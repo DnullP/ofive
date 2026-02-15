@@ -1,0 +1,161 @@
+/* 主体网格布局：活动栏 + 左侧扩展 + 主编辑区 (+ 可选右侧扩展) */
+.dockview-layout {
+  display: grid;
+  grid-template-columns: 48px var(--left-sidebar-width, 280px) 1fr;
+  height: 100vh;
+  width: 100vw;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* 存在右侧扩展面板时，增加右侧列 */
+.dockview-layout:has(.right-sidebar) {
+  grid-template-columns: 48px var(--left-sidebar-width, 280px) 1fr var(--right-sidebar-width, 260px);
+}
+
+/* 活动栏容器：承载左侧扩展面板切换按钮 */
+.activity-bar {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.activity-bar-top,
+.activity-bar-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 活动栏按钮基础样式 */
+.activity-bar-item {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* 活动栏 SVG 图标样式：统一图标尺寸和对齐 */
+.activity-bar-item svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  margin: 0 auto;
+}
+
+/* 活动栏按钮激活和悬浮样式 */
+.activity-bar-item.active,
+.activity-bar-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* 左右扩展面板容器基础样式 */
+.left-sidebar,
+.right-sidebar {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  min-width: 0;
+  position: relative;
+}
+
+/* 右侧扩展面板边框方向修正 */
+.right-sidebar {
+  border-right: 0;
+  border-left: 1px solid var(--border-color);
+}
+
+/* 扩展面板标题栏样式 */
+.sidebar-header {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+/* 扩展面板内容区样式 */
+.sidebar-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* 主编辑区容器样式 */
+.main-content-area {
+  min-width: 0;
+  min-height: 0;
+}
+
+/* dockview 官方 React 组件挂载区域 */
+.main-dockview {
+  width: 100%;
+  height: 100%;
+}
+
+/* Welcome Tab 内容样式 */
+.dockview-welcome-tab {
+  padding: 24px;
+}
+
+/* Paneview 面板内容包装层 */
+.pane-panel-content {
+  height: 100%;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 10;
+}
+
+.sidebar-resize-handle.right-edge {
+  right: 0;
+}
+
+.sidebar-resize-handle.left-edge {
+  left: 0;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+  background: var(--bg-hover);
+}
+
+/* dockview 主题变量覆写：增强拖拽预高亮可见性 */
+.dockview-theme-abyss,
+.dv-dockview,
+.dv-paneview,
+.sidebar-paneview-container {
+  --dv-drag-over-background-color: rgba(0, 120, 212, 0.22);
+  --dv-drag-over-border-color: #0078d4;
+}
+
+/* 拖拽放置区域锚点高亮 */
+.dv-drop-target-anchor {
+  background-color: rgba(0, 120, 212, 0.22);
+  border: 2px solid #0078d4;
+  border-radius: 4px;
+}
+
+/* Paneview 拖拽放置区高亮 */
+.dv-paneview .dv-drop-target-dropzone,
+.sidebar-paneview-container .dv-drop-target-dropzone {
+  background-color: rgba(0, 120, 212, 0.18);
+  border: 2px dashed #0078d4;
+  border-radius: 4px;
+}
