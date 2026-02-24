@@ -1,0 +1,81 @@
+/* 模块样式：知识图谱页根容器，提供全区域布局与背景。 */
+.knowledge-graph-tab {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--graph-bg-primary);
+    color: var(--graph-text-color);
+}
+
+/* 模块样式：顶部信息栏，展示加载状态与统计信息。 */
+.knowledge-graph-tab__toolbar {
+    height: 36px;
+    padding: 0 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--graph-border-color);
+    background: var(--graph-bg-secondary);
+    font-size: 12px;
+}
+
+/* 模块样式：状态文本区域。 */
+.knowledge-graph-tab__status {
+    color: var(--graph-status-color);
+}
+
+/* 模块样式：统计文本区域。 */
+.knowledge-graph-tab__stats {
+    color: var(--graph-text-color);
+}
+
+/* 模块样式：画布承载容器。 */
+.knowledge-graph-tab__canvas-wrap {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+}
+
+/* 模块样式：Cosmos 挂载点。 */
+.knowledge-graph-tab__canvas-host {
+    width: 100%;
+    height: 100%;
+}
+
+/* 模块样式：标签图层，承载每个节点对应的 md 文件名。 */
+.knowledge-graph-tab__labels-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+/* 模块样式：单个节点标签，提升节点文本可读性。 */
+.knowledge-graph-tab__label {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: none;
+    padding: 1px 4px;
+    border-radius: 4px;
+    border: 1px solid var(--graph-border-color);
+    background: var(--graph-label-bg);
+    color: var(--graph-text-color);
+    font-size: 10px;
+    line-height: 1.2;
+    white-space: nowrap;
+    transform: translate(-50%, -100%);
+}
+
+/* 模块样式：空数据提示层。 */
+.knowledge-graph-tab__empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--graph-muted-text-color);
+    font-size: 13px;
+    pointer-events: none;
+}

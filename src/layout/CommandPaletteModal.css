@@ -1,0 +1,94 @@
+/* 浮窗全屏遮罩：覆盖主布局并聚焦指令搜索交互 */
+.command-palette-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1250;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 10vh;
+    background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+}
+
+/* 浮窗主体容器：承载输入框与候选列表 */
+.command-palette-panel {
+    width: min(720px, 86vw);
+    max-height: 72vh;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    overflow: hidden;
+}
+
+/* 搜索输入框：用户输入关键字并实时过滤指令 */
+.command-palette-input {
+    border: 0;
+    border-bottom: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 16px;
+    line-height: 1.5;
+    padding: 14px 16px;
+    outline: none;
+}
+
+/* 输入框占位符文本：弱化提示信息 */
+.command-palette-input::placeholder {
+    color: var(--text-secondary);
+}
+
+/* 候选列表容器：纵向展示过滤结果 */
+.command-palette-list {
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    min-height: 120px;
+    max-height: 54vh;
+}
+
+/* 空态文本：用于展示无匹配结果 */
+.command-palette-empty {
+    padding: 18px 16px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* 候选项按钮：每条指令的可点击区域 */
+.command-palette-item {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* 候选项最后一项：移除底边框避免视觉重叠 */
+.command-palette-item:last-child {
+    border-bottom: 0;
+}
+
+/* 候选项悬浮/高亮态：突出当前选择目标 */
+.command-palette-item:hover,
+.command-palette-item.active {
+    background: var(--bg-hover);
+}
+
+/* 候选项标题文本：展示指令名称 */
+.command-palette-item-title {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* 候选项元信息文本：展示指令 id 和默认快捷键 */
+.command-palette-item-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+}

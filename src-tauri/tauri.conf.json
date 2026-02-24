@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.kaiqiu.ofive",
   "build": {
-    "beforeDevCommand": "bun run dev",
+    "beforeDevCommand": "bun run tauri:web:dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"
@@ -14,7 +14,10 @@
       {
         "title": "ofive",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "center": true,
+        "decorations": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {

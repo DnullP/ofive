@@ -1,0 +1,67 @@
+/* 仓库面板根容器：纵向布局并占满面板高度，确保文件树可填充剩余空间。 */
+.vault-panel-root {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* 仓库工具栏：左侧目录文本 + 右侧按钮的横向布局 */
+.vault-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 8px;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    user-select: none;
+}
+
+/* 当前目录区域：容纳 label 与目录路径文本 */
+.vault-toolbar-path {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    user-select: none;
+}
+
+/* 当前目录文案前缀 */
+.vault-toolbar-label {
+    color: var(--text-secondary);
+    margin-right: 6px;
+}
+
+/* 当前目录值文本：强调主内容并支持省略 */
+.vault-toolbar-value {
+    color: var(--text-primary);
+}
+
+/* 打开仓库按钮：右侧操作按钮基础样式 */
+.vault-toolbar-open-button {
+    border: 1px solid var(--border-color);
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+/* 打开仓库按钮禁用态 */
+.vault-toolbar-open-button:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+/* 仓库面板错误文本：用于展示后端加载失败信息 */
+.vault-toolbar-error {
+    margin: 0 8px 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}

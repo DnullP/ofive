@@ -1,0 +1,176 @@
+/* 模块样式：Cosmos 图谱调参页容器，负责整体布局与背景。 */
+.cosmos-playground {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  height: 100vh;
+  width: 100%;
+  background: #111827;
+  color: #e5e7eb;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* 模块样式：左侧控制区，承载参数分组和操作按钮。 */
+.cosmos-panel {
+  border-right: 1px solid #374151;
+  padding: 16px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #0f172a;
+}
+
+/* 模块样式：页头区，显示标题与说明。 */
+.cosmos-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 模块样式：主标题文本。 */
+.cosmos-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* 模块样式：说明文本。 */
+.cosmos-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* 模块样式：参数分组容器。 */
+.cosmos-section {
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 模块样式：参数分组标题。 */
+.cosmos-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+
+/* 模块样式：单个参数行，显示 label 与控件。 */
+.cosmos-control-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 模块样式：参数标签文本。 */
+.cosmos-label {
+  font-size: 12px;
+  color: #d1d5db;
+}
+
+/* 模块样式：参数值文本。 */
+.cosmos-value {
+  min-width: 48px;
+  text-align: right;
+  font-size: 11px;
+  color: #93c5fd;
+}
+
+/* 模块样式：滑条控件，负责数值调参。 */
+.cosmos-range {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+/* 模块样式：输入框控件（数字/颜色）。 */
+.cosmos-input {
+  width: 100%;
+  background: #1f2937;
+  color: #f9fafb;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+/* 模块样式：复选框行，控制布尔参数。 */
+.cosmos-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #d1d5db;
+}
+
+/* 模块样式：按钮组，组织操作按钮。 */
+.cosmos-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* 模块样式：按钮基础样式。 */
+.cosmos-button {
+  border: 1px solid #64748b;
+  background: #1e293b;
+  color: #f8fafc;
+  border-radius: 6px;
+  padding: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* 模块样式：按钮悬停状态。 */
+.cosmos-button:hover {
+  background: #334155;
+}
+
+/* 模块样式：状态栏，展示当前模拟状态。 */
+.cosmos-status {
+  font-size: 12px;
+  color: #93c5fd;
+}
+
+/* 模块样式：右侧画布区域容器。 */
+.cosmos-canvas-wrap {
+  position: relative;
+  overflow: hidden;
+  background: #020617;
+}
+
+/* 模块样式：Cosmos 挂载点，承载 WebGL Canvas。 */
+.cosmos-canvas-host {
+  width: 100%;
+  height: 100%;
+}
+
+/* 模块样式：右上角提示信息。 */
+.cosmos-tip {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(15, 23, 42, 0.85);
+  color: #e2e8f0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  border: 1px solid #334155;
+}
+
+/* 模块样式：移动端降级布局，改为上下结构。 */
+@media (max-width: 1024px) {
+  .cosmos-playground {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .cosmos-panel {
+    border-right: none;
+    border-bottom: 1px solid #334155;
+    max-height: 50vh;
+  }
+}

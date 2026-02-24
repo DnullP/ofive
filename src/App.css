@@ -1,3 +1,4 @@
+/* 默认主题变量：兜底为夜间风格，避免 data-theme 尚未注入时出现闪烁。 */
 :root {
   --bg-primary: #1f1f1f;
   --bg-secondary: #252526;
@@ -6,6 +7,103 @@
   --text-primary: #d4d4d4;
   --text-secondary: #9b9b9b;
   --text-tertiary: #7a7a7a;
+
+  --accent-primary: #0078d4;
+  --accent-primary-soft: rgba(0, 120, 212, 0.22);
+  --accent-primary-soft-weak: rgba(0, 120, 212, 0.18);
+  --scrollbar-thumb-color: rgba(212, 212, 212, 0.38);
+
+  --editor-inline-code-bg: rgba(120, 120, 120, 0.2);
+  --editor-link-color: #4ea1ff;
+  --editor-bg-color: #1f1f1f;
+  --editor-text-color: #d4d4d4;
+  --editor-gutter-bg-color: #252526;
+  --editor-gutter-text-color: #9b9b9b;
+  --editor-selection-bg-color: rgba(0, 120, 212, 0.28);
+  --editor-selection-text-color: #d4d4d4;
+  --editor-caret-color: #d4d4d4;
+  --editor-active-line-bg-color: rgba(255, 255, 255, 0.04);
+  --editor-active-line-gutter-bg-color: rgba(255, 255, 255, 0.06);
+
+  --graph-bg-primary: #020617;
+  --graph-bg-secondary: #0b1220;
+  --graph-border-color: #1e293b;
+  --graph-status-color: #93c5fd;
+  --graph-text-color: #e2e8f0;
+  --graph-muted-text-color: #94a3b8;
+  --graph-label-bg: rgba(2, 6, 23, 0.82);
+}
+
+/* 夜间主题变量：深色背景与高亮文字对比。 */
+:root[data-theme="dark"] {
+  --bg-primary: #1f1f1f;
+  --bg-secondary: #252526;
+  --bg-hover: #2a2d2e;
+  --border-color: #3c3c3c;
+  --text-primary: #d4d4d4;
+  --text-secondary: #9b9b9b;
+  --text-tertiary: #7a7a7a;
+
+  --accent-primary: #0078d4;
+  --accent-primary-soft: rgba(0, 120, 212, 0.22);
+  --accent-primary-soft-weak: rgba(0, 120, 212, 0.18);
+  --scrollbar-thumb-color: rgba(212, 212, 212, 0.38);
+
+  --editor-inline-code-bg: rgba(120, 120, 120, 0.2);
+  --editor-link-color: #4ea1ff;
+  --editor-bg-color: #1f1f1f;
+  --editor-text-color: #d4d4d4;
+  --editor-gutter-bg-color: #252526;
+  --editor-gutter-text-color: #9b9b9b;
+  --editor-selection-bg-color: rgba(0, 120, 212, 0.28);
+  --editor-selection-text-color: #d4d4d4;
+  --editor-caret-color: #d4d4d4;
+  --editor-active-line-bg-color: rgba(255, 255, 255, 0.04);
+  --editor-active-line-gutter-bg-color: rgba(255, 255, 255, 0.06);
+
+  --graph-bg-primary: #020617;
+  --graph-bg-secondary: #0b1220;
+  --graph-border-color: #1e293b;
+  --graph-status-color: #93c5fd;
+  --graph-text-color: #e2e8f0;
+  --graph-muted-text-color: #94a3b8;
+  --graph-label-bg: rgba(2, 6, 23, 0.82);
+}
+
+/* 日间主题变量：浅色背景与深色文字对比。 */
+:root[data-theme="light"] {
+  --bg-primary: #f5f7fa;
+  --bg-secondary: #ffffff;
+  --bg-hover: #eef2f6;
+  --border-color: #d7dce3;
+  --text-primary: #1f2937;
+  --text-secondary: #4b5563;
+  --text-tertiary: #6b7280;
+
+  --accent-primary: #0b6dff;
+  --accent-primary-soft: rgba(11, 109, 255, 0.2);
+  --accent-primary-soft-weak: rgba(11, 109, 255, 0.14);
+  --scrollbar-thumb-color: rgba(71, 85, 105, 0.38);
+
+  --editor-inline-code-bg: rgba(15, 23, 42, 0.08);
+  --editor-link-color: #0a58ca;
+  --editor-bg-color: #ffffff;
+  --editor-text-color: #1f2937;
+  --editor-gutter-bg-color: #f5f7fa;
+  --editor-gutter-text-color: #6b7280;
+  --editor-selection-bg-color: rgba(11, 109, 255, 0.22);
+  --editor-selection-text-color: #0f172a;
+  --editor-caret-color: #1f2937;
+  --editor-active-line-bg-color: rgba(15, 23, 42, 0.04);
+  --editor-active-line-gutter-bg-color: rgba(15, 23, 42, 0.08);
+
+  --graph-bg-primary: #f8fafc;
+  --graph-bg-secondary: #eef3fa;
+  --graph-border-color: #d1dae6;
+  --graph-status-color: #1d4ed8;
+  --graph-text-color: #1e293b;
+  --graph-muted-text-color: #475569;
+  --graph-label-bg: rgba(248, 250, 252, 0.88);
 }
 
 * {
@@ -22,9 +120,118 @@ body,
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+/* 禁止页面级别滚动，避免 macOS 双指滑动触发整窗弹性拖动 */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* 根节点不参与滚动，滚动仅发生在面板内容区 */
+#root {
+  overflow: hidden;
+}
+
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
+}
+
+.app-shell {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-content {
+  flex: 1;
+  min-height: 0;
+}
+
+.app-titlebar {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 8px;
+  user-select: none;
+  gap: 8px;
+}
+
+/* macOS 标题栏：窗口控制按钮在左侧。 */
+.app-titlebar--mac {
+  flex-direction: row;
+}
+
+/* Windows 标题栏：窗口控制按钮在右侧。 */
+.app-titlebar--windows {
+  flex-direction: row;
+}
+
+/* 标题栏控制组：容纳最小化/最大化/关闭三键。 */
+.app-titlebar__controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 84px;
+}
+
+/* 标题栏控制组占位：保证标题居中，不受左右控件影响。 */
+.app-titlebar__controls-spacer {
+  min-width: 84px;
+  height: 24px;
+}
+
+.app-titlebar__title {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+
+/* 标题栏控制按钮基础样式。 */
+.app-titlebar__control {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* 最小化/最大化按钮悬浮态。 */
+.app-titlebar__control--minimize:hover,
+.app-titlebar__control--maximize:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* 最小化/最大化按钮悬浮态。 */
+.app-titlebar__control--close:hover {
+  background: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+/* 窗口交互工具类：可拖拽区域（支持 macOS 三指拖拽）。 */
+.window-drag-region {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+/* 窗口交互工具类：禁止拖拽，保留点击/输入等交互。 */
+.window-no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .panel-placeholder,

@@ -1,0 +1,50 @@
+/* 大纲面板容器：纵向布局占满面板区域 */
+.outline-panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 大纲头部：显示当前追踪文章 */
+.outline-panel-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 12px;
+    user-select: none;
+}
+
+/* 大纲列表：滚动容器 */
+.outline-list {
+    list-style: none;
+    margin: 0;
+    padding: 8px;
+    overflow: auto;
+    flex: 1;
+}
+
+/* 大纲项按钮：点击区域与文本样式 */
+.outline-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* 大纲项悬浮样式 */
+.outline-item:hover {
+    background: var(--bg-hover);
+}
+
+/* 大纲空状态样式 */
+.outline-empty {
+    padding: 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    user-select: none;
+}

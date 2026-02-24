@@ -1,0 +1,300 @@
+/* 设置页容器：左侧分类 + 右侧内容双栏布局 */
+.settings-tab {
+    height: 100%;
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    min-height: 0;
+}
+
+/* 设置页左侧栏：分类菜单容器 */
+.settings-tab-sidebar {
+    border-right: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* 设置页分类按钮：默认态 */
+.settings-tab-sidebar-item {
+    border: 0;
+    text-align: left;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 6px;
+    padding: 8px 10px;
+    cursor: pointer;
+}
+
+/* 设置页分类按钮：激活态 */
+.settings-tab-sidebar-item.active,
+.settings-tab-sidebar-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* 设置页右侧内容区容器 */
+.settings-tab-content {
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    padding: 16px;
+}
+
+/* 设置页标题 */
+.settings-tab-content-header {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 14px;
+}
+
+/* 设置项组：纵向排列 */
+.settings-item-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* 单个设置项：标题描述 + 开关 */
+.settings-item {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+/* 单个设置项纵向布局：用于包含输入编辑区域 */
+.settings-item-column {
+    align-items: flex-start;
+    flex-direction: column;
+}
+
+/* 设置项标题 */
+.settings-item-title {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* 设置项描述 */
+.settings-item-desc {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* 快捷键设置表格容器 */
+.settings-shortcut-table-wrapper {
+    width: 100%;
+}
+
+/* 快捷键设置表格：仿 VS Code Keyboard Shortcuts 列表风格 */
+.settings-shortcut-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+/* 快捷键表头单元格 */
+.settings-shortcut-th {
+    text-align: left;
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+    user-select: none;
+}
+
+/* 快捷键表头操作列：收窄宽度 */
+.settings-shortcut-th-actions {
+    width: 1%;
+    text-align: right;
+}
+
+/* 快捷键表格行默认态 */
+.settings-shortcut-row {
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* 快捷键表格行悬浮态 */
+.settings-shortcut-row:hover {
+    background: var(--bg-hover);
+}
+
+/* 快捷键表格行录制态：轻微高亮 */
+.settings-shortcut-row.recording {
+    background: var(--accent-primary-soft, rgba(0, 120, 212, 0.08));
+}
+
+/* 快捷键表格单元格通用样式 */
+.settings-shortcut-td {
+    padding: 6px 10px;
+    vertical-align: middle;
+    color: var(--text-primary);
+}
+
+/* 快捷键表格-命令列：主文本 */
+.settings-shortcut-td-command {
+    font-weight: 400;
+}
+
+/* 快捷键表格-绑定列 */
+.settings-shortcut-td-keybinding {
+    white-space: nowrap;
+}
+
+/* 快捷键键位徽章：仿 VS Code 键位标签 */
+.settings-shortcut-kbd {
+    display: inline-block;
+    background: var(--bg-hover);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+/* 快捷键内联录制输入框 */
+.settings-shortcut-inline-input {
+    width: 120px;
+    border: 1px solid var(--accent-primary, #007acc);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 2px 6px;
+    font-size: 12px;
+    outline: none;
+}
+
+/* 快捷键表格-条件列：次要文本 */
+.settings-shortcut-td-when {
+    color: var(--text-secondary);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* 快捷键表格-操作列：按钮右对齐 */
+.settings-shortcut-td-actions {
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* 快捷键操作按钮：紧凑文字按钮 */
+.settings-shortcut-action-btn {
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 2px 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+/* 快捷键操作按钮悬浮态 */
+.settings-shortcut-action-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* 快捷键保存按钮：强调色 */
+.settings-shortcut-action-save {
+    color: var(--accent-primary, #007acc);
+    font-weight: 500;
+}
+
+/* 快捷键保存按钮禁用态 */
+.settings-shortcut-action-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* 图谱设置控件行：容纳输入框/颜色选择/开关。 */
+.settings-graph-control-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 图谱设置通用输入框：数值/文本输入。 */
+.settings-graph-input {
+    min-width: 140px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 6px 8px;
+}
+
+/* 图谱颜色输入框：颜色选择器尺寸规范。 */
+.settings-graph-color-input {
+    width: 38px;
+    height: 30px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    padding: 2px;
+}
+
+/* 设置页错误文本 */
+.settings-tab-error {
+    margin-top: 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+/* 风格模式按钮容器：用于并排展示日间/夜间选项。 */
+.settings-theme-mode-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+/* 风格模式按钮：展示主题名称与说明。 */
+.settings-theme-mode-button {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    cursor: pointer;
+}
+
+/* 风格模式按钮标题：强调主题名称。 */
+.settings-theme-mode-button-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* 风格模式按钮描述：补充使用场景说明。 */
+.settings-theme-mode-button-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* 风格模式按钮悬浮态：增强可交互反馈。 */
+.settings-theme-mode-button:hover {
+    background: var(--bg-hover);
+}
+
+/* 风格模式按钮激活态：标记当前生效主题。 */
+.settings-theme-mode-button.active {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary-soft);
+}

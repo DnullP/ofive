@@ -1,0 +1,94 @@
+/* 浮窗全屏遮罩：覆盖主布局并聚焦快速切换交互 */
+.quick-switcher-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 8vh;
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+}
+
+/* 浮窗主体容器：承载输入框与候选列表 */
+.quick-switcher-panel {
+  width: min(720px, 86vw);
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+/* 搜索输入框：用户输入关键字并实时触发检索 */
+.quick-switcher-input {
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1.5;
+  padding: 14px 16px;
+  outline: none;
+}
+
+/* 输入框占位符文本：弱化提示信息 */
+.quick-switcher-input::placeholder {
+  color: var(--text-secondary);
+}
+
+/* 候选列表容器：纵向展示搜索结果 */
+.quick-switcher-list {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  min-height: 120px;
+  max-height: 54vh;
+}
+
+/* 空态与状态提示：用于无结果/错误/加载提示 */
+.quick-switcher-empty {
+  padding: 18px 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* 候选项按钮：每条匹配结果的可点击区域 */
+.quick-switcher-item {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 候选项最后一项：移除底部边框避免视觉重叠 */
+.quick-switcher-item:last-child {
+  border-bottom: 0;
+}
+
+/* 候选项悬浮/高亮态：突出当前选择目标 */
+.quick-switcher-item:hover,
+.quick-switcher-item.active {
+  background: var(--bg-hover);
+}
+
+/* 候选项标题文本：展示文件主标题 */
+.quick-switcher-item-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 候选项路径文本：展示文件相对路径上下文 */
+.quick-switcher-item-path {
+  font-size: 12px;
+  color: var(--text-secondary);
+}

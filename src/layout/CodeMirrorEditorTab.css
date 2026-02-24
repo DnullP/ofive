@@ -11,6 +11,26 @@
     border-bottom: 1px solid var(--border-color);
     color: var(--text-secondary);
     font-size: 12px;
+    user-select: none;
+    cursor: text;
+}
+
+/* 编辑模式文件名输入框：支持重命名当前文件 */
+.cm-tab-header-input {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 4px 8px;
+}
+
+/* 文件重命名错误提示：展示校验或后端返回错误 */
+.cm-tab-header-error {
+    padding: 6px 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
 }
 
 /* 编辑器挂载容器：承载 CodeMirror DOM */
@@ -22,6 +42,8 @@
 /* CodeMirror 编辑器外层样式：确保占满容器 */
 .cm-tab-editor .cm-editor {
     height: 100%;
+    color: var(--editor-text-color);
+    background: var(--editor-bg-color);
 }
 
 /* CodeMirror 内容区样式：统一字体与行高 */
@@ -29,6 +51,31 @@
     font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 13px;
     line-height: 1.6;
+    color: var(--editor-text-color);
+}
+
+/* CodeMirror 文本选中态：统一选区背景与前景色，避免浏览器默认选择色泄漏。 */
+.cm-tab-editor .cm-content ::selection {
+    background: var(--editor-selection-bg-color);
+    color: var(--editor-selection-text-color);
+}
+
+/* CodeMirror 行号侧栏：统一主题背景/文本色，避免默认主题样式泄漏。 */
+.cm-tab-editor .cm-gutters {
+    background: var(--editor-gutter-bg-color) !important;
+    color: var(--editor-gutter-text-color) !important;
+    border-right: 1px solid var(--border-color) !important;
+}
+
+/* CodeMirror 行号文本：与侧栏文本色保持一致。 */
+.cm-tab-editor .cm-lineNumbers .cm-gutterElement {
+    color: var(--editor-gutter-text-color) !important;
+}
+
+/* CodeMirror 光标所在行号高亮：统一主题高亮色并覆盖默认样式。 */
+.cm-tab-editor .cm-gutterElement.cm-activeLineGutter {
+    background: var(--editor-active-line-gutter-bg-color) !important;
+    color: var(--editor-text-color) !important;
 }
 
 /* 标题渲染样式：非编辑态下显示为富文本标题 */
@@ -42,14 +89,19 @@
     padding: 2px 0;
 }
 
-/* 标题源码前缀（#）隐藏样式 */
+/* 标题源码前缀（#）隐藏样式
+   使用 font-size:0 而非 display:none，避免元素脱离布局流导致
+   CM6 coordsAtPos 坐标计算异常（selectAll 选区背景错位）。 */
 .cm-tab-editor .cm-header-marker-hidden {
-    display: none;
+    font-size: 0;
+    overflow: hidden;
 }
 
-/* 行内 Markdown 标记（如 **、__）隐藏样式 */
+/* 行内 Markdown 标记（如 **、__）隐藏样式
+   同上，保证 CM6 坐标计算不受影响。 */
 .cm-tab-editor .cm-inline-marker-hidden {
-    display: none;
+    font-size: 0;
+    overflow: hidden;
 }
 
 /* 行内粗体渲染样式 */
@@ -76,14 +128,30 @@
     font-size: 0.92em;
     padding: 1px 6px;
     border-radius: 6px;
-    background: rgba(120, 120, 120, 0.2);
+    background: var(--editor-inline-code-bg);
 }
 
 /* Wiki Link 渲染样式 */
 .cm-tab-editor .cm-rendered-wikilink {
-    color: #4ea1ff;
+    color: var(--editor-link-color);
     text-decoration: underline;
     text-underline-offset: 2px;
+}
+
+/* Wiki Link 悬浮样式：提示可通过组合键点击导航 */
+.cm-tab-editor .cm-rendered-wikilink:hover {
+    cursor: pointer;
+}
+
+/* Tag 语法渲染样式：用于显示 #123 等标签 token */
+.cm-tab-editor .cm-rendered-tag {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    line-height: 1.35;
 }
 
 /* 一级标题样式 */

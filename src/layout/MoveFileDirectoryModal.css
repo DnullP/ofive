@@ -1,0 +1,117 @@
+/* 浮窗全屏遮罩：覆盖主布局并聚焦“移动文件”交互。 */
+.move-file-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1260;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 10vh;
+    background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+}
+
+/* 浮窗主体容器：承载标题、输入框与目录候选列表。 */
+.move-file-panel {
+    width: min(760px, 88vw);
+    max-height: 74vh;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    overflow: hidden;
+}
+
+/* 浮窗头部：展示动作标题与当前源文件路径。 */
+.move-file-header {
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* 头部标题：强调当前动作语义。 */
+.move-file-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* 源文件路径：展示待移动文件的相对路径上下文。 */
+.move-file-source-path {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 搜索输入框：用户输入关键字筛选目录候选。 */
+.move-file-input {
+    border: 0;
+    border-bottom: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 15px;
+    line-height: 1.5;
+    padding: 12px 16px;
+    outline: none;
+}
+
+/* 输入框占位符：弱化提示文本。 */
+.move-file-input::placeholder {
+    color: var(--text-secondary);
+}
+
+/* 候选列表容器：纵向展示目录搜索结果。 */
+.move-file-list {
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    min-height: 120px;
+    max-height: 54vh;
+}
+
+/* 空态提示：用于无匹配目录场景。 */
+.move-file-empty {
+    padding: 18px 16px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* 候选项按钮：单个目标目录的可点击区域。 */
+.move-file-item {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* 候选项最后一项：移除底部边框避免视觉重叠。 */
+.move-file-item:last-child {
+    border-bottom: 0;
+}
+
+/* 候选项悬浮/高亮态：突出当前选择目标。 */
+.move-file-item:hover,
+.move-file-item.active {
+    background: var(--bg-hover);
+}
+
+/* 候选项标题：展示目录主文本。 */
+.move-file-item-title {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* 候选项元信息：展示目录路径细节。 */
+.move-file-item-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+}

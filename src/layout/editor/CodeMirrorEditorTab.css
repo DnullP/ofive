@@ -1,0 +1,434 @@
+/* 编辑器根容器：保证 Tab 内垂直布局占满可用空间 */
+.cm-tab {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 编辑器头部：显示当前文件路径 */
+.cm-tab-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 12px;
+    user-select: none;
+    cursor: text;
+}
+
+/* 编辑模式文件名输入框：支持重命名当前文件 */
+.cm-tab-header-input {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 4px 8px;
+}
+
+/* 文件重命名错误提示：展示校验或后端返回错误 */
+.cm-tab-header-error {
+    padding: 6px 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+/* 编辑器挂载容器：承载 CodeMirror DOM */
+.cm-tab-editor {
+    min-height: 0;
+    flex: 1;
+}
+
+/* 文档居中布局：宽度足够时限制内容最大宽度并居中，营造 Word 文档编辑体验 */
+.cm-tab-editor .cm-content {
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 32px;
+    padding-right: 32px;
+}
+
+/* CodeMirror 编辑器外层样式：确保占满容器 */
+.cm-tab-editor .cm-editor {
+    height: 100%;
+    color: var(--editor-text-color);
+    background: var(--editor-bg-color);
+}
+
+/* CodeMirror 内容区样式：统一字体与行高 */
+.cm-tab-editor .cm-content {
+    font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--editor-text-color);
+}
+
+/* CodeMirror 文本选中态：统一选区背景与前景色，避免浏览器默认选择色泄漏。 */
+.cm-tab-editor .cm-content ::selection {
+    background: var(--editor-selection-bg-color);
+    color: var(--editor-selection-text-color);
+}
+
+/* CodeMirror 行号侧栏：统一主题背景/文本色，避免默认主题样式泄漏。 */
+.cm-tab-editor .cm-gutters {
+    background: var(--editor-gutter-bg-color) !important;
+    color: var(--editor-gutter-text-color) !important;
+    border-right: 1px solid var(--border-color) !important;
+}
+
+/* CodeMirror 行号文本：与侧栏文本色保持一致。 */
+.cm-tab-editor .cm-lineNumbers .cm-gutterElement {
+    color: var(--editor-gutter-text-color) !important;
+}
+
+/* CodeMirror 光标所在行号高亮：统一主题高亮色并覆盖默认样式。 */
+.cm-tab-editor .cm-gutterElement.cm-activeLineGutter {
+    background: var(--editor-active-line-gutter-bg-color) !important;
+    color: var(--editor-text-color) !important;
+}
+
+/* 标题渲染样式：非编辑态下显示为富文本标题 */
+.cm-tab-editor .cm-rendered-header {
+    display: inline-block;
+    width: 100%;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.3;
+    padding: 2px 0;
+}
+
+/* 标题源码前缀（#）隐藏样式
+   使用 font-size:0 而非 display:none，避免元素脱离布局流导致
+   CM6 coordsAtPos 坐标计算异常（selectAll 选区背景错位）。 */
+.cm-tab-editor .cm-header-marker-hidden {
+    font-size: 0;
+    overflow: hidden;
+}
+
+/* 行内 Markdown 标记（如 **、__）隐藏样式
+   同上，保证 CM6 坐标计算不受影响。 */
+.cm-tab-editor .cm-inline-marker-hidden {
+    font-size: 0;
+    overflow: hidden;
+}
+
+/* 行内粗体渲染样式 */
+.cm-tab-editor .cm-rendered-bold {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* 行内斜体渲染样式 */
+.cm-tab-editor .cm-rendered-italic {
+    font-style: italic;
+    color: var(--text-primary);
+}
+
+/* 行内删除线渲染样式 */
+.cm-tab-editor .cm-rendered-strikethrough {
+    text-decoration: line-through;
+    opacity: 0.85;
+}
+
+/* 行内代码渲染样式 */
+.cm-tab-editor .cm-rendered-inline-code {
+    font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.92em;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: var(--editor-inline-code-bg);
+}
+
+/* Wiki Link 渲染样式 */
+.cm-tab-editor .cm-rendered-wikilink {
+    color: var(--editor-link-color);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+/* Wiki Link 悬浮样式：提示可通过组合键点击导航 */
+.cm-tab-editor .cm-rendered-wikilink:hover {
+    cursor: pointer;
+}
+
+/* Tag 语法渲染样式：用于显示 #123 等标签 token */
+.cm-tab-editor .cm-rendered-tag {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    line-height: 1.35;
+}
+
+/* 图片嵌入容器样式：承载 `![[...]]` 渲染出的预览块。 */
+.cm-tab-editor .cm-image-embed-widget {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 6px;
+    width: min(100%, 520px);
+    margin: 6px 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-hover);
+    padding: 8px;
+    box-sizing: border-box;
+}
+
+/* 图片嵌入加载态样式：在图片未完成读取时显示提示。 */
+.cm-tab-editor .cm-image-embed-loading {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/* 图片嵌入错误态样式：在路径或读取失败时显示错误信息。 */
+.cm-tab-editor .cm-image-embed-error {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/* 图片预览样式：限制最大高度并保持原图比例。 */
+.cm-tab-editor .cm-image-embed-image {
+    display: block;
+    max-width: 100%;
+    max-height: 360px;
+    border-radius: 6px;
+    object-fit: contain;
+}
+
+/* 图片嵌入标题样式：显示解析后的文件名。 */
+.cm-tab-editor .cm-image-embed-caption {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+    word-break: break-all;
+}
+
+/* 一级标题样式 */
+.cm-tab-editor .cm-rendered-header-h1 {
+    font-size: 1.9em;
+}
+
+/* 二级标题样式 */
+.cm-tab-editor .cm-rendered-header-h2 {
+    font-size: 1.6em;
+}
+
+/* 三级标题样式 */
+.cm-tab-editor .cm-rendered-header-h3 {
+    font-size: 1.35em;
+}
+
+/* 四级标题样式 */
+.cm-tab-editor .cm-rendered-header-h4 {
+    font-size: 1.2em;
+}
+
+/* 五级标题样式 */
+.cm-tab-editor .cm-rendered-header-h5 {
+    font-size: 1.05em;
+}
+
+/* 六级标题样式 */
+.cm-tab-editor .cm-rendered-header-h6 {
+    font-size: 1em;
+    opacity: 0.9;
+}
+
+/* Frontmatter 可视化容器：替换 YAML 区块后承载所有字段编辑控件 */
+.cm-tab-editor .cm-frontmatter-widget {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+/* Frontmatter 标题：标识当前块为 frontmatter 编辑区域 */
+.cm-tab-editor .cm-frontmatter-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+/* Frontmatter 空态：提示未解析到可编辑 key-value 字段 */
+.cm-tab-editor .cm-frontmatter-empty {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* Frontmatter 字段行：按 key / value 两列布局每个字段 */
+.cm-tab-editor .cm-frontmatter-field-row {
+    display: grid;
+    grid-template-columns: minmax(100px, 160px) minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+}
+
+/* Frontmatter 字段名：展示 YAML key */
+.cm-tab-editor .cm-frontmatter-field-key {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+    word-break: break-all;
+}
+
+/* Frontmatter 字段控件容器：承载输入组件 */
+.cm-tab-editor .cm-frontmatter-field-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+/* Frontmatter 布尔控件容器：checkbox 与文本并排展示 */
+.cm-tab-editor .cm-frontmatter-field-control-boolean {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Frontmatter 通用输入框：字符串/数字/list item 共用基础样式 */
+.cm-tab-editor .cm-frontmatter-input {
+    min-width: 0;
+    height: 26px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0 8px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 12px;
+}
+
+/* Frontmatter 文本输入框：字符串字段编辑 */
+.cm-tab-editor .cm-frontmatter-input-text {
+    width: min(420px, 100%);
+}
+
+/* Frontmatter 数字输入框：数字字段编辑 */
+.cm-tab-editor .cm-frontmatter-input-number {
+    width: 120px;
+}
+
+/* Frontmatter 布尔值勾选框：布尔字段编辑 */
+.cm-tab-editor .cm-frontmatter-checkbox {
+    margin: 0;
+}
+
+/* Frontmatter 布尔值文本：显示 true/false 当前值 */
+.cm-tab-editor .cm-frontmatter-boolean-text {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+/* Frontmatter 列表容器：多个 item 同行排列，超出自动换行 */
+.cm-tab-editor .cm-frontmatter-list {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+/* Frontmatter 列表项容器：单个 item 输入与删除按钮并排 */
+.cm-tab-editor .cm-frontmatter-list-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Frontmatter 列表操作按钮：新增/删除 item 的按钮样式 */
+.cm-tab-editor .cm-frontmatter-list-action {
+    height: 24px;
+    min-width: 24px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+/* Frontmatter 列表新增按钮：与通用操作按钮保持一致，仅语义区分 */
+.cm-tab-editor .cm-frontmatter-list-action-add {
+    font-weight: 700;
+}
+
+/* Frontmatter 空列表提示：当列表无 item 时给出视觉反馈 */
+.cm-tab-editor .cm-frontmatter-list-empty {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+/* Frontmatter 源码隐藏行：在非编辑态下隐藏 frontmatter 原始 YAML 行，仅显示可视化组件
+   使用 height:0 + overflow:hidden 而非 display:none，避免 CM6 坐标计算异常。 */
+.cm-tab-editor .cm-line.cm-frontmatter-source-hidden-line {
+    height: 0;
+    overflow: hidden;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    line-height: 0;
+    font-size: 0;
+}
+
+/* Frontmatter YAML 编辑器：提供原始 YAML 文本输入区域 */
+.cm-tab-editor .cm-frontmatter-yaml-editor {
+    width: 100%;
+    min-height: 160px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px;
+    resize: vertical;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 12px;
+    line-height: 1.5;
+    font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    box-sizing: border-box;
+}
+
+/* Frontmatter 底部工具栏：承载保存、重置按钮和状态信息 */
+.cm-tab-editor .cm-frontmatter-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Frontmatter 操作按钮：统一保存/重置按钮外观 */
+.cm-tab-editor .cm-frontmatter-action {
+    height: 28px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0 10px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+/* Frontmatter 状态文本：显示保存结果或校验提示 */
+.cm-tab-editor .cm-frontmatter-status {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+/* Frontmatter 成功状态：保存成功提示色 */
+.cm-tab-editor .cm-frontmatter-status-success {
+    color: var(--text-primary);
+}
+
+/* Frontmatter 失败状态：保存失败提示色（使用次级文本色避免新增自定义色值） */
+.cm-tab-editor .cm-frontmatter-status-error {
+    color: var(--text-secondary);
+    text-decoration: underline;
+}

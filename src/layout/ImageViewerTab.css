@@ -1,0 +1,41 @@
+/* 图片查看器容器：纵向布局并占满 Tab 可用空间 */
+.image-viewer-tab {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* 图片查看器头部：显示当前图片路径 */
+.image-viewer-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 12px;
+    user-select: none;
+}
+
+/* 图片查看器主体：居中承载图片内容 */
+.image-viewer-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-primary);
+}
+
+/* 图片元素：自适应容器并保留原图比例 */
+.image-viewer-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+/* 图片加载失败提示：用于展示错误信息 */
+.image-viewer-error {
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 12px;
+}
