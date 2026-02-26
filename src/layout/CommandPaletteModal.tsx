@@ -8,7 +8,9 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import type { CommandDefinition, CommandId } from "../commands/commandSystem";
+import i18n from "../i18n";
 import "./CommandPaletteModal.css";
 
 /**
@@ -54,7 +56,7 @@ function commandMatchesQuery(command: CommandDefinition, query: string): boolean
         return true;
     }
 
-    const searchable = `${command.title} ${command.id} ${command.shortcut?.defaultBinding ?? ""}`.toLowerCase();
+    const searchable = `${i18n.t(command.title)} ${command.id} ${command.shortcut?.defaultBinding ?? ""}`.toLowerCase();
     const tokens = normalized.split(/\s+/).filter(Boolean);
     return tokens.every((token) => searchable.includes(token));
 }
@@ -66,6 +68,7 @@ function commandMatchesQuery(command: CommandDefinition, query: string): boolean
  * @returns 浮窗节点；未打开时返回 null。
  */
 export function CommandPaletteModal(props: CommandPaletteModalProps): ReactNode {
+    const { t } = useTranslation();
     const [query, setQuery] = useState<string>("");
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
     const inputRef = useRef<HTMLInputElement | null>(null);
@@ -175,14 +178,14 @@ export function CommandPaletteModal(props: CommandPaletteModalProps): ReactNode 
             onKeyDown={handleKeyboard}
         >
             {/* command-palette-panel: 浮窗主体容器，承载输入与候选列表 */}
-            <section className="command-palette-panel" aria-label="指令搜索">
+            <section className="command-palette-panel" aria-label={t("commandPalette.ariaLabel")}>
                 {/* command-palette-input: 搜索输入框，用于实时过滤指令 */}
                 <input
                     ref={inputRef}
                     className="command-palette-input"
                     type="text"
                     value={query}
-                    placeholder="输入指令名称..."
+                    placeholder={t("commandPalette.placeholder")}
                     onChange={(event) => {
                         setQuery(event.target.value);
                     }}
@@ -190,7 +193,7 @@ export function CommandPaletteModal(props: CommandPaletteModalProps): ReactNode 
 
                 {/* command-palette-list: 候选列表容器 */}
                 <div className="command-palette-list" role="listbox" aria-activedescendant={selectedCommand?.id}>
-                    {filteredCommands.length === 0 && <div className="command-palette-empty">无匹配指令</div>}
+                    {filteredCommands.length === 0 && <div className="command-palette-empty">{t("commandPalette.noMatch")}</div>}
 
                     {filteredCommands.map((command, index) => (
                         // command-palette-item: 单条指令候选，可通过键盘和鼠标选择
@@ -209,7 +212,7 @@ export function CommandPaletteModal(props: CommandPaletteModalProps): ReactNode 
                             }}
                         >
                             {/* command-palette-item-title: 指令显示名称 */}
-                            <span className="command-palette-item-title">{command.title}</span>
+                            <span className="command-palette-item-title">{t(command.title)}</span>
                             {/* command-palette-item-meta: 指令标识和默认快捷键 */}
                             <span className="command-palette-item-meta">
                                 {command.id}

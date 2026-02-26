@@ -13,7 +13,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { IDockviewPanelProps } from "dockview";
 import { EditorView } from "codemirror";
 import { Compartment, EditorState, RangeSetBuilder } from "@codemirror/state";
-import { Decoration, type DecorationSet, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import { Decoration, type DecorationSet, ViewPlugin, type ViewUpdate, lineNumbers as lineNumbersExtension } from "@codemirror/view";
+import { indentUnit } from "@codemirror/language";
 import { markdown } from "@codemirror/lang-markdown";
 import { basicSetup } from "codemirror";
 import { redo, selectAll, undo } from "@codemirror/commands";
@@ -43,10 +44,11 @@ import {
     segmentChineseText,
     type ChineseSegmentToken,
 } from "../api/vaultApi";
-import { useConfigState } from "../store/configStore";
+import { useConfigState, DEFAULT_EDITOR_FONT_FAMILY } from "../store/configStore";
 import { createRegisteredLineSyntaxRenderExtension } from "./editor/syntaxRenderRegistry";
 import { ensureBuiltinSyntaxRenderersRegistered } from "./editor/registerBuiltinSyntaxRenderers";
 import { createCodeMirrorThemeExtension } from "./editor/codemirrorTheme";
+import { createRelativeLineNumbersExtension } from "./editor/relativeLineNumbersExtension";
 
 ensureBuiltinSyntaxRenderersRegistered();
 
@@ -1152,6 +1154,62 @@ const headerWysiwygExtension = ViewPlugin.fromClass(
 );
 
 /**
+ * @interface EditorStyleOptions
+ * @description 编辑器样式配置参数。
+ * @field fontFamily - CSS font-family 字符串
+ * @field fontSize - 字体大小（px）
+ * @field tabSize - Tab 缩进宽度（空格数）
+ * @field lineWrapping - 是否开启自动换行
+ * @field showLineNumbers - 行号显示模式："off" 隐藏 | "absolute" 绝对行号 | "relative" 相对行号
+ */
+interface EditorStyleOptions {
+    fontFamily: string;
+    fontSize: number;
+    tabSize: number;
+    lineWrapping: boolean;
+    showLineNumbers: "off" | "absolute" | "relative";
+}
+
+/**
+ * @function buildEditorStyleExtensions
+ * @description 根据设置构建编辑器样式扩展数组，包括字体、字号、Tab 宽度、换行、行号。
+ * @param options 样式配置项。
+ * @returns CodeMirror 扩展数组。
+ */
+function buildEditorStyleExtensions(options: EditorStyleOptions) {
+    const extensions = [];
+
+    /* 字体族与字号 — 通过 EditorView.theme 注入 .cm-content 样式 */
+    extensions.push(
+        EditorView.theme({
+            ".cm-content": {
+                fontFamily: options.fontFamily,
+                fontSize: `${options.fontSize}px`,
+            },
+        }),
+    );
+
+    /* Tab / 缩进宽度 */
+    extensions.push(EditorState.tabSize.of(options.tabSize));
+    extensions.push(indentUnit.of(" ".repeat(options.tabSize)));
+
+    /* 自动换行 */
+    if (options.lineWrapping) {
+        extensions.push(EditorView.lineWrapping);
+    }
+
+    /* 行号栏 */
+    if (options.showLineNumbers === "absolute") {
+        extensions.push(lineNumbersExtension());
+    } else if (options.showLineNumbers === "relative") {
+        extensions.push(createRelativeLineNumbersExtension());
+    }
+    /* "off" 模式不添加行号扩展 */
+
+    return extensions;
+}
+
+/**
  * @function buildDefaultContent
  * @description 根据文件路径构建默认内容。
  * @param filePath 文件路径。
@@ -1199,10 +1257,17 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     const segmentationCacheRef = useRef<Map<number, SegmentationCacheItem>>(new Map());
     const segmentationTimerRef = useRef<number | null>(null);
     const vimModeCompartmentRef = useRef<Compartment>(new Compartment());
+    /** 编辑器样式 Compartment：管理字体、字号、Tab 宽度、换行、行号等动态设置 */
+    const editorStyleCompartmentRef = useRef<Compartment>(new Compartment());
     const { bindings } = useShortcutState();
     const { files } = useVaultState();
     const { featureSettings } = useConfigState();
     const vimModeEnabled = featureSettings.vimModeEnabled;
+    const editorFontFamily = featureSettings.editorFontFamily || DEFAULT_EDITOR_FONT_FAMILY;
+    const editorFontSize = featureSettings.editorFontSize;
+    const editorTabSize = featureSettings.editorTabSize;
+    const editorLineWrapping = featureSettings.editorLineWrapping;
+    const editorLineNumbers = featureSettings.editorLineNumbers;
 
     const [currentFilePath, setCurrentFilePath] = useState<string>(
         String(props.params.path ?? "未命名.md"),
@@ -1431,7 +1496,15 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 basicSetup,
                 markdown(),
                 createCodeMirrorThemeExtension(),
-                EditorView.lineWrapping,
+                editorStyleCompartmentRef.current.of(
+                    buildEditorStyleExtensions({
+                        fontFamily: editorFontFamily,
+                        fontSize: editorFontSize,
+                        tabSize: editorTabSize,
+                        lineWrapping: editorLineWrapping,
+                        showLineNumbers: editorLineNumbers,
+                    }),
+                ),
                 headerWysiwygExtension,
                 registeredLineSyntaxRenderExtension,
                 createEditorShortcutExtension(
@@ -1508,6 +1581,35 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
             vimModeEnabled,
         });
     }, [vimModeEnabled, articleId, currentFilePath]);
+
+    /* 编辑器样式设置动态生效：字体族、字号、Tab 宽度、换行、行号 */
+    useEffect(() => {
+        const view = viewRef.current;
+        if (!view) {
+            return;
+        }
+
+        view.dispatch({
+            effects: editorStyleCompartmentRef.current.reconfigure(
+                buildEditorStyleExtensions({
+                    fontFamily: editorFontFamily,
+                    fontSize: editorFontSize,
+                    tabSize: editorTabSize,
+                    lineWrapping: editorLineWrapping,
+                    showLineNumbers: editorLineNumbers,
+                }),
+            ),
+        });
+
+        console.info("[editor] style settings changed", {
+            articleId,
+            editorFontFamily,
+            editorFontSize,
+            editorTabSize,
+            editorLineWrapping,
+            editorLineNumbers,
+        });
+    }, [editorFontFamily, editorFontSize, editorTabSize, editorLineWrapping, editorLineNumbers, articleId]);
 
     const currentFileName = currentFilePath.split("/").pop() ?? currentFilePath;
 

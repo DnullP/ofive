@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { ensureBuiltinSettingsRegistered } from "../settings/registerBuiltinSettings";
 import { useSettingsSections } from "../settings/settingsRegistry";
 import "./SettingsTab.css";
@@ -20,6 +21,7 @@ ensureBuiltinSettingsRegistered();
  * @returns React 节点。
  */
 export function SettingsTab(): ReactNode {
+    const { t } = useTranslation();
     const sections = useSettingsSections();
     const [activeSectionId, setActiveSectionId] = useState<string>("");
 
@@ -54,20 +56,20 @@ export function SettingsTab(): ReactNode {
                             setActiveSectionId(section.id);
                         }}
                     >
-                        {section.title}
+                        {t(section.title)}
                     </button>
                 ))}
             </aside>
 
             <section className="settings-tab-content">
-                <header className="settings-tab-content-header">设置</header>
+                <header className="settings-tab-content-header">{t("settings.title")}</header>
 
                 {activeSection ? activeSection.render() : (
                     <div className="settings-item-group">
                         <div className="settings-item">
                             <div>
-                                <div className="settings-item-title">暂无可用设置项</div>
-                                <div className="settings-item-desc">尚未注册设置选栏，请检查注册流程。</div>
+                                <div className="settings-item-title">{t("settings.noSections")}</div>
+                                <div className="settings-item-desc">{t("settings.noSectionsHint")}</div>
                             </div>
                         </div>
                     </div>

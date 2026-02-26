@@ -10,6 +10,7 @@
  */
 
 import { type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FileTree, type FileTreeItem } from "./FileTree";
 import type { TabInstanceDefinition } from "./DockviewLayout";
@@ -149,12 +150,31 @@ function normalizeSelectedVaultPath(selected: unknown): string | null {
 }
 
 /**
+ * @function splitVaultDisplayPath
+ * @description 将绝对路径拆分为「可省略前缀」和「仓库根目录名」两段。
+ *   当路径过长时，前缀部分由 CSS text-overflow 截断，根目录名始终完整显示。
+ * @param fullPath 完整绝对路径。
+ * @returns [prefix, rootDirName]，如 ["/Users/kaiqiu/Documents/projects/rust/", "ofive"]。
+ *   若路径无斜杠分隔则 prefix 为空。
+ */
+function splitVaultDisplayPath(fullPath: string): [string, string] {
+    const normalized = fullPath.replace(/\\/g, "/").replace(/\/+$/, "");
+    const lastSlash = normalized.lastIndexOf("/");
+    if (lastSlash < 0) {
+        return ["", normalized];
+    }
+    // prefix 包含末尾斜杠，如 "/Users/.../rust/"
+    return [normalized.slice(0, lastSlash + 1), normalized.slice(lastSlash + 1)];
+}
+
+/**
  * @function VaultPanel
  * @description 渲染资源管理器：当前目录展示、系统打开仓库、文件树展示。
  * @param props 面板参数。
  * @returns React 节点。
  */
 export function VaultPanel(props: VaultPanelProps): ReactNode {
+    const { t } = useTranslation();
     const { openTab, closeTab, requestMoveFileToDirectory } = props;
     const { currentVaultPath, files, isLoadingTree, error } = useVaultState();
     const focusedArticle = useFocusedArticle();
@@ -188,7 +208,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             const selected = await open({
                 directory: true,
                 multiple: false,
-                title: "选择仓库目录",
+                title: t("vault.selectDirectory"),
             });
             const selectedPath = normalizeSelectedVaultPath(selected);
 
@@ -200,7 +220,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             console.info("[vault-ui] openVault:dialog:selected", { selectedPath });
             setCurrentVaultPath(selectedPath);
         } catch (openError) {
-            const message = openError instanceof Error ? openError.message : "打开系统目录选择器失败";
+            const message = openError instanceof Error ? openError.message : t("vault.openDirectoryFailed");
             console.error("[vault-ui] openVault:dialog:failed", { message });
         }
     };
@@ -229,7 +249,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
 
             openTab(tab);
         } catch (readError) {
-            const message = readError instanceof Error ? readError.message : "读取文件失败";
+            const message = readError instanceof Error ? readError.message : t("vault.readFileFailed");
             console.error("[vault-ui] openFile:failed", { path: item.path, message });
         }
     };
@@ -254,7 +274,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                 });
                 return true;
             } catch (renameError) {
-                const message = renameError instanceof Error ? renameError.message : "重命名目录失败";
+                const message = renameError instanceof Error ? renameError.message : t("vault.renameDirFailed");
                 console.error("[vault-ui] rename directory failed", {
                     from: item.path,
                     to: targetPath,
@@ -310,7 +330,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             });
             return true;
         } catch (renameError) {
-            const message = renameError instanceof Error ? renameError.message : "重命名文件失败";
+            const message = renameError instanceof Error ? renameError.message : t("vault.renameFileFailed");
             console.error("[vault-ui] rename failed", {
                 from: item.path,
                 to: targetPath,
@@ -327,7 +347,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
      */
     const handleDeleteItem = async (item: FileTreeItem): Promise<void> => {
         if (item.isDir) {
-            const confirmed = window.confirm(`确认删除目录 ${item.path} 及其内容?`);
+            const confirmed = window.confirm(t("vault.confirmDeleteDir", { name: item.path }));
             if (!confirmed) {
                 return;
             }
@@ -338,7 +358,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                     path: item.path,
                 });
             } catch (deleteError) {
-                const message = resolveErrorMessage(deleteError, "删除目录失败");
+                const message = resolveErrorMessage(deleteError, t("vault.deleteDirFailed"));
                 console.error("[vault-ui] delete directory failed", {
                     path: item.path,
                     message,
@@ -355,7 +375,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             return;
         }
 
-        const confirmed = window.confirm(`确认删除 ${item.path} ?`);
+        const confirmed = window.confirm(t("vault.confirmDeleteFile", { name: item.path }));
         if (!confirmed) {
             return;
         }
@@ -367,7 +387,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                 path: item.path,
             });
         } catch (deleteError) {
-            const message = resolveErrorMessage(deleteError, "删除文件失败");
+            const message = resolveErrorMessage(deleteError, t("vault.deleteFileFailed"));
             console.error("[vault-ui] delete failed", {
                 path: item.path,
                 message,
@@ -394,7 +414,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                     to: result.relativePath,
                 });
             } catch (moveError) {
-                const message = resolveErrorMessage(moveError, "拖拽移动目录失败");
+                const message = resolveErrorMessage(moveError, t("vault.dragMoveDirFailed"));
                 console.error("[vault-ui] drop-move directory failed", {
                     sourceRelativePath,
                     targetDirectoryRelativePath,
@@ -432,7 +452,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                 to: result.relativePath,
             });
         } catch (moveError) {
-            const message = resolveErrorMessage(moveError, "拖拽移动文件失败");
+            const message = resolveErrorMessage(moveError, t("vault.dragMoveFileFailed"));
             console.error("[vault-ui] drop-move failed", {
                 sourceRelativePath,
                 targetDirectoryRelativePath,
@@ -472,7 +492,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                 targetDirectoryRelativePath,
             });
         } catch (error) {
-            const message = error instanceof Error ? error.message : "创建文件失败";
+            const message = error instanceof Error ? error.message : t("vault.createFileFailed");
             console.error("[vault-ui] create file failed", {
                 relativePath,
                 targetDirectoryRelativePath,
@@ -503,7 +523,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                 targetDirectoryRelativePath,
             });
         } catch (error) {
-            const message = error instanceof Error ? error.message : "创建文件夹失败";
+            const message = error instanceof Error ? error.message : t("vault.createFolderFailed");
             console.error("[vault-ui] create folder failed", {
                 relativeDirectoryPath,
                 targetDirectoryRelativePath,
@@ -514,22 +534,6 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
 
     return (
         <div className="vault-panel-root">
-            <div className="vault-toolbar">
-                <div className="vault-toolbar-path" title={currentVaultPath}>
-                    <span className="vault-toolbar-label">当前目录：</span>
-                    <span className="vault-toolbar-value">{currentVaultPath}</span>
-                </div>
-                <button
-                    type="button"
-                    className="vault-toolbar-open-button"
-                    onClick={() => {
-                        void handleOpenVaultWithSystemFs();
-                    }}
-                    disabled={isLoadingTree}
-                >
-                    {isLoadingTree ? "加载中..." : "打开仓库"}
-                </button>
-            </div>
             {error ? <p className="vault-toolbar-error">{error}</p> : null}
 
             <FileTree
@@ -557,6 +561,33 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                     void handleCreateFolderInDirectory(targetDirectoryRelativePath, draftName);
                 }}
             />
+
+            {/* 底部仓库路径分隔栏：hover 变色，点击触发打开仓库 */}
+            <div
+                className="vault-separator"
+                title={currentVaultPath}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                    if (!isLoadingTree) {
+                        void handleOpenVaultWithSystemFs();
+                    }
+                }}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter" && !isLoadingTree) {
+                        void handleOpenVaultWithSystemFs();
+                    }
+                }}
+            >
+                {/* 前缀：可被 CSS 省略截断 */}
+                <span className="vault-separator-prefix">
+                    {splitVaultDisplayPath(currentVaultPath)[0]}
+                </span>
+                {/* 仓库根目录名：始终完整显示 */}
+                <span className="vault-separator-root">
+                    {splitVaultDisplayPath(currentVaultPath)[1]}
+                </span>
+            </div>
         </div>
     );
 }

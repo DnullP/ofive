@@ -159,3 +159,17 @@ pub struct VaultQuickSwitchItem {
     /// 匹配评分（越高越相关）。
     pub score: usize,
 }
+
+/// WikiLink 补全建议项。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiLinkSuggestionItem {
+    /// 文件相对路径（相对于 vault 根目录）。
+    pub relative_path: String,
+    /// 展示标题（文件名，不含扩展名）。
+    pub title: String,
+    /// 综合评分（越高越相关）。
+    pub score: usize,
+    /// 被引用次数（入链权重和）。
+    pub reference_count: usize,
+}

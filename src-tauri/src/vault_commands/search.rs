@@ -5,6 +5,7 @@
 use crate::state::{get_vault_root, AppState};
 use crate::vault_commands::query_index;
 use crate::vault_commands::types::VaultQuickSwitchItem;
+use crate::vault_commands::types::WikiLinkSuggestionItem;
 use std::path::Path;
 use tauri::State;
 
@@ -189,4 +190,120 @@ pub fn search_vault_markdown_files(
 ) -> Result<Vec<VaultQuickSwitchItem>, String> {
     let root = get_vault_root(&state)?;
     search_vault_markdown_files_in_root(&root, query, limit)
+}
+
+/// 为 WikiLink 自动补全提供建议列表。
+///
+/// 排序维度（综合评分）：
+/// 1. 关键字契合度（与 quickSwitch 相同的模糊匹配算法）；
+/// 2. 笔记热度（被引用次数 / 入链权重和）。
+///
+/// 综合分计算：`keyword_score * 1000 + reference_count`，
+/// 保证关键字匹配度为主排序维度，热度为次排序维度。
+///
+/// # 参数
+/// - `vault_root` vault 根目录。
+/// - `query` 搜索关键字（可为空，空则按热度排序）。
+/// - `limit` 最大返回条数。
+///
+/// # 返回
+/// 综合排序后的建议列表。
+pub fn suggest_wikilink_targets_in_root(
+    vault_root: &Path,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<WikiLinkSuggestionItem>, String> {
+    let effective_limit = limit.unwrap_or(20).clamp(1, 100);
+    println!(
+        "[vault-search] suggest_wikilink_targets start: query='{}' limit={}",
+        query, effective_limit
+    );
+
+    let files_with_counts =
+        query_index::list_markdown_files_with_inbound_count(vault_root)?;
+
+    let trimmed_query = query.trim();
+
+    let mut scored: Vec<WikiLinkSuggestionItem> = if trimmed_query.is_empty() {
+        // 空查询：按热度排序
+        files_with_counts
+            .into_iter()
+            .map(|(relative_path, ref_count)| {
+                let title = Path::new(&relative_path)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(&relative_path)
+                    .to_string();
+                WikiLinkSuggestionItem {
+                    relative_path,
+                    title,
+                    score: ref_count,
+                    reference_count: ref_count,
+                }
+            })
+            .collect()
+    } else {
+        // 有查询：关键字匹配 + 热度加成
+        files_with_counts
+            .into_iter()
+            .filter_map(|(relative_path, ref_count)| {
+                let keyword_score =
+                    score_quick_switch_match(&relative_path, trimmed_query)?;
+                let title = Path::new(&relative_path)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(&relative_path)
+                    .to_string();
+                // 关键字分 * 1000 + 入链数，保证关键字为主排序维度
+                let combined = keyword_score
+                    .saturating_mul(1000)
+                    .saturating_add(ref_count);
+                Some(WikiLinkSuggestionItem {
+                    relative_path,
+                    title,
+                    score: combined,
+                    reference_count: ref_count,
+                })
+            })
+            .collect()
+    };
+
+    scored.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| {
+                right
+                    .reference_count
+                    .cmp(&left.reference_count)
+            })
+            .then_with(|| {
+                left.relative_path
+                    .len()
+                    .cmp(&right.relative_path.len())
+            })
+            .then_with(|| left.relative_path.cmp(&right.relative_path))
+    });
+
+    if scored.len() > effective_limit {
+        scored.truncate(effective_limit);
+    }
+
+    println!(
+        "[vault-search] suggest_wikilink_targets success: query='{}' results={}",
+        trimmed_query,
+        scored.len()
+    );
+
+    Ok(scored)
+}
+
+/// WikiLink 自动补全建议（Tauri 命令包装）。
+pub fn suggest_wikilink_targets(
+    query: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<WikiLinkSuggestionItem>, String> {
+    let root = get_vault_root(&state)?;
+    suggest_wikilink_targets_in_root(&root, query, limit)
 }

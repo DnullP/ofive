@@ -22,6 +22,7 @@
  */
 
 import type { EditorView } from "@codemirror/view";
+import i18n from "../../i18n";
 
 /**
  * @interface PasteImageDependencies
@@ -124,13 +125,13 @@ function blobToBase64(blob: Blob): Promise<string> {
             // 格式: data:image/png;base64,iVBOR...
             const commaIndex = result.indexOf(",");
             if (commaIndex < 0) {
-                reject(new Error("FileReader result 格式异常"));
+                reject(new Error(i18n.t("editorPlugins.fileReaderAbnormal")));
                 return;
             }
             resolve(result.slice(commaIndex + 1));
         };
         reader.onerror = () => {
-            reject(reader.error ?? new Error("FileReader 读取失败"));
+            reject(reader.error ?? new Error(i18n.t("editorPlugins.fileReaderFailed")));
         };
         reader.readAsDataURL(blob);
     });

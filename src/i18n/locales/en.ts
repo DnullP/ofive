@@ -1,0 +1,369 @@
+/**
+ * @module i18n/locales/en
+ * @description English translation resource pack.
+ *
+ * Key structure mirrors zh.ts for consistency.
+ * Grouped by module:
+ *  - common, app, vault, fileTree, editor, outline, graph,
+ *  - settings, commands, focusContext, titlebar, quickSwitcher,
+ *  - commandPalette, moveFileModal, dockview, image, frontmatter,
+ *  - store, editorPlugins
+ */
+
+const en = {
+    /* ==================== Common ==================== */
+    common: {
+        save: "Save",
+        cancel: "Cancel",
+        delete: "Delete",
+        confirm: "Confirm",
+        loading: "Loading...",
+        error: "Error",
+        success: "Success",
+        close: "Close",
+        search: "Search",
+        noMatch: "No match",
+        rootDirectory: "(Root)",
+        newFile: "New File",
+        newFolder: "New Folder",
+        rename: "Rename",
+        record: "Record",
+        resetDefault: "Reset Default",
+    },
+
+    /* ==================== App entry ==================== */
+    app: {
+        homeTitle: "ofive Workspace",
+        homeDescription: "Main area powered by Dockview React adapter, supports pluggable tab components.",
+        homeTabTitle: "Home",
+        explorer: "Explorer",
+        knowledgeGraph: "Knowledge Graph",
+        graphPanelHint: "Click the graph icon in the activity bar to open Knowledge Graph Tab.",
+        searchPanel: "Search",
+        searchPanelTitle: "Search Panel",
+        searchPanelHint: "Full-text search will be available here.",
+        outline: "Outline",
+    },
+
+    /* ==================== Vault panel ==================== */
+    vault: {
+        selectDirectory: "Select Vault Directory",
+        openDirectoryFailed: "Failed to open system directory picker",
+        readFileFailed: "Failed to read file",
+        renameDirFailed: "Failed to rename directory",
+        renameFileFailed: "Failed to rename file",
+        confirmDeleteDir: "Confirm to delete directory {{name}} and its contents?",
+        deleteDirFailed: "Failed to delete directory",
+        confirmDeleteFile: "Confirm to delete {{name}}?",
+        deleteFileFailed: "Failed to delete file",
+        dragMoveDirFailed: "Failed to move directory by drag",
+        dragMoveFileFailed: "Failed to move file by drag",
+        createFileFailed: "Failed to create file",
+        createFolderFailed: "Failed to create folder",
+        currentDirectory: "Current directory: ",
+        openVault: "Open Vault",
+        loadTreeFailed: "Failed to load vault tree",
+    },
+
+    /* ==================== File tree ==================== */
+    fileTree: {
+        files: "Files",
+        newFilePlaceholder: "New File",
+        newFolderPlaceholder: "New Folder",
+        emptyHint: "Right-click empty area to create file or folder",
+    },
+
+    /* ==================== Editor ==================== */
+    editor: {
+        defaultContent: "This is a CodeMirror 6 editor demo.\n\n- Basic editing\n- Markdown syntax highlighting\n- Extensible language and LSP support",
+        newPageContent: "New page created via [[{{target}}]] link.",
+        untitledFile: "Untitled.md",
+        fileNameEmpty: "File name cannot be empty",
+        renameFailed: "Failed to rename file",
+        fallbackContent: "Sample content in browser fallback mode.",
+        noLocalBinaryRead: "Browser fallback mode does not support reading local binary files",
+        invalidSourcePath: "Invalid source file path",
+        sourceNotExist: "Source file does not exist",
+        targetExists: "Target file already exists",
+        directoryPathEmpty: "Directory path cannot be empty",
+    },
+
+    /* ==================== Outline panel ==================== */
+    outline: {
+        noFocusedArticle: "No focused article",
+        focusArticleHint: "Please focus an article in the main editor first.",
+        noHeadings: "No heading structure found.",
+        lineNumber: "Line {{line}}",
+    },
+
+    /* ==================== Knowledge graph ==================== */
+    graph: {
+        loadingGraph: "Loading Markdown graph from backend...",
+        loadFailed: "Load failed: {{message}}",
+        graphReady: "Graph loaded, drag nodes to explore relationships",
+        noMarkdownNodes: "No Markdown nodes found in current vault",
+        /* Graph settings labels */
+        backgroundColor: "Background Color",
+        backgroundColorDesc: "Graph canvas background color.",
+        pointDefaultColor: "Node Color",
+        pointDefaultColorDesc: "Default node color.",
+        pointDefaultSize: "Node Size",
+        pointDefaultSizeDesc: "Default node radius.",
+        pointSizeScale: "Node Scale Factor",
+        pointSizeScaleDesc: "Overall node size multiplier.",
+        pointOpacity: "Node Opacity",
+        pointOpacityDesc: "Overall node opacity.",
+        linkDefaultColor: "Edge Color",
+        linkDefaultColorDesc: "Default edge color.",
+        linkDefaultWidth: "Edge Width",
+        linkDefaultWidthDesc: "Default edge width.",
+        linkWidthScale: "Edge Scale Factor",
+        linkWidthScaleDesc: "Overall edge width multiplier.",
+        linkOpacity: "Edge Opacity",
+        linkOpacityDesc: "Overall edge opacity.",
+        simulationDecay: "Decay",
+        simulationDecayDesc: "Simulation decay speed.",
+        simulationGravity: "Gravity",
+        simulationGravityDesc: "Simulation gravity coefficient.",
+        simulationCenter: "Center Force",
+        simulationCenterDesc: "Center attraction coefficient.",
+        simulationRepulsion: "Repulsion",
+        simulationRepulsionDesc: "Node repulsion coefficient.",
+        simulationRepulsionTheta: "Repulsion Theta",
+        simulationRepulsionThetaDesc: "Repulsion approximation parameter.",
+        simulationLinkSpring: "Spring Coefficient",
+        simulationLinkSpringDesc: "Edge spring strength.",
+        simulationLinkDistance: "Edge Target Distance",
+        simulationLinkDistanceDesc: "Minimum desired edge distance.",
+        simulationRepulsionFromMouse: "Mouse Repulsion",
+        simulationRepulsionFromMouseDesc: "Repulsion force from mouse.",
+        simulationFriction: "Friction",
+        simulationFrictionDesc: "Motion damping coefficient.",
+        simulationCluster: "Cluster Coefficient",
+        simulationClusterDesc: "Cluster force strength.",
+        enableRightClickRepulsion: "Right-click Repulsion",
+        enableRightClickRepulsionDesc: "Enable right-click mouse repulsion.",
+        enableZoom: "Enable Zoom",
+        enableZoomDesc: "Allow zoom interaction.",
+        enableDrag: "Enable Drag",
+        enableDragDesc: "Allow dragging nodes.",
+        enableSimulationDuringZoom: "Simulate on Zoom",
+        enableSimulationDuringZoomDesc: "Keep simulation running during zoom.",
+        fitViewOnInit: "Fit View on Init",
+        fitViewOnInitDesc: "Auto fit view on initialization.",
+        fitViewDelay: "Fit View Delay",
+        fitViewDelayDesc: "Fit view delay on init (ms).",
+        fitViewPadding: "Fit View Padding",
+        fitViewPaddingDesc: "Fit view padding ratio on init.",
+        fitViewDuration: "Fit View Animation",
+        fitViewDurationDesc: "Fit view animation duration (ms).",
+        pixelRatio: "Pixel Ratio",
+        pixelRatioDesc: "Canvas rendering pixel ratio.",
+        scalePointsOnZoom: "Scale Nodes on Zoom",
+        scalePointsOnZoomDesc: "Scale nodes when zooming.",
+        scaleLinksOnZoom: "Scale Edges on Zoom",
+        scaleLinksOnZoomDesc: "Scale edges when zooming.",
+        pointSamplingDistance: "Point Sampling Distance",
+        pointSamplingDistanceDesc: "Visible point sampling distance (px).",
+        showFPSMonitor: "FPS Monitor",
+        showFPSMonitorDesc: "Show performance monitor.",
+        spaceSize: "Simulation Space Size",
+        spaceSizeDesc: "Simulation space edge length.",
+        rescalePositions: "Rescale Positions",
+        rescalePositionsDesc: "Auto rescale point positions.",
+        labelVisibleZoomLevel: "Label Visible Zoom Level",
+        labelVisibleZoomLevelDesc: "Zoom level threshold at which node labels fade in.",
+        /* Graph settings panel */
+        settingsTitle: "Knowledge Graph Settings",
+        settingsCountDesc: "{{count}} configurable parameters",
+        loadSettingsFailed: "Failed to load graph settings",
+        saveSettingsFailed: "Failed to save graph settings",
+        resetSettingsFailed: "Failed to reset graph settings",
+    },
+
+    /* ==================== Settings ==================== */
+    settings: {
+        title: "Settings",
+        noSections: "No settings available",
+        noSectionsHint: "No settings sections registered, please check the registration process.",
+        /* General */
+        generalSection: "General",
+        rememberLastVault: "Remember Last Vault",
+        rememberLastVaultDesc: "When off, the last vault path will not be restored on next launch",
+        enableSearch: "Enable Search",
+        enableSearchDesc: "When off, the search icon in activity bar will be hidden",
+        /* Theme */
+        themeSection: "Style",
+        themeTitle: "Interface Style",
+        themeDesc: "All component colors are controlled by centralized theme variables",
+        themeDark: "Dark",
+        themeDarkDesc: "Suitable for low-light environments, reduces screen glare.",
+        themeLight: "Light",
+        themeLightDesc: "Suitable for bright environments, improves text contrast.",
+        /* Editor */
+        editorSection: "Editor",
+        vimMode: "Vim Mode",
+        vimModeDesc: "Use Vim keybindings (normal/insert mode)",
+        lineWrapping: "Line Wrapping",
+        lineWrappingDesc: "Automatically wrap lines when exceeding editor width",
+        lineNumbers: "Line Numbers",
+        lineNumbersDesc: "Line number display mode on the left side of editor",
+        lineNumbersOff: "Off",
+        lineNumbersAbsolute: "Absolute",
+        lineNumbersRelative: "Relative",
+        fontSize: "Font Size",
+        fontSizeDesc: "Editor text font size (10–32 px)",
+        fontFamily: "Editor Font",
+        fontFamilyDesc: "Choose the font used in the editor content area",
+        fontFamilyReset: "Reset Default",
+        fontPresetSanFrancisco: "San Francisco (System Default)",
+        fontPresetInter: "Inter",
+        fontPresetGeorgia: "Georgia (Serif)",
+        fontPresetMonospace: "Monospace",
+        tabSize: "Tab Size",
+        tabSizeDesc: "Number of spaces per Tab key press (1–8)",
+        /* Shortcuts */
+        shortcutSection: "Shortcuts",
+        shortcutCommand: "Command",
+        shortcutKeybinding: "Keybinding",
+        shortcutCondition: "Condition",
+        shortcutActions: "Actions",
+        shortcutRecordPlaceholder: "Press key combination…",
+        shortcutInvalid: "Invalid shortcut format, please re-record or type",
+        loadShortcutFailed: "Failed to load shortcut settings",
+        saveShortcutFailed: "Failed to save shortcut settings",
+        /* Knowledge graph */
+        graphSection: "Knowledge Graph",
+        /* Language */
+        languageSection: "Language",
+        languageTitle: "Interface Language",
+        languageDesc: "Switch the application interface language",
+    },
+
+    /* ==================== Command system ==================== */
+    commands: {
+        newFilePrompt: "New File",
+        closeCurrentTab: "Close Current Tab",
+        exitApp: "Exit Application",
+        toggleLeftSidebar: "Toggle Left Sidebar",
+        toggleRightSidebar: "Toggle Right Sidebar",
+        saveCurrentFile: "Save Current File",
+        createFileInDir: "Create File in Current Directory",
+        createFolderInDir: "Create Folder in Current Directory",
+        newFolderPrompt: "New Folder",
+        renameCurrent: "Rename Current File",
+        renamePrompt: "Rename File",
+        undo: "Undo",
+        redo: "Redo",
+        selectAll: "Select All",
+        find: "Find",
+        toggleComment: "Toggle Comment",
+        increaseIndent: "Increase Indent",
+        decreaseIndent: "Decrease Indent",
+        toggleBold: "Toggle Bold",
+        toggleItalic: "Toggle Italic",
+        toggleStrikethrough: "Toggle Strikethrough",
+        toggleInlineCode: "Toggle Inline Code",
+        toggleHighlight: "Toggle Highlight",
+        insertLink: "Insert Link",
+        copySelectedFile: "Copy Selected File",
+        pasteFileToDir: "Paste File to Current Directory",
+        deleteSelectedFile: "Delete Selected File",
+        moveFileToDir: "Move Current File to Directory",
+        quickSwitcher: "Quick Switcher",
+        commandPalette: "Open Command Palette",
+    },
+
+    /* ==================== Focus context ==================== */
+    focusContext: {
+        editorFocused: "Editor Focused",
+        fileTreeFocused: "File Tree Focused",
+    },
+
+    /* ==================== Titlebar ==================== */
+    titlebar: {
+        closeApp: "Close Application",
+        toggleFullscreen: "Toggle Fullscreen",
+        minimizeWindow: "Minimize Window",
+        maximizeWindow: "Maximize Window",
+    },
+
+    /* ==================== Quick switcher ==================== */
+    quickSwitcher: {
+        ariaLabel: "Quick Switcher",
+        placeholder: "Quick switch...",
+        searching: "Searching...",
+        searchFailed: "Search failed: {{message}}",
+        noMatch: "No matching notes",
+    },
+
+    /* ==================== Command palette ==================== */
+    commandPalette: {
+        ariaLabel: "Command Palette",
+        placeholder: "Type command name...",
+        noMatch: "No matching commands",
+    },
+
+    /* ==================== Move file modal ==================== */
+    moveFileModal: {
+        vaultRoot: "Vault Root",
+        ariaLabel: "Move Current File to Directory",
+        title: "Move Current File to Directory",
+        placeholder: "Search target directory...",
+        noMatch: "No matching directories",
+    },
+
+    /* ==================== DockviewLayout ==================== */
+    dockview: {
+        settingsTooltip: "Settings",
+        welcomeTitle: "Welcome to ofive",
+        welcomeDesc: "Open files from the left panel, or register new Tab components via extensions.",
+        activityBar: "Activity Bar",
+        activityAlignTop: "Align to Top",
+        activityAlignBottom: "Align to Bottom",
+        activityHide: "Hide",
+        sidebarEmpty: "No panels here. Drag panels from other areas.",
+        leftPanelArea: "Left Extension Panel",
+        mainArea: "Dockview Main Area",
+        rightPanelArea: "Right Extension Panel",
+    },
+
+    /* ==================== Image ==================== */
+    image: {
+        loadFailed: "Image load failed",
+        loading: "Loading image: {{src}}",
+        loadError: "Image load failed: {{src}}",
+        renderFailed: "Image render failed",
+        notFound: "Image file not found",
+        unsupportedType: "Unsupported image type: {{type}}",
+    },
+
+    /* ==================== Frontmatter ==================== */
+    frontmatter: {
+        clickToEdit: "Click to edit",
+        docSynced: "Document synced, save is handled by unified scheduler",
+        emptyFrontmatter: "Current frontmatter is empty.",
+        yamlError: "YAML format error",
+        editorClosed: "Editor is closed, cannot sync.",
+        noFrontmatterBlock: "No frontmatter block detected.",
+        frontmatterSynced: "Frontmatter synced to document, save is handled by unified scheduler.",
+    },
+
+    /* ==================== Store errors ==================== */
+    store: {
+        loadConfigFailed: "Failed to load configuration",
+        refreshConfigFailed: "Failed to refresh backend configuration",
+        saveSearchConfigFailed: "Failed to save search configuration",
+        saveVimConfigFailed: "Failed to save Vim configuration",
+        saveConfigFailed: "Failed to save config item {{key}}",
+    },
+
+    /* ==================== Editor plugins ==================== */
+    editorPlugins: {
+        noMatchingNote: "No matching notes",
+        fileReaderAbnormal: "FileReader result format abnormal",
+        fileReaderFailed: "FileReader read failed",
+    },
+};
+
+export default en;

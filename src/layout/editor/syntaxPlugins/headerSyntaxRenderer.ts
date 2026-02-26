@@ -41,7 +41,7 @@ export function registerHeaderSyntaxRenderer(): void {
                 context.ranges,
                 context.lineFrom,
                 markerEnd,
-                Decoration.mark({ class: "cm-header-marker-hidden" }),
+                Decoration.replace({}),
             );
             pushSyntaxDecorationRange(
                 context.ranges,

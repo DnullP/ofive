@@ -9,6 +9,7 @@
  */
 
 import type { ChangeEvent, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
     KNOWLEDGE_GRAPH_SETTING_DEFINITIONS,
     type KnowledgeGraphSettingDefinition,
@@ -42,6 +43,7 @@ function toNumberValue(raw: string, fallback: number): number {
  * @returns React 节点。
  */
 function GraphSettingField({ definition }: { definition: KnowledgeGraphSettingDefinition }): ReactNode {
+    const { t } = useTranslation();
     const { settings } = useGraphSettingsState();
     const currentValue = settings[definition.key];
 
@@ -60,25 +62,29 @@ function GraphSettingField({ definition }: { definition: KnowledgeGraphSettingDe
         updateGraphSetting(definition.key, event.target.value as never);
     };
 
+    /* boolean 类型：紧凑横向行，复选框在右侧。描述通过 title 属性（tooltip）展示 */
+    if (definition.fieldType === "boolean") {
+        return (
+            <label className="settings-dense-row" key={definition.key} title={t(definition.description)}>
+                <span className="settings-dense-title">{t(definition.title)}</span>
+                <input
+                    type="checkbox"
+                    checked={Boolean(currentValue)}
+                    onChange={onBooleanChange}
+                />
+            </label>
+        );
+    }
+
+    /* number / color 类型：紧凑横向行，控件在右侧。描述通过 title 属性（tooltip）展示 */
     return (
-        <div className="settings-item settings-item-column" key={definition.key}>
-            <div>
-                <div className="settings-item-title">{definition.title}</div>
-                <div className="settings-item-desc">{definition.description}</div>
-            </div>
+        <div className="settings-dense-row" key={definition.key} title={t(definition.description)}>
+            <span className="settings-dense-title">{t(definition.title)}</span>
 
             <div className="settings-graph-control-row">
-                {definition.fieldType === "boolean" ? (
-                    <input
-                        type="checkbox"
-                        checked={Boolean(currentValue)}
-                        onChange={onBooleanChange}
-                    />
-                ) : null}
-
                 {definition.fieldType === "number" ? (
                     <input
-                        className="settings-graph-input"
+                        className="settings-compact-number-input"
                         type="number"
                         value={String(currentValue)}
                         min={definition.min}
@@ -97,9 +103,10 @@ function GraphSettingField({ definition }: { definition: KnowledgeGraphSettingDe
                             onChange={onColorChange}
                         />
                         <input
-                            className="settings-graph-input"
+                            className="settings-compact-number-input"
                             type="text"
                             value={String(currentValue)}
+                            style={{ width: 80 }}
                             onChange={onColorChange}
                         />
                     </>
@@ -115,27 +122,31 @@ function GraphSettingField({ definition }: { definition: KnowledgeGraphSettingDe
  * @returns React 节点。
  */
 function GraphSettingsSection(): ReactNode {
+    const { t } = useTranslation();
     const { settings } = useGraphSettingsState();
     const { currentVaultPath } = useVaultState();
     useGraphSettingsSync(currentVaultPath, true);
 
     return (
         <div className="settings-item-group">
-            <div className="settings-item settings-item-column">
-                <div>
-                    <div className="settings-item-title">知识图谱设置</div>
-                    <div className="settings-item-desc">以下选项覆盖图谱组件全部当前可配置项。</div>
+            {/* --- 图谱设置总览 + 恢复默认 --- */}
+            {/* styles: .settings-compact-row 紧凑行布局 */}
+            <div className="settings-compact-row">
+                <div className="settings-compact-info">
+                    <span className="settings-compact-title">{t("graph.settingsTitle")}</span>
+                    <span className="settings-compact-desc">
+                        {t("graph.settingsCountDesc", { count: Object.keys(settings).length })}
+                    </span>
                 </div>
                 <button
                     type="button"
-                    className="settings-shortcut-save-button"
+                    className="settings-shortcut-action-btn"
                     onClick={() => {
                         void resetGraphSettings();
                     }}
                 >
-                    恢复默认
+                    {t("common.resetDefault")}
                 </button>
-                <div className="settings-shortcut-hint">当前配置项数量：{Object.keys(settings).length}</div>
             </div>
 
             {KNOWLEDGE_GRAPH_SETTING_DEFINITIONS.map((definition) => (
@@ -152,7 +163,7 @@ function GraphSettingsSection(): ReactNode {
 export function registerGraphSettingsSection(): void {
     registerSettingsSection({
         id: "graph-component",
-        title: "知识图谱",
+        title: "settings.graphSection",
         order: 40,
         render: () => <GraphSettingsSection />,
     });

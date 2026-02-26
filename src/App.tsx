@@ -1,4 +1,5 @@
 import { useEffect, useMemo, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Compass, FolderOpen, Search, Orbit } from "lucide-react";
 import {
   CustomTitlebar,
@@ -28,24 +29,28 @@ import {
 import { useVaultTreeSync } from "./store/vaultStore";
 import { useConfigState, useConfigSync } from "./store/configStore";
 import { useThemeSync } from "./store/themeStore";
+import { useAutoSaveLifecycle } from "./store/autoSaveService";
 import { useVaultState } from "./store/vaultStore";
 import { useWindowDragGestureSupport } from "./utils/windowDragGesture";
 import "./App.css";
 
 function HomeTab(): ReactNode {
+  const { t } = useTranslation();
   return (
     <div className="editor-tab-view">
-      <h2>ofive 工作区</h2>
-      <p>主区域由 dockview 官方 React 适配驱动，支持可插拔的 tab 组件。</p>
+      <h2>{t("app.homeTitle")}</h2>
+      <p>{t("app.homeDescription")}</p>
     </div>
   );
 }
 
 function App() {
+  const { t } = useTranslation();
   useBackendEventBridge();
   useVaultTreeSync();
   useThemeSync();
   useWindowDragGestureSupport();
+  useAutoSaveLifecycle();
 
   const vaultState = useVaultState();
   const focusedArticle = useFocusedArticle();
@@ -116,12 +121,12 @@ function App() {
       const nextPanels: PanelDefinition[] = [
         {
           id: "files",
-          title: "资源管理器",
+          title: t("app.explorer"),
           icon: filesIcon,
           position: "left",
           order: 1,
           activityId: "files",
-          activityTitle: "资源管理器",
+          activityTitle: t("app.explorer"),
           activityIcon: filesIcon,
           activitySection: "top",
           render: ({ openTab, closeTab, requestMoveFileToDirectory }) => (
@@ -134,25 +139,26 @@ function App() {
         },
         {
           id: "graph-activity",
-          title: "知识图谱",
+          title: t("app.knowledgeGraph"),
           icon: graphIcon,
           position: "left",
           order: 3,
           activityId: "knowledge-graph",
-          activityTitle: "知识图谱",
+          activityTitle: t("app.knowledgeGraph"),
           activityIcon: graphIcon,
           activitySection: "top",
+          tabOnly: true,
           onActivityClick: ({ openTab }) => {
             openTab({
               id: "knowledge-graph",
-              title: "知识图谱",
+              title: t("app.knowledgeGraph"),
               component: "knowledgegraph",
             });
           },
           render: () => (
             <div className="panel-placeholder">
-              <h3>知识图谱</h3>
-              <p>点击活动栏图谱图标打开知识图谱 Tab。</p>
+              <h3>{t("app.knowledgeGraph")}</h3>
+              <p>{t("app.graphPanelHint")}</p>
             </div>
           ),
         },
@@ -161,18 +167,18 @@ function App() {
       if (configState.featureSettings.searchEnabled) {
         nextPanels.push({
           id: "search",
-          title: "搜索",
+          title: t("app.searchPanel"),
           icon: searchIcon,
           position: "left",
           order: 2,
           activityId: "search",
-          activityTitle: "搜索",
+          activityTitle: t("app.searchPanel"),
           activityIcon: searchIcon,
           activitySection: "top",
           render: () => (
             <div className="panel-placeholder">
-              <h3>搜索面板</h3>
-              <p>在这里接入全文检索能力。</p>
+              <h3>{t("app.searchPanelTitle")}</h3>
+              <p>{t("app.searchPanelHint")}</p>
             </div>
           ),
         });
@@ -180,16 +186,20 @@ function App() {
 
       nextPanels.push({
         id: "outline",
-        title: "大纲",
+        title: t("app.outline"),
         icon: outlineIcon,
         position: "right",
         order: 1,
+        activityId: "outline",
+        activityTitle: t("app.outline"),
+        activityIcon: outlineIcon,
+        activitySection: "top",
         render: () => <OutlinePanel />,
       });
 
       return nextPanels;
     },
-    [configState.featureSettings.searchEnabled, filesIcon, graphIcon, outlineIcon, searchIcon],
+    [configState.featureSettings.searchEnabled, filesIcon, graphIcon, outlineIcon, searchIcon, t],
   );
 
   const tabComponents = useMemo<TabComponentDefinition[]>(
@@ -207,11 +217,11 @@ function App() {
     () => [
       {
         id: "home",
-        title: "首页",
+        title: t("app.homeTabTitle"),
         component: "home",
       },
     ],
-    [],
+    [t],
   );
 
   return (

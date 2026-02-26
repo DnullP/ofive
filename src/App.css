@@ -32,6 +32,24 @@
   --graph-text-color: #e2e8f0;
   --graph-muted-text-color: #94a3b8;
   --graph-label-bg: rgba(2, 6, 23, 0.82);
+
+  /* 标题偏红暗色色调（暗色主题） */
+  --editor-header-text-color: #d4836a;
+  --editor-header-rule-color: #8b5a4a;
+
+  /* highlight.js 语法高亮 Token 颜色（暗色主题） */
+  --hljs-keyword: #c678dd;
+  --hljs-string: #98c379;
+  --hljs-number: #d19a66;
+  --hljs-comment: #5c6370;
+  --hljs-type: #e5c07b;
+  --hljs-function: #61afef;
+  --hljs-variable: #e06c75;
+  --hljs-property: #61afef;
+  --hljs-operator: #abb2bf;
+  --hljs-regexp: #98c379;
+  --hljs-meta: #5c6370;
+  --hljs-attribute: #d19a66;
 }
 
 /* 夜间主题变量：深色背景与高亮文字对比。 */
@@ -68,6 +86,24 @@
   --graph-text-color: #e2e8f0;
   --graph-muted-text-color: #94a3b8;
   --graph-label-bg: rgba(2, 6, 23, 0.82);
+
+  /* 标题偏红暗色色调（暗色主题） */
+  --editor-header-text-color: #d4836a;
+  --editor-header-rule-color: #8b5a4a;
+
+  /* highlight.js 语法高亮 Token 颜色（暗色主题） */
+  --hljs-keyword: #c678dd;
+  --hljs-string: #98c379;
+  --hljs-number: #d19a66;
+  --hljs-comment: #5c6370;
+  --hljs-type: #e5c07b;
+  --hljs-function: #61afef;
+  --hljs-variable: #e06c75;
+  --hljs-property: #61afef;
+  --hljs-operator: #abb2bf;
+  --hljs-regexp: #98c379;
+  --hljs-meta: #5c6370;
+  --hljs-attribute: #d19a66;
 }
 
 /* 日间主题变量：浅色背景与深色文字对比。 */
@@ -104,6 +140,24 @@
   --graph-text-color: #1e293b;
   --graph-muted-text-color: #475569;
   --graph-label-bg: rgba(248, 250, 252, 0.88);
+
+  /* 标题偏红暗色色调（亮色主题） */
+  --editor-header-text-color: #6b2e2e;
+  --editor-header-rule-color: #8b4444;
+
+  /* highlight.js 语法高亮 Token 颜色（亮色主题） */
+  --hljs-keyword: #d73a49;
+  --hljs-string: #032f62;
+  --hljs-number: #005cc5;
+  --hljs-comment: #6a737d;
+  --hljs-type: #6f42c1;
+  --hljs-function: #6f42c1;
+  --hljs-variable: #e36209;
+  --hljs-property: #005cc5;
+  --hljs-operator: #24292e;
+  --hljs-regexp: #032f62;
+  --hljs-meta: #6a737d;
+  --hljs-attribute: #005cc5;
 }
 
 * {

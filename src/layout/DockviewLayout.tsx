@@ -15,6 +15,7 @@ import {
     type MouseEvent as ReactMouseEvent,
     type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
     DockviewReact,
     PaneviewReact,
@@ -26,9 +27,11 @@ import {
     type PaneviewReadyEvent,
 } from "dockview";
 import type { PaneviewDndOverlayEvent, PaneviewDropEvent } from "dockview-core";
+import { getPaneData } from "dockview-core";
 import "dockview/dist/styles/dockview.css";
 import "./DockviewLayout.css";
 import { Settings } from "lucide-react";
+import i18n from "../i18n";
 import {
     getArticleSnapshotById,
     getFocusedArticleSnapshot,
@@ -76,6 +79,22 @@ import { applyPanelOrderForPosition } from "./panelOrderUtils";
 import { CommandPaletteModal } from "./CommandPaletteModal";
 import { MoveFileDirectoryModal } from "./MoveFileDirectoryModal";
 import { QuickSwitcherModal } from "./QuickSwitcherModal";
+import {
+    SETTINGS_ACTIVITY_ID,
+    mergeActivityBarConfig,
+    useActivityBarConfig,
+    ensureActivityBarConfigLoaded,
+    updateActivityBarConfig,
+} from "../store/activityBarStore";
+import { showNativeContextMenu } from "./nativeContextMenu";
+import {
+    ActivityBar,
+    Sidebar,
+    SidebarIconBar,
+    ACTIVITY_ICON_DRAG_TYPE,
+    type ActivityIconItem,
+    type IconDragState,
+} from "./sidebar";
 
 export type PanelPosition = "left" | "right";
 
@@ -111,6 +130,11 @@ export interface PanelDefinition {
     activityIcon?: ReactNode;
     activitySection?: "top" | "bottom";
     onActivityClick?: (context: PanelRenderContext) => void;
+    /**
+     * 标记此面板为"仅标签"模式：点击图标只触发 onActivityClick 打开 Tab，
+     * 不在侧边栏中生成面板容器。适用于知识图谱等无需侧边栏面板的活动。
+     */
+    tabOnly?: boolean;
     render: (context: PanelRenderContext) => ReactNode;
 }
 
@@ -136,7 +160,7 @@ function openSettingsTab(api: DockviewApi | null): void {
 
     api.addPanel({
         id: SETTINGS_TAB_ID,
-        title: "设置",
+        title: i18n.t("dockview.settingsTooltip"),
         component: "settings",
     });
 }
@@ -169,10 +193,11 @@ function isMarkdownPath(path: string): boolean {
 }
 
 function WelcomeTabComponent(): ReactNode {
+    const { t } = useTranslation();
     return (
         <div className="dockview-welcome-tab">
-            <h2>欢迎使用 ofive</h2>
-            <p>请从左侧 Panel 打开文件，或通过扩展注册新的 Tab 组件。</p>
+            <h2>{t("dockview.welcomeTitle")}</h2>
+            <p>{t("dockview.welcomeDesc")}</p>
         </div>
     );
 }
@@ -183,6 +208,7 @@ export function DockviewLayout({
     initialTabs = [],
     initialActivePanelId,
 }: DockviewLayoutProps): ReactNode {
+    const { t } = useTranslation();
     const [dockviewApi, setDockviewApi] = useState<DockviewApi | null>(null);
     const [activeTabId, setActiveTabId] = useState<string | null>(null);
     const [leftSidebarWidth, setLeftSidebarWidth] = useState(280);
@@ -199,12 +225,25 @@ export function DockviewLayout({
     );
     const [activePanelId, setActivePanelId] = useState<string | null>(initialActivePanelId ?? null);
     const [activeActivityId, setActiveActivityId] = useState<string | null>(null);
+    /** 右侧栏当前激活的活动分组 ID */
+    const [activeRightActivityId, setActiveRightActivityId] = useState<string | null>(null);
     const [isQuickSwitcherOpen, setIsQuickSwitcherOpen] = useState<boolean>(false);
     const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
     const [isMoveFileDirectoryModalOpen, setIsMoveFileDirectoryModalOpen] = useState<boolean>(false);
     const [moveSourceSnapshot, setMoveSourceSnapshot] = useState<MoveSourceSnapshot | null>(null);
     const { currentVaultPath, isLoadingTree, error: vaultError, files } = useVaultState();
     const { bindings } = useShortcutState();
+    const activityBarConfigState = useActivityBarConfig();
+
+    /** 活动图标拖拽状态：记录被拖拽项 ID、来源栏、目标位置 */
+    const [dragState, setDragState] = useState<IconDragState | null>(null);
+
+    /** 空侧栏拖入高亮状态：paneview 面板拖入空的左侧栏占位区域时为 true */
+    const [isEmptySidebarDragOver, setIsEmptySidebarDragOver] = useState(false);
+    /** 空侧栏拖入高亮状态：paneview 面板拖入空的右侧栏占位区域时为 true */
+    const [isEmptyRightSidebarDragOver, setIsEmptyRightSidebarDragOver] = useState(false);
+    /** 右侧图标栏拖入高亮状态：活动图标从 ActivityBar 拖入时为 true */
+    const [isRightIconBarDragOver, setIsRightIconBarDragOver] = useState(false);
 
     const dockviewApiRef = useRef<DockviewApi | null>(null);
     const leftPaneApiRef = useRef<PaneviewApi | null>(null);
@@ -214,10 +253,57 @@ export function DockviewLayout({
     const pendingExpandedStateRef = useRef<Map<string, boolean>>(new Map());
     const suppressWindowCloseUntilRef = useRef<number>(0);
     const mainDockHostRef = useRef<HTMLDivElement | null>(null);
+    /** 缓存 paneview 面板的标题，用于检测语言切换后标题是否变化 */
+    const paneTitleCacheRef = useRef<Map<string, string>>(new Map());
 
     useEffect(() => {
         dockviewApiRef.current = dockviewApi;
     }, [dockviewApi]);
+
+    /* 仓库就绪后加载活动栏定制配置 */
+    useEffect(() => {
+        if (currentVaultPath && !isLoadingTree && !vaultError) {
+            void ensureActivityBarConfigLoaded(currentVaultPath);
+        }
+    }, [currentVaultPath, isLoadingTree, vaultError]);
+
+    /**
+     * 监听 i18n 语言切换事件，动态更新 dockview 主区域已打开面板的标题。
+     *
+     * dockview 的 addPanel({ title }) 只在创建时设置静态标题，
+     * 语言切换后需要手动调用 panel.api.setTitle() 刷新。
+     *
+     * 处理的面板：
+     * - "welcome"：首页标签
+     * - "settings"：设置标签
+     * - "knowledge-graph"：知识图谱标签
+     * - 文件标签（id 以 "file:" 开头）：标题为文件名，无需翻译
+     */
+    useEffect(() => {
+        const handleLanguageChanged = (): void => {
+            const api = dockviewApiRef.current;
+            if (!api) {
+                return;
+            }
+
+            console.info("[DockviewLayout] language changed, updating dockview panel titles");
+
+            for (const panel of api.panels) {
+                if (panel.id === "welcome") {
+                    panel.api.setTitle(i18n.t("app.homeTabTitle"));
+                } else if (panel.id === SETTINGS_TAB_ID) {
+                    panel.api.setTitle(i18n.t("dockview.settingsTooltip"));
+                } else if (panel.id === "knowledge-graph") {
+                    panel.api.setTitle(i18n.t("app.knowledgeGraph"));
+                }
+            }
+        };
+
+        i18n.on("languageChanged", handleLanguageChanged);
+        return () => {
+            i18n.off("languageChanged", handleLanguageChanged);
+        };
+    }, []);
 
     const panelById = useMemo(() => new Map(panels.map((panel) => [panel.id, panel])), [panels]);
     const activityMetaById = useMemo(
@@ -268,16 +354,23 @@ export function DockviewLayout({
             .filter((item) => item.position === position)
             .sort((a, b) => a.order - b.order)
             .map((item) => panelById.get(item.id))
-            .filter((item): item is PanelDefinition => item !== undefined);
+            .filter((item): item is PanelDefinition => item !== undefined)
+            /* tabOnly 的面板只提供活动栏图标，不在侧边栏中生成面板容器 */
+            .filter((item) => !item.tabOnly);
 
     const leftPanels = useMemo(() => orderedPanelsByPosition("left"), [panelStates, panelById]);
     const rightPanels = useMemo(() => orderedPanelsByPosition("right"), [panelStates, panelById]);
 
+    /**
+     * 活动栏项列表：仅包含显式声明了 activityId 的面板。
+     * 未声明 activityId 的面板不在活动栏显示图标。
+     * 活动栏图标独立于面板当前所在的容器位置存在，面板被拖到其他侧后图标仍保留。
+     */
     const activityItems = useMemo<ActivityItem[]>(() => {
         const dedup = new Set<string>();
         const items: ActivityItem[] = [];
 
-        leftPanels.forEach((panel) => {
+        panels.filter((p) => p.activityId !== undefined).forEach((panel) => {
             const activityId = activityIdOf(panel);
             if (dedup.has(activityId)) {
                 return;
@@ -293,18 +386,151 @@ export function DockviewLayout({
         });
 
         return items;
-    }, [leftPanels, activityMetaById]);
+    }, [panels, activityMetaById]);
+
+    /**
+     * 将面板派生的活动项与存储的定制配置合并，
+     * 同时加入内置的"设置"按钮，得到最终的活动栏有序列表。
+     * 面板的初始 position 决定其 activity icon 的默认 bar 归属。
+     */
+
+    /** 活动 ID → 默认归属栏（由面板初始 position 决定） */
+    const activityDefaultBar = useMemo(() => {
+        const map = new Map<string, "left" | "right">();
+        for (const panel of panels) {
+            if (panel.activityId === undefined) continue;
+            const aid = activityIdOf(panel);
+            if (!map.has(aid)) {
+                map.set(aid, panel.position === "right" ? "right" : "left");
+            }
+        }
+        return map;
+    }, [panels]);
+
+    const mergedActivityItems = useMemo<ActivityIconItem[]>(() => {
+        const allDefaults = [
+            ...activityItems.map((item) => ({
+                id: item.id,
+                section: item.section,
+                bar: activityDefaultBar.get(item.id),
+            })),
+            { id: SETTINGS_ACTIVITY_ID, section: "bottom" as const },
+        ];
+        const merged = mergeActivityBarConfig(allDefaults, activityBarConfigState.config);
+
+        const itemInfoMap = new Map(activityItems.map((item) => [item.id, item]));
+        return merged.map((m) => {
+            const info = itemInfoMap.get(m.id);
+            return {
+                id: m.id,
+                title:
+                    m.id === SETTINGS_ACTIVITY_ID
+                        ? t("dockview.settingsTooltip")
+                        : (info?.title ?? m.id),
+                icon:
+                    m.id === SETTINGS_ACTIVITY_ID
+                        ? <Settings size={18} strokeWidth={1.8} />
+                        : (info?.icon ?? m.id[0]),
+                section: m.section,
+                visible: m.visible,
+                isSettings: m.id === SETTINGS_ACTIVITY_ID,
+                bar: m.bar,
+            };
+        });
+    }, [activityItems, activityBarConfigState.config, t]);
+
+    /* ────────── 左侧 ActivityBar 可见项 ────────── */
+
+    /** 左侧 ActivityBar 中的所有项（bar === "left"） */
+    const leftBarItems = useMemo(
+        () => mergedActivityItems.filter((i) => i.bar === "left"),
+        [mergedActivityItems],
+    );
+
+    /** 左侧 ActivityBar 中可见的非设置项 */
+    const visibleNonSettingsItems = useMemo(
+        () => leftBarItems.filter((i) => i.visible && !i.isSettings),
+        [leftBarItems],
+    );
+
+    /**
+     * 左侧栏中有面板容器的活动项（排除 tabOnly）。
+     * 仅这些活动项适合作为 activeActivityId 的自动选中候选。
+     */
+    const leftPanelActivityItems = useMemo(
+        () => visibleNonSettingsItems.filter((i) => {
+            const panelDef = panels.find((p) => activityIdOf(p) === i.id);
+            return !panelDef?.tabOnly;
+        }),
+        [visibleNonSettingsItems, panels],
+    );
+
+    /** 左侧 ActivityBar 中可见的顶部项 */
+    const visibleTopActivityItems = useMemo(
+        () => leftBarItems.filter((i) => i.visible && i.section === "top"),
+        [leftBarItems],
+    );
+
+    /** 左侧 ActivityBar 中可见的底部项 */
+    const visibleBottomActivityItems = useMemo(
+        () => leftBarItems.filter((i) => i.visible && i.section === "bottom"),
+        [leftBarItems],
+    );
+
+    /* ────────── 右侧 SidebarIconBar 可见项 ────────── */
+
+    /** 右侧 SidebarIconBar 中可见的项（bar === "right"） */
+    const rightBarItems = useMemo(
+        () => mergedActivityItems.filter((i) => i.bar === "right" && i.visible),
+        [mergedActivityItems],
+    );
+
+    /**
+     * 右侧栏根据 activeRightActivityId 过滤可见面板，
+     * 与左侧栏的 visibleLeftPanels 逻辑对称。
+     * 如果没有选中的活动项，显示全部右侧面板。
+     */
+    const visibleRightPanels = useMemo(() => {
+        if (!activeRightActivityId) {
+            return rightPanels;
+        }
+        return rightPanels.filter((panel) => activityIdOf(panel) === activeRightActivityId);
+    }, [activeRightActivityId, rightPanels]);
+
+    /* ────────── 左侧活动项自动选中 ────────── */
 
     useEffect(() => {
-        if (activityItems.length === 0) {
+        if (leftPanelActivityItems.length === 0) {
             setActiveActivityId(null);
             return;
         }
 
-        if (!activeActivityId || !activityItems.some((item) => item.id === activeActivityId)) {
-            setActiveActivityId(activityItems[0]?.id ?? null);
+        if (!activeActivityId || !leftPanelActivityItems.some((item) => item.id === activeActivityId)) {
+            setActiveActivityId(leftPanelActivityItems[0]?.id ?? null);
         }
-    }, [activeActivityId, activityItems]);
+    }, [activeActivityId, leftPanelActivityItems]);
+
+    /* ────────── 右侧活动项自动选中 ────────── */
+
+    useEffect(() => {
+        if (rightBarItems.length === 0) {
+            setActiveRightActivityId(null);
+            return;
+        }
+        /* 排除 settings 和 tabOnly 的项，它们没有侧边栏面板 */
+        const panelRightItems = rightBarItems.filter((i) => {
+            if (i.isSettings) return false;
+            const panelDef = panels.find((p) => activityIdOf(p) === i.id);
+            return !panelDef?.tabOnly;
+        });
+        if (panelRightItems.length === 0) {
+            setActiveRightActivityId(null);
+            return;
+        }
+        if (!activeRightActivityId || !panelRightItems.some((i) => i.id === activeRightActivityId)) {
+            setActiveRightActivityId(panelRightItems[0]?.id ?? null);
+        }
+    }, [activeRightActivityId, rightBarItems, panels]);
 
     const visibleLeftPanels = useMemo(() => {
         if (!activeActivityId) {
@@ -330,6 +556,16 @@ export function DockviewLayout({
             return;
         }
 
+        /*
+         * 仅当 activePanelId 在 visibleLeftPanels 中可见时才同步 activeActivityId。
+         * 如果面板不在可见列表中，说明 Effect 1（上方）即将重置 activePanelId，
+         * 此时不应反向更新 activeActivityId，否则两个 Effect 会互相追逐导致
+         * "Maximum update depth exceeded" 无限循环。
+         */
+        if (!visibleLeftPanels.some((p) => p.id === activePanelId)) {
+            return;
+        }
+
         const panel = leftPanels.find((item) => item.id === activePanelId);
         if (!panel) {
             return;
@@ -339,7 +575,7 @@ export function DockviewLayout({
         if (activityId !== activeActivityId) {
             setActiveActivityId(activityId);
         }
-    }, [activePanelId, activeActivityId, leftPanels, activityIdByPanelId]);
+    }, [activePanelId, activeActivityId, leftPanels, visibleLeftPanels, activityIdByPanelId]);
 
     const expandedLeftPanelId = useMemo(() => {
         if (activePanelId && visibleLeftPanels.some((panel) => panel.id === activePanelId)) {
@@ -372,7 +608,37 @@ export function DockviewLayout({
         });
 
         panelList.forEach((panel, index) => {
-            if (!api.getPanel(panel.id)) {
+            const existingPanel = api.getPanel(panel.id);
+            const cachedTitle = paneTitleCacheRef.current.get(panel.id);
+
+            // Paneview 没有 setTitle()，标题变化时需要移除后重新添加面板
+            if (existingPanel && cachedTitle !== undefined && cachedTitle !== panel.title) {
+                const wasExpanded = existingPanel.api.isExpanded;
+                console.info("[DockviewLayout] paneview panel title changed, re-creating", panel.id, {
+                    oldTitle: cachedTitle,
+                    newTitle: panel.title,
+                });
+
+                try {
+                    api.removePanel(existingPanel);
+                } catch (error) {
+                    if (!(error instanceof DOMException && error.name === "NotFoundError")) {
+                        console.warn("[DockviewLayout] skip removing title-changed panel", panel.id, error);
+                    }
+                }
+
+                api.addPanel({
+                    id: panel.id,
+                    component: panel.id,
+                    title: panel.title,
+                    isExpanded: wasExpanded,
+                    index,
+                });
+                paneTitleCacheRef.current.set(panel.id, panel.title);
+                return;
+            }
+
+            if (!existingPanel) {
                 const pendingExpanded = pendingExpandedStateRef.current.get(panel.id);
                 const knownExpanded = currentExpandedById.get(panel.id);
                 const fallbackExpanded = expandedPanelId ? panel.id === expandedPanelId : index === 0;
@@ -384,6 +650,8 @@ export function DockviewLayout({
                     isExpanded: pendingExpanded ?? knownExpanded ?? fallbackExpanded,
                     index,
                 });
+
+                paneTitleCacheRef.current.set(panel.id, panel.title);
 
                 if (pendingExpanded !== undefined) {
                     pendingExpandedStateRef.current.delete(panel.id);
@@ -410,9 +678,9 @@ export function DockviewLayout({
     useEffect(() => {
         const api = rightPaneApiRef.current;
         if (api) {
-            syncPanePanels(api, rightPanels, null);
+            syncPanePanels(api, visibleRightPanels, null);
         }
-    }, [rightPanels]);
+    }, [visibleRightPanels]);
 
     const handleUnhandledDragOver = (targetApi: PaneviewApi, event: PaneviewDndOverlayEvent): void => {
         const data = event.getData();
@@ -427,6 +695,117 @@ export function DockviewLayout({
         if (panelById.has(data.paneId)) {
             event.accept();
         }
+    };
+
+    /**
+     * 空侧栏 dragover 处理：当 paneview 面板拖入空的左侧栏区域时，
+     * 通过 getPaneData() 读取 dockview-core 内部的 LocalSelectionTransfer 数据，
+     * 判断是否为有效的面板拖拽并接受该拖入操作。
+     *
+     * 此处理弥补了 PaneviewReact 在 0 个面板时无法触发 onDidDrop 的限制。
+     *
+     * @param e React 原生拖拽事件。
+     */
+    const handleEmptySidebarDragOver = (e: React.DragEvent<HTMLDivElement>): void => {
+        const paneData = getPaneData();
+        if (!paneData || !panelById.has(paneData.paneId)) {
+            return;
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setIsEmptySidebarDragOver(true);
+    };
+
+    /** 空侧栏 dragleave 处理：清除拖入高亮状态。 */
+    const handleEmptySidebarDragLeave = (): void => {
+        setIsEmptySidebarDragOver(false);
+    };
+
+    /**
+     * 空侧栏 drop 处理：将面板从右侧栏移动到左侧栏（当前活动项下）。
+     *
+     * 通过 getPaneData() 获取被拖拽面板的 paneId，
+     * 然后更新 panelStates 将该面板的 position 改为 "left"，
+     * activityId 设为当前活动项 ID。
+     *
+     * @param e React 原生拖拽事件。
+     * @sideEffects 修改 panelStates, activePanelId, isEmptySidebarDragOver。
+     */
+    const handleEmptySidebarDrop = (e: React.DragEvent<HTMLDivElement>): void => {
+        e.preventDefault();
+        setIsEmptySidebarDragOver(false);
+
+        const paneData = getPaneData();
+        if (!paneData || !panelById.has(paneData.paneId)) {
+            console.warn("[DockviewLayout] empty sidebar drop: no valid pane data");
+            return;
+        }
+
+        const movedPanelId = paneData.paneId;
+        console.info("[DockviewLayout] empty sidebar drop", { movedPanelId, activeActivityId });
+
+        /* 保存被拖拽面板的展开状态，以便重建时恢复 */
+        const sourceExpanded =
+            leftPaneApiRef.current?.getPanel(movedPanelId)?.api.isExpanded ??
+            rightPaneApiRef.current?.getPanel(movedPanelId)?.api.isExpanded;
+        if (typeof sourceExpanded === "boolean") {
+            pendingExpandedStateRef.current.set(movedPanelId, sourceExpanded);
+        }
+
+        queueMicrotask(() => {
+            setPanelStates((prev) => {
+                const moved = prev.find((item) => item.id === movedPanelId);
+                if (!moved) {
+                    return prev;
+                }
+
+                const sourcePosition = moved.position;
+                /* 目标 activityId 为当前活动项，若无则回退到面板自身的 activityId */
+                const nextActivityId = activeActivityId ?? moved.activityId;
+
+                /* 构建目标位置（left）的面板 ID 顺序，末尾追加 */
+                const targetIds = prev
+                    .filter((item) => item.position === "left" && item.id !== movedPanelId)
+                    .sort((a, b) => a.order - b.order)
+                    .map((item) => item.id);
+                targetIds.push(movedPanelId);
+
+                /* 源位置面板 ID 顺序（排除已移动面板） */
+                const sourceIds = prev
+                    .filter((item) => item.position === sourcePosition && item.id !== movedPanelId)
+                    .sort((a, b) => a.order - b.order)
+                    .map((item) => item.id);
+
+                return prev.map((item) => {
+                    if (item.id === movedPanelId) {
+                        return {
+                            ...item,
+                            position: "left" as PanelPosition,
+                            order: targetIds.indexOf(movedPanelId),
+                            activityId: nextActivityId,
+                        };
+                    }
+
+                    if (item.position === "left") {
+                        const order = targetIds.indexOf(item.id);
+                        if (order >= 0) {
+                            return { ...item, order };
+                        }
+                    }
+
+                    if (sourcePosition !== "left" && item.position === sourcePosition) {
+                        const order = sourceIds.indexOf(item.id);
+                        if (order >= 0) {
+                            return { ...item, order };
+                        }
+                    }
+
+                    return item;
+                });
+            });
+
+            setActivePanelId(movedPanelId);
+        });
     };
 
     const handleCrossContainerDrop = (targetPosition: PanelPosition, event: PaneviewDropEvent): void => {
@@ -982,13 +1361,9 @@ export function DockviewLayout({
                 target instanceof HTMLTextAreaElement ||
                 target?.isContentEditable === true;
 
-            // 编辑器快捷键由 CodeMirrorEditorTab 的独立 handler 处理
-            if (isCodeMirrorTarget) {
-                return;
-            }
-
             // 文本输入框中不拦截快捷键，保留原生行为
-            if (isTypingTarget) {
+            // （CodeMirror 内容区不属于此类，由后续逻辑处理）
+            if (isTypingTarget && !isCodeMirrorTarget) {
                 return;
             }
 
@@ -1035,7 +1410,7 @@ export function DockviewLayout({
                 return;
             }
 
-            // 编辑器作用域命令不在全局 handler 中执行（已由编辑器处理）
+            // 编辑器作用域命令不在全局 handler 中执行（已由编辑器内部 handler 处理）
             if (isEditorScopedCommand(commandId)) {
                 return;
             }
@@ -1144,26 +1519,534 @@ export function DockviewLayout({
         [rightPanels, panelRenderContext],
     );
 
-    const topActivityItems = useMemo(() => activityItems.filter((item) => item.section === "top"), [activityItems]);
-    const bottomActivityItems = useMemo(
-        () => activityItems.filter((item) => item.section === "bottom"),
-        [activityItems],
-    );
-
+    /**
+     * 活动栏项点击处理：活动栏始终控制左侧栏。
+     *
+     * 设计思路：活动栏是左侧栏的入口，点击行为始终围绕左侧栏展开：
+     * - 点击当前激活的 activity → 折叠/展开左侧栏（toggle）
+     * - 点击不同的 activity → 切换到该 activity 并展开左侧栏
+     * - 若面板有 onActivityClick（如知识图谱打开 Tab），优先执行自定义行为。
+     * - 即使该 activity 下的面板已被拖到右侧，点击仍展开左侧栏（空容器可接受拖入）。
+     *
+     * @param activityId 被点击的活动项 ID。
+     */
     const handleActivityItemClick = (activityId: string): void => {
-        const panel = leftPanels.find((candidate) => activityIdOf(candidate) === activityId);
-        if (!panel) {
-            return;
-        }
+        const panel = panels.find((candidate) => activityIdOf(candidate) === activityId);
 
-        if (panel.onActivityClick) {
+        if (panel?.onActivityClick) {
             panel.onActivityClick(panelRenderContext);
             return;
         }
 
-        setIsLeftSidebarVisible(true);
+        if (activityId === activeActivityId) {
+            /* 再次点击当前活动项 → toggle 左侧栏可见性 */
+            setIsLeftSidebarVisible((prev) => !prev);
+            return;
+        }
+
         setActiveActivityId(activityId);
-        setActivePanelId(panel.id);
+        setIsLeftSidebarVisible(true);
+        if (panel) {
+            setActivePanelId(panel.id);
+        }
+    };
+
+    /**
+     * 合并后的活动栏项点击处理：区分设置按钮与面板活动项。
+     * @param item 被点击的合并活动项。
+     */
+    const handleMergedActivityItemClick = (item: ActivityIconItem): void => {
+        if (item.isSettings) {
+            openSettingsTab(dockviewApiRef.current);
+            return;
+        }
+        handleActivityItemClick(item.id);
+    };
+
+    /* ────────────────── 活动栏拖拽排序 ────────────────── */
+
+    /**
+     * 活动栏项拖拽开始：记录被拖拽项 ID。
+     * @param itemId 被拖拽的活动项 ID。
+     */
+    const handleActivityDragStart = (itemId: string) => (e: React.DragEvent<HTMLButtonElement>): void => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", itemId);
+        e.dataTransfer.setData(ACTIVITY_ICON_DRAG_TYPE, itemId);
+        setDragState({ draggedId: itemId, sourceBar: "left", targetSection: "top", targetIndex: -1 });
+        console.debug("[activity-bar] drag start", { itemId });
+    };
+
+    /** 活动栏项拖拽结束：清理拖拽状态。 */
+    const handleActivityDragEnd = (): void => {
+        setDragState(null);
+    };
+
+    /**
+     * 活动栏单项 dragover：根据光标 Y 轴位于项上半/下半区来计算插入索引。
+     * @param section 当前区域。
+     * @param visibleIndex 该项在可见列表中的索引。
+     */
+    const handleActivityItemDragOver = (
+        section: "top" | "bottom",
+        visibleIndex: number,
+    ) => (e: React.DragEvent<HTMLButtonElement>): void => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        /* 补偿 CSS transform 偏移：被 translateY 偏移的图标通过 data-visual-shift
+           属性标记其偏移量，将 rect 还原到未偏移的"真实碰撞体"位置进行计算，
+           避免视觉偏移导致 midY 抖动。 */
+        const visualShift = Number(e.currentTarget.dataset.visualShift ?? 0);
+        const midY = rect.top - visualShift + rect.height / 2;
+        const insertIndex = e.clientY < midY ? visibleIndex : visibleIndex + 1;
+
+        setDragState((prev) => {
+            if (!prev) {
+                return null;
+            }
+            if (prev.targetSection === section && prev.targetIndex === insertIndex) {
+                return prev;
+            }
+            return { ...prev, targetSection: section, targetIndex: insertIndex };
+        });
+    };
+
+    /**
+     * 活动栏区域容器 dragover：当光标位于区域空白处时将插入点设置为末尾。
+     * @param section 目标区域。
+     * @param visibleCount 该区域的可见项数量。
+     */
+    const handleActivitySectionDragOver = (
+        section: "top" | "bottom",
+        visibleCount: number,
+    ) => (e: React.DragEvent<HTMLDivElement>): void => {
+        if (e.target !== e.currentTarget) {
+            return;
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setDragState((prev) => {
+            if (!prev) {
+                return null;
+            }
+            return { ...prev, targetSection: section, targetIndex: visibleCount };
+        });
+    };
+
+    /**
+     * 活动栏拖拽放置：根据 dragState 中的目标位置重新排序。
+     * 重排逻辑：按区域和可见性分组，将被拖拽项插入目标位置，隐藏项保持在末尾。
+     */
+    const handleActivityBarDrop = (e: React.DragEvent<HTMLElement>): void => {
+        e.preventDefault();
+        if (!dragState || dragState.targetIndex < 0) {
+            setDragState(null);
+            return;
+        }
+
+        const { draggedId, targetSection, targetIndex } = dragState;
+        const dragged = mergedActivityItems.find((i) => i.id === draggedId);
+        if (!dragged) {
+            setDragState(null);
+            return;
+        }
+
+        const others = mergedActivityItems.filter((i) => i.id !== draggedId);
+        const topVisible = others.filter((i) => i.section === "top" && i.visible);
+        const topHidden = others.filter((i) => i.section === "top" && !i.visible);
+        const bottomVisible = others.filter((i) => i.section === "bottom" && i.visible);
+        const bottomHidden = others.filter((i) => i.section === "bottom" && !i.visible);
+
+        const updatedDragged: ActivityIconItem = { ...dragged, section: targetSection };
+        const targetList = targetSection === "top" ? topVisible : bottomVisible;
+        const clamped = Math.min(Math.max(0, targetIndex), targetList.length);
+        targetList.splice(clamped, 0, updatedDragged);
+
+        const reordered = [
+            ...topVisible, ...topHidden,
+            ...bottomVisible, ...bottomHidden,
+        ];
+
+        updateActivityBarConfig({
+            items: reordered.map((i) => ({ id: i.id, section: i.section, visible: i.visible, bar: i.bar })),
+        });
+        setDragState(null);
+        console.info("[activity-bar] reorder completed", {
+            draggedId,
+            targetSection,
+            targetIndex: clamped,
+        });
+    };
+
+    /* ────────────────── 活动栏右键菜单 ────────────────── */
+
+    /**
+     * 右键点击活动栏图标：提供"向上对齐"、"向下对齐"、"隐藏"选项。
+     * @param item 被右键的活动项。
+     */
+    const handleActivityItemContextMenu = (
+        item: ActivityIconItem,
+    ) => async (e: ReactMouseEvent<HTMLButtonElement>): Promise<void> => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const menuItems = [];
+        if (item.section !== "top") {
+            menuItems.push({ id: "align-top", text: t("dockview.activityAlignTop") });
+        }
+        if (item.section !== "bottom") {
+            menuItems.push({ id: "align-bottom", text: t("dockview.activityAlignBottom") });
+        }
+        menuItems.push({ id: "hide", text: t("dockview.activityHide") });
+
+        const selectedId = await showNativeContextMenu(menuItems);
+        if (!selectedId) {
+            return;
+        }
+
+        if (selectedId === "align-top" || selectedId === "align-bottom") {
+            const newSection = selectedId === "align-top" ? "top" : "bottom";
+            const withoutItem = mergedActivityItems.filter((i) => i.id !== item.id);
+            const topItems = withoutItem.filter((i) => i.section === "top");
+            const bottomItems = withoutItem.filter((i) => i.section === "bottom");
+            const moved = { ...item, section: newSection as "top" | "bottom" };
+            if (newSection === "top") {
+                topItems.push(moved);
+            } else {
+                bottomItems.push(moved);
+            }
+            const merged = [...topItems, ...bottomItems];
+            updateActivityBarConfig({
+                items: merged.map((i) => ({ id: i.id, section: i.section, visible: i.visible, bar: i.bar })),
+            });
+            console.info("[activity-bar] item moved to section", { itemId: item.id, newSection });
+        } else if (selectedId === "hide") {
+            const updated = mergedActivityItems.map((i) =>
+                i.id === item.id ? { ...i, visible: false } : i,
+            );
+            updateActivityBarConfig({
+                items: updated.map((i) => ({ id: i.id, section: i.section, visible: i.visible, bar: i.bar })),
+            });
+            console.info("[activity-bar] item hidden", { itemId: item.id });
+        }
+    };
+
+    /**
+     * 右键点击活动栏空白处：列出所有活动项并提供可见性切换。
+     * 使用 CheckMenuItem 展示当前可见状态。
+     */
+    const handleActivityBarBackgroundContextMenu = async (
+        e: ReactMouseEvent<HTMLElement>,
+    ): Promise<void> => {
+        const target = e.target as HTMLElement;
+        if (target.closest(".activity-bar-item")) {
+            return;
+        }
+        e.preventDefault();
+
+        const menuItems = mergedActivityItems.map((item) => ({
+            id: item.id,
+            text: item.title,
+            checked: item.visible,
+        }));
+
+        const selectedId = await showNativeContextMenu(menuItems);
+        if (!selectedId) {
+            return;
+        }
+
+        const updated = mergedActivityItems.map((i) =>
+            i.id === selectedId ? { ...i, visible: !i.visible } : i,
+        );
+        updateActivityBarConfig({
+            items: updated.map((i) => ({ id: i.id, section: i.section, visible: i.visible, bar: i.bar })),
+        });
+        console.info("[activity-bar] visibility toggled", {
+            itemId: selectedId,
+            nowVisible: !mergedActivityItems.find((i) => i.id === selectedId)?.visible,
+        });
+    };
+
+    /* ────────────────── 右侧图标栏处理 ────────────────── */
+
+    /**
+     * 右侧图标栏项点击：切换 activeRightActivityId。
+     * - 如果该 item 是 settings → 打开设置 Tab
+     * - 如果点击的是已激活项 → toggle 右侧栏显隐
+     * - 否则 → 切换到该 activity 并展开右侧栏
+     * @param item 被点击的图标项。
+     */
+    const handleRightIconBarItemClick = (item: ActivityIconItem): void => {
+        if (item.isSettings) {
+            openSettingsTab(dockviewApiRef.current);
+            return;
+        }
+
+        const panel = panels.find((p) => activityIdOf(p) === item.id);
+        if (panel?.onActivityClick) {
+            panel.onActivityClick(panelRenderContext);
+            return;
+        }
+
+        if (item.id === activeRightActivityId) {
+            setIsRightSidebarVisible((prev) => !prev);
+            return;
+        }
+
+        setActiveRightActivityId(item.id);
+        setIsRightSidebarVisible(true);
+        console.debug("[right-icon-bar] switched active right activity", { id: item.id });
+    };
+
+    /**
+     * 右侧图标栏项拖拽开始：允许从右侧拖回左侧。
+     * @param itemId 被拖拽项 ID。
+     */
+    const handleRightIconBarItemDragStart = (itemId: string) => (e: React.DragEvent<HTMLButtonElement>): void => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", itemId);
+        e.dataTransfer.setData(ACTIVITY_ICON_DRAG_TYPE, itemId);
+        setDragState({ draggedId: itemId, sourceBar: "right", targetSection: "top", targetIndex: -1 });
+        console.debug("[right-icon-bar] drag start", { itemId });
+    };
+
+    /** 右侧图标栏项拖拽结束。 */
+    const handleRightIconBarItemDragEnd = (): void => {
+        setDragState(null);
+        setIsRightIconBarDragOver(false);
+    };
+
+    /**
+     * 右侧图标栏 dragover：接受来自 ActivityBar 的图标拖拽。
+     * 通过检测 dataTransfer 中是否包含 ACTIVITY_ICON_DRAG_TYPE 来判断。
+     * @param e React 拖拽事件。
+     */
+    const handleRightIconBarDragOver = (e: React.DragEvent<HTMLDivElement>): void => {
+        if (!e.dataTransfer.types.includes(ACTIVITY_ICON_DRAG_TYPE)) {
+            return;
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setIsRightIconBarDragOver(true);
+    };
+
+    /** 右侧图标栏 dragleave：清除高亮。 */
+    const handleRightIconBarDragLeave = (): void => {
+        setIsRightIconBarDragOver(false);
+    };
+
+    /**
+     * 右侧图标栏 drop：将图标从左栏移到右栏。
+     * 更新 mergedActivityItems 中该项的 bar 为 "right"，
+     * 并将其关联面板的 position 改为 "right"。
+     *
+     * @param e React 拖拽事件。
+     * @sideEffects 修改 activityBarConfig, panelStates, activeRightActivityId, dragState, isRightIconBarDragOver。
+     */
+    const handleRightIconBarDrop = (e: React.DragEvent<HTMLDivElement>): void => {
+        e.preventDefault();
+        setIsRightIconBarDragOver(false);
+
+        const itemId = e.dataTransfer.getData("text/plain");
+        if (!itemId) {
+            setDragState(null);
+            return;
+        }
+
+        const item = mergedActivityItems.find((i) => i.id === itemId);
+        if (!item) {
+            console.warn("[right-icon-bar] drop: item not found", { itemId });
+            setDragState(null);
+            return;
+        }
+
+        /* 更新活动栏配置：将 item 的 bar 改为 right */
+        const updated = mergedActivityItems.map((i) =>
+            i.id === itemId ? { ...i, bar: "right" as const } : i,
+        );
+        updateActivityBarConfig({
+            items: updated.map((i) => ({ id: i.id, section: i.section, visible: i.visible, bar: i.bar })),
+        });
+
+        /* 如果 item 是 panel container（有关联面板），将面板移到右侧 */
+        if (!item.isSettings) {
+            const panelDef = panels.find((p) => activityIdOf(p) === itemId);
+            const isTabOnly = panelDef?.tabOnly ?? false;
+
+            setPanelStates((prev) =>
+                prev.map((ps) => {
+                    const pd = panelById.get(ps.id);
+                    if (pd && activityIdOf(pd) === itemId) {
+                        return { ...ps, position: "right" as PanelPosition };
+                    }
+                    return ps;
+                }),
+            );
+
+            /* tabOnly 的活动不产生侧边栏面板，故不设为 activeRightActivityId */
+            if (!isTabOnly) {
+                setActiveRightActivityId(itemId);
+            }
+            setIsRightSidebarVisible(true);
+        }
+
+        setDragState(null);
+        console.info("[right-icon-bar] icon moved to right bar", { itemId });
+    };
+
+    /**
+     * 左侧 ActivityBar drop 处理（扩展）：除了区域内重排，
+     * 还需处理从右侧图标栏拖回左侧的跨栏操作。
+     */
+    const handleActivityBarDropWithCrossBar = (e: React.DragEvent<HTMLElement>): void => {
+        /* 检查是否是跨栏拖拽（从右栏拖回来的） */
+        if (dragState?.sourceBar === "right") {
+            e.preventDefault();
+            const itemId = dragState.draggedId;
+            const item = mergedActivityItems.find((i) => i.id === itemId);
+            if (!item) {
+                setDragState(null);
+                return;
+            }
+
+            /* 更新活动栏配置：将 item 的 bar 改回 left */
+            const updated = mergedActivityItems.map((i) =>
+                i.id === itemId ? { ...i, bar: "left" as const } : i,
+            );
+            updateActivityBarConfig({
+                items: updated.map((i) => ({ id: i.id, section: i.section, visible: i.visible, bar: i.bar })),
+            });
+
+            /* 将关联面板移回左侧 */
+            if (!item.isSettings) {
+                const panelDef = panels.find((p) => activityIdOf(p) === itemId);
+                const isTabOnly = panelDef?.tabOnly ?? false;
+
+                setPanelStates((prev) =>
+                    prev.map((ps) => {
+                        const pd = panelById.get(ps.id);
+                        if (pd && activityIdOf(pd) === itemId) {
+                            return { ...ps, position: "left" as PanelPosition };
+                        }
+                        return ps;
+                    }),
+                );
+
+                /* tabOnly 的活动不产生侧边栏面板，故不设为 activeActivityId */
+                if (!isTabOnly) {
+                    setActiveActivityId(itemId);
+                }
+                setIsLeftSidebarVisible(true);
+            }
+
+            setDragState(null);
+            console.info("[activity-bar] icon moved back from right bar", { itemId });
+            return;
+        }
+
+        /* 同栏内的重排逻辑 */
+        handleActivityBarDrop(e);
+    };
+
+    /* ────────────────── 空右侧栏拖入 ────────────────── */
+
+    /**
+     * 空右侧栏 dragover 处理：接受 paneview 面板拖入。
+     * @param e React 拖拽事件。
+     */
+    const handleEmptyRightSidebarDragOver = (e: React.DragEvent<HTMLDivElement>): void => {
+        const paneData = getPaneData();
+        if (!paneData || !panelById.has(paneData.paneId)) {
+            return;
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setIsEmptyRightSidebarDragOver(true);
+    };
+
+    /** 空右侧栏 dragleave 处理。 */
+    const handleEmptyRightSidebarDragLeave = (): void => {
+        setIsEmptyRightSidebarDragOver(false);
+    };
+
+    /**
+     * 空右侧栏 drop 处理：将面板从左侧栏移动到右侧栏。
+     * @param e React 拖拽事件。
+     * @sideEffects 修改 panelStates, isEmptyRightSidebarDragOver。
+     */
+    const handleEmptyRightSidebarDrop = (e: React.DragEvent<HTMLDivElement>): void => {
+        e.preventDefault();
+        setIsEmptyRightSidebarDragOver(false);
+
+        const paneData = getPaneData();
+        if (!paneData || !panelById.has(paneData.paneId)) {
+            console.warn("[DockviewLayout] empty right sidebar drop: no valid pane data");
+            return;
+        }
+
+        const movedPanelId = paneData.paneId;
+        console.info("[DockviewLayout] empty right sidebar drop", { movedPanelId });
+
+        /* 设置 activeRightActivityId 为被拖入面板的 activityId，确保面板可见 */
+        const movedPanelDef = panelById.get(movedPanelId);
+        if (movedPanelDef) {
+            const movedActivityId = activityIdOf(movedPanelDef);
+            setActiveRightActivityId(movedActivityId);
+        }
+
+        const sourceExpanded =
+            leftPaneApiRef.current?.getPanel(movedPanelId)?.api.isExpanded ??
+            rightPaneApiRef.current?.getPanel(movedPanelId)?.api.isExpanded;
+        if (typeof sourceExpanded === "boolean") {
+            pendingExpandedStateRef.current.set(movedPanelId, sourceExpanded);
+        }
+
+        queueMicrotask(() => {
+            setPanelStates((prev) => {
+                const moved = prev.find((item) => item.id === movedPanelId);
+                if (!moved) {
+                    return prev;
+                }
+
+                const sourcePosition = moved.position;
+                const targetIds = prev
+                    .filter((item) => item.position === "right" && item.id !== movedPanelId)
+                    .sort((a, b) => a.order - b.order)
+                    .map((item) => item.id);
+                targetIds.push(movedPanelId);
+
+                const sourceIds = prev
+                    .filter((item) => item.position === sourcePosition && item.id !== movedPanelId)
+                    .sort((a, b) => a.order - b.order)
+                    .map((item) => item.id);
+
+                return prev.map((item) => {
+                    if (item.id === movedPanelId) {
+                        return {
+                            ...item,
+                            position: "right" as PanelPosition,
+                            order: targetIds.indexOf(movedPanelId),
+                        };
+                    }
+                    if (item.position === "right") {
+                        const order = targetIds.indexOf(item.id);
+                        if (order >= 0) {
+                            return { ...item, order };
+                        }
+                    }
+                    if (sourcePosition !== "right" && item.position === sourcePosition) {
+                        const order = sourceIds.indexOf(item.id);
+                        if (order >= 0) {
+                            return { ...item, order };
+                        }
+                    }
+                    return item;
+                });
+            });
+        });
     };
 
     const beginResize = (side: "left" | "right", event: ReactMouseEvent<HTMLDivElement>): void => {
@@ -1214,12 +2097,11 @@ export function DockviewLayout({
             handleUnhandledDragOver(api, dragEvent);
         });
 
-        syncPanePanels(api, rightPanels, null);
+        syncPanePanels(api, visibleRightPanels, null);
     };
 
     useEffect(
         () => () => {
-            leftUnhandledDragDisposeRef.current?.dispose();
             rightUnhandledDragDisposeRef.current?.dispose();
         },
         [],
@@ -1283,7 +2165,7 @@ export function DockviewLayout({
         });
 
         if (initialTabs.length === 0) {
-            api.addPanel({ id: "welcome", title: "首页", component: "welcome" });
+            api.addPanel({ id: "welcome", title: t("app.homeTabTitle"), component: "welcome" });
             return;
         }
 
@@ -1300,8 +2182,10 @@ export function DockviewLayout({
     };
 
     const activeLeftPanel = visibleLeftPanels.find((panel) => panel.id === activePanelId) ?? visibleLeftPanels[0];
-    const shouldRenderLeftSidebar = isLeftSidebarVisible && visibleLeftPanels.length > 0;
-    const shouldRenderRightSidebar = isRightSidebarVisible && rightPanels.length > 0;
+    /* 左侧栏在活动栏有选中项且用户未折叠时渲染（即使面板列表为空也保留容器） */
+    const shouldRenderLeftSidebar = isLeftSidebarVisible && activeActivityId !== null;
+    /* 右侧栏只要未被用户 toggle 关闭就始终渲染（空内容时显示占位） */
+    const shouldRenderRightSidebar = isRightSidebarVisible;
     const gridTemplateColumns = shouldRenderLeftSidebar
         ? (shouldRenderRightSidebar
             ? "48px var(--left-sidebar-width, 280px) 1fr var(--right-sidebar-width, 260px)"
@@ -1321,54 +2205,38 @@ export function DockviewLayout({
                 } as CSSProperties
             }
         >
-            <aside className="activity-bar activity-bar-drag-region" aria-label="活动栏" data-tauri-drag-region>
-                <div className="activity-bar-top">
-                    {topActivityItems.map((item) => (
-                        <button
-                            key={item.id}
-                            type="button"
-                            className={`activity-bar-item window-no-drag ${item.id === activeActivityId ? "active" : ""}`}
-                            title={item.title}
-                            onClick={() => {
-                                handleActivityItemClick(item.id);
-                            }}
-                        >
-                            {item.icon}
-                        </button>
-                    ))}
-                </div>
-
-                <div className="activity-bar-bottom">
-                    {bottomActivityItems.map((item) => (
-                        <button
-                            key={item.id}
-                            type="button"
-                            className={`activity-bar-item window-no-drag ${item.id === activeActivityId ? "active" : ""}`}
-                            title={item.title}
-                            onClick={() => {
-                                handleActivityItemClick(item.id);
-                            }}
-                        >
-                            {item.icon}
-                        </button>
-                    ))}
-                    <button
-                        type="button"
-                        className="activity-bar-item window-no-drag"
-                        title="设置"
-                        onClick={() => {
-                            openSettingsTab(dockviewApiRef.current);
-                        }}
-                    >
-                        <Settings size={18} strokeWidth={1.8} />
-                    </button>
-                </div>
-            </aside>
+            {/* 活动栏：支持拖拽排序、右键菜单定制、跨栏拖拽 */}
+            <ActivityBar
+                topItems={visibleTopActivityItems}
+                bottomItems={visibleBottomActivityItems}
+                activeItemId={activeActivityId}
+                dragState={dragState}
+                onItemClick={handleMergedActivityItemClick}
+                onItemDragStart={handleActivityDragStart}
+                onItemDragEnd={handleActivityDragEnd}
+                onItemDragOver={handleActivityItemDragOver}
+                onSectionDragOver={handleActivitySectionDragOver}
+                onDrop={handleActivityBarDropWithCrossBar}
+                onItemContextMenu={handleActivityItemContextMenu}
+                onBackgroundContextMenu={handleActivityBarBackgroundContextMenu}
+                ariaLabel={t("dockview.activityBar")}
+            />
 
             {shouldRenderLeftSidebar && (
-                <section className="left-sidebar" aria-label="左侧扩展面板区">
-                    <header className="sidebar-header window-drag-region" data-tauri-drag-region>{activeLeftPanel?.title ?? "Panels"}</header>
-                    <div className="sidebar-content">
+                <Sidebar
+                    side="left"
+                    width={leftSidebarWidth}
+                    onBeginResize={(e) => beginResize("left", e)}
+                    ariaLabel={t("dockview.leftPanelArea")}
+                    header={
+                        <header className="sidebar-header window-drag-region" data-tauri-drag-region>
+                            {activeLeftPanel?.title
+                                ?? mergedActivityItems.find((i) => i.id === activeActivityId)?.title
+                                ?? "Panels"}
+                        </header>
+                    }
+                >
+                    {visibleLeftPanels.length > 0 ? (
                         <PaneviewReact
                             className="dockview-theme-abyss sidebar-paneview-container"
                             components={leftPaneComponents}
@@ -1377,12 +2245,21 @@ export function DockviewLayout({
                                 handleCrossContainerDrop("left", event);
                             }}
                         />
-                    </div>
-                    <div className="sidebar-resize-handle right-edge" onMouseDown={(event) => beginResize("left", event)} />
-                </section>
+                    ) : (
+                        /* 该 activity 下暂无左侧面板时显示空状态占位，支持拖入面板 */
+                        <div
+                            className={`sidebar-empty-placeholder${isEmptySidebarDragOver ? " drag-over" : ""}`}
+                            onDragOver={handleEmptySidebarDragOver}
+                            onDragLeave={handleEmptySidebarDragLeave}
+                            onDrop={handleEmptySidebarDrop}
+                        >
+                            {t("dockview.sidebarEmpty")}
+                        </div>
+                    )}
+                </Sidebar>
             )}
 
-            <main className="main-content-area" aria-label="Dockview 主区域">
+            <main className="main-content-area" aria-label={t("dockview.mainArea")}>
                 <div ref={mainDockHostRef} className="main-dockview-host">
                     <DockviewReact
                         className="dockview-theme-abyss main-dockview"
@@ -1393,10 +2270,27 @@ export function DockviewLayout({
             </main>
 
             {shouldRenderRightSidebar && (
-                <section className="right-sidebar" aria-label="右侧扩展面板区">
-                    <div className="sidebar-resize-handle left-edge" onMouseDown={(event) => beginResize("right", event)} />
-                    <header className="sidebar-header window-drag-region" data-tauri-drag-region>Right Panels</header>
-                    <div className="sidebar-content">
+                <Sidebar
+                    side="right"
+                    width={rightSidebarWidth}
+                    onBeginResize={(e) => beginResize("right", e)}
+                    ariaLabel={t("dockview.rightPanelArea")}
+                    header={
+                        <SidebarIconBar
+                            items={rightBarItems}
+                            activeItemId={activeRightActivityId}
+                            dragState={dragState}
+                            onItemClick={handleRightIconBarItemClick}
+                            onDragOver={handleRightIconBarDragOver}
+                            onDrop={handleRightIconBarDrop}
+                            onDragLeave={handleRightIconBarDragLeave}
+                            isDragOver={isRightIconBarDragOver}
+                            onItemDragStart={handleRightIconBarItemDragStart}
+                            onItemDragEnd={handleRightIconBarItemDragEnd}
+                        />
+                    }
+                >
+                    {visibleRightPanels.length > 0 ? (
                         <PaneviewReact
                             className="dockview-theme-abyss sidebar-paneview-container"
                             components={rightPaneComponents}
@@ -1405,8 +2299,18 @@ export function DockviewLayout({
                                 handleCrossContainerDrop("right", event);
                             }}
                         />
-                    </div>
-                </section>
+                    ) : (
+                        /* 右侧栏暂无面板时显示空状态占位，支持拖入面板 */
+                        <div
+                            className={`sidebar-empty-placeholder${isEmptyRightSidebarDragOver ? " drag-over" : ""}`}
+                            onDragOver={handleEmptyRightSidebarDragOver}
+                            onDragLeave={handleEmptyRightSidebarDragLeave}
+                            onDrop={handleEmptyRightSidebarDrop}
+                        >
+                            {t("dockview.sidebarEmpty")}
+                        </div>
+                    )}
+                </Sidebar>
             )}
 
             <QuickSwitcherModal

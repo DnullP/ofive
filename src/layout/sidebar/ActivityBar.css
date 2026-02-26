@@ -1,0 +1,116 @@
+/**
+ * 竖向活动栏组件样式。
+ * 从 DockviewLayout.css 中提取的 ActivityBar 专用样式。
+ */
+
+/* 活动栏容器：承载左侧扩展面板切换按钮 */
+.activity-bar {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-right: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    user-select: none;
+}
+
+/* 活动栏拖拽区：允许在按钮外背景区域拖拽窗口（含 macOS 三指拖拽）。 */
+.activity-bar-drag-region {
+    -webkit-app-region: drag;
+    app-region: drag;
+}
+
+/* 顶部/底部区域容器 */
+/* position: relative — 为绝对定位的拖拽指示器提供定位上下文 */
+.activity-bar-top,
+.activity-bar-bottom {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+}
+
+/* 活动栏按钮基础样式 */
+.activity-bar-item {
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    /* 拖拽偏移动画：使 transform translateY 平滑过渡 */
+    transition: transform 0.12s ease;
+}
+
+/* 活动栏按钮禁拖拽：保留点击交互，避免误触发窗口移动。 */
+.activity-bar-item.window-no-drag {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+}
+
+/* 活动栏 SVG 图标样式：统一图标尺寸和对齐 */
+.activity-bar-item svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+    margin: 0 auto;
+}
+
+/* 激活和悬浮样式 */
+.activity-bar-item.active,
+.activity-bar-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* 拖拽中样式：降低透明度 */
+.activity-bar-item.dragging {
+    opacity: 0.3;
+}
+
+/* 拖拽放置指示器：绝对定位于视觉间隙中，覆盖整个间隙以捕获 dragover 事件。
+   视觉线条通过 ::after 伪元素渲染，容器本身透明仅用于事件捕获。 */
+.activity-bar-drop-indicator {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 28px;
+    /* height 和 top 由行内样式动态设定 */
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 指示器视觉线条：3px 高亮横线 */
+.activity-bar-drop-indicator::after {
+    content: '';
+    width: 100%;
+    height: 3px;
+    background: var(--accent-primary);
+    border-radius: 2px;
+    animation: activity-bar-indicator-fadein 0.12s ease-out;
+}
+
+/* 放置指示器淡入动画 */
+@keyframes activity-bar-indicator-fadein {
+    from {
+        opacity: 0;
+        transform: scaleX(0.4);
+    }
+
+    to {
+        opacity: 1;
+        transform: scaleX(1);
+    }
+}
+
+/* 拖拽进行中时顶部/底部区域禁用窗口拖拽 */
+.activity-bar:not(.activity-bar-drag-region) .activity-bar-top,
+.activity-bar:not(.activity-bar-drag-region) .activity-bar-bottom {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+}

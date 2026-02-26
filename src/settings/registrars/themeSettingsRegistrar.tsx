@@ -8,6 +8,7 @@
  */
 
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { updateThemeMode, useThemeState, type ThemeMode } from "../../store/themeStore";
 import { registerSettingsSection } from "../settingsRegistry";
 
@@ -15,16 +16,16 @@ import { registerSettingsSection } from "../settingsRegistry";
  * @constant THEME_MODE_OPTIONS
  * @description 风格模式选项。
  */
-const THEME_MODE_OPTIONS: Array<{ value: ThemeMode; label: string; description: string }> = [
+const THEME_MODE_OPTIONS: Array<{ value: ThemeMode; labelKey: string; descKey: string }> = [
     {
         value: "dark",
-        label: "夜间",
-        description: "适合弱光环境，降低屏幕眩光。",
+        labelKey: "settings.themeDark",
+        descKey: "settings.themeDarkDesc",
     },
     {
         value: "light",
-        label: "日间",
-        description: "适合明亮环境，提升文本对比度。",
+        labelKey: "settings.themeLight",
+        descKey: "settings.themeLightDesc",
     },
 ];
 
@@ -34,14 +35,17 @@ const THEME_MODE_OPTIONS: Array<{ value: ThemeMode; label: string; description: 
  * @returns React 节点。
  */
 function ThemeSettingsSection(): ReactNode {
+    const { t } = useTranslation();
     const themeState = useThemeState();
 
     return (
         <div className="settings-item-group">
-            <div className="settings-item settings-item-column">
-                <div>
-                    <div className="settings-item-title">界面风格</div>
-                    <div className="settings-item-desc">所有组件颜色通过中心化主题变量控制。</div>
+            {/* --- 界面风格 --- */}
+            {/* styles: .settings-compact-row-column 紧凑纵向行，内含主题按钮 */}
+            <div className="settings-compact-row-column">
+                <div className="settings-compact-info">
+                    <span className="settings-compact-title">{t("settings.themeTitle")}</span>
+                    <span className="settings-compact-desc">{t("settings.themeDesc")}</span>
                 </div>
 
                 <div className="settings-theme-mode-row">
@@ -57,8 +61,8 @@ function ThemeSettingsSection(): ReactNode {
                                     updateThemeMode(option.value);
                                 }}
                             >
-                                <span className="settings-theme-mode-button-title">{option.label}</span>
-                                <span className="settings-theme-mode-button-desc">{option.description}</span>
+                                <span className="settings-theme-mode-button-title">{t(option.labelKey)}</span>
+                                <span className="settings-theme-mode-button-desc">{t(option.descKey)}</span>
                             </button>
                         );
                     })}
@@ -75,7 +79,7 @@ function ThemeSettingsSection(): ReactNode {
 export function registerThemeSettingsSection(): void {
     registerSettingsSection({
         id: "theme-style",
-        title: "风格",
+        title: "settings.themeSection",
         order: 20,
         render: () => <ThemeSettingsSection />,
     });

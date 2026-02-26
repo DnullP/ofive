@@ -24,14 +24,18 @@
     "@tauri-apps/plugin-opener": "^2",
     "codemirror": "^6.0.2",
     "dockview": "^4.9.0",
+    "i18next": "^25.8.13",
+    "katex": "^0.16.33",
     "lucide-react": "^0.564.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-i18next": "^16.5.4",
     "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "@types/bun": "^1.3.9",
+    "@types/katex": "^0.16.8",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",

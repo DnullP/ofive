@@ -14,15 +14,42 @@ mod wikilink;
 
 use crate::state::AppState;
 use crate::vault_config::VaultConfig;
+use std::time::Instant;
 use tauri::{AppHandle, State};
+
+/// 包装命令执行并记录耗时的宏。
+///
+/// 记录命令的调用、成功耗时或失败耗时日志。
+/// 要求 `$body` 返回 `Result<_, String>`。
+///
+/// # 参数
+/// - `$name`：命令名称字符串
+/// - `$body`：命令执行表达式
+macro_rules! timed_command {
+    ($name:expr, $body:expr) => {{
+        log::info!("[command] {} invoked", $name);
+        let start = Instant::now();
+        let result = $body;
+        let elapsed = start.elapsed();
+        match &result {
+            Ok(_) => log::info!("[command] {} completed in {:?}", $name, elapsed),
+            Err(ref err) => {
+                log::warn!("[command] {} failed in {:?}: {}", $name, elapsed, err)
+            }
+        }
+        result
+    }};
+}
 
 pub use graph::get_current_vault_markdown_graph_in_root;
 pub use search::search_vault_markdown_files_in_root;
+pub use search::suggest_wikilink_targets_in_root;
 pub use types::*;
 pub use vault_ops::{
     copy_vault_entry_in_root, create_vault_binary_file_in_root, create_vault_directory_in_root,
-    create_vault_markdown_file_in_root, delete_vault_directory_in_root,
-    delete_vault_markdown_file_in_root, get_current_vault_config_in_root,
+    create_vault_markdown_file_in_root, delete_vault_binary_file_in_root,
+    delete_vault_directory_in_root, delete_vault_markdown_file_in_root,
+    get_current_vault_config_in_root,
     get_current_vault_tree_in_root, move_vault_directory_to_directory_in_root,
     move_vault_markdown_file_to_directory_in_root, read_vault_binary_file_in_root,
     read_vault_markdown_file_in_root, rename_vault_directory_in_root,
@@ -47,12 +74,12 @@ pub fn set_current_vault(
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<SetVaultResponse, String> {
-    vault_ops::set_current_vault(vault_path, app_handle, state)
+    timed_command!("set_current_vault", vault_ops::set_current_vault(vault_path, app_handle, state))
 }
 
 #[tauri::command]
 pub fn get_current_vault_tree(state: State<'_, AppState>) -> Result<VaultTreeResponse, String> {
-    vault_ops::get_current_vault_tree(state)
+    timed_command!("get_current_vault_tree", vault_ops::get_current_vault_tree(state))
 }
 
 #[tauri::command]
@@ -60,7 +87,7 @@ pub fn read_vault_markdown_file(
     relative_path: String,
     state: State<'_, AppState>,
 ) -> Result<ReadMarkdownResponse, String> {
-    vault_ops::read_vault_markdown_file(relative_path, state)
+    timed_command!("read_vault_markdown_file", vault_ops::read_vault_markdown_file(relative_path, state))
 }
 
 #[tauri::command]
@@ -68,7 +95,7 @@ pub fn read_vault_binary_file(
     relative_path: String,
     state: State<'_, AppState>,
 ) -> Result<ReadBinaryFileResponse, String> {
-    vault_ops::read_vault_binary_file(relative_path, state)
+    timed_command!("read_vault_binary_file", vault_ops::read_vault_binary_file(relative_path, state))
 }
 
 #[tauri::command]
@@ -78,7 +105,7 @@ pub fn create_vault_markdown_file(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
-    vault_ops::create_vault_markdown_file(relative_path, content, source_trace_id, state)
+    timed_command!("create_vault_markdown_file", vault_ops::create_vault_markdown_file(relative_path, content, source_trace_id, state))
 }
 
 #[tauri::command]
@@ -87,7 +114,7 @@ pub fn create_vault_directory(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    vault_ops::create_vault_directory(relative_directory_path, source_trace_id, state)
+    timed_command!("create_vault_directory", vault_ops::create_vault_directory(relative_directory_path, source_trace_id, state))
 }
 
 #[tauri::command]
@@ -97,7 +124,7 @@ pub fn create_vault_binary_file(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteBinaryFileResponse, String> {
-    vault_ops::create_vault_binary_file(relative_path, base64_content, source_trace_id, state)
+    timed_command!("create_vault_binary_file", vault_ops::create_vault_binary_file(relative_path, base64_content, source_trace_id, state))
 }
 
 #[tauri::command]
@@ -107,7 +134,7 @@ pub fn save_vault_markdown_file(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
-    vault_ops::save_vault_markdown_file(relative_path, content, source_trace_id, state)
+    timed_command!("save_vault_markdown_file", vault_ops::save_vault_markdown_file(relative_path, content, source_trace_id, state))
 }
 
 #[tauri::command]
@@ -117,12 +144,12 @@ pub fn rename_vault_markdown_file(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
-    vault_ops::rename_vault_markdown_file(
+    timed_command!("rename_vault_markdown_file", vault_ops::rename_vault_markdown_file(
         from_relative_path,
         to_relative_path,
         source_trace_id,
         state,
-    )
+    ))
 }
 
 #[tauri::command]
@@ -131,9 +158,25 @@ pub fn delete_vault_markdown_file(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    vault_ops::delete_vault_markdown_file(relative_path, source_trace_id, state)
+    timed_command!("delete_vault_markdown_file", vault_ops::delete_vault_markdown_file(relative_path, source_trace_id, state))
 }
-
+/// 删除仓库中的二进制文件（图片等非 Markdown 文件）。
+///
+/// # 参数
+/// - `relative_path` - 目标文件相对路径。
+/// - `source_trace_id` - 前端写入追踪 ID（可选）。
+/// - `state` - 应用共享状态。
+///
+/// # 返回
+/// - 成功返回 `Ok(())`。
+#[tauri::command]
+pub fn delete_vault_binary_file(
+    relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    vault_ops::delete_vault_binary_file(relative_path, source_trace_id, state)
+}
 #[tauri::command]
 pub fn move_vault_markdown_file_to_directory(
     from_relative_path: String,
@@ -141,12 +184,12 @@ pub fn move_vault_markdown_file_to_directory(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
-    vault_ops::move_vault_markdown_file_to_directory(
+    timed_command!("move_vault_markdown_file_to_directory", vault_ops::move_vault_markdown_file_to_directory(
         from_relative_path,
         target_directory_relative_path,
         source_trace_id,
         state,
-    )
+    ))
 }
 
 #[tauri::command]
@@ -156,7 +199,7 @@ pub fn rename_vault_directory(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
-    vault_ops::rename_vault_directory(from_relative_path, to_relative_path, source_trace_id, state)
+    timed_command!("rename_vault_directory", vault_ops::rename_vault_directory(from_relative_path, to_relative_path, source_trace_id, state))
 }
 
 #[tauri::command]
@@ -166,12 +209,12 @@ pub fn move_vault_directory_to_directory(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
-    vault_ops::move_vault_directory_to_directory(
+    timed_command!("move_vault_directory_to_directory", vault_ops::move_vault_directory_to_directory(
         from_relative_path,
         target_directory_relative_path,
         source_trace_id,
         state,
-    )
+    ))
 }
 
 #[tauri::command]
@@ -180,7 +223,7 @@ pub fn delete_vault_directory(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    vault_ops::delete_vault_directory(relative_path, source_trace_id, state)
+    timed_command!("delete_vault_directory", vault_ops::delete_vault_directory(relative_path, source_trace_id, state))
 }
 
 #[tauri::command]
@@ -190,12 +233,12 @@ pub fn copy_vault_entry(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<CopyEntryResponse, String> {
-    vault_ops::copy_vault_entry(
+    timed_command!("copy_vault_entry", vault_ops::copy_vault_entry(
         source_relative_path,
         target_directory_relative_path,
         source_trace_id,
         state,
-    )
+    ))
 }
 
 #[tauri::command]
@@ -204,7 +247,7 @@ pub fn resolve_wikilink_target(
     target: String,
     state: State<'_, AppState>,
 ) -> Result<Option<ResolveWikiLinkTargetResponse>, String> {
-    wikilink::resolve_wikilink_target(current_dir, target, state)
+    timed_command!("resolve_wikilink_target", wikilink::resolve_wikilink_target(current_dir, target, state))
 }
 
 #[tauri::command]
@@ -213,7 +256,7 @@ pub fn resolve_media_embed_target(
     target: String,
     state: State<'_, AppState>,
 ) -> Result<Option<ResolveMediaEmbedTargetResponse>, String> {
-    wikilink::resolve_media_embed_target(current_dir, target, state)
+    timed_command!("resolve_media_embed_target", wikilink::resolve_media_embed_target(current_dir, target, state))
 }
 
 #[tauri::command]
@@ -222,24 +265,33 @@ pub fn search_vault_markdown_files(
     limit: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<VaultQuickSwitchItem>, String> {
-    search::search_vault_markdown_files(query, limit, state)
+    timed_command!("search_vault_markdown_files", search::search_vault_markdown_files(query, limit, state))
 }
 
 #[tauri::command]
 pub fn get_current_vault_markdown_graph(
     state: State<'_, AppState>,
 ) -> Result<VaultMarkdownGraphResponse, String> {
-    graph::get_current_vault_markdown_graph(state)
+    timed_command!("get_current_vault_markdown_graph", graph::get_current_vault_markdown_graph(state))
 }
 
 #[tauri::command]
 pub fn segment_chinese_text(text: String) -> Result<Vec<ChineseSegmentToken>, String> {
-    segment::segment_chinese_text(text)
+    timed_command!("segment_chinese_text", segment::segment_chinese_text(text))
+}
+
+#[tauri::command]
+pub fn suggest_wikilink_targets(
+    query: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<WikiLinkSuggestionItem>, String> {
+    timed_command!("suggest_wikilink_targets", search::suggest_wikilink_targets(query, limit, state))
 }
 
 #[tauri::command]
 pub fn get_current_vault_config(state: State<'_, AppState>) -> Result<VaultConfig, String> {
-    vault_ops::get_current_vault_config(state)
+    timed_command!("get_current_vault_config", vault_ops::get_current_vault_config(state))
 }
 
 #[tauri::command]
@@ -248,7 +300,7 @@ pub fn save_current_vault_config(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<VaultConfig, String> {
-    vault_ops::save_current_vault_config(config, source_trace_id, state)
+    timed_command!("save_current_vault_config", vault_ops::save_current_vault_config(config, source_trace_id, state))
 }
 
 #[cfg(test)]

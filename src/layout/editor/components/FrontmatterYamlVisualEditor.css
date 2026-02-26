@@ -9,22 +9,6 @@
     background: transparent;
 }
 
-/* Frontmatter 头部：展示标题和模式切换区域。 */
-.fmv-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-/* Frontmatter 标题文本：强调当前编辑对象。 */
-.fmv-title {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 13px;
-    font-weight: 700;
-}
-
 /* Frontmatter 字段网格：按行组织 key/value 编辑卡片。 */
 .fmv-grid {
     display: grid;
@@ -42,15 +26,8 @@
     display: grid;
     grid-template-columns: 180px minmax(0, 1fr);
     gap: 8px;
-    align-items: start;
+    align-items: center;
     border-bottom: 1px solid var(--border-color);
-}
-
-/* Frontmatter 字段键区域：展示 key 与类型标签。 */
-.fmv-key-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
 }
 
 /* Frontmatter 字段键文本：显示 YAML key 名称。 */
@@ -59,12 +36,6 @@
     font-size: 12px;
     font-weight: 600;
     word-break: break-all;
-}
-
-/* Frontmatter 类型提示：显示字段值类型。 */
-.fmv-type {
-    color: var(--text-secondary);
-    font-size: 11px;
 }
 
 /* Frontmatter 值编辑区域：承载不同类型输入控件。 */
@@ -144,7 +115,7 @@
     font-size: 12px;
 }
 
-/* Frontmatter 小型操作按钮：用于列表增删。 */
+/* Frontmatter 小型操作按钮：用于列表新增。 */
 .fmv-mini-action {
     height: 22px;
     min-width: 22px;
@@ -156,21 +127,26 @@
     cursor: pointer;
 }
 
-/* Frontmatter 状态文本：展示保存和校验反馈。 */
-.fmv-status {
+/* Frontmatter 列表项删除按钮：无边框圆圈，仅显示叉号，hover 变色提示可点击。 */
+.fmv-mini-action-remove {
+    height: 22px;
+    min-width: 22px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
-/* Frontmatter 成功状态文本：保存成功时高亮提示。 */
-.fmv-status-success {
+/* Frontmatter 列表项删除按钮悬停态：颜色加深提示交互。 */
+.fmv-mini-action-remove:hover {
     color: var(--text-primary);
-}
-
-/* Frontmatter 失败状态文本：保存失败时附加下划线提示。 */
-.fmv-status-error {
-    color: var(--text-secondary);
-    text-decoration: underline;
 }
 
 /* Frontmatter 空态文本：无可编辑字段时提示用户。 */

@@ -1,12 +1,12 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "../../src/App";
+import { MockApp } from "./mock/MockApp";
 import { setupFrontendLogBridge } from "../../src/utils/frontendLogBridge";
 
 setupFrontendLogBridge();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
-        <App />
+        <MockApp />
     </React.StrictMode>,
 );

@@ -10,6 +10,7 @@
  */
 
 import { RangeSetBuilder } from "@codemirror/state";
+import i18n from "../../../i18n";
 import {
     Decoration,
     type DecorationSet,
@@ -105,10 +106,10 @@ class ImageEmbedWidget extends WidgetType {
             const messageElement = document.createElement("span");
             if (this.payload.state === "loading") {
                 messageElement.className = "cm-image-embed-loading";
-                messageElement.textContent = `图片加载中：${this.payload.label}`;
+                messageElement.textContent = i18n.t("image.loading", { src: this.payload.label });
             } else {
                 messageElement.className = "cm-image-embed-error";
-                messageElement.textContent = `图片加载失败：${this.payload.errorMessage || this.payload.label}`;
+                messageElement.textContent = i18n.t("image.loadError", { src: this.payload.errorMessage || this.payload.label });
             }
 
             wrapperElement.appendChild(messageElement);
@@ -120,7 +121,7 @@ class ImageEmbedWidget extends WidgetType {
 
             const fallbackElement = document.createElement("span");
             fallbackElement.className = "cm-image-embed-error";
-            fallbackElement.textContent = "图片渲染失败";
+            fallbackElement.textContent = i18n.t("image.renderFailed");
             return fallbackElement;
         }
     }
@@ -259,7 +260,7 @@ export function createImageEmbedSyntaxExtension(
                                 state: "error",
                                 relativePath: "",
                                 source: "",
-                                errorMessage: "未找到图片文件",
+                                errorMessage: i18n.t("image.notFound"),
                             });
                             this.requestRefresh(view);
                             return;
@@ -276,7 +277,7 @@ export function createImageEmbedSyntaxExtension(
                                 state: "error",
                                 relativePath: resolvedTarget.relativePath,
                                 source: "",
-                                errorMessage: `不支持的图片类型: ${binaryResult.mimeType}`,
+                                errorMessage: i18n.t("image.unsupportedType", { type: binaryResult.mimeType }),
                             });
                             this.requestRefresh(view);
                             return;

@@ -14,6 +14,7 @@
  */
 
 import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import YAML from "yaml";
 import "./FrontmatterYamlVisualEditor.css";
 
@@ -68,19 +69,6 @@ function isScalar(value: unknown): value is VisualYamlScalar {
 }
 
 /**
- * @function inferScalarTypeName
- * @description 推断 scalar 类型名。
- * @param value 值。
- * @returns 类型名。
- */
-function inferScalarTypeName(value: VisualYamlScalar): string {
-    if (value === null) {
-        return "null";
-    }
-    return typeof value;
-}
-
-/**
  * @function parseYamlToRecord
  * @description 将 YAML 文本解析为可编辑记录结构。
  * @param yamlText YAML 文本。
@@ -125,27 +113,13 @@ function stringifyRecordToYaml(record: Record<string, VisualYamlValue>): string 
 }
 
 /**
- * @function buildStatusClassName
- * @description 根据状态构建状态文本类名。
- * @param status 保存状态。
- * @returns 类名。
- */
-function buildStatusClassName(status: SaveResult | null): string {
-    if (!status) {
-        return "fmv-status";
-    }
-
-    return status.success ? "fmv-status fmv-status-success" : "fmv-status fmv-status-error";
-}
-
-/**
  * @function FrontmatterYamlVisualEditor
  * @description 渲染 frontmatter 的可视化 YAML 编辑器。
  * @param props 组件参数。
  * @returns React 节点。
  */
 export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorProps): ReactNode {
-    const [status, setStatus] = useState<SaveResult | null>(null);
+    const { t } = useTranslation();
     const [recordDraft, setRecordDraft] = useState<Record<string, VisualYamlValue>>(() =>
         parseYamlToRecord(props.initialYamlText),
     );
@@ -166,7 +140,6 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
         }
 
         const result = props.onCommitYaml(nextYaml);
-        setStatus(result);
         if (result.success) {
             lastCommittedYamlRef.current = nextYaml;
         }
@@ -186,7 +159,6 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
         }
 
         const result = props.onCommitYaml(nextYaml);
-        setStatus(result);
         if (result.success) {
             lastCommittedYamlRef.current = nextYaml;
         }
@@ -322,14 +294,14 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                                         setEditingListItem({ key, index });
                                         setEditingListDraft(text);
                                     }}
-                                    title="点击编辑"
+                                    title={t("frontmatter.clickToEdit")}
                                 >
                                     {item === null ? "null" : String(item)}
                                 </button>
                             )}
                             <button
                                 type="button"
-                                className="fmv-mini-action"
+                                className="fmv-mini-action-remove"
                                 onClick={() => {
                                     const shouldClearEdit =
                                         editingListItem?.key === key && editingListItem.index === index;
@@ -401,30 +373,16 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
 
     return (
         <section className="fmv-editor">
-            <header className="fmv-header">
-                <h3 className="fmv-title">Frontmatter Visual YAML Editor</h3>
-                <span className={buildStatusClassName(status)}>{status?.message ?? "文档已同步，保存由统一调度负责"}</span>
-            </header>
-
             <div className="fmv-grid">
                 {fieldEntries.length === 0 ? (
-                    <div className="fmv-empty">当前 frontmatter 为空。</div>
+                    <div className="fmv-empty">{t("frontmatter.emptyFrontmatter")}</div>
                 ) : (
-                    fieldEntries.map(([key, value]) => {
-                        const typeLabel = Array.isArray(value)
-                            ? `array<${inferScalarTypeName(value[0] ?? "")}>`
-                            : inferScalarTypeName(value);
-
-                        return (
-                            <div key={key} className="fmv-row">
-                                <div className="fmv-key-wrap">
-                                    <span className="fmv-key">{key}</span>
-                                    <span className="fmv-type">{typeLabel}</span>
-                                </div>
-                                <div className="fmv-control">{renderValueControl(key, value)}</div>
-                            </div>
-                        );
-                    })
+                    fieldEntries.map(([key, value]) => (
+                        <div key={key} className="fmv-row">
+                            <span className="fmv-key">{key}</span>
+                            <div className="fmv-control">{renderValueControl(key, value)}</div>
+                        </div>
+                    ))
                 )}
             </div>
         </section>

@@ -42,9 +42,9 @@ describe("isConditionSatisfied", () => {
 });
 
 describe("SHORTCUT_CONDITION_LABELS", () => {
-    test("should have labels for all known conditions", () => {
-        expect(SHORTCUT_CONDITION_LABELS.editorFocused).toBe("编辑器聚焦");
-        expect(SHORTCUT_CONDITION_LABELS.fileTreeFocused).toBe("文件树聚焦");
+    test("should have i18n keys for all known conditions", () => {
+        expect(SHORTCUT_CONDITION_LABELS.editorFocused).toBe("focusContext.editorFocused");
+        expect(SHORTCUT_CONDITION_LABELS.fileTreeFocused).toBe("focusContext.fileTreeFocused");
     });
 });
 

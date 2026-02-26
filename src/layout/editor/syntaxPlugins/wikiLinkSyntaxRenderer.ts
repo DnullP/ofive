@@ -8,6 +8,7 @@
 import type { DockviewApi } from "dockview";
 import type { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import i18n from "../../../i18n";
 import { addDelimitedInlineSyntaxDecoration, registerLineSyntaxRenderer } from "../syntaxRenderRegistry";
 import { readVaultMarkdownFile, resolveWikiLinkTarget } from "../../../api/vaultApi";
 import { resolveParentDirectory } from "../pathUtils";
@@ -197,7 +198,7 @@ export function createWikiLinkNavigationExtension(
                             component: "codemirror",
                             params: {
                                 path: fallbackPath,
-                                content: `# ${wikiLink.target}\n\n通过 [[${wikiLink.target}]] 打开的新页面。`,
+                                content: `# ${wikiLink.target}\n\n${i18n.t("editor.newPageContent", { target: wikiLink.target })}`,
                             },
                         });
                     }

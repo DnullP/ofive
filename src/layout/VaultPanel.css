@@ -6,57 +6,40 @@
     min-height: 0;
 }
 
-/* 仓库工具栏：左侧目录文本 + 右侧按钮的横向布局 */
-.vault-toolbar {
+/* 底部仓库路径分隔栏：横线分隔，hover 变色，点击触发打开仓库 */
+.vault-separator {
+    border-top: 1px solid var(--border-color);
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin: 8px;
-    padding: 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--bg-secondary);
-    user-select: none;
+    flex-shrink: 0;
+    transition: background 0.15s ease;
 }
 
-/* 当前目录区域：容纳 label 与目录路径文本 */
-.vault-toolbar-path {
-    min-width: 0;
+/* 分隔栏 hover 态：背景高亮提示可点击 */
+.vault-separator:hover {
+    background: var(--bg-hover);
+}
+
+/* 分隔栏路径前缀：过长时从右侧截断（省略号紧贴仓库名左侧） */
+.vault-separator-prefix {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    font-size: 12px;
-    user-select: none;
-}
-
-/* 当前目录文案前缀 */
-.vault-toolbar-label {
     color: var(--text-secondary);
-    margin-right: 6px;
+    flex-shrink: 1;
+    min-width: 0;
 }
 
-/* 当前目录值文本：强调主内容并支持省略 */
-.vault-toolbar-value {
+/* 分隔栏仓库根目录名：始终完整显示，不收缩，加粗突出 */
+.vault-separator-root {
+    white-space: nowrap;
     color: var(--text-primary);
-}
-
-/* 打开仓库按钮：右侧操作按钮基础样式 */
-.vault-toolbar-open-button {
-    border: 1px solid var(--border-color);
-    background: var(--bg-hover);
-    color: var(--text-primary);
-    border-radius: 6px;
-    padding: 4px 10px;
-    cursor: pointer;
+    font-weight: 600;
     flex-shrink: 0;
-    user-select: none;
-}
-
-/* 打开仓库按钮禁用态 */
-.vault-toolbar-open-button:disabled {
-    opacity: 0.6;
-    cursor: default;
 }
 
 /* 仓库面板错误文本：用于展示后端加载失败信息 */

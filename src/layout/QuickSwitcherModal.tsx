@@ -14,7 +14,8 @@
  *   />
  */
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { searchVaultMarkdownFiles, type VaultQuickSwitchItem } from "../api/vaultApi";
 import "./QuickSwitcherModal.css";
 
@@ -32,17 +33,17 @@ export interface QuickSwitcherModalProps {
 }
 
 /**
- * @function clampSelectedIndex
- * @description 将索引限制在候选列表范围内。
+ * @function wrapSelectedIndex
+ * @description 将索引在候选列表范围内循环（到达末尾回到开头，到达开头回到末尾）。
  * @param nextIndex 目标索引。
  * @param itemCount 候选数量。
- * @returns 合法索引；无候选时返回 -1。
+ * @returns 循环后的合法索引；无候选时返回 -1。
  */
-function clampSelectedIndex(nextIndex: number, itemCount: number): number {
+function wrapSelectedIndex(nextIndex: number, itemCount: number): number {
     if (itemCount <= 0) {
         return -1;
     }
-    return Math.max(0, Math.min(nextIndex, itemCount - 1));
+    return ((nextIndex % itemCount) + itemCount) % itemCount;
 }
 
 /**
@@ -52,6 +53,7 @@ function clampSelectedIndex(nextIndex: number, itemCount: number): number {
  * @returns 浮窗节点；未打开时返回 null。
  */
 export function QuickSwitcherModal(props: QuickSwitcherModalProps): ReactNode {
+    const { t } = useTranslation();
     const [query, setQuery] = useState<string>("");
     const [results, setResults] = useState<VaultQuickSwitchItem[]>([]);
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
@@ -59,6 +61,7 @@ export function QuickSwitcherModal(props: QuickSwitcherModalProps): ReactNode {
     const [error, setError] = useState<string | null>(null);
 
     const inputRef = useRef<HTMLInputElement | null>(null);
+    const listRef = useRef<HTMLDivElement | null>(null);
     const requestVersionRef = useRef<number>(0);
 
     const selectedItem = useMemo(() => {
@@ -67,6 +70,24 @@ export function QuickSwitcherModal(props: QuickSwitcherModalProps): ReactNode {
         }
         return results[selectedIndex] ?? null;
     }, [results, selectedIndex]);
+
+    /**
+     * 选中项变化时，自动将对应 DOM 元素滚动到可视区域。
+     * 使用 scrollIntoView({ block: "nearest" }) 避免不必要的大幅跳动。
+     */
+    const scrollActiveItemIntoView = useCallback(() => {
+        if (selectedIndex < 0 || !listRef.current) {
+            return;
+        }
+        const activeElement = listRef.current.querySelector(".quick-switcher-item.active") as HTMLElement | null;
+        if (activeElement) {
+            activeElement.scrollIntoView({ block: "nearest" });
+        }
+    }, [selectedIndex]);
+
+    useEffect(() => {
+        scrollActiveItemIntoView();
+    }, [scrollActiveItemIntoView]);
 
     const openResultByIndex = (index: number): void => {
         if (index < 0 || index >= results.length) {
@@ -106,7 +127,7 @@ export function QuickSwitcherModal(props: QuickSwitcherModalProps): ReactNode {
             event.preventDefault();
             setSelectedIndex((previous) => {
                 const base = previous < 0 ? 0 : previous + 1;
-                return clampSelectedIndex(base, results.length);
+                return wrapSelectedIndex(base, results.length);
             });
             return;
         }
@@ -115,7 +136,7 @@ export function QuickSwitcherModal(props: QuickSwitcherModalProps): ReactNode {
             event.preventDefault();
             setSelectedIndex((previous) => {
                 const base = previous < 0 ? results.length - 1 : previous - 1;
-                return clampSelectedIndex(base, results.length);
+                return wrapSelectedIndex(base, results.length);
             });
             return;
         }
@@ -211,24 +232,24 @@ export function QuickSwitcherModal(props: QuickSwitcherModalProps): ReactNode {
             onKeyDown={handleKeyboard}
         >
             {/* quick-switcher-panel: 浮窗主体容器，承载输入与候选列表 */}
-            <section className="quick-switcher-panel" aria-label="快速切换">
+            <section className="quick-switcher-panel" aria-label={t("quickSwitcher.ariaLabel")}>
                 {/* quick-switcher-input: 搜索输入框，输入即触发后端检索 */}
                 <input
                     ref={inputRef}
                     className="quick-switcher-input"
                     type="text"
                     value={query}
-                    placeholder="快速切换..."
+                    placeholder={t("quickSwitcher.placeholder")}
                     onChange={(event) => {
                         setQuery(event.target.value);
                     }}
                 />
 
                 {/* quick-switcher-list: 搜索结果列表容器 */}
-                <div className="quick-switcher-list" role="listbox" aria-activedescendant={selectedItem?.relativePath}>
-                    {isLoading && <div className="quick-switcher-empty">搜索中...</div>}
-                    {!isLoading && error && <div className="quick-switcher-empty">搜索失败：{error}</div>}
-                    {!isLoading && !error && results.length === 0 && <div className="quick-switcher-empty">无匹配笔记</div>}
+                <div ref={listRef} className="quick-switcher-list" role="listbox" aria-activedescendant={selectedItem?.relativePath}>
+                    {isLoading && <div className="quick-switcher-empty">{t("quickSwitcher.searching")}</div>}
+                    {!isLoading && error && <div className="quick-switcher-empty">{t("quickSwitcher.searchFailed", { message: error })}</div>}
+                    {!isLoading && !error && results.length === 0 && <div className="quick-switcher-empty">{t("quickSwitcher.noMatch")}</div>}
 
                     {!isLoading && !error && results.map((item, index) => (
                         // quick-switcher-item: 单条候选项，可通过鼠标与键盘高亮选择

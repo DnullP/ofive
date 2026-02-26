@@ -23,6 +23,7 @@ import {
     type KnowledgeGraphSettingKey,
     type KnowledgeGraphSettings,
 } from "../layout/knowledgeGraphSettings";
+import i18n from "../i18n";
 
 /**
  * @constant GRAPH_SETTINGS_CONFIG_KEY
@@ -264,7 +265,7 @@ class GraphSettingsStore {
                 hasPersisted,
             });
         } catch (error) {
-            const message = error instanceof Error ? error.message : "加载图谱设置失败";
+            const message = error instanceof Error ? error.message : i18n.t("graph.loadSettingsFailed");
             this.state = {
                 ...this.state,
                 settings: { ...DEFAULT_KNOWLEDGE_GRAPH_SETTINGS },
@@ -304,7 +305,7 @@ class GraphSettingsStore {
             await writeGraphSettingsToConfig(nextSettings);
             console.info("[graph-settings-store] setting updated", { key, value });
         } catch (error) {
-            const message = error instanceof Error ? error.message : "保存图谱设置失败";
+            const message = error instanceof Error ? error.message : i18n.t("graph.saveSettingsFailed");
             this.state = {
                 ...this.state,
                 settings: previousSettings,
@@ -337,7 +338,7 @@ class GraphSettingsStore {
             await writeGraphSettingsToConfig(nextSettings);
             console.info("[graph-settings-store] reset to defaults");
         } catch (error) {
-            const message = error instanceof Error ? error.message : "重置图谱设置失败";
+            const message = error instanceof Error ? error.message : i18n.t("graph.resetSettingsFailed");
             this.state = {
                 ...this.state,
                 settings: previousSettings,

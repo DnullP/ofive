@@ -16,8 +16,9 @@
 
 import { Graph, type GraphConfigInterface } from "@cosmos.gl/graph";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useTranslation } from "react-i18next";
 import type { IDockviewPanelProps } from "dockview";
-import { getCurrentVaultMarkdownGraph } from "../api/vaultApi";
+import { getCurrentVaultMarkdownGraph, readVaultMarkdownFile } from "../api/vaultApi";
 import { createKnowledgeGraphInteractionCallbacksFor } from "./knowledgeGraphInteractions";
 import { buildKnowledgeGraphConfig, DEFAULT_KNOWLEDGE_GRAPH_SETTINGS } from "./knowledgeGraphSettings";
 import {
@@ -79,6 +80,13 @@ const DRAG_MOVE_REHEAT_INTERVAL_MS = 120;
  * @description 标签在节点上方的偏移像素。
  */
 const LABEL_Y_OFFSET_PX = 14;
+
+/**
+ * @constant LABEL_FADE_RANGE
+ * @description 标签从透明到完全可见的缩放过渡区间宽度（相对于阈值的比例）。
+ * 当缩放在 [threshold, threshold + LABEL_FADE_RANGE] 区间时标签逐渐显现。
+ */
+const LABEL_FADE_RANGE = 0.15;
 
 /**
  * @constant ZOOM_IN_SCALE_AFTER_FIT
@@ -196,13 +204,33 @@ function getNodeLabelText(path: string, title: string): string {
 }
 
 /**
+ * @function computeLabelOpacity
+ * @description 根据当前缩放级别和阈值计算标签透明度。
+ * @param currentZoom 当前缩放级别。
+ * @param threshold 标签开始显现的最低缩放阈值。
+ * @returns 0 到 1 之间的透明度值。
+ */
+function computeLabelOpacity(currentZoom: number, threshold: number): number {
+    if (currentZoom >= threshold + LABEL_FADE_RANGE) {
+        return 1;
+    }
+    if (currentZoom <= threshold) {
+        return 0;
+    }
+    return (currentZoom - threshold) / LABEL_FADE_RANGE;
+}
+
+/**
  * @function KnowledgeGraphTab
  * @description 渲染知识图谱并与后端图数据接口同步。
+ *   支持缩放级别驱动的标签渐显、单击节点跳转笔记、Cmd+单击在新 Tab 打开笔记。
+ * @param props Dockview 面板属性，通过 containerApi 操控 Tab。
  * @returns Dockview Tab 组件。
  */
 export function KnowledgeGraphTab(
-    _props: IDockviewPanelProps<Record<string, unknown>>,
+    props: IDockviewPanelProps<Record<string, unknown>>,
 ): ReactElement {
+    const { t } = useTranslation();
     const { currentVaultPath } = useVaultState();
     useGraphSettingsSync(currentVaultPath, true);
     const { themeMode } = useThemeState();
@@ -214,6 +242,8 @@ export function KnowledgeGraphTab(
     const dragTailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const labelRafRef = useRef<number | null>(null);
     const lastDragReheatTimeRef = useRef<number>(0);
+    /** 节点索引到相对路径的映射表，用于点击节点时打开对应笔记 */
+    const nodePathsByIndexRef = useRef<Map<number, string>>(new Map());
     const [labels, setLabels] = useState<GraphLabelItem[]>([]);
     const [state, setState] = useState<GraphTabState>({
         loading: true,
@@ -232,7 +262,7 @@ export function KnowledgeGraphTab(
 
     /**
      * @function scheduleLabelLayoutUpdate
-     * @description 通过 RAF 节流同步标签屏幕坐标。
+     * @description 通过 RAF 节流同步标签屏幕坐标并根据缩放级别控制标签整体透明度。
      * @param graph Graph 实例。
      */
     const scheduleLabelLayoutUpdate = (graph: Graph): void => {
@@ -247,6 +277,18 @@ export function KnowledgeGraphTab(
             const hostElement = hostRef.current;
             if (!labelLayerElement || !hostElement) {
                 console.warn("[knowledge-graph] skip label layout update because host or layer is null");
+                return;
+            }
+
+            /* ── 缩放驱动标签透明度 ── */
+            const currentZoom = graph.getZoomLevel();
+            const threshold = graphSettings.labelVisibleZoomLevel;
+            const opacity = computeLabelOpacity(currentZoom, threshold);
+            labelLayerElement.style.opacity = String(opacity);
+            labelLayerElement.style.pointerEvents = opacity <= 0 ? "none" : "none";
+
+            /* 当标签完全不可见时跳过位置计算以节省性能 */
+            if (opacity <= 0) {
                 return;
             }
 
@@ -297,6 +339,60 @@ export function KnowledgeGraphTab(
         });
     };
 
+    /**
+     * @function handleNodeClick
+     * @description 处理图谱节点点击事件：打开对应笔记 Tab，若已存在则跳转激活。
+     * @param index 节点索引。
+     * @param _pointPosition 节点在仿真空间中的坐标（未使用）。
+     * @param _event 鼠标事件（未使用）。
+     */
+    const handleNodeClick = async (
+        index: number,
+        _pointPosition: [number, number],
+        _event: MouseEvent,
+    ): Promise<void> => {
+        const relativePath = nodePathsByIndexRef.current.get(index);
+        if (!relativePath) {
+            console.warn("[knowledge-graph] clicked node has no path mapping", { index });
+            return;
+        }
+
+        const tabId = `file:${relativePath}`;
+        const fileName = relativePath.split("/").pop() ?? relativePath;
+
+        console.info("[knowledge-graph] node clicked", { index, relativePath });
+
+        /* 已有 Tab 直接激活 */
+        const existingPanel = props.containerApi.getPanel(tabId);
+        if (existingPanel) {
+            existingPanel.api.setActive();
+            console.info("[knowledge-graph] activated existing tab", { tabId });
+            return;
+        }
+
+        /* 新建 Tab */
+        try {
+            const file = await readVaultMarkdownFile(relativePath);
+
+            props.containerApi.addPanel({
+                id: tabId,
+                title: fileName,
+                component: "codemirror",
+                params: {
+                    path: relativePath,
+                    content: file.content,
+                },
+            });
+            console.info("[knowledge-graph] opened new tab from graph node", { tabId });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error("[knowledge-graph] failed to open note from graph node", {
+                relativePath,
+                message,
+            });
+        }
+    };
+
     useEffect(() => {
         const hostElement = hostRef.current;
         if (!hostElement) {
@@ -328,6 +424,13 @@ export function KnowledgeGraphTab(
                 setTimeoutImpl: window.setTimeout,
                 clearTimeoutImpl: window.clearTimeout,
             }),
+            onPointClick: (
+                index: number,
+                pointPosition: [number, number],
+                event: MouseEvent,
+            ) => {
+                void handleNodeClick(index, pointPosition, event);
+            },
         });
 
         graphRef.current = graph;
@@ -411,6 +514,13 @@ export function KnowledgeGraphTab(
                     cameraCenter[1],
                 );
 
+                /* 缓存节点索引到路径的映射，供点击回调使用 */
+                const nextPathsByIndex = new Map<number, string>();
+                response.nodes.forEach((node, index) => {
+                    nextPathsByIndex.set(index, node.path);
+                });
+                nodePathsByIndexRef.current = nextPathsByIndex;
+
                 const nextLabels = response.nodes.map((node, index) => ({
                     index,
                     text: getNodeLabelText(node.path, node.title),
@@ -473,10 +583,10 @@ export function KnowledgeGraphTab(
     }, []);
 
     const statusText = state.loading
-        ? "正在从后端加载 Markdown 图谱..."
+        ? t("graph.loadingGraph")
         : state.error
-            ? `加载失败：${state.error}`
-            : "图谱已加载，可拖拽节点探索关系";
+            ? t("graph.loadFailed", { message: state.error })
+            : t("graph.graphReady");
 
     return (
         <div className="knowledge-graph-tab">
@@ -509,7 +619,7 @@ export function KnowledgeGraphTab(
                     ))}
                 </div>
                 {!state.loading && !state.error && state.nodeCount === 0 && (
-                    <div className="knowledge-graph-tab__empty">当前 vault 未发现 Markdown 节点</div>
+                    <div className="knowledge-graph-tab__empty">{t("graph.noMarkdownNodes")}</div>
                 )}
             </div>
         </div>

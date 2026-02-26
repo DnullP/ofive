@@ -50,11 +50,23 @@ export interface EditorFocusChangedBusEvent {
     updatedAt: number;
 }
 
+/**
+ * @interface EditorRenameRequestedBusEvent
+ * @description 请求编辑器 Tab 进入文件名内联编辑模式的事件。
+ * @field eventId - 事件唯一标识
+ * @field articleId - 要进入重命名模式的文章 Tab ID
+ */
+export interface EditorRenameRequestedBusEvent {
+    eventId: string;
+    articleId: string;
+}
+
 type AppBusEventMap = {
     "vault.fs": VaultFsEventPayload;
     "vault.config": VaultConfigEventPayload;
     "editor.content.changed": EditorContentChangedBusEvent;
     "editor.focus.changed": EditorFocusChangedBusEvent;
+    "editor.rename.requested": EditorRenameRequestedBusEvent;
 };
 
 const appEventTarget = new EventTarget();
@@ -276,6 +288,32 @@ export function subscribeEditorFocusBusEvent(
     listener: (payload: EditorFocusChangedBusEvent) => void,
 ): () => void {
     return subscribeBusEvent("editor.focus.changed", listener);
+}
+
+/**
+ * @function emitEditorRenameRequestedEvent
+ * @description 发布编辑器 Tab 进入文件名内联编辑模式的请求事件。
+ * @param payload 事件负载，含目标 articleId。
+ */
+export function emitEditorRenameRequestedEvent(payload: {
+    articleId: string;
+}): void {
+    dispatchBusEvent("editor.rename.requested", {
+        eventId: nextFrontendEventId(),
+        ...payload,
+    });
+}
+
+/**
+ * @function subscribeEditorRenameRequestedEvent
+ * @description 订阅编辑器 Tab 重命名请求事件。
+ * @param listener 监听器。
+ * @returns 取消订阅函数。
+ */
+export function subscribeEditorRenameRequestedEvent(
+    listener: (payload: EditorRenameRequestedBusEvent) => void,
+): () => void {
+    return subscribeBusEvent("editor.rename.requested", listener);
 }
 
 // ────────── 仅用于测试的辅助函数 ──────────

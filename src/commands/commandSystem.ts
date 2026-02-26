@@ -13,15 +13,18 @@ import {
     copyVaultEntry,
     createVaultDirectory,
     createVaultMarkdownFile,
+    deleteVaultBinaryFile,
     deleteVaultDirectory,
     deleteVaultMarkdownFile,
-    renameVaultMarkdownFile,
     saveVaultMarkdownFile,
 } from "../api/vaultApi";
+import i18n from "../i18n";
 import {
     getArticleSnapshotById,
     getFocusedArticleSnapshot,
 } from "../store/editorContextStore";
+import { markContentAsSaved } from "../store/autoSaveService";
+import { emitEditorRenameRequestedEvent } from "../events/appEventBus";
 import type { ShortcutCondition } from "./focusContext";
 import {
     getFileTreeClipboardEntry,
@@ -49,6 +52,12 @@ export type CommandId =
     | "editor.toggleComment"
     | "editor.indentMore"
     | "editor.indentLess"
+    | "editor.toggleBold"
+    | "editor.toggleItalic"
+    | "editor.toggleStrikethrough"
+    | "editor.toggleInlineCode"
+    | "editor.toggleHighlight"
+    | "editor.insertLink"
     | "fileTree.copySelected"
     | "fileTree.pasteInDirectory"
     | "fileTree.deleteSelected"
@@ -66,7 +75,13 @@ export type EditorNativeCommandId =
     | "editor.find"
     | "editor.toggleComment"
     | "editor.indentMore"
-    | "editor.indentLess";
+    | "editor.indentLess"
+    | "editor.toggleBold"
+    | "editor.toggleItalic"
+    | "editor.toggleStrikethrough"
+    | "editor.toggleInlineCode"
+    | "editor.toggleHighlight"
+    | "editor.insertLink";
 
 /**
  * @interface CommandShortcutMeta
@@ -138,28 +153,6 @@ function resolveParentDirectoryByPath(path: string | null): string {
     return normalizedPath.slice(0, splitIndex);
 }
 
-function resolveRenamedMarkdownPath(currentPath: string, draftName: string): string | null {
-    const normalizedCurrentPath = currentPath.replace(/\\/g, "/");
-    const trimmedName = draftName.trim();
-    if (!trimmedName) {
-        return null;
-    }
-
-    const currentFileName = normalizedCurrentPath.split("/").pop() ?? normalizedCurrentPath;
-    const hasMarkdownSuffix = /\.(md|markdown)$/i.test(trimmedName);
-    const currentSuffixMatch = currentFileName.match(/(\.md|\.markdown)$/i);
-    const currentSuffix = currentSuffixMatch?.[0] ?? ".md";
-    const nextFileName = hasMarkdownSuffix ? trimmedName : `${trimmedName}${currentSuffix}`;
-
-    const splitIndex = normalizedCurrentPath.lastIndexOf("/");
-    if (splitIndex < 0) {
-        return nextFileName;
-    }
-
-    const parentDirectory = normalizedCurrentPath.slice(0, splitIndex);
-    return `${parentDirectory}/${nextFileName}`;
-}
-
 function resolveCreatedFilePath(directoryPath: string, draftName: string): string | null {
     const trimmedName = draftName.trim();
     if (!trimmedName) {
@@ -185,7 +178,7 @@ function resolveCreatedDirectoryPath(directoryPath: string, draftName: string): 
 async function executeCreateFileInFocusedDirectory(context: CommandContext): Promise<void> {
     const targetPath = resolveTargetArticlePath(context.activeTabId);
     const baseDirectory = resolveParentDirectoryByPath(targetPath);
-    const draftName = window.prompt("新建文件", "untitled.md");
+    const draftName = window.prompt(i18n.t("commands.newFilePrompt"), "untitled.md");
     if (draftName === null) {
         return;
     }
@@ -230,7 +223,7 @@ export interface CommandDefinition {
 export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     "tab.closeFocused": {
         id: "tab.closeFocused",
-        title: "关闭当前标签页",
+        title: "commands.closeCurrentTab",
         shortcut: {
             defaultBinding: "Ctrl+W",
             editableInSettings: true,
@@ -245,7 +238,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "app.quit": {
         id: "app.quit",
-        title: "退出应用",
+        title: "commands.exitApp",
         shortcut: {
             defaultBinding: "Cmd+Q",
             editableInSettings: false,
@@ -268,7 +261,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "sidebar.left.toggle": {
         id: "sidebar.left.toggle",
-        title: "显示/隐藏左侧边栏",
+        title: "commands.toggleLeftSidebar",
         shortcut: {
             defaultBinding: "Cmd+Shift+J",
             editableInSettings: true,
@@ -284,7 +277,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "sidebar.right.toggle": {
         id: "sidebar.right.toggle",
-        title: "显示/隐藏右侧边栏",
+        title: "commands.toggleRightSidebar",
         shortcut: {
             defaultBinding: "Cmd+Shift+K",
             editableInSettings: true,
@@ -300,7 +293,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "file.saveFocused": {
         id: "file.saveFocused",
-        title: "保存当前文件",
+        title: "commands.saveCurrentFile",
         shortcut: {
             defaultBinding: "Cmd+S",
             editableInSettings: true,
@@ -324,6 +317,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
             }
 
             await saveVaultMarkdownFile(targetArticle.path, targetArticle.content);
+            markContentAsSaved(targetArticle.path, targetArticle.content);
             console.info("[command-system] saveFocused success", {
                 articleId: targetArticle.articleId,
                 path: targetArticle.path,
@@ -333,7 +327,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "note.createNew": {
         id: "note.createNew",
-        title: "在当前目录创建文件",
+        title: "commands.createFileInDir",
         shortcut: {
             defaultBinding: "",
             editableInSettings: true,
@@ -344,7 +338,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "folder.createInFocusedDirectory": {
         id: "folder.createInFocusedDirectory",
-        title: "在当前目录创建文件夹",
+        title: "commands.createFolderInDir",
         shortcut: {
             defaultBinding: "",
             editableInSettings: true,
@@ -352,7 +346,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
         async execute(context) {
             const targetPath = resolveTargetArticlePath(context.activeTabId);
             const baseDirectory = resolveParentDirectoryByPath(targetPath);
-            const draftName = window.prompt("新建文件夹", "untitled-folder");
+            const draftName = window.prompt(i18n.t("commands.newFolderPrompt"), "untitled-folder");
             if (draftName === null) {
                 return;
             }
@@ -371,12 +365,19 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "file.renameFocused": {
         id: "file.renameFocused",
-        title: "重命名当前文件",
+        title: "commands.renameCurrent",
         shortcut: {
             defaultBinding: "",
             editableInSettings: true,
         },
-        async execute(context) {
+        /**
+         * @description 请求当前激活 Tab 进入文件名内联编辑模式。
+         * 通过事件总线发布 editor.rename.requested 事件，由对应的
+         * CodeMirrorEditorTab 接收并切换到编辑状态。
+         * @param context 指令执行上下文。
+         * @sideEffect 发布 editor.rename.requested 事件。
+         */
+        execute(context) {
             const activeArticle = context.activeTabId ? getArticleSnapshotById(context.activeTabId) : null;
             const focusedArticle = getFocusedArticleSnapshot();
             const targetArticle = activeArticle ?? focusedArticle;
@@ -396,29 +397,16 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
                 return;
             }
 
-            const currentName = normalizedPath.split("/").pop() ?? normalizedPath;
-            const draftName = window.prompt("重命名文件", currentName);
-            if (draftName === null) {
-                return;
-            }
-
-            const targetRelativePath = resolveRenamedMarkdownPath(normalizedPath, draftName);
-            if (!targetRelativePath || targetRelativePath === normalizedPath) {
-                return;
-            }
-
-            await renameVaultMarkdownFile(normalizedPath, targetRelativePath);
-            context.closeTab(targetArticle.articleId);
-            context.openFileTab(targetRelativePath, targetArticle.content);
-            console.info("[command-system] renameFocused success", {
-                from: normalizedPath,
-                to: targetRelativePath,
+            emitEditorRenameRequestedEvent({ articleId: targetArticle.articleId });
+            console.info("[command-system] renameFocused: emitted rename request", {
+                articleId: targetArticle.articleId,
+                path: normalizedPath,
             });
         },
     },
     "editor.undo": {
         id: "editor.undo",
-        title: "撤销",
+        title: "commands.undo",
         scope: "editor",
         condition: "editorFocused",
         shortcut: {
@@ -431,7 +419,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "editor.redo": {
         id: "editor.redo",
-        title: "重做",
+        title: "commands.redo",
         scope: "editor",
         condition: "editorFocused",
         shortcut: {
@@ -444,7 +432,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "editor.selectAll": {
         id: "editor.selectAll",
-        title: "全选",
+        title: "commands.selectAll",
         scope: "editor",
         condition: "editorFocused",
         shortcut: {
@@ -457,7 +445,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "editor.find": {
         id: "editor.find",
-        title: "查找",
+        title: "commands.find",
         scope: "editor",
         condition: "editorFocused",
         shortcut: {
@@ -470,7 +458,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "editor.toggleComment": {
         id: "editor.toggleComment",
-        title: "切换注释",
+        title: "commands.toggleComment",
         scope: "editor",
         condition: "editorFocused",
         shortcut: {
@@ -483,7 +471,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "editor.indentMore": {
         id: "editor.indentMore",
-        title: "增加缩进",
+        title: "commands.increaseIndent",
         scope: "editor",
         condition: "editorFocused",
         shortcut: {
@@ -496,7 +484,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "editor.indentLess": {
         id: "editor.indentLess",
-        title: "减少缩进",
+        title: "commands.decreaseIndent",
         scope: "editor",
         condition: "editorFocused",
         shortcut: {
@@ -507,9 +495,87 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
             context.executeEditorNativeCommand?.("editor.indentLess");
         },
     },
+    "editor.toggleBold": {
+        id: "editor.toggleBold",
+        title: "commands.toggleBold",
+        scope: "editor",
+        condition: "editorFocused",
+        shortcut: {
+            defaultBinding: "Cmd+B",
+            editableInSettings: true,
+        },
+        execute(context) {
+            context.executeEditorNativeCommand?.("editor.toggleBold");
+        },
+    },
+    "editor.toggleItalic": {
+        id: "editor.toggleItalic",
+        title: "commands.toggleItalic",
+        scope: "editor",
+        condition: "editorFocused",
+        shortcut: {
+            defaultBinding: "Cmd+I",
+            editableInSettings: true,
+        },
+        execute(context) {
+            context.executeEditorNativeCommand?.("editor.toggleItalic");
+        },
+    },
+    "editor.toggleStrikethrough": {
+        id: "editor.toggleStrikethrough",
+        title: "commands.toggleStrikethrough",
+        scope: "editor",
+        condition: "editorFocused",
+        shortcut: {
+            defaultBinding: "Cmd+Shift+X",
+            editableInSettings: true,
+        },
+        execute(context) {
+            context.executeEditorNativeCommand?.("editor.toggleStrikethrough");
+        },
+    },
+    "editor.toggleInlineCode": {
+        id: "editor.toggleInlineCode",
+        title: "commands.toggleInlineCode",
+        scope: "editor",
+        condition: "editorFocused",
+        shortcut: {
+            defaultBinding: "Cmd+E",
+            editableInSettings: true,
+        },
+        execute(context) {
+            context.executeEditorNativeCommand?.("editor.toggleInlineCode");
+        },
+    },
+    "editor.toggleHighlight": {
+        id: "editor.toggleHighlight",
+        title: "commands.toggleHighlight",
+        scope: "editor",
+        condition: "editorFocused",
+        shortcut: {
+            defaultBinding: "Cmd+Shift+H",
+            editableInSettings: true,
+        },
+        execute(context) {
+            context.executeEditorNativeCommand?.("editor.toggleHighlight");
+        },
+    },
+    "editor.insertLink": {
+        id: "editor.insertLink",
+        title: "commands.insertLink",
+        scope: "editor",
+        condition: "editorFocused",
+        shortcut: {
+            defaultBinding: "Cmd+K",
+            editableInSettings: true,
+        },
+        execute(context) {
+            context.executeEditorNativeCommand?.("editor.insertLink");
+        },
+    },
     "fileTree.copySelected": {
         id: "fileTree.copySelected",
-        title: "复制选中文件",
+        title: "commands.copySelectedFile",
         condition: "fileTreeFocused",
         shortcut: {
             defaultBinding: "Cmd+C",
@@ -527,7 +593,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "fileTree.pasteInDirectory": {
         id: "fileTree.pasteInDirectory",
-        title: "粘贴文件到当前目录",
+        title: "commands.pasteFileToDir",
         condition: "fileTreeFocused",
         shortcut: {
             defaultBinding: "Cmd+V",
@@ -565,7 +631,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "fileTree.deleteSelected": {
         id: "fileTree.deleteSelected",
-        title: "删除选中文件",
+        title: "commands.deleteSelectedFile",
         condition: "fileTreeFocused",
         shortcut: {
             defaultBinding: "Cmd+Backspace",
@@ -587,7 +653,14 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
                 if (selected.isDir) {
                     await deleteVaultDirectory(selected.path);
                 } else {
-                    await deleteVaultMarkdownFile(selected.path);
+                    // 根据文件扩展名选择对应的删除接口
+                    const isMarkdown =
+                        selected.path.endsWith(".md") || selected.path.endsWith(".markdown");
+                    if (isMarkdown) {
+                        await deleteVaultMarkdownFile(selected.path);
+                    } else {
+                        await deleteVaultBinaryFile(selected.path);
+                    }
                 }
                 console.info("[command-system] fileTree.deleteSelected success", {
                     path: selected.path,
@@ -604,7 +677,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "file.moveFocusedToDirectory": {
         id: "file.moveFocusedToDirectory",
-        title: "移动当前文件到目录",
+        title: "commands.moveFileToDir",
         execute(context) {
             if (!context.openMoveFocusedFileToDirectory) {
                 console.warn("[command-system] moveFocusedToDirectory skipped: open capability missing");
@@ -617,7 +690,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "quickSwitcher.open": {
         id: "quickSwitcher.open",
-        title: "快速切换",
+        title: "commands.quickSwitcher",
         shortcut: {
             defaultBinding: "Cmd+O",
             editableInSettings: true,
@@ -634,7 +707,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
     "commandPalette.open": {
         id: "commandPalette.open",
-        title: "打开指令搜索",
+        title: "commands.commandPalette",
         shortcut: {
             defaultBinding: "Cmd+J",
             editableInSettings: true,

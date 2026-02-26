@@ -7,6 +7,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 import "./FileTree.css";
 import { showNativeContextMenu } from "./nativeContextMenu";
 
@@ -191,6 +192,7 @@ function TreeItem({
   onCommitCreate: () => void;
   onCancelCreate: () => void;
 }): ReactNode {
+  const { t } = useTranslation();
   const isExpanded = expanded.has(node.path);
   const isDropTarget = dropTargetDirectoryPath !== null && node.path === dropTargetDirectoryPath;
   const isDropDescendant =
@@ -352,7 +354,7 @@ function TreeItem({
                     }
                   }}
                   autoFocus
-                  placeholder={creatingType === "folder" ? "新建文件夹" : "新建文件"}
+                  placeholder={creatingType === "folder" ? t("fileTree.newFolderPlaceholder") : t("fileTree.newFilePlaceholder")}
                 />
               </div>
             </li>
@@ -386,7 +388,7 @@ function TreeItem({
                   }
                 }}
                 autoFocus
-                placeholder={creatingType === "folder" ? "新建文件夹" : "新建文件"}
+                placeholder={creatingType === "folder" ? t("fileTree.newFolderPlaceholder") : t("fileTree.newFilePlaceholder")}
               />
             </div>
           </li>
@@ -407,6 +409,7 @@ export function FileTree({
   onCreateFileInDirectory,
   onCreateFolderInDirectory,
 }: FileTreeProps): ReactNode {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const tree = useMemo(() => buildTree(items), [items]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -543,11 +546,11 @@ export function FileTree({
     const selectedAction = await showNativeContextMenu([
       {
         id: "create-file",
-        text: "新建文件",
+        text: t("common.newFile"),
       },
       {
         id: "create-folder",
-        text: "新建文件夹",
+        text: t("common.newFolder"),
       },
     ]);
 
@@ -590,11 +593,11 @@ export function FileTree({
     const selectedAction = await showNativeContextMenu([
       {
         id: "create-file",
-        text: "新建文件",
+        text: t("common.newFile"),
       },
       {
         id: "create-folder",
-        text: "新建文件夹",
+        text: t("common.newFolder"),
       },
       {
         id: "rename",
@@ -603,7 +606,7 @@ export function FileTree({
       },
       {
         id: "delete",
-        text: "删除",
+        text: t("common.delete"),
         enabled: true,
       },
       {
@@ -841,7 +844,7 @@ export function FileTree({
          点击空白区域时焦点落在 .file-tree 内，满足 fileTreeFocused 条件 */
       tabIndex={-1}
     >
-      <div className="file-tree-header">文件</div>
+      <div className="file-tree-header">{t("fileTree.files")}</div>
       <ul
         className={`tree-root ${dropTargetDirectoryPath === "" ? "drop-target-root" : ""}`}
         onContextMenu={handleRootContextMenu}
@@ -883,7 +886,7 @@ export function FileTree({
                   }
                 }}
                 autoFocus
-                placeholder={creatingType === "folder" ? "新建文件夹" : "新建文件"}
+                placeholder={creatingType === "folder" ? t("fileTree.newFolderPlaceholder") : t("fileTree.newFilePlaceholder")}
               />
             </div>
           </li>
@@ -939,7 +942,7 @@ export function FileTree({
             />
           ))
         ) : (
-          <li className="tree-empty-hint">右键空白区域可新建文件或文件夹</li>
+          <li className="tree-empty-hint">{t("fileTree.emptyHint")}</li>
         )}
       </ul>
     </div>

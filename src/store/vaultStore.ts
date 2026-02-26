@@ -22,6 +22,7 @@ import {
 import { subscribeVaultFsBusEvent } from "../events/appEventBus";
 import { isRememberLastVaultEnabled } from "./configStore";
 import type { FileTreeItem } from "../layout";
+import i18n from "../i18n";
 
 /**
  * @constant DEFAULT_VAULT_PATH
@@ -282,7 +283,7 @@ class VaultStore {
                 return;
             }
 
-            const message = error instanceof Error ? error.message : "加载仓库目录树失败";
+            const message = error instanceof Error ? error.message : i18n.t("vault.loadTreeFailed");
             this.setFiles([]);
             this.setError(message);
             console.error("[vault-store] syncTreeByCurrentPath:failed", { targetPath, message });

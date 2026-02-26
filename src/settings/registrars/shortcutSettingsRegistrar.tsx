@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
     normalizeShortcutString,
     recordShortcutFromKeyboardEvent,
@@ -28,6 +29,7 @@ import { registerSettingsSection } from "../settingsRegistry";
  * @returns React 节点。
  */
 function ShortcutSettingsSection(): ReactNode {
+    const { t } = useTranslation();
     const shortcutState = useShortcutState();
     const [shortcutInputs, setShortcutInputs] = useState<Record<CommandId, string>>(shortcutState.bindings);
     const [recordingCommandId, setRecordingCommandId] = useState<CommandId | null>(null);
@@ -60,11 +62,11 @@ function ShortcutSettingsSection(): ReactNode {
                 return;
             }
 
+            // 仅更新本地输入显示，保持录制模式激活以便用户点击"保存"持久化
             setShortcutInputs((current) => ({
                 ...current,
                 [recordingCommandId]: recordedShortcut,
             }));
-            setRecordingCommandId(null);
         };
 
         window.addEventListener("keydown", handleRecordKeydown, { capture: true });
@@ -80,10 +82,10 @@ function ShortcutSettingsSection(): ReactNode {
                 <thead>
                     <tr>
                         {/* 表头：命令名 | 快捷键 | 条件 | 操作 */}
-                        <th className="settings-shortcut-th">命令</th>
-                        <th className="settings-shortcut-th">快捷键</th>
-                        <th className="settings-shortcut-th">条件</th>
-                        <th className="settings-shortcut-th settings-shortcut-th-actions">操作</th>
+                        <th className="settings-shortcut-th">{t("settings.shortcutCommand")}</th>
+                        <th className="settings-shortcut-th">{t("settings.shortcutKeybinding")}</th>
+                        <th className="settings-shortcut-th">{t("settings.shortcutCondition")}</th>
+                        <th className="settings-shortcut-th settings-shortcut-th-actions">{t("settings.shortcutActions")}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -99,7 +101,7 @@ function ShortcutSettingsSection(): ReactNode {
                             >
                                 {/* 命令名称列 */}
                                 <td className="settings-shortcut-td settings-shortcut-td-command">
-                                    {command.title}
+                                    {t(command.title)}
                                 </td>
                                 {/* 快捷键绑定列：显示键位徽章或录制输入框 */}
                                 <td className="settings-shortcut-td settings-shortcut-td-keybinding">
@@ -108,7 +110,7 @@ function ShortcutSettingsSection(): ReactNode {
                                             className="settings-shortcut-inline-input"
                                             value={inputValue}
                                             readOnly
-                                            placeholder="按下组合键…"
+                                            placeholder={t("settings.shortcutRecordPlaceholder")}
                                             autoFocus
                                         />
                                     ) : (
@@ -120,7 +122,7 @@ function ShortcutSettingsSection(): ReactNode {
                                 {/* 条件列：显示触发条件标签 */}
                                 <td className="settings-shortcut-td settings-shortcut-td-when">
                                     {command.condition
-                                        ? SHORTCUT_CONDITION_LABELS[command.condition]
+                                        ? t(SHORTCUT_CONDITION_LABELS[command.condition])
                                         : "—"}
                                 </td>
                                 {/* 操作列：录制/保存/取消按钮 */}
@@ -136,7 +138,7 @@ function ShortcutSettingsSection(): ReactNode {
                                                     setRecordingCommandId(null);
                                                 }}
                                             >
-                                                保存
+                                                {t("common.save")}
                                             </button>
                                             <button
                                                 type="button"
@@ -149,7 +151,7 @@ function ShortcutSettingsSection(): ReactNode {
                                                     setRecordingCommandId(null);
                                                 }}
                                             >
-                                                取消
+                                                {t("common.cancel")}
                                             </button>
                                         </>
                                     ) : (
@@ -160,7 +162,7 @@ function ShortcutSettingsSection(): ReactNode {
                                                 setRecordingCommandId(commandId);
                                             }}
                                         >
-                                            录制
+                                            {t("common.record")}
                                         </button>
                                     )}
                                 </td>
@@ -182,7 +184,7 @@ function ShortcutSettingsSection(): ReactNode {
 export function registerShortcutSettingsSection(): void {
     registerSettingsSection({
         id: "shortcut-system",
-        title: "快捷键",
+        title: "settings.shortcutSection",
         order: 30,
         render: () => <ShortcutSettingsSection />,
     });

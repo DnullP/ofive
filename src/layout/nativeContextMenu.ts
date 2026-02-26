@@ -1,13 +1,15 @@
 /**
  * @module layout/nativeContextMenu
  * @description 原生右键菜单桥接：在 Tauri 环境调用系统原生 Menu，在浏览器环境回退为无操作。
+ *   支持普通菜单项和勾选菜单项（CheckMenuItem）。
  * @dependencies
- *  - @tauri-apps/api/menu
+ *  - @tauri-apps/api/menu (Menu, MenuItem, CheckMenuItem)
  */
 
 /**
  * @interface NativeContextMenuItem
  * @description 单个右键菜单项配置。
+ *   当 checked 字段存在时，渲染为 CheckMenuItem（带勾选状态）。
  */
 export interface NativeContextMenuItem {
     /** 菜单项唯一 ID */
@@ -16,6 +18,8 @@ export interface NativeContextMenuItem {
     text: string;
     /** 是否可用 */
     enabled?: boolean;
+    /** 勾选状态，定义后渲染为 CheckMenuItem */
+    checked?: boolean;
 }
 
 /**
@@ -41,6 +45,7 @@ let isContextMenuPopupOpening = false;
 /**
  * @function showNativeContextMenu
  * @description 弹出系统原生右键菜单并返回用户选择的菜单项 ID。
+ *   当任意菜单项设置了 checked 属性时，使用 MenuItem/CheckMenuItem 显式构造。
  * @param items 菜单项列表。
  * @returns 用户选择结果；取消时返回 null。
  */
@@ -62,20 +67,56 @@ export async function showNativeContextMenu(items: NativeContextMenuItem[]): Pro
         itemIds: items.map((item) => item.id),
     });
 
-    const { Menu } = await import("@tauri-apps/api/menu");
-
     let selectedId: string | null = null;
-    const menu = await Menu.new({
-        items: items.map((item) => ({
-            id: item.id,
-            text: item.text,
-            enabled: item.enabled ?? true,
-            action: (id: string) => {
-                selectedId = id;
-                console.info("[native-context-menu] action selected", { id });
-            },
-        })),
-    });
+
+    const hasCheckedItems = items.some((item) => item.checked !== undefined);
+
+    let menu: Awaited<ReturnType<typeof import("@tauri-apps/api/menu").Menu.new>>;
+
+    if (hasCheckedItems) {
+        /* 含 CheckMenuItem 时使用显式构造，保证类型正确 */
+        const { Menu, MenuItem, CheckMenuItem } = await import("@tauri-apps/api/menu");
+        const menuItems = await Promise.all(
+            items.map((item) => {
+                if (item.checked !== undefined) {
+                    return CheckMenuItem.new({
+                        id: item.id,
+                        text: item.text,
+                        checked: item.checked,
+                        enabled: item.enabled ?? true,
+                        action: (id: string) => {
+                            selectedId = id;
+                            console.info("[native-context-menu] action selected", { id });
+                        },
+                    });
+                }
+                return MenuItem.new({
+                    id: item.id,
+                    text: item.text,
+                    enabled: item.enabled ?? true,
+                    action: (id: string) => {
+                        selectedId = id;
+                        console.info("[native-context-menu] action selected", { id });
+                    },
+                });
+            }),
+        );
+        menu = await Menu.new({ items: menuItems });
+    } else {
+        /* 全部为普通菜单项时使用简化 API */
+        const { Menu } = await import("@tauri-apps/api/menu");
+        menu = await Menu.new({
+            items: items.map((item) => ({
+                id: item.id,
+                text: item.text,
+                enabled: item.enabled ?? true,
+                action: (id: string) => {
+                    selectedId = id;
+                    console.info("[native-context-menu] action selected", { id });
+                },
+            })),
+        });
+    }
 
     try {
         await menu.popup();

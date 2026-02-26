@@ -286,6 +286,36 @@ fn refresh_manifest_meta(connection: &Connection, vault_root: &Path) -> Result<(
     upsert_meta(connection, META_KEY_MANIFEST_FINGERPRINT, &fingerprint)
 }
 
+/// 仅确保索引数据库与表结构可用，不做完整性校验或重建。
+///
+/// 用于增量操作（reindex / remove）场景，避免因文件刚刚写入导致
+/// manifest fingerprint 不一致而触发全库重建。
+///
+/// 如果索引从未初始化（schema_version 缺失），则触发一次全量重建以确保索引可用。
+///
+/// # 参数
+/// - `vault_root`：仓库根目录
+///
+/// # 返回
+/// - 成功返回 Ok(Connection)
+/// - 失败返回 Err(String)
+fn ensure_index_ready_for_incremental(vault_root: &Path) -> Result<Connection, String> {
+    let connection = open_index_connection(vault_root)?;
+    ensure_schema(&connection)?;
+
+    // 如果索引从未初始化过（schema_version 缺失），需要先做一次全量重建
+    let stored_schema = get_meta(&connection, META_KEY_SCHEMA_VERSION)?;
+    if stored_schema.as_deref() != Some(INDEX_SCHEMA_VERSION) {
+        println!("[query-index] index not initialized, performing initial build");
+        drop(connection);
+        ensure_query_index_current(vault_root)?;
+        let connection = open_index_connection(vault_root)?;
+        return Ok(connection);
+    }
+
+    Ok(connection)
+}
+
 /// 确保索引与当前仓库状态一致；若检测到离线变更则重建。
 pub fn ensure_query_index_current(vault_root: &Path) -> Result<(), String> {
     println!("[query-index] ensure current start");
@@ -458,6 +488,46 @@ pub fn find_markdown_candidates_by_stem(
     Ok(output)
 }
 
+/// 查询每个 Markdown 文件被引用（入链）的次数。
+///
+/// 返回 `(relative_path, inbound_link_count)` 列表，
+/// 包含所有文件（无入链的文件 count = 0）。
+///
+/// # 副作用
+/// - 会触发 `ensure_query_index_current` 确保索引一致。
+pub fn list_markdown_files_with_inbound_count(
+    vault_root: &Path,
+) -> Result<Vec<(String, usize)>, String> {
+    ensure_query_index_current(vault_root)?;
+    let connection = open_index_connection(vault_root)?;
+
+    let mut statement = connection
+        .prepare(
+            "SELECT f.relative_path,
+                    COALESCE(SUM(l.weight), 0) AS inbound_count
+             FROM markdown_files f
+             LEFT JOIN markdown_links l ON l.target_path = f.relative_path
+             GROUP BY f.relative_path
+             ORDER BY f.relative_path ASC",
+        )
+        .map_err(|error| format!("构建入链统计查询失败: {error}"))?;
+
+    let rows = statement
+        .query_map([], |row| {
+            let path: String = row.get(0)?;
+            let count: i64 = row.get(1)?;
+            Ok((path, count as usize))
+        })
+        .map_err(|error| format!("执行入链统计查询失败: {error}"))?;
+
+    let mut output = Vec::new();
+    for row in rows {
+        output.push(row.map_err(|error| format!("解析入链统计行失败: {error}"))?);
+    }
+
+    Ok(output)
+}
+
 fn upsert_single_file(
     transaction: &Transaction<'_>,
     vault_root: &Path,
@@ -537,9 +607,20 @@ fn upsert_single_file(
 }
 
 /// 在写入后增量刷新单个 Markdown 文件索引。
+///
+/// 仅对指定文件执行 upsert + 链接刷新，不触发全库重建。
+/// 如果索引数据库尚未初始化，会先执行一次全量构建，
+/// 之后再进行增量操作。
+///
+/// # 参数
+/// - `vault_root`：仓库根目录
+/// - `relative_path`：变更文件相对路径
+///
+/// # 副作用
+/// - 更新 markdown_files 与 markdown_links 表中该文件相关行
+/// - 更新 manifest_fingerprint 元信息
 pub fn reindex_markdown_file(vault_root: &Path, relative_path: &str) -> Result<(), String> {
-    ensure_query_index_current(vault_root)?;
-    let mut connection = open_index_connection(vault_root)?;
+    let mut connection = ensure_index_ready_for_incremental(vault_root)?;
     let transaction = connection
         .transaction()
         .map_err(|error| format!("开始单文件索引事务失败: {error}"))?;
@@ -555,9 +636,18 @@ pub fn reindex_markdown_file(vault_root: &Path, relative_path: &str) -> Result<(
 }
 
 /// 在删除后增量刷新单个 Markdown 文件索引。
+///
+/// 仅删除指定文件的索引记录与关联边，不触发全库重建。
+///
+/// # 参数
+/// - `vault_root`：仓库根目录
+/// - `relative_path`：已删除文件的相对路径
+///
+/// # 副作用
+/// - 删除 markdown_files 与 markdown_links 表中该文件相关行
+/// - 更新 manifest_fingerprint 元信息
 pub fn remove_markdown_file(vault_root: &Path, relative_path: &str) -> Result<(), String> {
-    ensure_query_index_current(vault_root)?;
-    let mut connection = open_index_connection(vault_root)?;
+    let mut connection = ensure_index_ready_for_incremental(vault_root)?;
     let transaction = connection
         .transaction()
         .map_err(|error| format!("开始删除索引事务失败: {error}"))?;
@@ -586,7 +676,10 @@ pub fn remove_markdown_file(vault_root: &Path, relative_path: &str) -> Result<()
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_query_index_current, list_markdown_files, load_markdown_graph};
+    use super::{
+        ensure_query_index_current, list_markdown_files, load_markdown_graph,
+        reindex_markdown_file, remove_markdown_file,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -630,6 +723,149 @@ mod tests {
         assert!(graph.edges.iter().any(|edge| {
             edge.source_path == "A.md" && edge.target_path == "B.md" && edge.weight == 2
         }));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// 验证增量 reindex：在索引已初始化的前提下，
+    /// 新增文件后调用 reindex_markdown_file 应只更新单文件，
+    /// 不触发全库重建，且索引数据正确反映变更。
+    #[test]
+    fn reindex_should_incrementally_add_file_when_index_exists() {
+        let root = create_test_root();
+        write_markdown_file(&root, "A.md", "# A");
+
+        // 先全量构建
+        ensure_query_index_current(&root).expect("初始构建应成功");
+        let files = list_markdown_files(&root).expect("读取索引应成功");
+        assert_eq!(files.len(), 1, "初始应有 1 个文件");
+
+        // 写入新文件后增量 reindex
+        write_markdown_file(&root, "B.md", "# B\n\n[[A]]");
+        reindex_markdown_file(&root, "B.md").expect("增量 reindex 应成功");
+
+        let files = list_markdown_files(&root).expect("增量后读取索引应成功");
+        assert_eq!(files.len(), 2, "增量 reindex 后应有 2 个文件");
+
+        let graph = load_markdown_graph(&root).expect("读取图谱应成功");
+        assert!(
+            graph
+                .edges
+                .iter()
+                .any(|e| e.source_path == "B.md" && e.target_path == "A.md"),
+            "应存在 B→A 边"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// 验证增量 reindex：修改已有文件内容后，
+    /// 调用 reindex_markdown_file 应更新链接关系。
+    #[test]
+    fn reindex_should_update_links_on_content_change() {
+        let root = create_test_root();
+        write_markdown_file(&root, "A.md", "# A\n\n[[B]]");
+        write_markdown_file(&root, "B.md", "# B");
+        write_markdown_file(&root, "C.md", "# C");
+
+        ensure_query_index_current(&root).expect("初始构建应成功");
+
+        let graph = load_markdown_graph(&root).expect("初始图谱应可读");
+        assert!(
+            graph
+                .edges
+                .iter()
+                .any(|e| e.source_path == "A.md" && e.target_path == "B.md"),
+            "初始应有 A→B 边"
+        );
+
+        // 修改 A.md 链接从 B 改为 C
+        write_markdown_file(&root, "A.md", "# A\n\n[[C]]");
+        reindex_markdown_file(&root, "A.md").expect("增量 reindex 应成功");
+
+        let graph = load_markdown_graph(&root).expect("更新后图谱应可读");
+        assert!(
+            !graph
+                .edges
+                .iter()
+                .any(|e| e.source_path == "A.md" && e.target_path == "B.md"),
+            "A→B 边应消失"
+        );
+        assert!(
+            graph
+                .edges
+                .iter()
+                .any(|e| e.source_path == "A.md" && e.target_path == "C.md"),
+            "A→C 边应出现"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// 验证增量 remove：删除文件后调用 remove_markdown_file
+    /// 应从索引中移除该文件及其相关边。
+    #[test]
+    fn remove_should_delete_file_and_edges_from_index() {
+        let root = create_test_root();
+        write_markdown_file(&root, "A.md", "# A\n\n[[B]]");
+        write_markdown_file(&root, "B.md", "# B\n\n[[A]]");
+
+        ensure_query_index_current(&root).expect("初始构建应成功");
+        let files = list_markdown_files(&root).expect("读取索引应成功");
+        assert_eq!(files.len(), 2);
+
+        // 从文件系统删除 B，然后增量移除索引
+        fs::remove_file(root.join("B.md")).expect("删除文件应成功");
+        remove_markdown_file(&root, "B.md").expect("增量 remove 应成功");
+
+        let files = list_markdown_files(&root).expect("移除后读取索引应成功");
+        assert_eq!(files.len(), 1, "移除后应只剩 1 个文件");
+        assert_eq!(files[0].relative_path, "A.md");
+
+        let graph = load_markdown_graph(&root).expect("移除后读取图谱应成功");
+        assert!(graph.edges.is_empty(), "所有涉及 B.md 的边应消失");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// 验证 reindex 在索引未初始化时能自动触发全量构建。
+    /// 即使不先调用 ensure_query_index_current，
+    /// reindex_markdown_file 也应正确工作。
+    #[test]
+    fn reindex_should_bootstrap_index_when_not_initialized() {
+        let root = create_test_root();
+        write_markdown_file(&root, "A.md", "# A");
+        write_markdown_file(&root, "B.md", "# B\n\n[[A]]");
+
+        // 不先调用 ensure_query_index_current，直接 reindex
+        reindex_markdown_file(&root, "A.md").expect("首次 reindex 应自动构建索引");
+
+        // 索引应已构建（因为 ensure_index_ready_for_incremental 检测到
+        // schema_version 缺失后会先执行全量构建）
+        let files = list_markdown_files(&root).expect("读取索引应成功");
+        assert_eq!(files.len(), 2, "自动构建后应包含所有文件");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// 验证增量 reindex 后 manifest fingerprint 更新正确，
+    /// 再次调用 ensure_query_index_current 不应触发全量重建。
+    #[test]
+    fn reindex_should_update_fingerprint_to_avoid_unnecessary_rebuild() {
+        let root = create_test_root();
+        write_markdown_file(&root, "A.md", "# A");
+
+        ensure_query_index_current(&root).expect("初始构建应成功");
+
+        // 新增文件并增量 reindex
+        write_markdown_file(&root, "B.md", "# B");
+        reindex_markdown_file(&root, "B.md").expect("增量 reindex 应成功");
+
+        // 此时 fingerprint 应已更新，第二次 ensure 不应重建
+        // （验证方式：ensure 后文件数仍为 2，没有触发 clear_all_index_data）
+        ensure_query_index_current(&root).expect("二次 ensure 应成功");
+        let files = list_markdown_files(&root).expect("读取索引应成功");
+        assert_eq!(files.len(), 2, "ensure 不应重建导致数据丢失");
 
         let _ = fs::remove_dir_all(root);
     }

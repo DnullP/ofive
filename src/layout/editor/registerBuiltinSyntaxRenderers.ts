@@ -5,10 +5,14 @@
  *  - ./syntaxPlugins/*
  */
 
+import { registerBlockquoteSyntaxRenderer } from "./syntaxPlugins/blockquoteSyntaxRenderer";
 import { registerBoldSyntaxRenderer } from "./syntaxPlugins/boldSyntaxRenderer";
 import { registerHeaderSyntaxRenderer } from "./syntaxPlugins/headerSyntaxRenderer";
+import { registerHighlightSyntaxRenderer } from "./syntaxPlugins/highlightSyntaxRenderer";
+import { registerHorizontalRuleSyntaxRenderer } from "./syntaxPlugins/horizontalRuleSyntaxRenderer";
 import { registerInlineCodeSyntaxRenderer } from "./syntaxPlugins/inlineCodeSyntaxRenderer";
 import { registerItalicSyntaxRenderer } from "./syntaxPlugins/italicSyntaxRenderer";
+import { registerLinkSyntaxRenderer } from "./syntaxPlugins/linkSyntaxRenderer";
 import { registerStrikethroughSyntaxRenderer } from "./syntaxPlugins/strikethroughSyntaxRenderer";
 import { registerTagSyntaxRenderer } from "./syntaxPlugins/tagSyntaxRenderer";
 import { registerWikiLinkSyntaxRenderer } from "./syntaxPlugins/wikiLinkSyntaxRenderer";
@@ -31,5 +35,9 @@ export function ensureBuiltinSyntaxRenderersRegistered(): void {
     registerInlineCodeSyntaxRenderer();
     registerWikiLinkSyntaxRenderer();
     registerTagSyntaxRenderer();
+    registerBlockquoteSyntaxRenderer();
+    registerHorizontalRuleSyntaxRenderer();
+    registerLinkSyntaxRenderer();
+    registerHighlightSyntaxRenderer();
     registered = true;
 }

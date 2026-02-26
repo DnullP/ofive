@@ -7,6 +7,7 @@
  */
 
 import { useMemo, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Expand, Minus, Square, X } from "lucide-react";
 import { requestApplicationQuit } from "../commands/systemShortcutSubsystem";
 
@@ -15,6 +16,7 @@ import { requestApplicationQuit } from "../commands/systemShortcutSubsystem";
  * @description 渲染自定义标题栏并提供结束应用能力。
  */
 export function CustomTitlebar(): ReactNode {
+    const { t } = useTranslation();
     const isMacOS = useMemo(() => {
         if (typeof navigator === "undefined") {
             return false;
@@ -92,7 +94,7 @@ export function CustomTitlebar(): ReactNode {
             <button
                 type="button"
                 className="app-titlebar__control app-titlebar__control--close window-no-drag"
-                aria-label="关闭应用"
+                aria-label={t("titlebar.closeApp")}
                 onClick={() => {
                     void handleClose();
                 }}
@@ -103,7 +105,7 @@ export function CustomTitlebar(): ReactNode {
             <button
                 type="button"
                 className="app-titlebar__control app-titlebar__control--maximize window-no-drag"
-                aria-label="切换全屏"
+                aria-label={t("titlebar.toggleFullscreen")}
                 onClick={() => {
                     void handleToggleFullscreen();
                 }}
@@ -114,7 +116,7 @@ export function CustomTitlebar(): ReactNode {
             <button
                 type="button"
                 className="app-titlebar__control app-titlebar__control--minimize window-no-drag"
-                aria-label="最小化窗口"
+                aria-label={t("titlebar.minimizeWindow")}
                 onClick={() => {
                     void handleMinimize();
                 }}
@@ -127,7 +129,7 @@ export function CustomTitlebar(): ReactNode {
             <button
                 type="button"
                 className="app-titlebar__control app-titlebar__control--minimize window-no-drag"
-                aria-label="最小化窗口"
+                aria-label={t("titlebar.minimizeWindow")}
                 onClick={() => {
                     void handleMinimize();
                 }}
@@ -138,7 +140,7 @@ export function CustomTitlebar(): ReactNode {
             <button
                 type="button"
                 className="app-titlebar__control app-titlebar__control--maximize window-no-drag"
-                aria-label="最大化窗口"
+                aria-label={t("titlebar.maximizeWindow")}
                 onClick={() => {
                     void handleToggleMaximize();
                 }}
@@ -149,7 +151,7 @@ export function CustomTitlebar(): ReactNode {
             <button
                 type="button"
                 className="app-titlebar__control app-titlebar__control--close window-no-drag"
-                aria-label="关闭应用"
+                aria-label={t("titlebar.closeApp")}
                 onClick={() => {
                     void handleClose();
                 }}

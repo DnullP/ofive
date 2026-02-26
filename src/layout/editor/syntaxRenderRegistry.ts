@@ -12,6 +12,7 @@
 
 import { RangeSetBuilder } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import { isInsideExclusionZone } from "./syntaxExclusionZones";
 
 /**
  * @interface SyntaxDecorationRange
@@ -165,14 +166,15 @@ export function addInlineSyntaxDecoration(
 
 /**
  * @function addDelimitedInlineSyntaxDecoration
- * @description 为带左右标记的行内语法添加装饰：非编辑态隐藏标记，仅渲染内容区。
+ * @description 为带左右标记的行内语法添加装饰：非编辑态通过 Decoration.replace 隐藏标记，仅渲染内容区。
+ *   使用 Decoration.replace 而非 font-size:0 的 Decoration.mark，以确保 CM6 的
+ *   posAtCoords / coordsAtPos 位置映射正确，避免点击后光标偏移。
  * @param context 语法渲染上下文。
  * @param tokenStartInLine token 在行内起始位置。
  * @param fullText token 完整文本。
  * @param leftMarkerLength 左侧标记长度。
  * @param rightMarkerLength 右侧标记长度。
  * @param contentClass 内容样式类名。
- * @param markerClass 标记隐藏样式类名。
  */
 export function addDelimitedInlineSyntaxDecoration(
     context: LineSyntaxDecorationContext,
@@ -181,7 +183,6 @@ export function addDelimitedInlineSyntaxDecoration(
     leftMarkerLength: number,
     rightMarkerLength: number,
     contentClass: string,
-    markerClass = "cm-inline-marker-hidden",
 ): void {
     if (tokenStartInLine < 0 || fullText.length <= leftMarkerLength + rightMarkerLength) {
         return;
@@ -196,9 +197,7 @@ export function addDelimitedInlineSyntaxDecoration(
         return;
     }
 
-    const markerDecoration = Decoration.mark({
-        class: markerClass,
-    });
+    const markerDecoration = Decoration.replace({});
     const contentDecoration = Decoration.mark({
         class: contentClass,
     });
@@ -211,6 +210,8 @@ export function addDelimitedInlineSyntaxDecoration(
 /**
  * @function buildRegisteredSyntaxDecorations
  * @description 依据注册中心构建当前 viewport 内的装饰集合。
+ *   通过排斥区域（syntaxExclusionZones）跳过被块级插件（frontmatter / code-fence /
+ *   latex-block）管辖的行，避免行级渲染器对这些行产生冲突装饰。
  * @param view 编辑器视图。
  * @returns 装饰集合。
  */
@@ -227,14 +228,17 @@ function buildRegisteredSyntaxDecorations(view: EditorView): DecorationSet {
         const endLineNumber = view.state.doc.lineAt(visibleRange.to).number;
 
         while (currentLine.number <= endLineNumber) {
-            renderers.forEach((renderer) => {
-                renderer.applyLineDecorations({
-                    view,
-                    lineText: currentLine.text,
-                    lineFrom: currentLine.from,
-                    ranges,
+            /* 若当前行起始位置处于任何排斥区域内，则跳过行级语法渲染 */
+            if (!isInsideExclusionZone(view, currentLine.from)) {
+                renderers.forEach((renderer) => {
+                    renderer.applyLineDecorations({
+                        view,
+                        lineText: currentLine.text,
+                        lineFrom: currentLine.from,
+                        ranges,
+                    });
                 });
-            });
+            }
 
             if (currentLine.number === endLineNumber) {
                 break;

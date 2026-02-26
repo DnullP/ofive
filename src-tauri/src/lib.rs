@@ -13,6 +13,7 @@ use std::sync::Mutex;
 use tauri::{App, LogicalSize, Manager, PhysicalPosition, Position, Size};
 
 mod frontend_log;
+mod logging;
 mod state;
 mod vault_commands;
 mod vault_config;
@@ -20,10 +21,13 @@ mod vault_fs;
 
 /// 对外导出日志桥接命令以支持集成测试直接调用。
 pub use frontend_log::forward_frontend_log;
+/// 对外导出日志模块以支持测试中的日志初始化。
+pub use logging::init as init_logging;
 pub use vault_commands::copy_vault_entry_in_root;
 pub use vault_commands::create_vault_directory_in_root;
 /// 对外导出仓库命令的 root 级辅助函数以支持集成测试。
 pub use vault_commands::create_vault_markdown_file_in_root;
+pub use vault_commands::delete_vault_binary_file_in_root;
 pub use vault_commands::delete_vault_directory_in_root;
 pub use vault_commands::delete_vault_markdown_file_in_root;
 pub use vault_commands::get_current_vault_config_in_root;
@@ -47,6 +51,8 @@ pub use vault_commands::search_vault_markdown_files_in_root;
 /// 该导出仅用于测试与验证，不改变前端通过 Tauri `invoke` 的调用路径。
 pub use vault_commands::segment_chinese_text;
 pub use vault_commands::set_current_vault_precheck;
+/// 对外导出 WikiLink 建议搜索函数以支持集成测试直接调用。
+pub use vault_commands::suggest_wikilink_targets_in_root;
 pub use vault_config::VaultConfig;
 
 /// 根据主显示器尺寸按比例初始化主窗口大小，并居中显示。
@@ -144,6 +150,9 @@ fn setup_main_window(app: &mut App) -> std::result::Result<(), Box<dyn std::erro
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    logging::init();
+    log::info!("[app] ofive starting");
+
     tauri::Builder::default()
         .setup(setup_main_window)
         .manage(state::AppState {
@@ -169,12 +178,14 @@ pub fn run() {
             vault_commands::move_vault_directory_to_directory,
             vault_commands::delete_vault_directory,
             vault_commands::delete_vault_markdown_file,
+            vault_commands::delete_vault_binary_file,
             vault_commands::copy_vault_entry,
             vault_commands::resolve_wikilink_target,
             vault_commands::resolve_media_embed_target,
             vault_commands::search_vault_markdown_files,
             vault_commands::get_current_vault_markdown_graph,
             vault_commands::segment_chinese_text,
+            vault_commands::suggest_wikilink_targets,
             vault_commands::get_current_vault_config,
             vault_commands::save_current_vault_config
         ])

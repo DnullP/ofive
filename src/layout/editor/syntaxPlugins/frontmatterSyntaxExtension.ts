@@ -13,6 +13,8 @@
  */
 
 import { RangeSetBuilder } from "@codemirror/state";
+import type { Extension } from "@codemirror/state";
+import i18n from "../../../i18n";
 import {
     Decoration,
     type DecorationSet,
@@ -25,6 +27,11 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import YAML from "yaml";
 import { FrontmatterYamlVisualEditor } from "../components/FrontmatterYamlVisualEditor";
+import {
+    createBlockAtomicRangesExtension,
+    hiddenBlockLineDecoration,
+} from "./blockWidgetReplace";
+import { setExclusionZones } from "../syntaxExclusionZones";
 
 /**
  * @interface FrontmatterBlock
@@ -137,7 +144,7 @@ function normalizeYamlText(rawText: string): string {
     });
 
     if (parsedDocument.errors.length > 0) {
-        const message = parsedDocument.errors[0]?.message ?? "YAML 格式错误";
+        const message = parsedDocument.errors[0]?.message ?? i18n.t("frontmatter.yamlError");
         throw new Error(message);
     }
 
@@ -160,7 +167,7 @@ function saveFrontmatterYaml(view: EditorView, rawYamlText: string): SaveFrontma
         console.warn("[editor-frontmatter] save skipped: view disconnected");
         return {
             success: false,
-            message: "编辑器已关闭，无法同步。",
+            message: i18n.t("frontmatter.editorClosed"),
         };
     }
 
@@ -169,7 +176,7 @@ function saveFrontmatterYaml(view: EditorView, rawYamlText: string): SaveFrontma
         console.warn("[editor-frontmatter] save skipped: block missing");
         return {
             success: false,
-            message: "未检测到 frontmatter 区块。",
+            message: i18n.t("frontmatter.noFrontmatterBlock"),
         };
     }
 
@@ -199,7 +206,7 @@ function saveFrontmatterYaml(view: EditorView, rawYamlText: string): SaveFrontma
 
         return {
             success: true,
-            message: "frontmatter 已同步到文档，保存由统一调度负责。",
+            message: i18n.t("frontmatter.frontmatterSynced"),
         };
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -241,13 +248,24 @@ class FrontmatterYamlWidget extends WidgetType {
         const wrapper = document.createElement("section");
         wrapper.className = "cm-frontmatter-widget";
 
-        this.root = createRoot(wrapper);
-        this.root.render(
-            createElement(FrontmatterYamlVisualEditor, {
-                initialYamlText: this.yamlText,
-                onCommitYaml: (yamlText: string) => this.onSave(yamlText),
-            }),
-        );
+        // React root 创建和渲染必须在 try-catch 中执行：
+        // toDOM() 在 CM6 DocView 构造期间被调用，此时 EditorView.docView 尚未赋值。
+        // 若此处抛出异常，DocView 构造中断，docView 永远不被赋值，
+        // 而已调度的 cursorLayer RAF 会访问 undefined 的 docView 导致 TypeError。
+        try {
+            this.root = createRoot(wrapper);
+            this.root.render(
+                createElement(FrontmatterYamlVisualEditor, {
+                    initialYamlText: this.yamlText,
+                    onCommitYaml: (yamlText: string) => this.onSave(yamlText),
+                }),
+            );
+        } catch (error) {
+            console.error("[editor-frontmatter] widget toDOM render failed", {
+                message: error instanceof Error ? error.message : String(error),
+            });
+            wrapper.textContent = "Frontmatter render error";
+        }
 
         return wrapper;
     }
@@ -265,11 +283,23 @@ class FrontmatterYamlWidget extends WidgetType {
 /**
  * @function createFrontmatterSyntaxExtension
  * @description 创建 frontmatter 渲染扩展：用 YAML 编辑器组件显示并编辑顶部 frontmatter。
- * @returns CodeMirror 视图扩展。
+ * 内部通过以下机制协作：
+ * 1. `Decoration.line` 将 frontmatter 源码行隐藏（CSS `height:0`）；
+ *    对应的 gutter 元素通过 CSS `overflow:hidden` 自动随行高折叠为 0 并裁剪溢出行号。
+ * 2. `Decoration.widget` 在隐藏行之后插入可视化编辑组件；
+ * 3. `atomicRanges` 阻止光标通过键盘导航进入隐藏区域。
+ *
+ * 注意：widget 使用 `block: false`（行内模式），
+ * 不使用 `block: true` 或 `gutterLineClass/StateField`，
+ * 因为这两者会在 EditorView 构造/销毁的 React 生命周期窗口中
+ * 触发额外的 gutter measure 调度，导致 `cursorLayer.markers` 在
+ * `docView` 尚未就绪时调用 `coordsAtPos` 抛出空引用异常。
+ *
+ * @returns CodeMirror Extension 数组（ViewPlugin + atomicRanges）。
  * @throws 无显式异常；内部异常将降级为空装饰并记录日志。
  */
-export function createFrontmatterSyntaxExtension(): ReturnType<typeof ViewPlugin.fromClass> {
-    return ViewPlugin.fromClass(
+export function createFrontmatterSyntaxExtension(): Extension {
+    const plugin = ViewPlugin.fromClass(
         class {
             decorations: DecorationSet;
 
@@ -302,20 +332,24 @@ export function createFrontmatterSyntaxExtension(): ReturnType<typeof ViewPlugin
 
                 const block = parseFrontmatterBlock(view.state);
                 if (!block) {
+                    /* 无 frontmatter：清空排斥区域 */
+                    setExclusionZones(view, "frontmatter", []);
                     return builder.finish();
                 }
 
-                // frontmatter 始终以可视化组件显示，不提供源码展开能力。
-                // 编辑通过 widget 内的表单完成，修改回写到文档。
+                /* 声明排斥区域，供其他插件（code-fence / latex / 行级渲染器）跳过 */
+                setExclusionZones(view, "frontmatter", [
+                    { from: block.from, to: block.to },
+                ]);
 
-                const hiddenLineDecoration = Decoration.line({
-                    class: "cm-frontmatter-source-hidden-line",
-                });
+                // 通过 Decoration.line 为每行添加隐藏类，CSS 将行高设为 0。
+                // 对应的 gutter 元素通过 CSS overflow:hidden 自动裁剪溢出行号。
                 for (let lineNumber = block.startLineNumber; lineNumber <= block.endLineNumber; lineNumber += 1) {
                     const line = view.state.doc.line(lineNumber);
-                    builder.add(line.from, line.from, hiddenLineDecoration);
+                    builder.add(line.from, line.from, hiddenBlockLineDecoration);
                 }
 
+                // 在隐藏行之后插入 Widget（行内模式，避免 block widget 引发 measure 异常）。
                 builder.add(
                     block.to,
                     block.to,
@@ -332,7 +366,18 @@ export function createFrontmatterSyntaxExtension(): ReturnType<typeof ViewPlugin
             }
         },
         {
-            decorations: (plugin) => plugin.decorations,
+            decorations: (p) => p.decorations,
         },
     );
+
+    // atomicRanges 阻止光标通过键盘导航进入 frontmatter 隐藏范围。
+    const atomicRanges = createBlockAtomicRangesExtension((view) => {
+        const block = parseFrontmatterBlock(view.state);
+        if (!block) {
+            return null;
+        }
+        return { from: block.from, to: block.to };
+    });
+
+    return [plugin, atomicRanges];
 }

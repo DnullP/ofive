@@ -7,6 +7,7 @@
  */
 
 import { useMemo, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { useFocusedArticle } from "../store/editorContextStore";
 import "./OutlinePanel.css";
 
@@ -58,6 +59,7 @@ function parseMarkdownHeadings(content: string): HeadingItem[] {
  * @returns 大纲面板视图。
  */
 export function OutlinePanel(): ReactNode {
+    const { t } = useTranslation();
     const focusedArticle = useFocusedArticle();
 
     const headings = useMemo(() => {
@@ -70,8 +72,8 @@ export function OutlinePanel(): ReactNode {
     if (!focusedArticle) {
         return (
             <div className="outline-panel">
-                <div className="outline-panel-header">未聚焦文章</div>
-                <div className="outline-empty">请先在主编辑区聚焦一篇文章。</div>
+                <div className="outline-panel-header">{t("outline.noFocusedArticle")}</div>
+                <div className="outline-empty">{t("outline.focusArticleHint")}</div>
             </div>
         );
     }
@@ -80,7 +82,7 @@ export function OutlinePanel(): ReactNode {
         <div className="outline-panel">
             <div className="outline-panel-header">{focusedArticle.path}</div>
             {headings.length === 0 ? (
-                <div className="outline-empty">当前文章没有标题结构。</div>
+                <div className="outline-empty">{t("outline.noHeadings")}</div>
             ) : (
                 <ul className="outline-list">
                     {headings.map((heading) => (
@@ -89,7 +91,7 @@ export function OutlinePanel(): ReactNode {
                                 type="button"
                                 className="outline-item"
                                 style={{ paddingLeft: `${String((heading.level - 1) * 14 + 8)}px` }}
-                                title={`第 ${String(heading.line)} 行`}
+                                title={t("outline.lineNumber", { line: String(heading.line) })}
                             >
                                 {heading.text}
                             </button>

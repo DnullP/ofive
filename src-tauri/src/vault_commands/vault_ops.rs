@@ -25,6 +25,30 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, State};
 
+/// 在后台线程中执行索引重建操作，不阻塞当前命令返回。
+///
+/// 将给定的闭包提交到独立线程执行，索引操作失败仅记录日志，
+/// 不影响主流程返回结果。
+///
+/// # 参数
+/// - `operation_name`：操作名称，用于日志标识
+/// - `task`：需要在后台执行的索引操作闭包
+fn spawn_background_reindex<F>(operation_name: &str, task: F)
+where
+    F: FnOnce() -> Result<(), String> + Send + 'static,
+{
+    let name = operation_name.to_string();
+    std::thread::spawn(move || {
+        if let Err(error) = task() {
+            log::warn!(
+                "[query-index] background reindex failed for {}: {}",
+                name,
+                error
+            );
+        }
+    });
+}
+
 const PENDING_WRITE_TRACE_TTL_MS: u128 = 5_000;
 const VAULT_CONFIG_RELATIVE_PATH: &str = ".ofive/config.json";
 
@@ -112,6 +136,9 @@ pub fn set_current_vault(
 
     install_vault_watcher(&app_handle, &state, &canonical)?;
     query_index::ensure_query_index_current(&canonical)?;
+
+    // 设置日志文件持久化路径到 <vault>/.ofive/
+    crate::logging::set_vault_log_path(Some(canonical.join(".ofive")));
 
     println!("[vault] set_current_vault success: {}", effective_path);
 
@@ -313,13 +340,17 @@ pub fn create_vault_markdown_file(
 ) -> Result<WriteMarkdownResponse, String> {
     let root = get_vault_root(&state)?;
     let created = create_vault_markdown_file_in_root(relative_path, content, &root)?;
-    query_index::reindex_markdown_file(&root, &created.relative_path)?;
     register_pending_write_trace(
         &state,
         source_trace_id,
         &[created.relative_path.clone()],
         "create_vault_markdown_file",
     )?;
+    let reindex_root = root.clone();
+    let reindex_path = created.relative_path.clone();
+    spawn_background_reindex("create_vault_markdown_file", move || {
+        query_index::reindex_markdown_file(&reindex_root, &reindex_path)
+    });
     Ok(created)
 }
 
@@ -483,13 +514,17 @@ pub fn save_vault_markdown_file(
 ) -> Result<WriteMarkdownResponse, String> {
     let root = get_vault_root(&state)?;
     let saved = save_vault_markdown_file_in_root(relative_path, content, &root)?;
-    query_index::reindex_markdown_file(&root, &saved.relative_path)?;
     register_pending_write_trace(
         &state,
         source_trace_id,
         &[saved.relative_path.clone()],
         "save_vault_markdown_file",
     )?;
+    let reindex_root = root.clone();
+    let reindex_path = saved.relative_path.clone();
+    spawn_background_reindex("save_vault_markdown_file", move || {
+        query_index::reindex_markdown_file(&reindex_root, &reindex_path)
+    });
 
     Ok(saved)
 }
@@ -553,14 +588,18 @@ pub fn rename_vault_markdown_file(
     let root = get_vault_root(&state)?;
     let from_path_for_trace = from_relative_path.clone();
     let renamed = rename_vault_markdown_file_in_root(from_relative_path, to_relative_path, &root)?;
-    query_index::remove_markdown_file(&root, &from_path_for_trace)?;
-    query_index::reindex_markdown_file(&root, &renamed.relative_path)?;
     register_pending_write_trace(
         &state,
         source_trace_id,
-        &[from_path_for_trace, renamed.relative_path.clone()],
+        &[from_path_for_trace.clone(), renamed.relative_path.clone()],
         "rename_vault_markdown_file",
     )?;
+    let reindex_root = root.clone();
+    let reindex_path = renamed.relative_path.clone();
+    spawn_background_reindex("rename_vault_markdown_file", move || {
+        query_index::remove_markdown_file(&reindex_root, &from_path_for_trace)?;
+        query_index::reindex_markdown_file(&reindex_root, &reindex_path)
+    });
     Ok(renamed)
 }
 
@@ -646,14 +685,18 @@ pub fn move_vault_markdown_file_to_directory(
         target_directory_relative_path,
         &root,
     )?;
-    query_index::remove_markdown_file(&root, &from_path_for_trace)?;
-    query_index::reindex_markdown_file(&root, &moved.relative_path)?;
     register_pending_write_trace(
         &state,
         source_trace_id,
-        &[from_path_for_trace, moved.relative_path.clone()],
+        &[from_path_for_trace.clone(), moved.relative_path.clone()],
         "move_vault_markdown_file_to_directory",
     )?;
+    let reindex_root = root.clone();
+    let reindex_path = moved.relative_path.clone();
+    spawn_background_reindex("move_vault_markdown_file_to_directory", move || {
+        query_index::remove_markdown_file(&reindex_root, &from_path_for_trace)?;
+        query_index::reindex_markdown_file(&reindex_root, &reindex_path)
+    });
     Ok(moved)
 }
 
@@ -740,13 +783,16 @@ pub fn rename_vault_directory(
     let root = get_vault_root(&state)?;
     let from_path_for_trace = from_relative_path.clone();
     let renamed = rename_vault_directory_in_root(from_relative_path, to_relative_path, &root)?;
-    query_index::ensure_query_index_current(&root)?;
     register_pending_write_trace(
         &state,
         source_trace_id,
         &[from_path_for_trace, renamed.relative_path.clone()],
         "rename_vault_directory",
     )?;
+    let reindex_root = root.clone();
+    spawn_background_reindex("rename_vault_directory", move || {
+        query_index::ensure_query_index_current(&reindex_root)
+    });
     Ok(renamed)
 }
 
@@ -852,13 +898,16 @@ pub fn move_vault_directory_to_directory(
         target_directory_relative_path,
         &root,
     )?;
-    query_index::ensure_query_index_current(&root)?;
     register_pending_write_trace(
         &state,
         source_trace_id,
         &[from_path_for_trace, moved.relative_path.clone()],
         "move_vault_directory_to_directory",
     )?;
+    let reindex_root = root.clone();
+    spawn_background_reindex("move_vault_directory_to_directory", move || {
+        query_index::ensure_query_index_current(&reindex_root)
+    });
     Ok(moved)
 }
 
@@ -909,13 +958,16 @@ pub fn delete_vault_directory(
     let root = get_vault_root(&state)?;
     let relative_path_for_trace = relative_path.clone();
     delete_vault_directory_in_root(relative_path, &root)?;
-    query_index::ensure_query_index_current(&root)?;
     register_pending_write_trace(
         &state,
         source_trace_id,
         &[relative_path_for_trace],
         "delete_vault_directory",
     )?;
+    let reindex_root = root.clone();
+    spawn_background_reindex("delete_vault_directory", move || {
+        query_index::ensure_query_index_current(&reindex_root)
+    });
     Ok(())
 }
 
@@ -958,12 +1010,90 @@ pub fn delete_vault_markdown_file(
     let root = get_vault_root(&state)?;
     let relative_path_for_trace = relative_path.clone();
     delete_vault_markdown_file_in_root(relative_path, &root)?;
-    query_index::remove_markdown_file(&root, &relative_path_for_trace)?;
+    register_pending_write_trace(
+        &state,
+        source_trace_id,
+        &[relative_path_for_trace.clone()],
+        "delete_vault_markdown_file",
+    )?;
+    let reindex_root = root.clone();
+    spawn_background_reindex("delete_vault_markdown_file", move || {
+        query_index::remove_markdown_file(&reindex_root, &relative_path_for_trace)
+    });
+    Ok(())
+}
+
+/// 删除当前仓库中的二进制文件（图片等非 Markdown 文件）。
+///
+/// 使用 `resolve_binary_target_path` 校验路径后执行删除操作。
+///
+/// # 参数
+/// - `relative_path` - 目标文件相对路径。
+/// - `vault_root` - vault 根目录绝对路径。
+///
+/// # 返回
+/// - 成功返回 `Ok(())`。
+///
+/// # 异常
+/// - 路径为空/绝对路径/目录逃逸/系统目录时返回错误。
+/// - 目标文件不存在或不是文件时返回错误。
+/// - 删除文件失败时返回错误。
+pub fn delete_vault_binary_file_in_root(
+    relative_path: String,
+    vault_root: &Path,
+) -> Result<(), String> {
+    println!(
+        "[vault] delete_vault_binary_file start: relative_path={}",
+        relative_path
+    );
+
+    let target_path = resolve_binary_target_path(vault_root, &relative_path)?;
+
+    if !target_path.exists() {
+        return Err("目标文件不存在".to_string());
+    }
+
+    if !target_path.is_file() {
+        return Err("目标路径不是文件".to_string());
+    }
+
+    fs::remove_file(&target_path)
+        .map_err(|error| format!("删除文件失败 {}: {error}", target_path.display()))?;
+
+    println!(
+        "[vault] delete_vault_binary_file success: {}",
+        target_path.display()
+    );
+
+    Ok(())
+}
+
+/// 删除当前仓库中的二进制文件（图片等非 Markdown 文件），并注册写入追踪。
+///
+/// # 参数
+/// - `relative_path` - 目标文件相对路径。
+/// - `source_trace_id` - 前端写入追踪 ID（可选）。
+/// - `state` - 应用共享状态。
+///
+/// # 返回
+/// - 成功返回 `Ok(())`。
+///
+/// # 副作用
+/// - 删除文件系统中的目标文件。
+/// - 注册写入追踪以防止文件监听器重复通知前端。
+pub fn delete_vault_binary_file(
+    relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = get_vault_root(&state)?;
+    let relative_path_for_trace = relative_path.clone();
+    delete_vault_binary_file_in_root(relative_path, &root)?;
     register_pending_write_trace(
         &state,
         source_trace_id,
         &[relative_path_for_trace],
-        "delete_vault_markdown_file",
+        "delete_vault_binary_file",
     )?;
     Ok(())
 }

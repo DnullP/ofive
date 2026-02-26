@@ -15,6 +15,27 @@ import {
     type VaultConfigEventPayload,
 } from "../api/vaultApi";
 import { subscribeVaultConfigBusEvent } from "../events/appEventBus";
+import i18n from "../i18n";
+
+/**
+ * @constant DEFAULT_EDITOR_FONT_FAMILY
+ * @description 编辑器默认字体族，使用 San Francisco 系统字体。
+ * 采用系统 UI 字体栈：macOS 下即为 San Francisco，其余平台使用对应系统 UI 字体。
+ */
+export const DEFAULT_EDITOR_FONT_FAMILY =
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+/**
+ * @constant FONT_FAMILY_PRESETS
+ * @description 编辑器字体预设列表，供设置页面下拉框使用。
+ * 每项包含 label（显示名称的 i18n key）和 value（CSS font-family 值）。
+ */
+export const FONT_FAMILY_PRESETS: ReadonlyArray<{ readonly label: string; readonly value: string }> = [
+    { label: "settings.fontPresetSanFrancisco", value: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
+    { label: "settings.fontPresetInter", value: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
+    { label: "settings.fontPresetGeorgia", value: 'Georgia, "Times New Roman", Times, serif' },
+    { label: "settings.fontPresetMonospace", value: '"SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' },
+];
 
 /**
  * @constant CONFIG_CHANGE_EVENT_NAME
@@ -40,13 +61,36 @@ const LAST_VAULT_PATH_STORAGE_KEY = "ofive:last-vault-path";
 
 /**
  * @interface FeatureSettings
- * @description 功能开关配置。
+ * @description 功能开关与编辑器体验配置。
+ * @field searchEnabled - 是否开启搜索功能
+ * @field vimModeEnabled - 是否开启 Vim 编辑模式
+ * @field editorFontSize - 编辑器字体大小（px），范围 10–32
+ * @field editorTabSize - Tab 缩进宽度（空格数），范围 1–8
+ * @field editorLineWrapping - 是否开启自动换行
+ * @field editorLineNumbers - 行号显示模式："off" 隐藏 | "absolute" 绝对行号 | "relative" 相对行号
+ * @field autoSaveEnabled - 是否开启自动保存
+ * @field autoSaveDelayMs - 自动保存防抖延迟（毫秒），范围 500–10000
+ * @field editorFontFamily - 编辑器字体族，默认与 Obsidian 一致的无衬线字体栈
  */
-interface FeatureSettings {
+export interface FeatureSettings {
     /** 是否开启搜索功能（后端配置） */
     searchEnabled: boolean;
     /** 是否开启 Vim 编辑模式（后端配置） */
     vimModeEnabled: boolean;
+    /** 编辑器字体大小（px），默认 16 */
+    editorFontSize: number;
+    /** Tab 缩进宽度（空格数），默认 4 */
+    editorTabSize: number;
+    /** 是否开启自动换行，默认 true */
+    editorLineWrapping: boolean;
+    /** 行号显示模式："off" 隐藏 | "absolute" 绝对行号 | "relative" 相对行号，默认 "absolute" */
+    editorLineNumbers: "off" | "absolute" | "relative";
+    /** 是否开启自动保存，默认 true */
+    autoSaveEnabled: boolean;
+    /** 自动保存防抖延迟（毫秒），默认 1500，范围 500–10000 */
+    autoSaveDelayMs: number;
+    /** 编辑器字体族，默认 Obsidian 同款无衬线字体栈 */
+    editorFontFamily: string;
 }
 
 /**
@@ -145,11 +189,59 @@ function normalizeBackendConfig(config: VaultConfig): {
         typeof featuresObj.searchEnabled === "boolean" ? featuresObj.searchEnabled : true;
     const vimModeEnabled =
         typeof featuresObj.vimModeEnabled === "boolean" ? featuresObj.vimModeEnabled : false;
+    const editorFontSize =
+        typeof featuresObj.editorFontSize === "number" &&
+            Number.isFinite(featuresObj.editorFontSize) &&
+            (featuresObj.editorFontSize as number) >= 10 &&
+            (featuresObj.editorFontSize as number) <= 32
+            ? (featuresObj.editorFontSize as number)
+            : 16;
+    const editorTabSize =
+        typeof featuresObj.editorTabSize === "number" &&
+            Number.isFinite(featuresObj.editorTabSize) &&
+            (featuresObj.editorTabSize as number) >= 1 &&
+            (featuresObj.editorTabSize as number) <= 8
+            ? (featuresObj.editorTabSize as number)
+            : 4;
+    const editorLineWrapping =
+        typeof featuresObj.editorLineWrapping === "boolean" ? featuresObj.editorLineWrapping : true;
+    /* 行号模式：兼容旧版 boolean 值（true→"absolute"，false→"off"） */
+    const editorLineNumbers: "off" | "absolute" | "relative" = (() => {
+        const raw = featuresObj.editorLineNumbers;
+        if (raw === "off" || raw === "absolute" || raw === "relative") {
+            return raw;
+        }
+        if (typeof raw === "boolean") {
+            return raw ? "absolute" : "off";
+        }
+        return "absolute";
+    })();
+    const autoSaveEnabled =
+        typeof featuresObj.autoSaveEnabled === "boolean" ? featuresObj.autoSaveEnabled : true;
+    const autoSaveDelayMs =
+        typeof featuresObj.autoSaveDelayMs === "number" &&
+            Number.isFinite(featuresObj.autoSaveDelayMs) &&
+            (featuresObj.autoSaveDelayMs as number) >= 500 &&
+            (featuresObj.autoSaveDelayMs as number) <= 10000
+            ? (featuresObj.autoSaveDelayMs as number)
+            : 1500;
+    const editorFontFamily =
+        typeof featuresObj.editorFontFamily === "string" &&
+            (featuresObj.editorFontFamily as string).trim().length > 0
+            ? (featuresObj.editorFontFamily as string).trim()
+            : DEFAULT_EDITOR_FONT_FAMILY;
 
     const nextFeatures = {
         ...featuresObj,
         searchEnabled,
         vimModeEnabled,
+        editorFontSize,
+        editorTabSize,
+        editorLineWrapping,
+        editorLineNumbers,
+        autoSaveEnabled,
+        autoSaveDelayMs,
+        editorFontFamily,
     };
 
     const nextConfig: VaultConfig = {
@@ -162,13 +254,27 @@ function normalizeBackendConfig(config: VaultConfig): {
 
     const changed =
         featuresObj.searchEnabled !== searchEnabled ||
-        featuresObj.vimModeEnabled !== vimModeEnabled;
+        featuresObj.vimModeEnabled !== vimModeEnabled ||
+        featuresObj.editorFontSize !== editorFontSize ||
+        featuresObj.editorTabSize !== editorTabSize ||
+        featuresObj.editorLineWrapping !== editorLineWrapping ||
+        featuresObj.editorLineNumbers !== editorLineNumbers ||
+        featuresObj.autoSaveEnabled !== autoSaveEnabled ||
+        featuresObj.autoSaveDelayMs !== autoSaveDelayMs ||
+        featuresObj.editorFontFamily !== editorFontFamily;
 
     return {
         nextConfig,
         featureSettings: {
             searchEnabled,
             vimModeEnabled,
+            editorFontSize,
+            editorTabSize,
+            editorLineWrapping,
+            editorLineNumbers,
+            autoSaveEnabled,
+            autoSaveDelayMs,
+            editorFontFamily,
         },
         changed,
     };
@@ -185,6 +291,13 @@ class ConfigStore {
         featureSettings: {
             searchEnabled: true,
             vimModeEnabled: false,
+            editorFontSize: 16,
+            editorTabSize: 4,
+            editorLineWrapping: true,
+            editorLineNumbers: "absolute",
+            autoSaveEnabled: true,
+            autoSaveDelayMs: 1500,
+            editorFontFamily: DEFAULT_EDITOR_FONT_FAMILY,
         },
         frontendSettings: {
             rememberLastVault: readRememberLastVaultFromLocal(),
@@ -260,7 +373,7 @@ class ConfigStore {
                 featureSettings,
             });
         } catch (error) {
-            const message = error instanceof Error ? error.message : "加载配置失败";
+            const message = error instanceof Error ? error.message : i18n.t("store.loadConfigFailed");
             this.state = {
                 ...this.state,
                 isLoading: false,
@@ -324,7 +437,7 @@ class ConfigStore {
                 eventType: eventPayload.eventType,
             });
         } catch (error) {
-            const message = error instanceof Error ? error.message : "后端配置刷新失败";
+            const message = error instanceof Error ? error.message : i18n.t("store.refreshConfigFailed");
             this.state = {
                 ...this.state,
                 error: message,
@@ -371,7 +484,7 @@ class ConfigStore {
             await saveCurrentVaultConfig(nextConfig);
             console.info("[config-store] searchEnabled saved", { nextValue });
         } catch (error) {
-            const message = error instanceof Error ? error.message : "保存搜索配置失败";
+            const message = error instanceof Error ? error.message : i18n.t("store.saveSearchConfigFailed");
             this.state = {
                 ...this.state,
                 error: message,
@@ -418,7 +531,7 @@ class ConfigStore {
             await saveCurrentVaultConfig(nextConfig);
             console.info("[config-store] vimModeEnabled saved", { nextValue });
         } catch (error) {
-            const message = error instanceof Error ? error.message : "保存 Vim 配置失败";
+            const message = error instanceof Error ? error.message : i18n.t("store.saveVimConfigFailed");
             this.state = {
                 ...this.state,
                 error: message,
@@ -440,6 +553,64 @@ class ConfigStore {
         };
         this.emit();
         console.info("[config-store] rememberLastVault changed", { nextValue });
+    }
+
+    /**
+     * @method setFeatureSetting
+     * @description 通用更新单个 feature 配置项并持久化到后端。
+     * @param key 配置键名。
+     * @param nextValue 配置值。
+     * @sideEffects 更新 backendConfig + featureSettings，调用后端保存接口。
+     */
+    async setFeatureSetting<K extends keyof FeatureSettings>(
+        key: K,
+        nextValue: FeatureSettings[K],
+    ): Promise<void> {
+        const currentConfig = this.state.backendConfig;
+        if (!currentConfig) {
+            console.warn("[config-store] setFeatureSetting: no backendConfig loaded", { key });
+            return;
+        }
+
+        const featuresRaw = currentConfig.entries.features;
+        const featuresObj =
+            featuresRaw && typeof featuresRaw === "object" && !Array.isArray(featuresRaw)
+                ? (featuresRaw as Record<string, unknown>)
+                : {};
+
+        const nextConfig: VaultConfig = {
+            ...currentConfig,
+            entries: {
+                ...currentConfig.entries,
+                features: {
+                    ...featuresObj,
+                    [key]: nextValue,
+                },
+            },
+        };
+
+        this.state = {
+            ...this.state,
+            backendConfig: nextConfig,
+            featureSettings: {
+                ...this.state.featureSettings,
+                [key]: nextValue,
+            },
+        };
+        this.emit();
+
+        try {
+            await saveCurrentVaultConfig(nextConfig);
+            console.info("[config-store] feature setting saved", { key, nextValue });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : i18n.t("store.saveConfigFailed", { key });
+            this.state = {
+                ...this.state,
+                error: message,
+            };
+            this.emit();
+            console.error("[config-store] save feature setting failed", { key, nextValue, message });
+        }
     }
 }
 
@@ -511,7 +682,18 @@ export async function updateVimModeEnabled(nextValue: boolean): Promise<void> {
 export function updateRememberLastVault(nextValue: boolean): void {
     configStore.setRememberLastVault(nextValue);
 }
-
+/**
+ * @function updateFeatureSetting
+ * @description 通用更新单个 feature 配置项并持久化到后端。
+ * @param key 配置键名，必须是 FeatureSettings 的有效属性。
+ * @param nextValue 对应键的配置值。
+ */
+export async function updateFeatureSetting<K extends keyof FeatureSettings>(
+    key: K,
+    nextValue: FeatureSettings[K],
+): Promise<void> {
+    await configStore.setFeatureSetting(key, nextValue);
+}
 /**
  * @function useConfigSync
  * @description 在仓库就绪后加载并同步配置。

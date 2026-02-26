@@ -43,12 +43,14 @@
     height: 100%;
 }
 
-/* 模块样式：标签图层，承载每个节点对应的 md 文件名。 */
+/* 模块样式：标签图层，承载每个节点对应的 md 文件名，支持缩放级别驱动的渐显过渡。 */
 .knowledge-graph-tab__labels-layer {
     position: absolute;
     inset: 0;
     pointer-events: none;
     overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.18s ease-out;
 }
 
 /* 模块样式：单个节点标签，提升节点文本可读性。 */

@@ -12,6 +12,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import i18n from "../i18n";
 
 /**
  * @constant VAULT_FS_EVENT_NAME
@@ -169,6 +170,21 @@ export interface VaultQuickSwitchItem {
     title: string;
     /** 匹配评分（越高越相关） */
     score: number;
+}
+
+/**
+ * @interface WikiLinkSuggestionItem
+ * @description WikiLink 自动补全建议条目。
+ */
+export interface WikiLinkSuggestionItem {
+    /** 文件相对路径 */
+    relativePath: string;
+    /** 展示标题（文件名，不含扩展名） */
+    title: string;
+    /** 综合评分（越高越相关） */
+    score: number;
+    /** 被引用次数（入链权重和） */
+    referenceCount: number;
 }
 
 /**
@@ -557,7 +573,7 @@ export async function readVaultMarkdownFile(relativePath: string): Promise<ReadM
     if (!isTauriRuntime()) {
         const mockContent =
             BROWSER_MOCK_MARKDOWN_CONTENTS[relativePath] ??
-            `# ${relativePath.split("/").pop() ?? relativePath}\n\n浏览器回退模式下的示例内容。`;
+            `# ${relativePath.split("/").pop() ?? relativePath}\n\n${i18n.t("editor.fallbackContent")}`;
 
         return {
             relativePath,
@@ -578,7 +594,7 @@ export async function readVaultMarkdownFile(relativePath: string): Promise<ReadM
  */
 export async function readVaultBinaryFile(relativePath: string): Promise<ReadBinaryFileResponse> {
     if (!isTauriRuntime()) {
-        throw new Error("浏览器回退模式不支持读取本地二进制文件");
+        throw new Error(i18n.t("editor.noLocalBinaryRead"));
     }
 
     return invoke<ReadBinaryFileResponse>("read_vault_binary_file", {
@@ -745,6 +761,62 @@ export async function searchVaultMarkdownFiles(
 }
 
 /**
+ * @function suggestWikiLinkTargets
+ * @description 为 WikiLink 自动补全提供建议列表。
+ *   排序同时考虑关键字匹配度与笔记被引用次数（热度）。
+ * @param query 搜索关键字（可为空）。
+ * @param limit 最大返回条数，默认 20。
+ * @returns 建议列表。
+ */
+export async function suggestWikiLinkTargets(
+    query: string,
+    limit = 20,
+): Promise<WikiLinkSuggestionItem[]> {
+    const normalizedLimit = Math.max(1, Math.min(100, Number.isFinite(limit) ? Math.floor(limit) : 20));
+
+    if (!isTauriRuntime()) {
+        // 浏览器回退：复用 mock 数据
+        const fallbackItems = Object.keys(BROWSER_MOCK_MARKDOWN_CONTENTS)
+            .map((relativePath) => {
+                const score = query.trim()
+                    ? scoreBrowserFallbackQuickSwitch(relativePath, query) ?? undefined
+                    : 0;
+                if (score === undefined) {
+                    return null;
+                }
+                return {
+                    relativePath,
+                    title: relativePath.split("/").pop()?.replace(/\.(md|markdown)$/i, "") ?? relativePath,
+                    score,
+                    referenceCount: 0,
+                };
+            })
+            .filter((item): item is WikiLinkSuggestionItem => item !== null)
+            .sort((left, right) => right.score - left.score || left.relativePath.localeCompare(right.relativePath))
+            .slice(0, normalizedLimit);
+
+        return fallbackItems;
+    }
+
+    console.debug("[vault-api] suggestWikiLinkTargets invoke start", {
+        query,
+        limit: normalizedLimit,
+    });
+
+    const response = await invoke<WikiLinkSuggestionItem[]>("suggest_wikilink_targets", {
+        query,
+        limit: normalizedLimit,
+    });
+
+    console.debug("[vault-api] suggestWikiLinkTargets invoke success", {
+        query,
+        resultCount: response.length,
+    });
+
+    return response;
+}
+
+/**
  * @function createVaultMarkdownFile
  * @description 在当前仓库创建 Markdown 文件。
  * @param relativePath 目标文件相对路径。
@@ -901,7 +973,7 @@ export async function moveVaultMarkdownFileToDirectory(
     const sourceFileName = normalizedFromPath.split("/").pop() ?? "";
 
     if (!sourceFileName) {
-        throw new Error("源文件路径无效");
+        throw new Error(i18n.t("editor.invalidSourcePath"));
     }
 
     const targetRelativePath = normalizedTargetDirectory
@@ -911,12 +983,12 @@ export async function moveVaultMarkdownFileToDirectory(
     if (!isTauriRuntime()) {
         const sourceContent = BROWSER_MOCK_MARKDOWN_CONTENTS[normalizedFromPath];
         if (typeof sourceContent !== "string") {
-            throw new Error("源文件不存在");
+            throw new Error(i18n.t("editor.sourceNotExist"));
         }
 
         const existedTarget = BROWSER_MOCK_MARKDOWN_CONTENTS[targetRelativePath];
         if (typeof existedTarget === "string" && targetRelativePath !== normalizedFromPath) {
-            throw new Error("目标文件已存在");
+            throw new Error(i18n.t("editor.targetExists"));
         }
 
         if (targetRelativePath !== normalizedFromPath) {
@@ -1009,7 +1081,7 @@ export async function moveVaultDirectoryToDirectory(
 export async function deleteVaultDirectory(relativePath: string): Promise<void> {
     const normalizedPath = normalizeSlashPath(relativePath).trim().replace(/^\/+|\/+$/g, "");
     if (!normalizedPath) {
-        throw new Error("目录路径不能为空");
+        throw new Error(i18n.t("editor.directoryPathEmpty"));
     }
 
     if (!isTauriRuntime()) {
@@ -1039,6 +1111,26 @@ export async function deleteVaultMarkdownFile(relativePath: string): Promise<voi
     registerLocalWriteTrace(sourceTraceId);
 
     await invoke<void>("delete_vault_markdown_file", {
+        relativePath,
+        sourceTraceId,
+    });
+}
+
+/**
+ * @function deleteVaultBinaryFile
+ * @description 删除当前仓库中的二进制文件（图片等非 Markdown 文件）。
+ * @param relativePath 目标文件相对路径。
+ * @throws 路径为空、绝对路径、目录逃逸、文件不存在时抛出错误。
+ */
+export async function deleteVaultBinaryFile(relativePath: string): Promise<void> {
+    if (!isTauriRuntime()) {
+        return;
+    }
+
+    const sourceTraceId = createWriteTraceId();
+    registerLocalWriteTrace(sourceTraceId);
+
+    await invoke<void>("delete_vault_binary_file", {
         relativePath,
         sourceTraceId,
     });

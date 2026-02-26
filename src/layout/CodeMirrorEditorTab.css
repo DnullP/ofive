@@ -46,10 +46,11 @@
     background: var(--editor-bg-color);
 }
 
-/* CodeMirror 内容区样式：统一字体与行高 */
+/* CodeMirror 内容区样式：统一字体与行高，默认使用 Obsidian 同款无衬线字体栈，
+   实际字体由 editorStyleCompartment 动态注入覆盖 */
 .cm-tab-editor .cm-content {
-    font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 13px;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
     line-height: 1.6;
     color: var(--editor-text-color);
 }
@@ -78,35 +79,43 @@
     color: var(--editor-text-color) !important;
 }
 
-/* 标题渲染样式：非编辑态下显示为富文本标题 */
+/* 标题渲染样式：非编辑态下显示为富文本标题，带偏红暗色调及底部装饰线 */
 .cm-tab-editor .cm-rendered-header {
     display: inline-block;
     width: 100%;
-    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-weight: 700;
-    color: var(--text-primary);
+    /* 标题文字：偏红的暗色 */
+    color: var(--editor-header-text-color, #6b2e2e);
     line-height: 1.3;
-    padding: 2px 0;
+    padding: 2px 0 6px 0;
+    position: relative;
+    /* 覆盖 CodeMirror defaultHighlightStyle 对 heading 标签的 underline */
+    text-decoration: none;
 }
 
-/* 标题源码前缀（#）隐藏样式
-   使用 font-size:0 而非 display:none，避免元素脱离布局流导致
-   CM6 coordsAtPos 坐标计算异常（selectAll 选区背景错位）。 */
-.cm-tab-editor .cm-header-marker-hidden {
-    font-size: 0;
-    overflow: hidden;
+/* 覆盖 CodeMirror 动态注入的 heading token 下划线
+   defaultHighlightStyle 会在子 span（如 .ͼ7）上设置 text-decoration: underline，
+   父元素的 text-decoration:none 无法覆盖子元素，需要单独对子 span 重置。 */
+.cm-tab-editor .cm-rendered-header span {
+    text-decoration: none !important;
 }
 
-/* 行内 Markdown 标记（如 **、__）隐藏样式
-   同上，保证 CM6 坐标计算不受影响。 */
-.cm-tab-editor .cm-inline-marker-hidden {
-    font-size: 0;
-    overflow: hidden;
+/* 标题底部装饰横线：通过伪元素实现，与标题文字保持数像素间距 */
+.cm-tab-editor .cm-rendered-header::after {
+    content: "";
+    display: block;
+    /* 横线延伸至接近右侧边缘 */
+    width: 100%;
+    /* 横线与标题文字的间距 */
+    margin-top: 4px;
+    /* 横线粗细与颜色：偏红暗色，比标题文字略浅以形成层次 */
+    border-bottom: 1.5px solid var(--editor-header-rule-color, #8b4444);
 }
 
-/* 行内粗体渲染样式 */
+/* 行内粗体渲染样式：显式 font-style:normal 以覆盖 CodeMirror defaultHighlightStyle 对 Emphasis 标签的斜体 */
 .cm-tab-editor .cm-rendered-bold {
     font-weight: 700;
+    font-style: normal;
     color: var(--text-primary);
 }
 

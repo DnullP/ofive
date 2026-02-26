@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import "./MoveFileDirectoryModal.css";
 
 /**
@@ -77,6 +78,7 @@ function directoryMatchesQuery(option: MoveDirectoryOption, query: string): bool
  * @returns 浮窗节点；未打开时返回 null。
  */
 export function MoveFileDirectoryModal(props: MoveFileDirectoryModalProps): ReactNode {
+    const { t } = useTranslation();
     const [query, setQuery] = useState<string>("");
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
     const inputRef = useRef<HTMLInputElement | null>(null);
@@ -92,7 +94,7 @@ export function MoveFileDirectoryModal(props: MoveFileDirectoryModalProps): Reac
         return [
             {
                 relativePath: "",
-                title: "仓库根目录",
+                title: t("moveFileModal.vaultRoot"),
             },
             ...sortedDirectoryPaths.map((relativePath) => ({
                 relativePath,
@@ -206,9 +208,9 @@ export function MoveFileDirectoryModal(props: MoveFileDirectoryModalProps): Reac
             }}
             onKeyDown={handleKeyboard}
         >
-            <section className="move-file-panel" aria-label="移动当前文件到目录">
+            <section className="move-file-panel" aria-label={t("moveFileModal.ariaLabel")}>
                 <header className="move-file-header">
-                    <div className="move-file-title">移动当前文件到目录</div>
+                    <div className="move-file-title">{t("moveFileModal.title")}</div>
                     <div className="move-file-source-path" title={props.sourceFilePath}>
                         {props.sourceFilePath}
                     </div>
@@ -219,14 +221,14 @@ export function MoveFileDirectoryModal(props: MoveFileDirectoryModalProps): Reac
                     className="move-file-input"
                     type="text"
                     value={query}
-                    placeholder="搜索目标目录..."
+                    placeholder={t("moveFileModal.placeholder")}
                     onChange={(event) => {
                         setQuery(event.target.value);
                     }}
                 />
 
                 <div className="move-file-list" role="listbox" aria-activedescendant={selectedOption?.relativePath || "vault-root"}>
-                    {filteredOptions.length === 0 && <div className="move-file-empty">无匹配目录</div>}
+                    {filteredOptions.length === 0 && <div className="move-file-empty">{t("moveFileModal.noMatch")}</div>}
 
                     {filteredOptions.map((option, index) => {
                         const optionId = option.relativePath || "vault-root";
@@ -247,7 +249,7 @@ export function MoveFileDirectoryModal(props: MoveFileDirectoryModalProps): Reac
                             >
                                 <span className="move-file-item-title">{option.title}</span>
                                 <span className="move-file-item-meta">
-                                    {option.relativePath || "(根目录)"}
+                                    {option.relativePath || t("common.rootDirectory")}
                                 </span>
                             </button>
                         );

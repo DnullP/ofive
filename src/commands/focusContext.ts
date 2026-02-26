@@ -59,9 +59,9 @@ export type FocusedComponent = string;
  */
 export const SHORTCUT_CONDITION_LABELS: Record<ShortcutCondition, string> = {
     /* 编辑器标签聚焦时激活 */
-    editorFocused: "编辑器聚焦",
+    editorFocused: "focusContext.editorFocused",
     /* 文件树面板聚焦时激活 */
-    fileTreeFocused: "文件树聚焦",
+    fileTreeFocused: "focusContext.fileTreeFocused",
 };
 
 /**

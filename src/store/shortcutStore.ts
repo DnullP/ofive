@@ -14,6 +14,7 @@ import {
     type VaultConfig,
 } from "../api/vaultApi";
 import { COMMAND_DEFINITIONS, type CommandId } from "../commands/commandSystem";
+import i18n from "../i18n";
 
 /**
  * @constant SHORTCUTS_CONFIG_KEY
@@ -447,7 +448,7 @@ class ShortcutStore {
             this.emit();
             console.info("[shortcut-store] loaded", { vaultPath, bindings: normalizedBindings });
         } catch (error) {
-            const message = error instanceof Error ? error.message : "加载快捷键配置失败";
+            const message = error instanceof Error ? error.message : i18n.t("settings.loadShortcutFailed");
             this.state = {
                 ...this.state,
                 bindings: { ...DEFAULT_SHORTCUTS },
@@ -469,7 +470,7 @@ class ShortcutStore {
     async updateBinding(commandId: CommandId, shortcut: string): Promise<void> {
         const nextShortcut = normalizeShortcutString(shortcut);
         if (!nextShortcut) {
-            this.setError("快捷键格式无效，请重新录制或输入");
+            this.setError(i18n.t("settings.shortcutInvalid"));
             return;
         }
 
@@ -513,7 +514,7 @@ class ShortcutStore {
                 shortcut: nextShortcut,
             });
         } catch (error) {
-            const message = error instanceof Error ? error.message : "保存快捷键配置失败";
+            const message = error instanceof Error ? error.message : i18n.t("settings.saveShortcutFailed");
             this.state = {
                 ...this.state,
                 bindings: previousBindings,

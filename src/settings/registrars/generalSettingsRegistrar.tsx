@@ -8,6 +8,7 @@
  */
 
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
     updateRememberLastVault,
     updateSearchEnabled,
@@ -21,14 +22,17 @@ import { registerSettingsSection } from "../settingsRegistry";
  * @returns React 节点。
  */
 function GeneralSettingsSection(): ReactNode {
+    const { t } = useTranslation();
     const configState = useConfigState();
 
     return (
         <div className="settings-item-group">
-            <label className="settings-item" htmlFor="remember-last-vault-switch">
-                <div>
-                    <div className="settings-item-title">保存上次打开仓库</div>
-                    <div className="settings-item-desc">关闭后，下次启动不会自动恢复上次仓库路径。</div>
+            {/* --- 保存上次仓库 --- */}
+            {/* styles: .settings-compact-row 紧凑行布局 */}
+            <label className="settings-compact-row" htmlFor="remember-last-vault-switch">
+                <div className="settings-compact-info">
+                    <span className="settings-compact-title">{t("settings.rememberLastVault")}</span>
+                    <span className="settings-compact-desc">{t("settings.rememberLastVaultDesc")}</span>
                 </div>
                 <input
                     id="remember-last-vault-switch"
@@ -40,10 +44,11 @@ function GeneralSettingsSection(): ReactNode {
                 />
             </label>
 
-            <label className="settings-item" htmlFor="search-feature-switch">
-                <div>
-                    <div className="settings-item-title">开启搜索功能</div>
-                    <div className="settings-item-desc">关闭后，活动栏将隐藏搜索图标。</div>
+            {/* --- 开启搜索功能 --- */}
+            <label className="settings-compact-row" htmlFor="search-feature-switch">
+                <div className="settings-compact-info">
+                    <span className="settings-compact-title">{t("settings.enableSearch")}</span>
+                    <span className="settings-compact-desc">{t("settings.enableSearchDesc")}</span>
                 </div>
                 <input
                     id="search-feature-switch"
@@ -67,7 +72,7 @@ function GeneralSettingsSection(): ReactNode {
 export function registerGeneralSettingsSection(): void {
     registerSettingsSection({
         id: "general-global",
-        title: "通用",
+        title: "settings.generalSection",
         order: 10,
         render: () => <GeneralSettingsSection />,
     });

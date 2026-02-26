@@ -8,6 +8,7 @@
 //! - `save_vault_markdown_file`
 //! - `rename_vault_markdown_file`
 //! - `delete_vault_markdown_file`
+//! - `delete_vault_binary_file`
 
 #[path = "support/mod.rs"]
 mod support;
@@ -16,12 +17,11 @@ use std::fs;
 
 use ofive_lib::{
     create_vault_directory_in_root, create_vault_markdown_file_in_root,
-    delete_vault_directory_in_root,
-    delete_vault_markdown_file_in_root,
-    get_current_vault_tree_in_root, move_vault_directory_to_directory_in_root,
-    move_vault_markdown_file_to_directory_in_root, read_vault_binary_file_in_root,
-    read_vault_markdown_file_in_root, rename_vault_directory_in_root,
-    rename_vault_markdown_file_in_root,
+    delete_vault_binary_file_in_root, delete_vault_directory_in_root,
+    delete_vault_markdown_file_in_root, get_current_vault_tree_in_root,
+    move_vault_directory_to_directory_in_root, move_vault_markdown_file_to_directory_in_root,
+    read_vault_binary_file_in_root, read_vault_markdown_file_in_root,
+    rename_vault_directory_in_root, rename_vault_markdown_file_in_root,
     save_vault_markdown_file_in_root,
 };
 use serde_json::Value;
@@ -31,8 +31,7 @@ use support::TestVault;
 fn get_current_vault_tree_should_list_seeded_entries() {
     let vault = TestVault::new();
     fs::create_dir_all(vault.root.join(".ofive")).expect("应创建系统目录");
-    fs::write(vault.root.join(".ofive/internal.md"), "# internal")
-        .expect("应写入系统目录测试文件");
+    fs::write(vault.root.join(".ofive/internal.md"), "# internal").expect("应写入系统目录测试文件");
 
     let tree = get_current_vault_tree_in_root(&vault.root).expect("读取目录树应成功");
     let value = serde_json::to_value(tree).expect("目录树响应应可序列化");
@@ -41,9 +40,9 @@ fn get_current_vault_tree_should_list_seeded_entries() {
         .and_then(Value::as_array)
         .expect("entries 应为数组");
 
-    let has_guide = entries.iter().any(|item| {
-        item.get("relativePath").and_then(Value::as_str) == Some("notes/guide.md")
-    });
+    let has_guide = entries
+        .iter()
+        .any(|item| item.get("relativePath").and_then(Value::as_str) == Some("notes/guide.md"));
     let has_assets_dir = entries.iter().any(|item| {
         item.get("relativePath").and_then(Value::as_str) == Some("assets")
             && item.get("isDir").and_then(Value::as_bool) == Some(true)
@@ -130,11 +129,9 @@ fn create_save_rename_delete_should_mutate_filesystem() {
         &vault.root,
     )
     .expect("保存文件应成功");
-    assert!(
-        fs::read_to_string(vault.root.join("notes/new-note.md"))
-            .expect("应成功读取保存后的 Markdown")
-            .contains("updated")
-    );
+    assert!(fs::read_to_string(vault.root.join("notes/new-note.md"))
+        .expect("应成功读取保存后的 Markdown")
+        .contains("updated"));
 
     rename_vault_markdown_file_in_root(
         "notes/new-note.md".to_string(),
@@ -211,11 +208,9 @@ fn multi_step_write_flow_should_keep_tree_and_content_consistent() {
 
     let final_path = vault.root.join("archive/flow-renamed.md");
     assert!(final_path.exists());
-    assert!(
-        fs::read_to_string(&final_path)
-            .expect("应能读取最终文件")
-            .contains("step-2")
-    );
+    assert!(fs::read_to_string(&final_path)
+        .expect("应能读取最终文件")
+        .contains("step-2"));
 
     let tree = get_current_vault_tree_in_root(&vault.root).expect("读取目录树应成功");
     let tree_json = serde_json::to_value(tree).expect("目录树响应应可序列化");
@@ -229,8 +224,7 @@ fn multi_step_write_flow_should_keep_tree_and_content_consistent() {
     });
     let has_intermediate = entries.iter().any(|item| {
         item.get("relativePath").and_then(Value::as_str) == Some("notes/flow.md")
-            || item.get("relativePath").and_then(Value::as_str)
-                == Some("notes/flow-renamed.md")
+            || item.get("relativePath").and_then(Value::as_str) == Some("notes/flow-renamed.md")
     });
 
     assert!(has_final);
@@ -316,4 +310,54 @@ fn delete_directory_should_remove_subtree() {
         .expect("删除目录应成功");
 
     assert!(!vault.root.join("notes/folder").exists());
+}
+
+/// 删除二进制文件（图片等非 Markdown 文件）应正确移除文件系统条目。
+#[test]
+fn delete_binary_file_should_remove_image_file() {
+    let vault = TestVault::new();
+
+    // 创建测试图片文件
+    let image_dir = vault.root.join("assets/images");
+    fs::create_dir_all(&image_dir).expect("应成功创建图片目录");
+    let image_path = image_dir.join("test-photo.png");
+    fs::write(&image_path, &[0x89, 0x50, 0x4E, 0x47]).expect("应成功写入测试图片");
+    assert!(image_path.exists());
+
+    delete_vault_binary_file_in_root("assets/images/test-photo.png".to_string(), &vault.root)
+        .expect("删除二进制文件应成功");
+
+    assert!(!image_path.exists());
+}
+
+/// 删除二进制文件时路径校验应正常工作。
+#[test]
+fn delete_binary_file_should_reject_empty_path() {
+    let vault = TestVault::new();
+
+    let result = delete_vault_binary_file_in_root("".to_string(), &vault.root);
+    assert!(result.is_err());
+}
+
+/// 删除不存在的二进制文件应返回错误。
+#[test]
+fn delete_binary_file_should_fail_for_nonexistent_file() {
+    let vault = TestVault::new();
+
+    let result =
+        delete_vault_binary_file_in_root("assets/nonexistent.png".to_string(), &vault.root);
+    assert!(result.is_err());
+}
+
+/// 对已有的图片资源（icon.png）进行删除后应不存在于文件系统中。
+#[test]
+fn delete_binary_file_should_remove_seeded_icon() {
+    let vault = TestVault::new();
+
+    assert!(vault.root.join("assets/icon.png").exists());
+
+    delete_vault_binary_file_in_root("assets/icon.png".to_string(), &vault.root)
+        .expect("删除种子图片应成功");
+
+    assert!(!vault.root.join("assets/icon.png").exists());
 }

@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import type { IDockviewPanelProps } from "dockview";
 import { readVaultBinaryFile } from "../api/vaultApi";
 import "./ImageViewerTab.css";
@@ -37,6 +38,7 @@ function isTauriRuntime(): boolean {
  * @returns 图片查看器视图。
  */
 export function ImageViewerTab(props: IDockviewPanelProps<Record<string, unknown>>): ReactNode {
+    const { t } = useTranslation();
     const [imageLoadError, setImageLoadError] = useState<string | null>(null);
     const [imageSource, setImageSource] = useState<string>("");
     const filePath = String(props.params.path ?? "");
@@ -76,7 +78,7 @@ export function ImageViewerTab(props: IDockviewPanelProps<Record<string, unknown
             .catch((error) => {
                 const message = error instanceof Error ? error.message : String(error);
                 setImageSource("");
-                setImageLoadError("图片加载失败");
+                setImageLoadError(t("image.loadFailed"));
                 console.error("[image-viewer] load image failed", {
                     path: filePath,
                     message,
@@ -94,7 +96,7 @@ export function ImageViewerTab(props: IDockviewPanelProps<Record<string, unknown
                         src={imageSource}
                         alt={filePath}
                         onError={() => {
-                            setImageLoadError("图片加载失败");
+                            setImageLoadError(t("image.loadFailed"));
                             console.error("[image-viewer] image element onError", {
                                 path: filePath,
                                 src: imageSource,

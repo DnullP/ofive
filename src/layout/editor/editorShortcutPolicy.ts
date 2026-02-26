@@ -23,6 +23,12 @@ export const EDITOR_MANAGED_NATIVE_COMMAND_IDS: EditorNativeCommandId[] = [
     "editor.toggleComment",
     "editor.indentMore",
     "editor.indentLess",
+    "editor.toggleBold",
+    "editor.toggleItalic",
+    "editor.toggleStrikethrough",
+    "editor.toggleInlineCode",
+    "editor.toggleHighlight",
+    "editor.insertLink",
 ];
 
 /**
@@ -37,6 +43,12 @@ export const EDITOR_NATIVE_FALLBACK_SHORTCUTS: Record<EditorNativeCommandId, str
     "editor.toggleComment": ["Cmd+/", "Ctrl+/"],
     "editor.indentMore": ["Cmd+]", "Ctrl+]"],
     "editor.indentLess": ["Cmd+[", "Ctrl+["],
+    "editor.toggleBold": ["Cmd+B", "Ctrl+B"],
+    "editor.toggleItalic": ["Cmd+I", "Ctrl+I"],
+    "editor.toggleStrikethrough": ["Cmd+Shift+X", "Ctrl+Shift+X"],
+    "editor.toggleInlineCode": ["Cmd+E", "Ctrl+E"],
+    "editor.toggleHighlight": ["Cmd+Shift+H", "Ctrl+Shift+H"],
+    "editor.insertLink": ["Cmd+K", "Ctrl+K"],
 };
 
 /**

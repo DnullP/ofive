@@ -1,0 +1,67 @@
+/**
+ * 横向图标栏组件样式（右侧栏 header）。
+ */
+
+/* 横向图标栏容器：嵌入 sidebar-header 区域 */
+.sidebar-icon-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    min-height: 20px;
+    /* 作为拖放目标需禁用窗口拖拽 */
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+    /* 拖入过渡 */
+    transition: background-color 0.15s ease;
+    border-radius: 4px;
+    padding: 2px 4px;
+}
+
+/* 图标栏拖入高亮 */
+.sidebar-icon-bar.drag-over {
+    background-color: rgba(83, 89, 93, 0.2);
+}
+
+/* 横向图标按钮 */
+.sidebar-icon-bar-item {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    /* 禁止拖拽窗口 */
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+}
+
+/* 图标尺寸统一 */
+.sidebar-icon-bar-item svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* 激活和悬浮 */
+.sidebar-icon-bar-item.active,
+.sidebar-icon-bar-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* 拖拽中 */
+.sidebar-icon-bar-item.dragging {
+    opacity: 0.3;
+}
+
+/* 空状态：占位保持高度 */
+.sidebar-icon-bar-empty {
+    display: block;
+    min-height: 20px;
+}
