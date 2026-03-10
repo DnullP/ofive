@@ -173,3 +173,15 @@ pub struct WikiLinkSuggestionItem {
     /// 被引用次数（入链权重和）。
     pub reference_count: usize,
 }
+
+/// 反向链接条目：表示一个指向目标文件的源文件。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BacklinkItem {
+    /// 引用源文件的相对路径（相对于 vault 根目录）。
+    pub source_path: String,
+    /// 引用源文件的标题（文件名去除扩展名）。
+    pub title: String,
+    /// 引用权重（同一源文件对目标的引用次数）。
+    pub weight: usize,
+}

@@ -244,6 +244,8 @@ export function KnowledgeGraphTab(
     const lastDragReheatTimeRef = useRef<number>(0);
     /** 节点索引到相对路径的映射表，用于点击节点时打开对应笔记 */
     const nodePathsByIndexRef = useRef<Map<number, string>>(new Map());
+    /** 标签显示缩放阈值引用，供交互回调闭包读取最新值 */
+    const labelVisibleZoomLevelRef = useRef<number>(graphSettings.labelVisibleZoomLevel);
     const [labels, setLabels] = useState<GraphLabelItem[]>([]);
     const [state, setState] = useState<GraphTabState>({
         loading: true,
@@ -282,7 +284,7 @@ export function KnowledgeGraphTab(
 
             /* ── 缩放驱动标签透明度 ── */
             const currentZoom = graph.getZoomLevel();
-            const threshold = graphSettings.labelVisibleZoomLevel;
+            const threshold = labelVisibleZoomLevelRef.current;
             const opacity = computeLabelOpacity(currentZoom, threshold);
             labelLayerElement.style.opacity = String(opacity);
             labelLayerElement.style.pointerEvents = opacity <= 0 ? "none" : "none";
@@ -469,6 +471,18 @@ export function KnowledgeGraphTab(
 
         scheduleLabelLayoutUpdate(graph);
     }, [labels]);
+
+    /* ── 标签阈值变化时同步 ref 并触发重绘 ── */
+    useEffect(() => {
+        labelVisibleZoomLevelRef.current = graphSettings.labelVisibleZoomLevel;
+        const graph = graphRef.current;
+        if (graph) {
+            scheduleLabelLayoutUpdate(graph);
+            console.info("[knowledge-graph] labelVisibleZoomLevel updated", {
+                labelVisibleZoomLevel: graphSettings.labelVisibleZoomLevel,
+            });
+        }
+    }, [graphSettings.labelVisibleZoomLevel]);
 
     useEffect(() => {
         const graph = graphRef.current;

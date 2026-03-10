@@ -48,7 +48,7 @@ import {
     segmentChineseText,
     type ChineseSegmentToken,
 } from "../../api/vaultApi";
-import { useConfigState } from "../../store/configStore";
+import { useConfigState, DEFAULT_EDITOR_FONT_FAMILY } from "../../store/configStore";
 import { subscribeEditorRenameRequestedEvent } from "../../events/appEventBus";
 import i18n from "../../i18n";
 import { createRegisteredLineSyntaxRenderExtension } from "./syntaxRenderRegistry";
@@ -308,6 +308,8 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     const segmentationCacheRef = useRef<Map<number, SegmentationCacheItem>>(new Map());
     const segmentationTimerRef = useRef<number | null>(null);
     const vimModeCompartmentRef = useRef<Compartment>(new Compartment());
+    /** 编辑器字体族 Compartment：通过 EditorView.theme 动态控制 .cm-content 字体族 */
+    const fontFamilyCompartmentRef = useRef<Compartment>(new Compartment());
     /** 编辑器字体大小 Compartment */
     const fontSizeCompartmentRef = useRef<Compartment>(new Compartment());
     /** Tab 缩进宽度 Compartment */
@@ -323,6 +325,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     const { files } = useVaultState();
     const { featureSettings } = useConfigState();
     const vimModeEnabled = featureSettings.vimModeEnabled;
+    const editorFontFamily = featureSettings.editorFontFamily || DEFAULT_EDITOR_FONT_FAMILY;
     const editorFontSize = featureSettings.editorFontSize;
     const editorTabSize = featureSettings.editorTabSize;
     const editorLineWrapping = featureSettings.editorLineWrapping;
@@ -652,6 +655,10 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 basicSetup,
                 markdown(),
                 createCodeMirrorThemeExtension(),
+                /* 字体族 Compartment：通过 theme 扩展动态控制 .cm-content 字体族 */
+                fontFamilyCompartmentRef.current.of(
+                    EditorView.theme({ ".cm-content": { fontFamily: editorFontFamily } }),
+                ),
                 /* 字体大小 Compartment：通过 theme 扩展动态控制 .cm-content 字号 */
                 fontSizeCompartmentRef.current.of(
                     EditorView.theme({ ".cm-content": { fontSize: `${editorFontSize}px` } }),
@@ -863,6 +870,22 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
             vimModeEnabled,
         });
     }, [vimModeEnabled, articleId, currentFilePath]);
+
+    /* 编辑器字体族动态重配置 */
+    useEffect(() => {
+        const view = viewRef.current;
+        if (!view) {
+            return;
+        }
+
+        view.dispatch({
+            effects: fontFamilyCompartmentRef.current.reconfigure(
+                EditorView.theme({ ".cm-content": { fontFamily: editorFontFamily } }),
+            ),
+        });
+
+        console.info("[editor] font family changed", { articleId, editorFontFamily });
+    }, [editorFontFamily, articleId]);
 
     /* 编辑器字体大小动态重配置 */
     useEffect(() => {

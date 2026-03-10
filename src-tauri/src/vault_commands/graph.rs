@@ -35,6 +35,7 @@ pub fn get_current_vault_markdown_graph(
 #[cfg(test)]
 mod tests {
     use super::get_current_vault_markdown_graph_in_root;
+    use crate::vault_commands::query_index::ensure_query_index_current;
     use std::collections::BTreeMap;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -50,7 +51,7 @@ mod tests {
             .map(|duration| duration.as_nanos())
             .unwrap_or(0);
         let root = std::env::temp_dir().join(format!("ofive-graph-test-{unique}-{sequence}"));
-        fs::create_dir_all(&root).expect("应成功创建测试根目录");
+        fs::create_dir_all(root.join(".ofive")).expect("应成功创建测试根目录");
         root
     }
 
@@ -72,6 +73,8 @@ mod tests {
         );
         write_markdown_file(&root, "B.md", "[[A]]");
         write_markdown_file(&root, "sub/C.md", "[[../B]]");
+
+        ensure_query_index_current(&root).expect("构建索引应成功");
 
         let graph = get_current_vault_markdown_graph_in_root(&root).expect("图谱构建应成功");
 

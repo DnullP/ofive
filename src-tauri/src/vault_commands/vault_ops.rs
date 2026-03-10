@@ -126,25 +126,48 @@ pub fn set_current_vault(
     let prechecked = set_current_vault_precheck(vault_path)?;
     let canonical = PathBuf::from(&prechecked.vault_path);
 
-    let mut guard = state
-        .current_vault
-        .lock()
-        .map_err(|error| format!("写入 vault 状态失败: {error}"))?;
-    *guard = Some(canonical.clone());
+    /* 检查仓库路径是否真正变化。
+     * 同路径时跳过 watcher 安装和索引重建——
+     * 避免与后台 spawn_background_reindex 线程竞争 SQLite 写锁。 */
+    let vault_changed = {
+        let guard = state
+            .current_vault
+            .lock()
+            .map_err(|error| format!("读取 vault 状态失败: {error}"))?;
+        guard.as_ref() != Some(&canonical)
+    };
 
-    let effective_path = canonical.to_string_lossy().to_string();
+    if vault_changed {
+        let mut guard = state
+            .current_vault
+            .lock()
+            .map_err(|error| format!("写入 vault 状态失败: {error}"))?;
+        *guard = Some(canonical.clone());
+        drop(guard);
 
-    install_vault_watcher(&app_handle, &state, &canonical)?;
-    query_index::ensure_query_index_current(&canonical)?;
+        let effective_path = canonical.to_string_lossy().to_string();
 
-    // 设置日志文件持久化路径到 <vault>/.ofive/
-    crate::logging::set_vault_log_path(Some(canonical.join(".ofive")));
+        install_vault_watcher(&app_handle, &state, &canonical)?;
+        query_index::ensure_query_index_current(&canonical)?;
 
-    println!("[vault] set_current_vault success: {}", effective_path);
+        // 设置日志文件持久化路径到 <vault>/.ofive/
+        crate::logging::set_vault_log_path(Some(canonical.join(".ofive")));
 
-    Ok(SetVaultResponse {
-        vault_path: effective_path,
-    })
+        println!("[vault] set_current_vault success (changed): {}", effective_path);
+
+        Ok(SetVaultResponse {
+            vault_path: effective_path,
+        })
+    } else {
+        let effective_path = canonical.to_string_lossy().to_string();
+        println!(
+            "[vault] set_current_vault success (unchanged, skip reindex): {}",
+            effective_path
+        );
+        Ok(SetVaultResponse {
+            vault_path: effective_path,
+        })
+    }
 }
 
 /// 获取当前仓库配置。
@@ -783,6 +806,7 @@ pub fn rename_vault_directory(
     let root = get_vault_root(&state)?;
     let from_path_for_trace = from_relative_path.clone();
     let renamed = rename_vault_directory_in_root(from_relative_path, to_relative_path, &root)?;
+    let old_prefix_for_reindex = from_path_for_trace.clone();
     register_pending_write_trace(
         &state,
         source_trace_id,
@@ -790,8 +814,13 @@ pub fn rename_vault_directory(
         "rename_vault_directory",
     )?;
     let reindex_root = root.clone();
+    let new_prefix = renamed.relative_path.clone();
     spawn_background_reindex("rename_vault_directory", move || {
-        query_index::ensure_query_index_current(&reindex_root)
+        query_index::relocate_directory_in_index(
+            &reindex_root,
+            &old_prefix_for_reindex,
+            &new_prefix,
+        )
     });
     Ok(renamed)
 }
@@ -901,12 +930,17 @@ pub fn move_vault_directory_to_directory(
     register_pending_write_trace(
         &state,
         source_trace_id,
-        &[from_path_for_trace, moved.relative_path.clone()],
+        &[from_path_for_trace.clone(), moved.relative_path.clone()],
         "move_vault_directory_to_directory",
     )?;
     let reindex_root = root.clone();
+    let new_prefix = moved.relative_path.clone();
     spawn_background_reindex("move_vault_directory_to_directory", move || {
-        query_index::ensure_query_index_current(&reindex_root)
+        query_index::relocate_directory_in_index(
+            &reindex_root,
+            &from_path_for_trace,
+            &new_prefix,
+        )
     });
     Ok(moved)
 }
@@ -961,12 +995,12 @@ pub fn delete_vault_directory(
     register_pending_write_trace(
         &state,
         source_trace_id,
-        &[relative_path_for_trace],
+        &[relative_path_for_trace.clone()],
         "delete_vault_directory",
     )?;
     let reindex_root = root.clone();
     spawn_background_reindex("delete_vault_directory", move || {
-        query_index::ensure_query_index_current(&reindex_root)
+        query_index::remove_directory_from_index(&reindex_root, &relative_path_for_trace)
     });
     Ok(())
 }

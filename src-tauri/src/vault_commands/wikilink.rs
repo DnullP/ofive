@@ -8,6 +8,9 @@ use crate::vault_commands::fs_helpers::{
     is_markdown_file, is_supported_image_file, relative_path_from_vault_root,
     with_markdown_extension_candidates, with_supported_image_extension_candidates,
 };
+use crate::vault_commands::markdown_block_detector::{
+    detect_excluded_byte_ranges, is_byte_offset_excluded,
+};
 use crate::vault_commands::query_index;
 use crate::vault_commands::types::{
     ResolveMediaEmbedTargetResponse, ResolveWikiLinkTargetResponse,
@@ -62,7 +65,11 @@ fn to_media_embed_resolve_target(raw_target: &str) -> Option<String> {
 }
 
 /// 提取 Markdown 文本中的 WikiLink 目标集合。
+///
+/// 通过 `markdown_block_detector` 跳过 frontmatter / 代码块 / LaTeX 块
+/// 内的 `[[...]]` 模式，避免代码示例中的伪链接污染索引。
 pub(crate) fn extract_wikilink_targets(content: &str) -> Vec<String> {
+    let excluded = detect_excluded_byte_ranges(content);
     let mut targets = Vec::new();
     let mut cursor = 0usize;
 
@@ -75,6 +82,14 @@ pub(crate) fn extract_wikilink_targets(content: &str) -> Vec<String> {
             break;
         };
         let end_index = start_index + end_offset;
+
+        // 跳过排斥区域内的匹配（`[[` 起始位置在排斥范围内）
+        let match_start = cursor + start_offset;
+        if is_byte_offset_excluded(match_start, &excluded) {
+            cursor = end_index + 2;
+            continue;
+        }
+
         let raw_target = &content[start_index..end_index];
         if let Some(target) = to_wikilink_resolve_target(raw_target) {
             targets.push(target);
@@ -115,7 +130,11 @@ fn normalize_markdown_link_target(raw_target: &str) -> Option<String> {
 }
 
 /// 提取 Markdown 文本中的行内链接目标集合（忽略图片链接）。
+///
+/// 通过 `markdown_block_detector` 跳过 frontmatter / 代码块 / LaTeX 块
+/// 内的 `[text](url)` 模式，避免代码示例中的伪链接污染索引。
 pub(crate) fn extract_markdown_inline_link_targets(content: &str) -> Vec<String> {
+    let excluded = detect_excluded_byte_ranges(content);
     let bytes = content.as_bytes();
     let mut targets = Vec::new();
     let mut cursor = 0usize;
@@ -127,6 +146,12 @@ pub(crate) fn extract_markdown_inline_link_targets(content: &str) -> Vec<String>
         }
 
         if cursor > 0 && bytes[cursor - 1] == b'!' {
+            cursor += 1;
+            continue;
+        }
+
+        // 跳过排斥区域内的匹配
+        if is_byte_offset_excluded(cursor, &excluded) {
             cursor += 1;
             continue;
         }

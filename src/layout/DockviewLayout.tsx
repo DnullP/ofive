@@ -95,6 +95,21 @@ import {
     type ActivityIconItem,
     type IconDragState,
 } from "./sidebar";
+import {
+    useActivities,
+    usePanels,
+    useTabComponents,
+    resolveTitle,
+    resolveActivityTitle,
+} from "../registry";
+import {
+    buildInitialPanelStates,
+    mergePanelStates,
+    computeCrossContainerDrop,
+    computeEmptySidebarDrop,
+    computeEmptyRightSidebarDrop,
+    resolveRightActivityIdAfterDrop,
+} from "./layoutStateReducers";
 
 export type PanelPosition = "left" | "right";
 
@@ -138,10 +153,19 @@ export interface PanelDefinition {
     render: (context: PanelRenderContext) => ReactNode;
 }
 
+/**
+ * @interface DockviewLayoutProps
+ * @description DockviewLayout 组件属性。
+ *   panels 和 tabComponents 现在从全局注册中心获取，
+ *   不再需要通过 props 传入。initialTabs 和 initialActivePanelId
+ *   仍通过 props 控制初始状态。
+ * @field initialTabs           - 初始打开的标签页列表
+ * @field initialActivePanelId  - 初始激活的面板 ID
+ */
 interface DockviewLayoutProps {
-    panels?: PanelDefinition[];
-    tabComponents?: TabComponentDefinition[];
+    /** 初始打开的标签页 */
     initialTabs?: TabInstanceDefinition[];
+    /** 初始激活的面板 ID */
     initialActivePanelId?: string;
 }
 
@@ -203,12 +227,78 @@ function WelcomeTabComponent(): ReactNode {
 }
 
 export function DockviewLayout({
-    panels = [],
-    tabComponents = [],
     initialTabs = [],
     initialActivePanelId,
 }: DockviewLayoutProps): ReactNode {
     const { t } = useTranslation();
+
+    /* ── 从全局注册中心获取数据 ── */
+    const registeredActivities = useActivities();
+    const registeredPanels = usePanels();
+    const registeredTabComponents = useTabComponents();
+
+    /**
+     * 将注册中心的数据转换为内部 PanelDefinition 格式。
+     * 这是一个桥接层，使注册中心数据兼容已有的内部逻辑。
+     */
+    const panels = useMemo<PanelDefinition[]>(() => {
+        const result: PanelDefinition[] = [];
+
+        /* 从注册的面板和活动生成 PanelDefinition */
+        for (const panelDesc of registeredPanels) {
+            const activity = registeredActivities.find((a) => a.id === panelDesc.activityId);
+            result.push({
+                id: panelDesc.id,
+                title: resolveTitle(panelDesc.title),
+                icon: activity?.icon,
+                position: panelDesc.defaultPosition,
+                order: panelDesc.defaultOrder,
+                activityId: panelDesc.activityId,
+                activityTitle: activity ? resolveActivityTitle(activity.title) : undefined,
+                activityIcon: activity?.icon,
+                activitySection: activity?.defaultSection,
+                tabOnly: false,
+                render: panelDesc.render,
+            });
+        }
+
+        /* 回调型活动图标需要生成 tabOnly 的虚拟 PanelDefinition 以保留活动栏图标 */
+        for (const activity of registeredActivities) {
+            if (activity.type !== "callback") {
+                continue;
+            }
+            /* 确保不与已有面板的 activityId 冲突 */
+            const hasPanel = registeredPanels.some((p) => p.activityId === activity.id);
+            if (hasPanel) {
+                continue;
+            }
+            result.push({
+                id: `${activity.id}-activity`,
+                title: resolveActivityTitle(activity.title),
+                icon: activity.icon,
+                position: activity.defaultBar === "right" ? "right" : "left",
+                order: activity.defaultOrder,
+                activityId: activity.id,
+                activityTitle: resolveActivityTitle(activity.title),
+                activityIcon: activity.icon,
+                activitySection: activity.defaultSection,
+                tabOnly: true,
+                onActivityClick: activity.onActivate,
+                render: () => null,
+            });
+        }
+
+        return result;
+    }, [registeredActivities, registeredPanels]);
+
+    /** 将注册的 Tab 组件转换为旧格式 */
+    const tabComponents = useMemo<TabComponentDefinition[]>(
+        () => registeredTabComponents.map((desc) => ({
+            key: desc.id,
+            component: desc.component,
+        })),
+        [registeredTabComponents],
+    );
     const [dockviewApi, setDockviewApi] = useState<DockviewApi | null>(null);
     const [activeTabId, setActiveTabId] = useState<string | null>(null);
     const [leftSidebarWidth, setLeftSidebarWidth] = useState(280);
@@ -216,12 +306,7 @@ export function DockviewLayout({
     const [isLeftSidebarVisible, setIsLeftSidebarVisible] = useState(true);
     const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(true);
     const [panelStates, setPanelStates] = useState<PanelRuntimeState[]>(() =>
-        panels.map((panel, index) => ({
-            id: panel.id,
-            position: panel.position ?? "left",
-            order: panel.order ?? index,
-            activityId: panel.activityId ?? panel.id,
-        })),
+        buildInitialPanelStates(panels),
     );
     const [activePanelId, setActivePanelId] = useState<string | null>(initialActivePanelId ?? null);
     const [activeActivityId, setActiveActivityId] = useState<string | null>(null);
@@ -332,21 +417,7 @@ export function DockviewLayout({
         activityIdByPanelId.get(panel.id) ?? panel.activityId ?? panel.id;
 
     useEffect(() => {
-        setPanelStates((prev) => {
-            const prevMap = new Map(prev.map((item) => [item.id, item]));
-            return panels.map((panel, index) => {
-                const existing = prevMap.get(panel.id);
-                if (existing) {
-                    return existing;
-                }
-                return {
-                    id: panel.id,
-                    position: panel.position ?? "left",
-                    order: panel.order ?? index,
-                    activityId: panel.activityId ?? panel.id,
-                };
-            });
-        });
+        setPanelStates((prev) => mergePanelStates(prev, panels));
     }, [panels]);
 
     const orderedPanelsByPosition = (position: PanelPosition): PanelDefinition[] =>
@@ -641,7 +712,7 @@ export function DockviewLayout({
             if (!existingPanel) {
                 const pendingExpanded = pendingExpandedStateRef.current.get(panel.id);
                 const knownExpanded = currentExpandedById.get(panel.id);
-                const fallbackExpanded = expandedPanelId ? panel.id === expandedPanelId : index === 0;
+                const fallbackExpanded = expandedPanelId ? panel.id === expandedPanelId : true;
 
                 api.addPanel({
                     id: panel.id,
@@ -753,56 +824,9 @@ export function DockviewLayout({
         }
 
         queueMicrotask(() => {
-            setPanelStates((prev) => {
-                const moved = prev.find((item) => item.id === movedPanelId);
-                if (!moved) {
-                    return prev;
-                }
-
-                const sourcePosition = moved.position;
-                /* 目标 activityId 为当前活动项，若无则回退到面板自身的 activityId */
-                const nextActivityId = activeActivityId ?? moved.activityId;
-
-                /* 构建目标位置（left）的面板 ID 顺序，末尾追加 */
-                const targetIds = prev
-                    .filter((item) => item.position === "left" && item.id !== movedPanelId)
-                    .sort((a, b) => a.order - b.order)
-                    .map((item) => item.id);
-                targetIds.push(movedPanelId);
-
-                /* 源位置面板 ID 顺序（排除已移动面板） */
-                const sourceIds = prev
-                    .filter((item) => item.position === sourcePosition && item.id !== movedPanelId)
-                    .sort((a, b) => a.order - b.order)
-                    .map((item) => item.id);
-
-                return prev.map((item) => {
-                    if (item.id === movedPanelId) {
-                        return {
-                            ...item,
-                            position: "left" as PanelPosition,
-                            order: targetIds.indexOf(movedPanelId),
-                            activityId: nextActivityId,
-                        };
-                    }
-
-                    if (item.position === "left") {
-                        const order = targetIds.indexOf(item.id);
-                        if (order >= 0) {
-                            return { ...item, order };
-                        }
-                    }
-
-                    if (sourcePosition !== "left" && item.position === sourcePosition) {
-                        const order = sourceIds.indexOf(item.id);
-                        if (order >= 0) {
-                            return { ...item, order };
-                        }
-                    }
-
-                    return item;
-                });
-            });
+            setPanelStates((prev) =>
+                computeEmptySidebarDrop({ prev, movedPanelId, activeActivityId }),
+            );
 
             setActivePanelId(movedPanelId);
         });
@@ -838,81 +862,17 @@ export function DockviewLayout({
         }
 
         queueMicrotask(() => {
-            setPanelStates((prev) => {
-                const moved = prev.find((item) => item.id === movedPanelId);
-                if (!moved) {
-                    return prev;
-                }
-
-                const sourcePosition = moved.position;
-                const targetPanelId = dropTargetPanelId;
-                const firstLeftActivityId = prev
-                    .filter((item) => item.position === "left")
-                    .sort((a, b) => a.order - b.order)[0]?.activityId;
-                const targetPanelState = prev.find(
-                    (item) => item.id === targetPanelId && item.position === targetPosition,
-                );
-                const targetPanelDefinition = panelById.get(targetPanelId);
-                const targetPanelActivityId =
-                    targetPosition === "left"
-                        ? targetPanelState?.activityId ??
-                        (targetPanelDefinition ? targetPanelDefinition.activityId ?? targetPanelDefinition.id : undefined)
-                        : undefined;
-                const fallbackLeftActivityId =
-                    targetPanelActivityId ??
-                    firstLeftActivityId ??
-                    activeActivityId ??
-                    moved.activityId;
-                const nextActivityId = targetPosition === "left" ? fallbackLeftActivityId : moved.activityId;
-                const targetIds = prev
-                    .filter((item) => item.position === targetPosition && item.id !== movedPanelId)
-                    .sort((a, b) => a.order - b.order)
-                    .map((item) => item.id);
-
-                let insertIndex = targetIds.indexOf(targetPanelId);
-                if (insertIndex < 0) {
-                    insertIndex = targetIds.length;
-                }
-
-                if (event.position === "bottom" || event.position === "right") {
-                    insertIndex += 1;
-                }
-
-                insertIndex = Math.max(0, Math.min(insertIndex, targetIds.length));
-                targetIds.splice(insertIndex, 0, movedPanelId);
-
-                const sourceIds = prev
-                    .filter((item) => item.position === sourcePosition && item.id !== movedPanelId)
-                    .sort((a, b) => a.order - b.order)
-                    .map((item) => item.id);
-
-                return prev.map((item) => {
-                    if (item.id === movedPanelId) {
-                        return {
-                            ...item,
-                            position: targetPosition,
-                            order: targetIds.indexOf(movedPanelId),
-                            activityId: nextActivityId,
-                        };
-                    }
-
-                    if (item.position === targetPosition) {
-                        const order = targetIds.indexOf(item.id);
-                        if (order >= 0) {
-                            return { ...item, order };
-                        }
-                    }
-
-                    if (item.position === sourcePosition && sourcePosition !== targetPosition) {
-                        const order = sourceIds.indexOf(item.id);
-                        if (order >= 0) {
-                            return { ...item, order };
-                        }
-                    }
-
-                    return item;
-                });
-            });
+            setPanelStates((prev) =>
+                computeCrossContainerDrop({
+                    prev,
+                    movedPanelId,
+                    targetPosition,
+                    dropTargetPanelId,
+                    dropPosition: event.position as "top" | "bottom" | "left" | "right",
+                    panelById,
+                    activeActivityId,
+                }),
+            );
 
             setActivePanelId((currentActivePanelId) => {
                 if (targetPosition === "left") {
@@ -1990,12 +1950,9 @@ export function DockviewLayout({
         const movedPanelId = paneData.paneId;
         console.info("[DockviewLayout] empty right sidebar drop", { movedPanelId });
 
-        /* 设置 activeRightActivityId 为被拖入面板的 activityId，确保面板可见 */
-        const movedPanelDef = panelById.get(movedPanelId);
-        if (movedPanelDef) {
-            const movedActivityId = activityIdOf(movedPanelDef);
-            setActiveRightActivityId(movedActivityId);
-        }
+        /* 设置 activeRightActivityId 为面板定义中的原始 activityId，
+         * 而非运行时可能已被修改的 activityId（例如面板曾被拖到左侧栏）。 */
+        setActiveRightActivityId(resolveRightActivityIdAfterDrop(movedPanelId, panelById));
 
         const sourceExpanded =
             leftPaneApiRef.current?.getPanel(movedPanelId)?.api.isExpanded ??
@@ -2005,47 +1962,9 @@ export function DockviewLayout({
         }
 
         queueMicrotask(() => {
-            setPanelStates((prev) => {
-                const moved = prev.find((item) => item.id === movedPanelId);
-                if (!moved) {
-                    return prev;
-                }
-
-                const sourcePosition = moved.position;
-                const targetIds = prev
-                    .filter((item) => item.position === "right" && item.id !== movedPanelId)
-                    .sort((a, b) => a.order - b.order)
-                    .map((item) => item.id);
-                targetIds.push(movedPanelId);
-
-                const sourceIds = prev
-                    .filter((item) => item.position === sourcePosition && item.id !== movedPanelId)
-                    .sort((a, b) => a.order - b.order)
-                    .map((item) => item.id);
-
-                return prev.map((item) => {
-                    if (item.id === movedPanelId) {
-                        return {
-                            ...item,
-                            position: "right" as PanelPosition,
-                            order: targetIds.indexOf(movedPanelId),
-                        };
-                    }
-                    if (item.position === "right") {
-                        const order = targetIds.indexOf(item.id);
-                        if (order >= 0) {
-                            return { ...item, order };
-                        }
-                    }
-                    if (sourcePosition !== "right" && item.position === sourcePosition) {
-                        const order = sourceIds.indexOf(item.id);
-                        if (order >= 0) {
-                            return { ...item, order };
-                        }
-                    }
-                    return item;
-                });
-            });
+            setPanelStates((prev) =>
+                computeEmptyRightSidebarDrop({ prev, movedPanelId, panelById }),
+            );
         });
     };
 

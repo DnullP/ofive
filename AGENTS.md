@@ -63,6 +63,50 @@ registeredLineSyntaxRenderExtension    // 行级渲染，查询排斥区域
 
 **不遵循以上步骤将导致嵌套语法冲突（如代码块内的注释被渲染为标题）。**
 
+## Markdown 文本级块结构检测
+
+### 双层架构
+
+项目中存在两套块级结构感知机制，分别服务于不同场景：
+
+| 层 | 模块 | 适用场景 | 数据来源 |
+|---|---|---|---|
+| **编辑器层** | `syntaxExclusionZones.ts` | CodeMirror ViewPlugin 装饰渲染 | EditorView（文档偏移） |
+| **文本层（前端）** | `markdownBlockDetector.ts` | 非编辑器组件（OutlinePanel、搜索、知识图谱等） | 纯文本字符串（行号） |
+| **文本层（后端）** | `markdown_block_detector.rs` | Rust 文本解析（WikiLink / inline link 提取等） | 纯文本字符串（字节偏移） |
+
+### 前端文本层用法（`src/utils/markdownBlockDetector.ts`）
+
+任何需要解析 Markdown 内容的非编辑器组件，都应使用该模块跳过块级结构内的行：
+
+```ts
+import { detectExcludedLineRanges, isLineExcluded } from "../utils/markdownBlockDetector";
+
+const ranges = detectExcludedLineRanges(markdownText);
+lines.forEach((line, index) => {
+    if (isLineExcluded(index + 1, ranges)) return; // 跳过代码块/frontmatter/LaTeX 内的行
+    // ...正常处理
+});
+```
+
+**新增解析 Markdown 内容的组件时，必须通过 `markdownBlockDetector` 过滤块级结构内的行，否则会出现代码块内注释被错误识别的问题。**
+
+### 后端文本层用法（`src-tauri/src/vault_commands/markdown_block_detector.rs`）
+
+任何需要扫描 Markdown 内容提取语法元素（WikiLink、inline link 等）的 Rust 函数，都应使用该模块跳过块级结构内的匹配：
+
+```rust
+use crate::vault_commands::markdown_block_detector::{detect_excluded_byte_ranges, is_byte_offset_excluded};
+
+let excluded = detect_excluded_byte_ranges(content);
+// 扫描到 [[wikilink]] 时，检查其起始字节偏移
+if is_byte_offset_excluded(match_start, &excluded) {
+    continue; // 跳过代码块/frontmatter/LaTeX 内的匹配
+}
+```
+
+**新增从 Markdown 内容提取语法元素的后端函数时，必须通过 `markdown_block_detector` 过滤块级结构内的匹配，否则代码块内的 `[[xxx]]` 会被误识别为 WikiLink 并污染索引。**
+
 ## 代码规范
 
 详见 `.github/instructions/` 目录下的规范文件：

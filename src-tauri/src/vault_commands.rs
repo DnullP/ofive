@@ -1,10 +1,12 @@
 //! # 仓库命令模块
 //!
 //! 提供仓库目录设置、目录树读取、Markdown 文件读写、
-//! WikiLink 解析、图谱构建、快速切换搜索与中文分词命令。
+//! WikiLink 解析、图谱构建、快速切换搜索、反向链接与中文分词命令。
 
+mod backlinks;
 mod fs_helpers;
 mod graph;
+mod markdown_block_detector;
 mod query_index;
 mod search;
 mod segment;
@@ -41,6 +43,7 @@ macro_rules! timed_command {
     }};
 }
 
+pub use backlinks::get_backlinks_for_file_in_root;
 pub use graph::get_current_vault_markdown_graph_in_root;
 pub use search::search_vault_markdown_files_in_root;
 pub use search::suggest_wikilink_targets_in_root;
@@ -49,17 +52,22 @@ pub use vault_ops::{
     copy_vault_entry_in_root, create_vault_binary_file_in_root, create_vault_directory_in_root,
     create_vault_markdown_file_in_root, delete_vault_binary_file_in_root,
     delete_vault_directory_in_root, delete_vault_markdown_file_in_root,
-    get_current_vault_config_in_root,
-    get_current_vault_tree_in_root, move_vault_directory_to_directory_in_root,
-    move_vault_markdown_file_to_directory_in_root, read_vault_binary_file_in_root,
-    read_vault_markdown_file_in_root, rename_vault_directory_in_root,
-    rename_vault_markdown_file_in_root, save_current_vault_config_in_root,
-    save_vault_markdown_file_in_root, set_current_vault_precheck,
+    get_current_vault_config_in_root, get_current_vault_tree_in_root,
+    move_vault_directory_to_directory_in_root, move_vault_markdown_file_to_directory_in_root,
+    read_vault_binary_file_in_root, read_vault_markdown_file_in_root,
+    rename_vault_directory_in_root, rename_vault_markdown_file_in_root,
+    save_current_vault_config_in_root, save_vault_markdown_file_in_root,
+    set_current_vault_precheck,
 };
 pub use wikilink::{
     resolve_media_embed_target_in_root, resolve_wikilink_target_in_root,
     resolve_wikilink_target_path_in_vault,
 };
+
+/// 对外导出索引构建与查询函数以支持基准测试。
+pub use query_index::ensure_query_index_current;
+pub use query_index::list_markdown_files;
+pub use query_index::load_markdown_graph;
 
 #[cfg(test)]
 pub(crate) use wikilink::path_tree_distance;
@@ -74,12 +82,18 @@ pub fn set_current_vault(
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<SetVaultResponse, String> {
-    timed_command!("set_current_vault", vault_ops::set_current_vault(vault_path, app_handle, state))
+    timed_command!(
+        "set_current_vault",
+        vault_ops::set_current_vault(vault_path, app_handle, state)
+    )
 }
 
 #[tauri::command]
 pub fn get_current_vault_tree(state: State<'_, AppState>) -> Result<VaultTreeResponse, String> {
-    timed_command!("get_current_vault_tree", vault_ops::get_current_vault_tree(state))
+    timed_command!(
+        "get_current_vault_tree",
+        vault_ops::get_current_vault_tree(state)
+    )
 }
 
 #[tauri::command]
@@ -87,7 +101,10 @@ pub fn read_vault_markdown_file(
     relative_path: String,
     state: State<'_, AppState>,
 ) -> Result<ReadMarkdownResponse, String> {
-    timed_command!("read_vault_markdown_file", vault_ops::read_vault_markdown_file(relative_path, state))
+    timed_command!(
+        "read_vault_markdown_file",
+        vault_ops::read_vault_markdown_file(relative_path, state)
+    )
 }
 
 #[tauri::command]
@@ -95,7 +112,10 @@ pub fn read_vault_binary_file(
     relative_path: String,
     state: State<'_, AppState>,
 ) -> Result<ReadBinaryFileResponse, String> {
-    timed_command!("read_vault_binary_file", vault_ops::read_vault_binary_file(relative_path, state))
+    timed_command!(
+        "read_vault_binary_file",
+        vault_ops::read_vault_binary_file(relative_path, state)
+    )
 }
 
 #[tauri::command]
@@ -105,7 +125,10 @@ pub fn create_vault_markdown_file(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
-    timed_command!("create_vault_markdown_file", vault_ops::create_vault_markdown_file(relative_path, content, source_trace_id, state))
+    timed_command!(
+        "create_vault_markdown_file",
+        vault_ops::create_vault_markdown_file(relative_path, content, source_trace_id, state)
+    )
 }
 
 #[tauri::command]
@@ -114,7 +137,10 @@ pub fn create_vault_directory(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    timed_command!("create_vault_directory", vault_ops::create_vault_directory(relative_directory_path, source_trace_id, state))
+    timed_command!(
+        "create_vault_directory",
+        vault_ops::create_vault_directory(relative_directory_path, source_trace_id, state)
+    )
 }
 
 #[tauri::command]
@@ -124,7 +150,10 @@ pub fn create_vault_binary_file(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteBinaryFileResponse, String> {
-    timed_command!("create_vault_binary_file", vault_ops::create_vault_binary_file(relative_path, base64_content, source_trace_id, state))
+    timed_command!(
+        "create_vault_binary_file",
+        vault_ops::create_vault_binary_file(relative_path, base64_content, source_trace_id, state)
+    )
 }
 
 #[tauri::command]
@@ -134,7 +163,10 @@ pub fn save_vault_markdown_file(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
-    timed_command!("save_vault_markdown_file", vault_ops::save_vault_markdown_file(relative_path, content, source_trace_id, state))
+    timed_command!(
+        "save_vault_markdown_file",
+        vault_ops::save_vault_markdown_file(relative_path, content, source_trace_id, state)
+    )
 }
 
 #[tauri::command]
@@ -144,12 +176,15 @@ pub fn rename_vault_markdown_file(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
-    timed_command!("rename_vault_markdown_file", vault_ops::rename_vault_markdown_file(
-        from_relative_path,
-        to_relative_path,
-        source_trace_id,
-        state,
-    ))
+    timed_command!(
+        "rename_vault_markdown_file",
+        vault_ops::rename_vault_markdown_file(
+            from_relative_path,
+            to_relative_path,
+            source_trace_id,
+            state,
+        )
+    )
 }
 
 #[tauri::command]
@@ -158,7 +193,10 @@ pub fn delete_vault_markdown_file(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    timed_command!("delete_vault_markdown_file", vault_ops::delete_vault_markdown_file(relative_path, source_trace_id, state))
+    timed_command!(
+        "delete_vault_markdown_file",
+        vault_ops::delete_vault_markdown_file(relative_path, source_trace_id, state)
+    )
 }
 /// 删除仓库中的二进制文件（图片等非 Markdown 文件）。
 ///
@@ -184,12 +222,15 @@ pub fn move_vault_markdown_file_to_directory(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
-    timed_command!("move_vault_markdown_file_to_directory", vault_ops::move_vault_markdown_file_to_directory(
-        from_relative_path,
-        target_directory_relative_path,
-        source_trace_id,
-        state,
-    ))
+    timed_command!(
+        "move_vault_markdown_file_to_directory",
+        vault_ops::move_vault_markdown_file_to_directory(
+            from_relative_path,
+            target_directory_relative_path,
+            source_trace_id,
+            state,
+        )
+    )
 }
 
 #[tauri::command]
@@ -199,7 +240,15 @@ pub fn rename_vault_directory(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
-    timed_command!("rename_vault_directory", vault_ops::rename_vault_directory(from_relative_path, to_relative_path, source_trace_id, state))
+    timed_command!(
+        "rename_vault_directory",
+        vault_ops::rename_vault_directory(
+            from_relative_path,
+            to_relative_path,
+            source_trace_id,
+            state
+        )
+    )
 }
 
 #[tauri::command]
@@ -209,12 +258,15 @@ pub fn move_vault_directory_to_directory(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
-    timed_command!("move_vault_directory_to_directory", vault_ops::move_vault_directory_to_directory(
-        from_relative_path,
-        target_directory_relative_path,
-        source_trace_id,
-        state,
-    ))
+    timed_command!(
+        "move_vault_directory_to_directory",
+        vault_ops::move_vault_directory_to_directory(
+            from_relative_path,
+            target_directory_relative_path,
+            source_trace_id,
+            state,
+        )
+    )
 }
 
 #[tauri::command]
@@ -223,7 +275,10 @@ pub fn delete_vault_directory(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    timed_command!("delete_vault_directory", vault_ops::delete_vault_directory(relative_path, source_trace_id, state))
+    timed_command!(
+        "delete_vault_directory",
+        vault_ops::delete_vault_directory(relative_path, source_trace_id, state)
+    )
 }
 
 #[tauri::command]
@@ -233,12 +288,15 @@ pub fn copy_vault_entry(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<CopyEntryResponse, String> {
-    timed_command!("copy_vault_entry", vault_ops::copy_vault_entry(
-        source_relative_path,
-        target_directory_relative_path,
-        source_trace_id,
-        state,
-    ))
+    timed_command!(
+        "copy_vault_entry",
+        vault_ops::copy_vault_entry(
+            source_relative_path,
+            target_directory_relative_path,
+            source_trace_id,
+            state,
+        )
+    )
 }
 
 #[tauri::command]
@@ -247,7 +305,10 @@ pub fn resolve_wikilink_target(
     target: String,
     state: State<'_, AppState>,
 ) -> Result<Option<ResolveWikiLinkTargetResponse>, String> {
-    timed_command!("resolve_wikilink_target", wikilink::resolve_wikilink_target(current_dir, target, state))
+    timed_command!(
+        "resolve_wikilink_target",
+        wikilink::resolve_wikilink_target(current_dir, target, state)
+    )
 }
 
 #[tauri::command]
@@ -256,7 +317,10 @@ pub fn resolve_media_embed_target(
     target: String,
     state: State<'_, AppState>,
 ) -> Result<Option<ResolveMediaEmbedTargetResponse>, String> {
-    timed_command!("resolve_media_embed_target", wikilink::resolve_media_embed_target(current_dir, target, state))
+    timed_command!(
+        "resolve_media_embed_target",
+        wikilink::resolve_media_embed_target(current_dir, target, state)
+    )
 }
 
 #[tauri::command]
@@ -265,14 +329,20 @@ pub fn search_vault_markdown_files(
     limit: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<VaultQuickSwitchItem>, String> {
-    timed_command!("search_vault_markdown_files", search::search_vault_markdown_files(query, limit, state))
+    timed_command!(
+        "search_vault_markdown_files",
+        search::search_vault_markdown_files(query, limit, state)
+    )
 }
 
 #[tauri::command]
 pub fn get_current_vault_markdown_graph(
     state: State<'_, AppState>,
 ) -> Result<VaultMarkdownGraphResponse, String> {
-    timed_command!("get_current_vault_markdown_graph", graph::get_current_vault_markdown_graph(state))
+    timed_command!(
+        "get_current_vault_markdown_graph",
+        graph::get_current_vault_markdown_graph(state)
+    )
 }
 
 #[tauri::command]
@@ -286,12 +356,18 @@ pub fn suggest_wikilink_targets(
     limit: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<WikiLinkSuggestionItem>, String> {
-    timed_command!("suggest_wikilink_targets", search::suggest_wikilink_targets(query, limit, state))
+    timed_command!(
+        "suggest_wikilink_targets",
+        search::suggest_wikilink_targets(query, limit, state)
+    )
 }
 
 #[tauri::command]
 pub fn get_current_vault_config(state: State<'_, AppState>) -> Result<VaultConfig, String> {
-    timed_command!("get_current_vault_config", vault_ops::get_current_vault_config(state))
+    timed_command!(
+        "get_current_vault_config",
+        vault_ops::get_current_vault_config(state)
+    )
 }
 
 #[tauri::command]
@@ -300,7 +376,21 @@ pub fn save_current_vault_config(
     source_trace_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<VaultConfig, String> {
-    timed_command!("save_current_vault_config", vault_ops::save_current_vault_config(config, source_trace_id, state))
+    timed_command!(
+        "save_current_vault_config",
+        vault_ops::save_current_vault_config(config, source_trace_id, state)
+    )
+}
+
+#[tauri::command]
+pub fn get_backlinks_for_file(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<BacklinkItem>, String> {
+    timed_command!(
+        "get_backlinks_for_file",
+        backlinks::get_backlinks_for_file(relative_path, state)
+    )
 }
 
 #[cfg(test)]
@@ -310,6 +400,7 @@ mod tests {
         move_vault_markdown_file_to_directory_in_root, path_tree_distance,
         resolve_media_embed_target_path_in_vault, resolve_wikilink_target_path_in_vault,
     };
+    use crate::vault_commands::query_index::ensure_query_index_current;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -324,7 +415,7 @@ mod tests {
             .map(|duration| duration.as_nanos())
             .unwrap_or(0);
         let root = std::env::temp_dir().join(format!("ofive-wikilink-test-{unique}-{sequence}"));
-        fs::create_dir_all(&root).expect("应成功创建测试根目录");
+        fs::create_dir_all(root.join(".ofive")).expect("应成功创建测试根目录");
         root
     }
 
@@ -396,6 +487,8 @@ mod tests {
         create_markdown_file(&root, "notes/topic/readme.md");
         create_markdown_file(&root, "archive/2024/readme.md");
 
+        ensure_query_index_current(&root).expect("构建索引应成功");
+
         let result = resolve_wikilink_target_path_in_vault(&root, "notes/topic", "readme")
             .expect("解析应成功")
             .expect("应命中文件");
@@ -408,6 +501,8 @@ mod tests {
     fn resolve_wikilink_target_should_match_case_insensitively() {
         let root = create_test_root();
         create_markdown_file(&root, "notes/topic/Information-Science.md");
+
+        ensure_query_index_current(&root).expect("构建索引应成功");
 
         let result =
             resolve_wikilink_target_path_in_vault(&root, "notes/topic", "information-science")
@@ -507,5 +602,63 @@ mod tests {
 
         assert!(result.ends_with(Path::new("notes/topic/pasted-image-1.png")));
         let _ = fs::remove_dir_all(root);
+    }
+
+    // ---- 追加：提取函数应跳过块级结构内的匹配 ----
+
+    #[test]
+    fn extract_wikilink_targets_should_skip_code_block() {
+        let content = "[[real]]\n```\n[[fake]]\n```\n[[also-real]]";
+        let targets = extract_wikilink_targets(content);
+        assert_eq!(targets, vec!["real", "also-real"]);
+    }
+
+    #[test]
+    fn extract_wikilink_targets_should_skip_frontmatter() {
+        let content = "---\ntags: [[not-a-link]]\n---\n[[actual-link]]";
+        let targets = extract_wikilink_targets(content);
+        assert_eq!(targets, vec!["actual-link"]);
+    }
+
+    #[test]
+    fn extract_wikilink_targets_should_skip_latex_block() {
+        let content = "[[before]]\n$$\n[[latex-fake]]\n$$\n[[after]]";
+        let targets = extract_wikilink_targets(content);
+        assert_eq!(targets, vec!["before", "after"]);
+    }
+
+    #[test]
+    fn extract_wikilink_targets_should_skip_all_block_types() {
+        let content = concat!(
+            "---\ntitle: [[fm]]\n---\n",
+            "[[real-1]]\n",
+            "```\n[[code]]\n```\n",
+            "[[real-2]]\n",
+            "$$\n[[latex]]\n$$\n",
+            "[[real-3]]"
+        );
+        let targets = extract_wikilink_targets(content);
+        assert_eq!(targets, vec!["real-1", "real-2", "real-3"]);
+    }
+
+    #[test]
+    fn extract_inline_link_targets_should_skip_code_block() {
+        let content = "[real](real.md)\n```\n[fake](fake.md)\n```\n[also](also.md)";
+        let targets = extract_markdown_inline_link_targets(content);
+        assert_eq!(targets, vec!["real.md", "also.md"]);
+    }
+
+    #[test]
+    fn extract_inline_link_targets_should_skip_frontmatter() {
+        let content = "---\nref: [link](not-real.md)\n---\n[ok](ok.md)";
+        let targets = extract_markdown_inline_link_targets(content);
+        assert_eq!(targets, vec!["ok.md"]);
+    }
+
+    #[test]
+    fn extract_inline_link_targets_should_skip_latex_block() {
+        let content = "[a](a.md)\n$$\n[b](b.md)\n$$\n[c](c.md)";
+        let targets = extract_markdown_inline_link_targets(content);
+        assert_eq!(targets, vec!["a.md", "c.md"]);
     }
 }

@@ -252,6 +252,10 @@ class VaultStore {
     /**
      * @function syncTreeByCurrentPath
      * @description 根据当前目录回源后端并刷新文件树状态。
+     *
+     * 用于仓库路径变更时的完整同步流程：先调用 set_current_vault 初始化后端状态，
+     * 再获取目录树。仅在仓库路径切换时调用。
+     *
      * @returns Promise 完成信号。
      */
     async syncTreeByCurrentPath(): Promise<void> {
@@ -293,6 +297,53 @@ class VaultStore {
             }
         }
     }
+
+    /**
+     * @function refreshTreeOnly
+     * @description 仅刷新文件树，不重新初始化后端仓库状态。
+     *
+     * 用于文件系统事件（创建/删除/移动）触发的增量刷新场景。
+     * 不调用 set_current_vault，避免与后台索引重建线程竞争 SQLite 写锁。
+     * 刷新失败时保留现有文件树数据，仅记录警告日志，不清空 UI。
+     *
+     * @returns Promise 完成信号。
+     */
+    async refreshTreeOnly(): Promise<void> {
+        const targetPath = this.state.currentVaultPath;
+        const requestId = ++this.requestVersion;
+
+        console.info("[vault-store] refreshTreeOnly:start", { targetPath, requestId });
+
+        try {
+            const tree = await getCurrentVaultTree();
+            const files = this.mapEntriesToTreeItems(tree.entries);
+
+            if (requestId !== this.requestVersion) {
+                console.warn("[vault-store] refreshTreeOnly skipped outdated response", { requestId });
+                return;
+            }
+
+            this.setFiles(files);
+            this.setError(null);
+            console.info("[vault-store] refreshTreeOnly:success", {
+                targetPath,
+                count: files.length,
+            });
+        } catch (error) {
+            if (requestId !== this.requestVersion) {
+                return;
+            }
+
+            /* 刷新失败时保留现有文件树，不清空 UI——
+             * 后台索引重建期间 get_current_vault_tree 本身不依赖索引，
+             * 通常不会失败。若确实失败则保留旧数据并记录警告。 */
+            const message = error instanceof Error ? error.message : i18n.t("vault.loadTreeFailed");
+            console.warn("[vault-store] refreshTreeOnly:failed, keeping existing tree", {
+                targetPath,
+                message,
+            });
+        }
+    }
 }
 
 const vaultStore = new VaultStore();
@@ -322,6 +373,10 @@ export function useVaultState(): VaultState {
 /**
  * @function useVaultTreeSync
  * @description Hook 回调：订阅当前目录状态，在目录变化后自动请求后端刷新文件树。
+ *
+ * 初始加载 / 路径切换时使用 `syncTreeByCurrentPath`（含 set_current_vault）。
+ * 文件系统事件触发的增量刷新使用 `refreshTreeOnly`（仅 get_current_vault_tree），
+ * 避免与后台索引重建线程竞争 SQLite 写锁导致 "database is locked" 错误。
  */
 export function useVaultTreeSync(): void {
     const state = useVaultState();
@@ -340,7 +395,7 @@ export function useVaultTreeSync(): void {
             }
 
             refreshTimer = window.setTimeout(() => {
-                void vaultStore.syncTreeByCurrentPath();
+                void vaultStore.refreshTreeOnly();
             }, 120);
         };
 

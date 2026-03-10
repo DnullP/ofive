@@ -8,8 +8,6 @@ import {
   OutlinePanel,
   SettingsTab,
   VaultPanel,
-  type PanelDefinition,
-  type TabComponentDefinition,
   type TabInstanceDefinition,
 } from "./layout";
 import { CodeMirrorEditorTab } from "./layout/editor/CodeMirrorEditorTab";
@@ -32,6 +30,10 @@ import { useThemeSync } from "./store/themeStore";
 import { useAutoSaveLifecycle } from "./store/autoSaveService";
 import { useVaultState } from "./store/vaultStore";
 import { useWindowDragGestureSupport } from "./utils/windowDragGesture";
+import { ensureBuiltinComponentsRegistered } from "./registry/registerBuiltinComponents";
+import { unregisterActivity } from "./registry/activityRegistry";
+import { registerActivity } from "./registry/activityRegistry";
+import { unregisterPanel, registerPanel } from "./registry/panelRegistry";
 import "./App.css";
 
 function HomeTab(): ReactNode {
@@ -56,6 +58,24 @@ function App() {
   const focusedArticle = useFocusedArticle();
   const configState = useConfigState();
   useConfigSync(vaultState.currentVaultPath, !vaultState.isLoadingTree && !vaultState.error);
+
+  /* ── 注册内置组件（幂等，只执行一次） ── */
+  const builtinRefs = useMemo(() => ({
+    HomeTab: HomeTab,
+    CodeMirrorEditorTab,
+    ImageViewerTab,
+    KnowledgeGraphTab,
+    SettingsTab,
+    VaultPanel,
+    OutlinePanel,
+    icons: {
+      files: <FolderOpen size={18} strokeWidth={1.8} />,
+      search: <Search size={18} strokeWidth={1.8} />,
+      outline: <Compass size={18} strokeWidth={1.8} />,
+      graph: <Orbit size={18} strokeWidth={1.8} />,
+    },
+  }), []);
+  ensureBuiltinComponentsRegistered(builtinRefs);
 
   useEffect(() => {
     const unlisten = subscribeVaultFsBusEvent(async (payload) => {
@@ -111,107 +131,40 @@ function App() {
     };
   }, [focusedArticle?.path]);
 
-  const filesIcon = useMemo(() => <FolderOpen size={18} strokeWidth={1.8} />, []);
   const searchIcon = useMemo(() => <Search size={18} strokeWidth={1.8} />, []);
-  const outlineIcon = useMemo(() => <Compass size={18} strokeWidth={1.8} />, []);
-  const graphIcon = useMemo(() => <Orbit size={18} strokeWidth={1.8} />, []);
 
-  const panels = useMemo<PanelDefinition[]>(
-    () => {
-      const nextPanels: PanelDefinition[] = [
-        {
-          id: "files",
-          title: t("app.explorer"),
-          icon: filesIcon,
-          position: "left",
-          order: 1,
-          activityId: "files",
-          activityTitle: t("app.explorer"),
-          activityIcon: filesIcon,
-          activitySection: "top",
-          render: ({ openTab, closeTab, requestMoveFileToDirectory }) => (
-            <VaultPanel
-              openTab={openTab}
-              closeTab={closeTab}
-              requestMoveFileToDirectory={requestMoveFileToDirectory}
-            />
-          ),
-        },
-        {
-          id: "graph-activity",
-          title: t("app.knowledgeGraph"),
-          icon: graphIcon,
-          position: "left",
-          order: 3,
-          activityId: "knowledge-graph",
-          activityTitle: t("app.knowledgeGraph"),
-          activityIcon: graphIcon,
-          activitySection: "top",
-          tabOnly: true,
-          onActivityClick: ({ openTab }) => {
-            openTab({
-              id: "knowledge-graph",
-              title: t("app.knowledgeGraph"),
-              component: "knowledgegraph",
-            });
-          },
-          render: () => (
-            <div className="panel-placeholder">
-              <h3>{t("app.knowledgeGraph")}</h3>
-              <p>{t("app.graphPanelHint")}</p>
-            </div>
-          ),
-        },
-      ];
-
-      if (configState.featureSettings.searchEnabled) {
-        nextPanels.push({
-          id: "search",
-          title: t("app.searchPanel"),
-          icon: searchIcon,
-          position: "left",
-          order: 2,
-          activityId: "search",
-          activityTitle: t("app.searchPanel"),
-          activityIcon: searchIcon,
-          activitySection: "top",
-          render: () => (
-            <div className="panel-placeholder">
-              <h3>{t("app.searchPanelTitle")}</h3>
-              <p>{t("app.searchPanelHint")}</p>
-            </div>
-          ),
-        });
-      }
-
-      nextPanels.push({
-        id: "outline",
-        title: t("app.outline"),
-        icon: outlineIcon,
-        position: "right",
-        order: 1,
-        activityId: "outline",
-        activityTitle: t("app.outline"),
-        activityIcon: outlineIcon,
-        activitySection: "top",
-        render: () => <OutlinePanel />,
+  // 搜索功能的可见性由 featureFlag 控制
+  // 当 searchEnabled 改变时动态注册/注销搜索活动和面板
+  useEffect(() => {
+    if (!configState.featureSettings.searchEnabled) {
+      unregisterActivity("search");
+      unregisterPanel("search");
+    } else {
+      // 重新注册搜索组件（registerActivity/registerPanel 内部支持覆盖）
+      registerActivity({
+        type: "panel-container",
+        id: "search",
+        title: () => t("app.searchPanel"),
+        icon: searchIcon,
+        defaultSection: "top",
+        defaultBar: "left",
+        defaultOrder: 2,
       });
-
-      return nextPanels;
-    },
-    [configState.featureSettings.searchEnabled, filesIcon, graphIcon, outlineIcon, searchIcon, t],
-  );
-
-  const tabComponents = useMemo<TabComponentDefinition[]>(
-    () => [
-      { key: "home", component: HomeTab },
-      { key: "codemirror", component: CodeMirrorEditorTab },
-      { key: "imageviewer", component: ImageViewerTab },
-      { key: "knowledgegraph", component: KnowledgeGraphTab },
-      { key: "settings", component: SettingsTab },
-    ],
-    [],
-  );
+      registerPanel({
+        id: "search",
+        title: () => t("app.searchPanel"),
+        activityId: "search",
+        defaultPosition: "left",
+        defaultOrder: 2,
+        render: () => (
+          <div className="panel-placeholder">
+            <h3>{t("app.searchPanelTitle")}</h3>
+            <p>{t("app.searchPanelHint")}</p>
+          </div>
+        ),
+      });
+    }
+  }, [configState.featureSettings.searchEnabled, searchIcon, t]);
 
   const initialTabs = useMemo<TabInstanceDefinition[]>(
     () => [
@@ -229,8 +182,6 @@ function App() {
       <CustomTitlebar />
       <div className="app-content">
         <DockviewLayout
-          panels={panels}
-          tabComponents={tabComponents}
           initialTabs={initialTabs}
           initialActivePanelId="files"
         />

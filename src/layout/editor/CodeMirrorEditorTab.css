@@ -88,10 +88,9 @@
     background: var(--editor-bg-color);
 }
 
-/* CodeMirror 内容区样式：统一字体与行高 */
+/* CodeMirror 内容区样式：行高与文本色。
+   font-family / font-size 由 editorStyleCompartment 动态注入，不在 CSS 中硬编码。 */
 .cm-tab-editor .cm-content {
-    font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 13px;
     line-height: 1.6;
     color: var(--editor-text-color);
 }

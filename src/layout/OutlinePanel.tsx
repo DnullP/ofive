@@ -1,14 +1,17 @@
 /**
  * @module layout/OutlinePanel
  * @description 文章大纲面板：监听全局聚焦文章状态，并实时解析 Markdown 标题。
+ *   通过 markdownBlockDetector 跳过 frontmatter / 代码块 / LaTeX 块内的伪标题。
  * @dependencies
  *  - react
  *  - ../store/editorContextStore
+ *  - ../utils/markdownBlockDetector
  */
 
 import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useFocusedArticle } from "../store/editorContextStore";
+import { detectExcludedLineRanges, isLineExcluded } from "../utils/markdownBlockDetector";
 import "./OutlinePanel.css";
 
 /**
@@ -23,15 +26,23 @@ interface HeadingItem {
 
 /**
  * @function parseMarkdownHeadings
- * @description 解析 Markdown 内容中的标题。
+ * @description 解析 Markdown 内容中的标题，跳过块级结构（代码块、frontmatter、LaTeX）内的行。
  * @param content Markdown 文本。
  * @returns 标题数组。
  */
 function parseMarkdownHeadings(content: string): HeadingItem[] {
     const lines = content.split("\n");
+    const excludedRanges = detectExcludedLineRanges(content);
     const results: HeadingItem[] = [];
 
     lines.forEach((line, index) => {
+        const lineNumber = index + 1;
+
+        /* 跳过 frontmatter / 代码块 / LaTeX 块内的行 */
+        if (isLineExcluded(lineNumber, excludedRanges)) {
+            return;
+        }
+
         const matched = line.match(/^(#{1,6})\s+(.+)$/);
         if (!matched) {
             return;
@@ -46,7 +57,7 @@ function parseMarkdownHeadings(content: string): HeadingItem[] {
         results.push({
             level: Math.min(6, Math.max(1, hashes.length)),
             text: headingText,
-            line: index + 1,
+            line: lineNumber,
         });
     });
 

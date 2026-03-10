@@ -30,9 +30,14 @@ pub use vault_commands::create_vault_markdown_file_in_root;
 pub use vault_commands::delete_vault_binary_file_in_root;
 pub use vault_commands::delete_vault_directory_in_root;
 pub use vault_commands::delete_vault_markdown_file_in_root;
+/// 对外导出索引构建与查询函数以支持基准测试。
+pub use vault_commands::ensure_query_index_current;
+pub use vault_commands::get_backlinks_for_file_in_root;
 pub use vault_commands::get_current_vault_config_in_root;
 pub use vault_commands::get_current_vault_markdown_graph_in_root;
 pub use vault_commands::get_current_vault_tree_in_root;
+pub use vault_commands::list_markdown_files;
+pub use vault_commands::load_markdown_graph;
 pub use vault_commands::move_vault_directory_to_directory_in_root;
 pub use vault_commands::move_vault_markdown_file_to_directory_in_root;
 pub use vault_commands::read_vault_binary_file_in_root;
@@ -187,7 +192,8 @@ pub fn run() {
             vault_commands::segment_chinese_text,
             vault_commands::suggest_wikilink_targets,
             vault_commands::get_current_vault_config,
-            vault_commands::save_current_vault_config
+            vault_commands::save_current_vault_config,
+            vault_commands::get_backlinks_for_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,0 +1,92 @@
+/* 反向链接面板容器：纵向布局占满面板区域 */
+.backlinks-panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 面板标题栏：显示当前追踪文章路径与引用计数 */
+.backlinks-panel-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 12px;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+/* 引用计数标签：弱化显示在标题栏右侧 */
+.backlinks-count {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-tertiary, var(--text-secondary));
+    opacity: 0.7;
+}
+
+/* 反向链接列表：滚动容器 */
+.backlinks-list {
+    list-style: none;
+    margin: 0;
+    padding: 8px;
+    overflow: auto;
+    flex: 1;
+}
+
+/* 单条反向链接按钮：水平布局包含标题和权重 */
+.backlinks-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+/* 反向链接按钮悬浮样式 */
+.backlinks-item:hover {
+    background: var(--bg-hover);
+}
+
+/* 链接标题：文字溢出以省略号截断 */
+.backlinks-item-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 引用次数徽章：仅在引用次数 > 1 时渲染 */
+.backlinks-item-weight {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--bg-secondary, rgba(128, 128, 128, 0.15));
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+/* 空状态提示文字 */
+.backlinks-empty {
+    padding: 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    user-select: none;
+}
+
+/* 错误提示文字 */
+.backlinks-error {
+    padding: 12px;
+    color: var(--error-color, #e74c3c);
+    font-size: 12px;
+    user-select: none;
+}

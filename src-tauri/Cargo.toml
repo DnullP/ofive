@@ -28,3 +28,10 @@ jieba-rs = "0.8.1"
 base64 = "0.22"
 log = "0.4"
 rusqlite = { version = "0.32", features = ["bundled"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "rebuild_index_bench"
+harness = false
