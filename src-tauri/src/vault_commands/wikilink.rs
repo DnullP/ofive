@@ -4,9 +4,9 @@
 
 use crate::state::{get_vault_root, AppState};
 use crate::vault_commands::fs_helpers::{
-    collect_image_candidates_by_stem, collect_markdown_candidates_by_stem,
-    is_markdown_file, is_supported_image_file, relative_path_from_vault_root,
-    with_markdown_extension_candidates, with_supported_image_extension_candidates,
+    collect_image_candidates_by_stem, collect_markdown_candidates_by_stem, is_markdown_file,
+    is_supported_image_file, relative_path_from_vault_root, with_markdown_extension_candidates,
+    with_supported_image_extension_candidates,
 };
 use crate::vault_commands::markdown_block_detector::{
     detect_excluded_byte_ranges, is_byte_offset_excluded,
@@ -447,9 +447,10 @@ pub fn resolve_wikilink_target_in_root(
     current_dir: String,
     target: String,
 ) -> Result<Option<ResolveWikiLinkTargetResponse>, String> {
-    println!(
+    log::info!(
         "[vault] resolve_wikilink_target start: current_dir={} target={}",
-        current_dir, target
+        current_dir,
+        target
     );
 
     let resolved = resolve_wikilink_target_path_in_vault(vault_root, &current_dir, &target)?;
@@ -457,9 +458,10 @@ pub fn resolve_wikilink_target_in_root(
     let response = if let Some(path) = resolved {
         let relative = relative_path_from_vault_root(vault_root, &path)?;
 
-        println!(
+        log::info!(
             "[vault] resolve_wikilink_target success: target={} relative_path={}",
-            target, relative
+            target,
+            relative
         );
 
         Some(ResolveWikiLinkTargetResponse {
@@ -467,7 +469,7 @@ pub fn resolve_wikilink_target_in_root(
             absolute_path: path.to_string_lossy().to_string(),
         })
     } else {
-        println!(
+        log::info!(
             "[vault] resolve_wikilink_target success: target={} no matched file",
             target
         );
@@ -483,9 +485,10 @@ pub fn resolve_media_embed_target_in_root(
     current_dir: String,
     target: String,
 ) -> Result<Option<ResolveMediaEmbedTargetResponse>, String> {
-    println!(
+    log::info!(
         "[vault] resolve_media_embed_target start: current_dir={} target={}",
-        current_dir, target
+        current_dir,
+        target
     );
 
     let resolved = resolve_media_embed_target_path_in_vault(vault_root, &current_dir, &target)?;
@@ -493,9 +496,10 @@ pub fn resolve_media_embed_target_in_root(
     let response = if let Some(path) = resolved {
         let relative = relative_path_from_vault_root(vault_root, &path)?;
 
-        println!(
+        log::info!(
             "[vault] resolve_media_embed_target success: target={} relative_path={}",
-            target, relative
+            target,
+            relative
         );
 
         Some(ResolveMediaEmbedTargetResponse {
@@ -503,7 +507,7 @@ pub fn resolve_media_embed_target_in_root(
             absolute_path: path.to_string_lossy().to_string(),
         })
     } else {
-        println!(
+        log::info!(
             "[vault] resolve_media_embed_target success: target={} no matched file",
             target
         );

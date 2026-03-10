@@ -15,7 +15,9 @@ fn utf16_len(input: &str) -> usize {
 
 /// 查找子串在 UTF-16 语义下的起始偏移。
 fn utf16_find(haystack: &str, needle: &str) -> Option<usize> {
-    haystack.find(needle).map(|byte_index| utf16_len(&haystack[..byte_index]))
+    haystack
+        .find(needle)
+        .map(|byte_index| utf16_len(&haystack[..byte_index]))
 }
 
 /// 从分词结果的序列化表示中读取 UTF-16 起止偏移。
@@ -116,7 +118,10 @@ aliases:
         let word = token_word(token);
         let (start, end) = token_offsets(token);
         assert!(start < end, "token[{index}] 必须满足 start < end");
-        assert!(end <= total_utf16, "token[{index}] 结束偏移不能超过文本 UTF-16 长度");
+        assert!(
+            end <= total_utf16,
+            "token[{index}] 结束偏移不能超过文本 UTF-16 长度"
+        );
         if index > 0 {
             assert!(start >= prev_start, "token[{index}] 起始偏移应保持非递减");
         }
@@ -132,23 +137,20 @@ aliases:
 
     let protocol_stack_utf16 = utf16_find(text, "协议栈").expect("测试文本应包含“协议栈”");
     assert!(
-        tokens
-            .iter()
-            .any(|token| {
-                let (start, end) = token_offsets(token);
-                start <= protocol_stack_utf16 && end > protocol_stack_utf16
-            }),
+        tokens.iter().any(|token| {
+            let (start, end) = token_offsets(token);
+            start <= protocol_stack_utf16 && end > protocol_stack_utf16
+        }),
         "分词结果应覆盖“协议栈”起始位置",
     );
 
-    let communication_stack_utf16 = utf16_find(text, "通信协议栈").expect("测试文本应包含“通信协议栈”");
+    let communication_stack_utf16 =
+        utf16_find(text, "通信协议栈").expect("测试文本应包含“通信协议栈”");
     assert!(
-        tokens
-            .iter()
-            .any(|token| {
-                let (start, end) = token_offsets(token);
-                start <= communication_stack_utf16 && end > communication_stack_utf16
-            }),
+        tokens.iter().any(|token| {
+            let (start, end) = token_offsets(token);
+            start <= communication_stack_utf16 && end > communication_stack_utf16
+        }),
         "分词结果应覆盖“通信协议栈”起始位置",
     );
 }
@@ -167,7 +169,10 @@ fn segment_chinese_text_handles_mixed_text() {
         let word = token_word(token);
         let (start, end) = token_offsets(token);
         assert!(start < end, "token[{index}] 必须满足 start < end");
-        assert!(end <= total_utf16, "token[{index}] 结束偏移不能超过文本 UTF-16 长度");
+        assert!(
+            end <= total_utf16,
+            "token[{index}] 结束偏移不能超过文本 UTF-16 长度"
+        );
 
         let sliced = utf16_slice(text, start, end).expect("token 偏移应可还原为有效切片");
         assert_eq!(sliced, word, "token[{index}] 文本与偏移切片必须一致");

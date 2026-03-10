@@ -9,8 +9,8 @@
 mod support;
 
 use ofive_lib::{
-    get_current_vault_config_in_root, save_current_vault_config_in_root, set_current_vault_precheck,
-    VaultConfig,
+    get_current_vault_config_in_root, save_current_vault_config_in_root,
+    set_current_vault_precheck, VaultConfig,
 };
 use serde_json::{json, Value};
 use support::TestVault;
@@ -18,16 +18,16 @@ use support::TestVault;
 #[test]
 fn set_current_vault_precheck_should_create_config_file() {
     let vault = TestVault::new();
-    let canonical_root = vault
-        .root
-        .canonicalize()
-        .expect("临时仓库路径应可规范化");
+    let canonical_root = vault.root.canonicalize().expect("临时仓库路径应可规范化");
     let root_string = canonical_root.to_string_lossy().to_string();
 
     let response = set_current_vault_precheck(root_string.clone()).expect("预检应成功");
     let response_json = serde_json::to_value(response).expect("响应应可序列化");
 
-    assert_eq!(response_json.get("vaultPath").and_then(Value::as_str), Some(root_string.as_str()));
+    assert_eq!(
+        response_json.get("vaultPath").and_then(Value::as_str),
+        Some(root_string.as_str())
+    );
     assert!(canonical_root.join(".ofive/config.json").exists());
 }
 
@@ -47,7 +47,8 @@ fn get_and_save_vault_config_should_roundtrip_entries() {
         entries: next_entries,
     };
 
-    let saved = save_current_vault_config_in_root(next.clone(), &vault.root).expect("保存配置应成功");
+    let saved =
+        save_current_vault_config_in_root(next.clone(), &vault.root).expect("保存配置应成功");
     assert_eq!(saved.entries.get("featureToggle"), Some(&json!(true)));
 
     let loaded = get_current_vault_config_in_root(&vault.root).expect("再次读取配置应成功");

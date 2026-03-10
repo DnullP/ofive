@@ -579,7 +579,7 @@ fn rebuild_index_data(
 
     let total_elapsed = phase_start.elapsed();
 
-    println!(
+    log::info!(
         "[query-index][profile] rebuild_index_data 耗时分解 (files={}, links={}):\n\
          \x20 prepare_stmt   : {:>8.2?}\n\
          \x20 phase1_files   : {:>8.2?}\n\
@@ -631,7 +631,7 @@ fn ensure_index_ready_for_incremental(vault_root: &Path) -> Result<Connection, S
     // 如果索引从未初始化过（schema_version 缺失），需要先做一次全量重建
     let stored_schema = get_meta(&connection, META_KEY_SCHEMA_VERSION)?;
     if stored_schema.as_deref() != Some(INDEX_SCHEMA_VERSION) {
-        println!("[query-index] index not initialized, performing initial build");
+        log::info!("[query-index] index not initialized, performing initial build");
         drop(connection);
         // 调用 _inner 避免重复加锁（调用方已持有锁）
         ensure_query_index_current_inner(vault_root)?;
@@ -649,7 +649,7 @@ fn ensure_index_ready_for_incremental(vault_root: &Path) -> Result<Connection, S
 fn ensure_query_index_current_inner(vault_root: &Path) -> Result<(), String> {
     use std::time::Instant;
 
-    println!("[query-index] ensure current start");
+    log::info!("[query-index] ensure current start");
     let total_start = Instant::now();
 
     let t_scan = Instant::now();
@@ -668,11 +668,11 @@ fn ensure_query_index_current_inner(vault_root: &Path) -> Result<(), String> {
         || stored_fingerprint.as_deref() != Some(runtime_fingerprint.as_str());
 
     if !need_rebuild {
-        println!("[query-index] ensure current success: unchanged");
+        log::info!("[query-index] ensure current success: unchanged");
         return Ok(());
     }
 
-    println!(
+    log::info!(
         "[query-index] manifest changed, rebuilding index: files={}",
         manifest.len()
     );
@@ -705,15 +705,17 @@ fn ensure_query_index_current_inner(vault_root: &Path) -> Result<(), String> {
     let tx_elapsed = t_tx.elapsed();
 
     let total_elapsed = total_start.elapsed();
-    println!(
+    log::info!(
         "[query-index][profile] ensure_query_index_current_inner 耗时分解:\n\
          \x20 scan_manifest  : {:>8.2?}\n\
          \x20 transaction    : {:>8.2?}\n\
          \x20 total          : {:>8.2?}",
-        scan_elapsed, tx_elapsed, total_elapsed,
+        scan_elapsed,
+        tx_elapsed,
+        total_elapsed,
     );
 
-    println!("[query-index] ensure current success: rebuilt");
+    log::info!("[query-index] ensure current success: rebuilt");
     Ok(())
 }
 
@@ -1049,7 +1051,7 @@ pub fn reindex_markdown_file(vault_root: &Path, relative_path: &str) -> Result<(
         .map_err(|error| format!("提交单文件索引事务失败: {error}"))?;
 
     refresh_manifest_meta(&connection, vault_root)?;
-    println!("[query-index] reindex file success: path={}", relative_path);
+    log::info!("[query-index] reindex file success: path={}", relative_path);
     Ok(())
 }
 
@@ -1094,7 +1096,7 @@ pub fn remove_markdown_file(vault_root: &Path, relative_path: &str) -> Result<()
         .map_err(|error| format!("提交删除索引事务失败: {error}"))?;
 
     refresh_manifest_meta(&connection, vault_root)?;
-    println!("[query-index] remove file success: path={}", relative_path);
+    log::info!("[query-index] remove file success: path={}", relative_path);
     Ok(())
 }
 

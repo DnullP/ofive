@@ -110,14 +110,14 @@ fn resolve_token_utf16_offsets(
 
 /// 对文本执行中文分词。
 pub fn segment_chinese_text(text: String) -> Result<Vec<ChineseSegmentToken>, String> {
-    println!(
+    log::info!(
         "[segment] segment_chinese_text start: chars={} bytes={}",
         text.chars().count(),
         text.len()
     );
 
     if text.trim().is_empty() {
-        println!("[segment] segment_chinese_text warning: empty input");
+        log::info!("[segment] segment_chinese_text warning: empty input");
         return Ok(Vec::new());
     }
 
@@ -139,7 +139,7 @@ pub fn segment_chinese_text(text: String) -> Result<Vec<ChineseSegmentToken>, St
         })
         .collect::<Vec<_>>();
 
-    println!(
+    log::info!(
         "[segment] segment_chinese_text success: tokens={}",
         result.len()
     );

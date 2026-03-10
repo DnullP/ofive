@@ -60,13 +60,10 @@ fn resolve_by_absolute_path_should_work() {
     let root = create_test_root();
     let file = create_markdown_file(&root, "refs/protocol/stack.md");
 
-    let resolved = resolve_wikilink_target_path_in_vault(
-        &root,
-        "refs",
-        file.to_string_lossy().as_ref(),
-    )
-    .expect("解析应成功")
-    .expect("应命中文件");
+    let resolved =
+        resolve_wikilink_target_path_in_vault(&root, "refs", file.to_string_lossy().as_ref())
+            .expect("解析应成功")
+            .expect("应命中文件");
 
     assert_eq!(resolved, file.canonicalize().expect("应能 canonicalize"));
     let _ = fs::remove_dir_all(root);

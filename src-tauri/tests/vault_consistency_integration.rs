@@ -55,8 +55,7 @@ fn search_markdown_paths(vault_root: &std::path::Path) -> BTreeSet<String> {
 
 /// 从图谱接口读取节点路径集合及边列表。
 fn graph_data(vault_root: &std::path::Path) -> (BTreeSet<String>, Vec<(String, String)>) {
-    let graph =
-        get_current_vault_markdown_graph_in_root(vault_root).expect("图谱索引应可用");
+    let graph = get_current_vault_markdown_graph_in_root(vault_root).expect("图谱索引应可用");
     let nodes: BTreeSet<String> = graph.nodes.iter().map(|n| n.path.clone()).collect();
     let edges: Vec<(String, String)> = graph
         .edges
@@ -88,12 +87,14 @@ fn assert_full_consistency(vault_root: &std::path::Path, context: &str) {
         assert!(
             graph_nodes.contains(source),
             "[{}] 图谱边 source 不存在: {}",
-            context, source
+            context,
+            source
         );
         assert!(
             graph_nodes.contains(target),
             "[{}] 图谱边 target 不存在: {}",
-            context, target
+            context,
+            target
         );
     }
 }
@@ -127,10 +128,7 @@ fn rename_directory_should_keep_index_consistent() {
 
     // 旧路径不应出现在索引中
     let paths = search_markdown_paths(&vault.root);
-    assert!(
-        !paths.contains("notes/dir-a/nested.md"),
-        "旧路径不应残留"
-    );
+    assert!(!paths.contains("notes/dir-a/nested.md"), "旧路径不应残留");
     assert!(
         paths.contains("notes/dir-b/nested.md"),
         "新路径应出现在索引中"
@@ -181,8 +179,7 @@ fn delete_directory_with_files_should_remove_all_from_index() {
     .expect("创建 b.md 应成功");
     assert_full_consistency(&vault.root, "删前");
 
-    delete_vault_directory_in_root("trash".to_string(), &vault.root)
-        .expect("删除目录应成功");
+    delete_vault_directory_in_root("trash".to_string(), &vault.root).expect("删除目录应成功");
 
     assert!(!vault.root.join("trash").exists());
     assert_full_consistency(&vault.root, "删后");
@@ -234,12 +231,8 @@ fn mixed_file_and_directory_operations_should_stay_consistent() {
     assert_full_consistency(&vault.root, "步骤4");
 
     // 步骤 5：重命名目录
-    rename_vault_directory_in_root(
-        "project".to_string(),
-        "published".to_string(),
-        &vault.root,
-    )
-    .expect("步骤5 重命名目录");
+    rename_vault_directory_in_root("project".to_string(), "published".to_string(), &vault.root)
+        .expect("步骤5 重命名目录");
     assert_full_consistency(&vault.root, "步骤5");
 
     // 步骤 6：移动目录到子目录
@@ -252,16 +245,12 @@ fn mixed_file_and_directory_operations_should_stay_consistent() {
     assert_full_consistency(&vault.root, "步骤6");
 
     // 步骤 7：删除一个文件
-    delete_vault_markdown_file_in_root(
-        "archive/published/extra.md".to_string(),
-        &vault.root,
-    )
-    .expect("步骤7 删除文件");
+    delete_vault_markdown_file_in_root("archive/published/extra.md".to_string(), &vault.root)
+        .expect("步骤7 删除文件");
     assert_full_consistency(&vault.root, "步骤7");
 
     // 步骤 8：删除整个目录
-    delete_vault_directory_in_root("archive".to_string(), &vault.root)
-        .expect("步骤8 删除目录");
+    delete_vault_directory_in_root("archive".to_string(), &vault.root).expect("步骤8 删除目录");
     assert_full_consistency(&vault.root, "步骤8");
 }
 
@@ -273,8 +262,7 @@ fn create_empty_directory_should_not_affect_search_or_graph() {
     let before_search = search_markdown_paths(&vault.root);
     let (before_graph, _) = graph_data(&vault.root);
 
-    create_vault_directory_in_root("empty-dir".to_string(), &vault.root)
-        .expect("创建空目录应成功");
+    create_vault_directory_in_root("empty-dir".to_string(), &vault.root).expect("创建空目录应成功");
 
     let after_search = search_markdown_paths(&vault.root);
     let (after_graph, _) = graph_data(&vault.root);
@@ -308,7 +296,9 @@ fn graph_edges_should_update_after_link_target_moved() {
     // 图谱应有 source → target 边
     let (_, edges_before) = graph_data(&vault.root);
     assert!(
-        edges_before.iter().any(|(s, t)| s == "ref/source.md" && t == "ref/target.md"),
+        edges_before
+            .iter()
+            .any(|(s, t)| s == "ref/source.md" && t == "ref/target.md"),
         "初始图谱应有 source→target 边"
     );
 
@@ -324,7 +314,9 @@ fn graph_edges_should_update_after_link_target_moved() {
     let (_, edges_after) = graph_data(&vault.root);
     // 旧路径边应消失（因为 ref/target.md 在 markdown_files 中已不存在）
     assert!(
-        !edges_after.iter().any(|(s, t)| s == "ref/source.md" && t == "ref/target.md"),
+        !edges_after
+            .iter()
+            .any(|(s, t)| s == "ref/source.md" && t == "ref/target.md"),
         "旧路径边应消失"
     );
 }
@@ -360,11 +352,8 @@ fn error_boundary_operations_should_not_corrupt_index() {
     assert_full_consistency(&vault.root, "错误操作后索引不变");
 
     // 禁止操作根目录
-    let result = rename_vault_directory_in_root(
-        "".to_string(),
-        "anything".to_string(),
-        &vault.root,
-    );
+    let result =
+        rename_vault_directory_in_root("".to_string(), "anything".to_string(), &vault.root);
     assert!(result.is_err(), "空路径操作应报错");
 
     let result = delete_vault_directory_in_root("".to_string(), &vault.root);
@@ -374,13 +363,9 @@ fn error_boundary_operations_should_not_corrupt_index() {
 /// 在真实笔记库 Notes 上执行一致性校验。
 #[test]
 fn real_notes_vault_should_have_consistent_index() {
-    let notes_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/Notes");
+    let notes_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/Notes");
     if !notes_root.exists() {
-        eprintln!(
-            "[skip] Notes fixture not found: {}",
-            notes_root.display()
-        );
+        eprintln!("[skip] Notes fixture not found: {}", notes_root.display());
         return;
     }
 

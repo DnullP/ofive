@@ -89,11 +89,11 @@ fn next_vault_fs_event_id() -> String {
 /// 派发后端文件系统事件到前端。
 fn emit_vault_fs_event(app_handle: &AppHandle, payload: VaultFsEventPayload) {
     if let Err(error) = app_handle.emit(VAULT_FS_EVENT_NAME, payload.clone()) {
-        eprintln!("[vault-watch] emit event failed: {error}");
+        log::warn!("[vault-watch] emit event failed: {error}");
         return;
     }
 
-    println!(
+    log::info!(
         "[vault-watch] event emitted: id={} type={} path={:?} old_path={:?} source_trace_id={:?}",
         payload.event_id,
         payload.event_type,
@@ -105,11 +105,11 @@ fn emit_vault_fs_event(app_handle: &AppHandle, payload: VaultFsEventPayload) {
 
 fn emit_vault_config_event(app_handle: &AppHandle, payload: VaultConfigEventPayload) {
     if let Err(error) = app_handle.emit(VAULT_CONFIG_EVENT_NAME, payload.clone()) {
-        eprintln!("[vault-config-watch] emit event failed: {error}");
+        log::warn!("[vault-config-watch] emit event failed: {error}");
         return;
     }
 
-    println!(
+    log::info!(
         "[vault-config-watch] event emitted: id={} type={} path={:?} old_path={:?} source_trace_id={:?}",
         payload.event_id,
         payload.event_type,
@@ -172,7 +172,7 @@ fn take_pending_trace_id(app_handle: &AppHandle, relative_path: Option<&str>) ->
     let mut pending_trace_map = match state.pending_vault_write_trace_by_path.lock() {
         Ok(guard) => guard,
         Err(error) => {
-            eprintln!("[vault-watch] read trace map failed: {error}");
+            log::warn!("[vault-watch] read trace map failed: {error}");
             return None;
         }
     };
@@ -344,7 +344,7 @@ fn handle_notify_event(app_handle: &AppHandle, root: &Path, event: Event) {
                         // 还是来源（deleted）。macOS FSEvents 常产生此类事件。
                         let path_exists = abs_path.exists();
                         let event_type = if path_exists { "created" } else { "deleted" };
-                        println!(
+                        log::info!(
                             "[vault-watch] RenameMode::Any single-path: path={} exists={} → {}",
                             abs_path.display(),
                             path_exists,
@@ -455,7 +455,7 @@ pub fn install_vault_watcher(
                 handle_notify_event(&app_handle, &root, event);
             }
             Err(error) => {
-                eprintln!("[vault-watch] watch callback error: {error}");
+                log::warn!("[vault-watch] watch callback error: {error}");
             }
         })
         .map_err(|error| format!("创建文件监听器失败: {error}"))?;
@@ -470,6 +470,6 @@ pub fn install_vault_watcher(
         .map_err(|error| format!("写入 watcher 状态失败: {error}"))?;
     *guard = Some(watcher);
 
-    println!("[vault-watch] watcher installed: {}", vault_root.display());
+    log::info!("[vault-watch] watcher installed: {}", vault_root.display());
     Ok(())
 }

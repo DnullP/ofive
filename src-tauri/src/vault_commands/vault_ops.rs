@@ -97,9 +97,11 @@ fn register_pending_write_trace(
                 expire_at_unix_ms: now_ms + PENDING_WRITE_TRACE_TTL_MS,
             },
         );
-        println!(
+        log::info!(
             "[vault] {} trace mapped: path={} trace_id={}",
-            operation_name, normalized_path, trace_id
+            operation_name,
+            normalized_path,
+            trace_id
         );
     });
 
@@ -108,7 +110,7 @@ fn register_pending_write_trace(
 
 /// 设置当前工作仓库目录。
 pub fn set_current_vault_precheck(vault_path: String) -> Result<SetVaultResponse, String> {
-    println!("[vault] set_current_vault_precheck start: {}", vault_path);
+    log::info!("[vault] set_current_vault_precheck start: {}", vault_path);
     let canonical = canonicalize_vault_path(&vault_path)?;
     ensure_vault_config_file(&canonical)?;
     Ok(SetVaultResponse {
@@ -122,7 +124,7 @@ pub fn set_current_vault(
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<SetVaultResponse, String> {
-    println!("[vault] set_current_vault start: {}", vault_path);
+    log::info!("[vault] set_current_vault start: {}", vault_path);
     let prechecked = set_current_vault_precheck(vault_path)?;
     let canonical = PathBuf::from(&prechecked.vault_path);
 
@@ -153,14 +155,17 @@ pub fn set_current_vault(
         // 设置日志文件持久化路径到 <vault>/.ofive/
         crate::logging::set_vault_log_path(Some(canonical.join(".ofive")));
 
-        println!("[vault] set_current_vault success (changed): {}", effective_path);
+        log::info!(
+            "[vault] set_current_vault success (changed): {}",
+            effective_path
+        );
 
         Ok(SetVaultResponse {
             vault_path: effective_path,
         })
     } else {
         let effective_path = canonical.to_string_lossy().to_string();
-        println!(
+        log::info!(
             "[vault] set_current_vault success (unchanged, skip reindex): {}",
             effective_path
         );
@@ -174,9 +179,9 @@ pub fn set_current_vault(
 ///
 /// 当前为配置模块骨架接口，返回预留结构体供后续功能扩展。
 pub fn get_current_vault_config_in_root(vault_root: &Path) -> Result<VaultConfig, String> {
-    println!("[vault-config] get_current_vault_config start");
+    log::info!("[vault-config] get_current_vault_config start");
     let config = load_vault_config(vault_root)?;
-    println!(
+    log::info!(
         "[vault-config] get_current_vault_config success: schema_version={}",
         config.schema_version
     );
@@ -195,9 +200,9 @@ pub fn save_current_vault_config_in_root(
     config: VaultConfig,
     vault_root: &Path,
 ) -> Result<VaultConfig, String> {
-    println!("[vault-config] save_current_vault_config start");
+    log::info!("[vault-config] save_current_vault_config start");
     save_vault_config(vault_root, &config)?;
-    println!(
+    log::info!(
         "[vault-config] save_current_vault_config success: schema_version={}",
         config.schema_version
     );
@@ -222,13 +227,13 @@ pub fn save_current_vault_config(
 
 /// 获取当前仓库目录树。
 pub fn get_current_vault_tree_in_root(vault_root: &Path) -> Result<VaultTreeResponse, String> {
-    println!("[vault] get_current_vault_tree start");
+    log::info!("[vault] get_current_vault_tree start");
 
     let mut entries = Vec::new();
     collect_tree_entries(vault_root, vault_root, &mut entries)?;
     entries.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
 
-    println!(
+    log::info!(
         "[vault] get_current_vault_tree success: {} entries",
         entries.len()
     );
@@ -249,7 +254,7 @@ pub fn read_vault_markdown_file_in_root(
     relative_path: String,
     vault_root: &Path,
 ) -> Result<ReadMarkdownResponse, String> {
-    println!(
+    log::info!(
         "[vault] read_vault_markdown_file start: relative_path={}",
         relative_path
     );
@@ -258,7 +263,7 @@ pub fn read_vault_markdown_file_in_root(
     let content = fs::read_to_string(&target_path)
         .map_err(|error| format!("读取 Markdown 文件失败 {}: {error}", target_path.display()))?;
 
-    println!(
+    log::info!(
         "[vault] read_vault_markdown_file success: bytes={}",
         content.len()
     );
@@ -282,7 +287,7 @@ pub fn read_vault_binary_file_in_root(
     relative_path: String,
     vault_root: &Path,
 ) -> Result<ReadBinaryFileResponse, String> {
-    println!(
+    log::info!(
         "[vault] read_vault_binary_file start: relative_path={}",
         relative_path
     );
@@ -293,7 +298,7 @@ pub fn read_vault_binary_file_in_root(
         .map_err(|error| format!("读取二进制文件失败 {}: {error}", target_path.display()))?;
     let base64_content = BASE64_STANDARD.encode(content);
 
-    println!(
+    log::info!(
         "[vault] read_vault_binary_file success: mime={} bytes(base64)={}",
         mime_type,
         base64_content.len()
@@ -320,7 +325,7 @@ pub fn create_vault_markdown_file_in_root(
     content: Option<String>,
     vault_root: &Path,
 ) -> Result<WriteMarkdownResponse, String> {
-    println!(
+    log::info!(
         "[vault] create_vault_markdown_file start: relative_path={}",
         relative_path
     );
@@ -344,7 +349,7 @@ pub fn create_vault_markdown_file_in_root(
             .map_err(|error| format!("写入初始内容失败 {}: {error}", target_path.display()))?;
     }
 
-    println!(
+    log::info!(
         "[vault] create_vault_markdown_file success: {}",
         target_path.display()
     );
@@ -394,7 +399,7 @@ pub fn create_vault_binary_file_in_root(
     base64_content: String,
     vault_root: &Path,
 ) -> Result<WriteBinaryFileResponse, String> {
-    println!(
+    log::info!(
         "[vault] create_vault_binary_file start: relative_path={}",
         relative_path
     );
@@ -417,7 +422,7 @@ pub fn create_vault_binary_file_in_root(
     fs::write(&target_path, &decoded_bytes)
         .map_err(|error| format!("写入二进制文件失败 {}: {error}", target_path.display()))?;
 
-    println!(
+    log::info!(
         "[vault] create_vault_binary_file success: {} ({} bytes)",
         target_path.display(),
         decoded_bytes.len()
@@ -457,7 +462,7 @@ pub fn create_vault_directory_in_root(
     relative_directory_path: String,
     vault_root: &Path,
 ) -> Result<(), String> {
-    println!(
+    log::info!(
         "[vault] create_vault_directory start: relative_directory_path={}",
         relative_directory_path
     );
@@ -471,7 +476,7 @@ pub fn create_vault_directory_in_root(
     fs::create_dir_all(&target_directory_path)
         .map_err(|error| format!("创建目录失败 {}: {error}", target_directory_path.display()))?;
 
-    println!(
+    log::info!(
         "[vault] create_vault_directory success: {}",
         target_directory_path.display()
     );
@@ -501,7 +506,7 @@ pub fn save_vault_markdown_file_in_root(
     content: String,
     vault_root: &Path,
 ) -> Result<WriteMarkdownResponse, String> {
-    println!(
+    log::info!(
         "[vault] save_vault_markdown_file start: relative_path={} bytes={}",
         relative_path,
         content.len()
@@ -518,7 +523,7 @@ pub fn save_vault_markdown_file_in_root(
     fs::write(&target_path, content.as_bytes())
         .map_err(|error| format!("保存文件失败 {}: {error}", target_path.display()))?;
 
-    println!(
+    log::info!(
         "[vault] save_vault_markdown_file success: {}",
         target_path.display()
     );
@@ -558,9 +563,10 @@ pub fn rename_vault_markdown_file_in_root(
     to_relative_path: String,
     vault_root: &Path,
 ) -> Result<WriteMarkdownResponse, String> {
-    println!(
+    log::info!(
         "[vault] rename_vault_markdown_file start: from={} to={}",
-        from_relative_path, to_relative_path
+        from_relative_path,
+        to_relative_path
     );
 
     let source_path = resolve_markdown_path(vault_root, &from_relative_path)?;
@@ -590,7 +596,7 @@ pub fn rename_vault_markdown_file_in_root(
         )
     })?;
 
-    println!(
+    log::info!(
         "[vault] rename_vault_markdown_file success: {} -> {}",
         source_path.display(),
         target_path.display()
@@ -632,9 +638,10 @@ pub fn move_vault_markdown_file_to_directory_in_root(
     target_directory_relative_path: String,
     vault_root: &Path,
 ) -> Result<WriteMarkdownResponse, String> {
-    println!(
+    log::info!(
         "[vault] move_vault_markdown_file_to_directory start: from={} target_dir={}",
-        from_relative_path, target_directory_relative_path
+        from_relative_path,
+        target_directory_relative_path
     );
 
     let source_path = resolve_markdown_path(vault_root, &from_relative_path)?;
@@ -683,7 +690,7 @@ pub fn move_vault_markdown_file_to_directory_in_root(
         )
     })?;
 
-    println!(
+    log::info!(
         "[vault] move_vault_markdown_file_to_directory success: {} -> {}",
         source_path.display(),
         target_path.display()
@@ -729,9 +736,10 @@ pub fn rename_vault_directory_in_root(
     to_relative_path: String,
     vault_root: &Path,
 ) -> Result<WriteMarkdownResponse, String> {
-    println!(
+    log::info!(
         "[vault] rename_vault_directory start: from={} to={}",
-        from_relative_path, to_relative_path
+        from_relative_path,
+        to_relative_path
     );
 
     if from_relative_path.trim().is_empty() {
@@ -785,7 +793,7 @@ pub fn rename_vault_directory_in_root(
         )
     })?;
 
-    println!(
+    log::info!(
         "[vault] rename_vault_directory success: {} -> {}",
         source_path.display(),
         target_path.display()
@@ -831,9 +839,10 @@ pub fn move_vault_directory_to_directory_in_root(
     target_directory_relative_path: String,
     vault_root: &Path,
 ) -> Result<WriteMarkdownResponse, String> {
-    println!(
+    log::info!(
         "[vault] move_vault_directory_to_directory start: from={} target_dir={}",
-        from_relative_path, target_directory_relative_path
+        from_relative_path,
+        target_directory_relative_path
     );
 
     if from_relative_path.trim().is_empty() {
@@ -902,7 +911,7 @@ pub fn move_vault_directory_to_directory_in_root(
         )
     })?;
 
-    println!(
+    log::info!(
         "[vault] move_vault_directory_to_directory success: {} -> {}",
         source_path.display(),
         target_path.display()
@@ -936,11 +945,7 @@ pub fn move_vault_directory_to_directory(
     let reindex_root = root.clone();
     let new_prefix = moved.relative_path.clone();
     spawn_background_reindex("move_vault_directory_to_directory", move || {
-        query_index::relocate_directory_in_index(
-            &reindex_root,
-            &from_path_for_trace,
-            &new_prefix,
-        )
+        query_index::relocate_directory_in_index(&reindex_root, &from_path_for_trace, &new_prefix)
     });
     Ok(moved)
 }
@@ -950,7 +955,7 @@ pub fn delete_vault_directory_in_root(
     relative_path: String,
     vault_root: &Path,
 ) -> Result<(), String> {
-    println!(
+    log::info!(
         "[vault] delete_vault_directory start: relative_path={}",
         relative_path
     );
@@ -976,7 +981,7 @@ pub fn delete_vault_directory_in_root(
     fs::remove_dir_all(&target_path)
         .map_err(|error| format!("删除目录失败 {}: {error}", target_path.display()))?;
 
-    println!(
+    log::info!(
         "[vault] delete_vault_directory success: {}",
         target_path.display()
     );
@@ -1010,7 +1015,7 @@ pub fn delete_vault_markdown_file_in_root(
     relative_path: String,
     vault_root: &Path,
 ) -> Result<(), String> {
-    println!(
+    log::info!(
         "[vault] delete_vault_markdown_file start: relative_path={}",
         relative_path
     );
@@ -1028,7 +1033,7 @@ pub fn delete_vault_markdown_file_in_root(
     fs::remove_file(&target_path)
         .map_err(|error| format!("删除文件失败 {}: {error}", target_path.display()))?;
 
-    println!(
+    log::info!(
         "[vault] delete_vault_markdown_file success: {}",
         target_path.display()
     );
@@ -1076,7 +1081,7 @@ pub fn delete_vault_binary_file_in_root(
     relative_path: String,
     vault_root: &Path,
 ) -> Result<(), String> {
-    println!(
+    log::info!(
         "[vault] delete_vault_binary_file start: relative_path={}",
         relative_path
     );
@@ -1094,7 +1099,7 @@ pub fn delete_vault_binary_file_in_root(
     fs::remove_file(&target_path)
         .map_err(|error| format!("删除文件失败 {}: {error}", target_path.display()))?;
 
-    println!(
+    log::info!(
         "[vault] delete_vault_binary_file success: {}",
         target_path.display()
     );
@@ -1243,9 +1248,10 @@ pub fn copy_vault_entry_in_root(
     target_directory_relative_path: &str,
     vault_root: &Path,
 ) -> Result<CopyEntryResponse, String> {
-    println!(
+    log::info!(
         "[vault] copy_vault_entry start: source={} target_dir={}",
-        source_relative_path, target_directory_relative_path
+        source_relative_path,
+        target_directory_relative_path
     );
 
     if source_relative_path.trim().is_empty() {
@@ -1290,9 +1296,10 @@ pub fn copy_vault_entry_in_root(
         .to_string_lossy()
         .replace('\\', "/");
 
-    println!(
+    log::info!(
         "[vault] copy_vault_entry success: {} -> {}",
-        source_relative_path, new_relative_path
+        source_relative_path,
+        new_relative_path
     );
 
     Ok(CopyEntryResponse {

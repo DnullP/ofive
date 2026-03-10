@@ -24,8 +24,7 @@ impl TestVault {
         let sequence = TEST_VAULT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let root = std::env::temp_dir().join(format!(
             "ofive-backend-int-{}-{}",
-            timestamp_nanos,
-            sequence
+            timestamp_nanos, sequence
         ));
         fs::create_dir_all(&root).expect("应成功创建临时仓库目录");
 

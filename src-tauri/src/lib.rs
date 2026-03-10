@@ -63,7 +63,7 @@ pub use vault_config::VaultConfig;
 /// 根据主显示器尺寸按比例初始化主窗口大小，并居中显示。
 fn setup_main_window(app: &mut App) -> std::result::Result<(), Box<dyn std::error::Error>> {
     let Some(main_window) = app.get_webview_window("main") else {
-        eprintln!("[window] setup warning: main window not found");
+        log::warn!("[window] setup warning: main window not found");
         return Ok(());
     };
 
@@ -72,18 +72,18 @@ fn setup_main_window(app: &mut App) -> std::result::Result<(), Box<dyn std::erro
         Ok(None) => match main_window.primary_monitor() {
             Ok(primary) => primary,
             Err(error) => {
-                eprintln!("[window] setup warning: failed to get primary monitor: {error}");
+                log::warn!("[window] setup warning: failed to get primary monitor: {error}");
                 None
             }
         },
         Err(error) => {
-            eprintln!("[window] setup warning: failed to get current monitor: {error}");
+            log::warn!("[window] setup warning: failed to get current monitor: {error}");
             None
         }
     };
 
     let Some(monitor) = monitor else {
-        eprintln!("[window] setup warning: monitor information unavailable");
+        log::warn!("[window] setup warning: monitor information unavailable");
         return Ok(());
     };
 
@@ -109,7 +109,7 @@ fn setup_main_window(app: &mut App) -> std::result::Result<(), Box<dyn std::erro
     if let Err(error) =
         main_window.set_size(Size::Logical(LogicalSize::new(target_width, target_height)))
     {
-        eprintln!("[window] setup warning: set_size failed: {error}");
+        log::warn!("[window] setup warning: set_size failed: {error}");
     }
 
     // 使用 work_area 进行物理坐标居中，避免 center() 在某些平台下受整屏坐标影响导致的视觉偏移。
@@ -128,14 +128,14 @@ fn setup_main_window(app: &mut App) -> std::result::Result<(), Box<dyn std::erro
     if let Err(error) = main_window.set_position(Position::Physical(PhysicalPosition::new(
         centered_x, centered_y,
     ))) {
-        eprintln!("[window] setup warning: set_position failed: {error}");
+        log::warn!("[window] setup warning: set_position failed: {error}");
 
         if let Err(center_error) = main_window.center() {
-            eprintln!("[window] setup warning: fallback center failed: {center_error}");
+            log::warn!("[window] setup warning: fallback center failed: {center_error}");
         }
     }
 
-    println!(
+    log::info!(
         "[window] setup success: monitor_physical={}x{} work_area_physical={}x{} logical_work={}x{} scale_factor={} window={}x{} position=({}, {})",
         monitor_size.width,
         monitor_size.height,

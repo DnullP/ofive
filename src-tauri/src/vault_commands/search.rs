@@ -114,9 +114,10 @@ pub fn search_vault_markdown_files_in_root(
     limit: Option<usize>,
 ) -> Result<Vec<VaultQuickSwitchItem>, String> {
     let effective_limit = limit.unwrap_or(80).clamp(1, 200);
-    println!(
+    log::info!(
         "[vault-search] search_vault_markdown_files start: query={} limit={}",
-        query, effective_limit
+        query,
+        effective_limit
     );
 
     let indexed_files = query_index::list_markdown_files(vault_root)?;
@@ -133,16 +134,14 @@ pub fn search_vault_markdown_files_in_root(
         let results = sorted_files
             .into_iter()
             .take(effective_limit)
-            .map(|item| {
-                VaultQuickSwitchItem {
-                    relative_path: item.relative_path,
-                    title: item.title,
-                    score: 0,
-                }
+            .map(|item| VaultQuickSwitchItem {
+                relative_path: item.relative_path,
+                title: item.title,
+                score: 0,
             })
             .collect::<Vec<_>>();
 
-        println!(
+        log::info!(
             "[vault-search] search_vault_markdown_files success: query-empty results={}",
             results.len()
         );
@@ -173,7 +172,7 @@ pub fn search_vault_markdown_files_in_root(
         scored.truncate(effective_limit);
     }
 
-    println!(
+    log::info!(
         "[vault-search] search_vault_markdown_files success: query={} results={}",
         trimmed_query,
         scored.len()
@@ -214,13 +213,13 @@ pub fn suggest_wikilink_targets_in_root(
     limit: Option<usize>,
 ) -> Result<Vec<WikiLinkSuggestionItem>, String> {
     let effective_limit = limit.unwrap_or(20).clamp(1, 100);
-    println!(
+    log::info!(
         "[vault-search] suggest_wikilink_targets start: query='{}' limit={}",
-        query, effective_limit
+        query,
+        effective_limit
     );
 
-    let files_with_counts =
-        query_index::list_markdown_files_with_inbound_count(vault_root)?;
+    let files_with_counts = query_index::list_markdown_files_with_inbound_count(vault_root)?;
 
     let trimmed_query = query.trim();
 
@@ -247,17 +246,14 @@ pub fn suggest_wikilink_targets_in_root(
         files_with_counts
             .into_iter()
             .filter_map(|(relative_path, ref_count)| {
-                let keyword_score =
-                    score_quick_switch_match(&relative_path, trimmed_query)?;
+                let keyword_score = score_quick_switch_match(&relative_path, trimmed_query)?;
                 let title = Path::new(&relative_path)
                     .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or(&relative_path)
                     .to_string();
                 // 关键字分 * 1000 + 入链数，保证关键字为主排序维度
-                let combined = keyword_score
-                    .saturating_mul(1000)
-                    .saturating_add(ref_count);
+                let combined = keyword_score.saturating_mul(1000).saturating_add(ref_count);
                 Some(WikiLinkSuggestionItem {
                     relative_path,
                     title,
@@ -272,16 +268,8 @@ pub fn suggest_wikilink_targets_in_root(
         right
             .score
             .cmp(&left.score)
-            .then_with(|| {
-                right
-                    .reference_count
-                    .cmp(&left.reference_count)
-            })
-            .then_with(|| {
-                left.relative_path
-                    .len()
-                    .cmp(&right.relative_path.len())
-            })
+            .then_with(|| right.reference_count.cmp(&left.reference_count))
+            .then_with(|| left.relative_path.len().cmp(&right.relative_path.len()))
             .then_with(|| left.relative_path.cmp(&right.relative_path))
     });
 
@@ -289,7 +277,7 @@ pub fn suggest_wikilink_targets_in_root(
         scored.truncate(effective_limit);
     }
 
-    println!(
+    log::info!(
         "[vault-search] suggest_wikilink_targets success: query='{}' results={}",
         trimmed_query,
         scored.len()

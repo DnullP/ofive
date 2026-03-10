@@ -27,13 +27,13 @@ fn is_internal_system_path_under_base(path: &Path, base: &Path) -> bool {
 /// 校验并规范化 vault 路径。
 pub fn canonicalize_vault_path(vault_path: &str) -> Result<PathBuf, String> {
     if vault_path.trim().is_empty() {
-        eprintln!("[vault] set_current_vault failed: empty path");
+        log::warn!("[vault] set_current_vault failed: empty path");
         return Err("vault 路径不能为空".to_string());
     }
 
     let path = PathBuf::from(vault_path);
     if !path.exists() {
-        eprintln!(
+        log::warn!(
             "[vault] set_current_vault failed: path not exists -> {}",
             vault_path
         );
@@ -41,7 +41,7 @@ pub fn canonicalize_vault_path(vault_path: &str) -> Result<PathBuf, String> {
     }
 
     if !path.is_dir() {
-        eprintln!(
+        log::warn!(
             "[vault] set_current_vault failed: not a directory -> {}",
             vault_path
         );
@@ -135,13 +135,13 @@ pub fn collect_markdown_relative_paths(
 /// 解析并校验相对路径对应的 Markdown 文件真实路径。
 pub fn resolve_markdown_path(vault_root: &Path, relative_path: &str) -> Result<PathBuf, String> {
     if relative_path.trim().is_empty() {
-        eprintln!("[vault] read markdown failed: empty relative path");
+        log::warn!("[vault] read markdown failed: empty relative path");
         return Err("relative_path 不能为空".to_string());
     }
 
     let is_markdown = relative_path.ends_with(".md") || relative_path.ends_with(".markdown");
     if !is_markdown {
-        eprintln!(
+        log::warn!(
             "[vault] read markdown failed: invalid extension -> {}",
             relative_path
         );
@@ -149,7 +149,7 @@ pub fn resolve_markdown_path(vault_root: &Path, relative_path: &str) -> Result<P
     }
 
     if is_internal_system_relative_path(Path::new(relative_path)) {
-        eprintln!(
+        log::warn!(
             "[vault] read markdown failed: internal system path blocked -> {}",
             relative_path
         );
@@ -165,7 +165,7 @@ pub fn resolve_markdown_path(vault_root: &Path, relative_path: &str) -> Result<P
         .map_err(|error| format!("读取目标文件路径失败: {error}"))?;
 
     if !canonical.starts_with(&canonical_vault_root) {
-        eprintln!(
+        log::warn!(
             "[vault] read markdown failed: path traversal blocked -> {}",
             relative_path
         );
@@ -173,7 +173,7 @@ pub fn resolve_markdown_path(vault_root: &Path, relative_path: &str) -> Result<P
     }
 
     if !canonical.is_file() {
-        eprintln!(
+        log::warn!(
             "[vault] read markdown failed: not file -> {}",
             canonical.display()
         );
@@ -189,13 +189,13 @@ pub fn resolve_markdown_target_path(
     relative_path: &str,
 ) -> Result<PathBuf, String> {
     if relative_path.trim().is_empty() {
-        eprintln!("[vault] write markdown failed: empty relative path");
+        log::warn!("[vault] write markdown failed: empty relative path");
         return Err("relative_path 不能为空".to_string());
     }
 
     let is_markdown = relative_path.ends_with(".md") || relative_path.ends_with(".markdown");
     if !is_markdown {
-        eprintln!(
+        log::warn!(
             "[vault] write markdown failed: invalid extension -> {}",
             relative_path
         );
@@ -204,7 +204,7 @@ pub fn resolve_markdown_target_path(
 
     let relative = Path::new(relative_path);
     if relative.is_absolute() {
-        eprintln!(
+        log::warn!(
             "[vault] write markdown failed: absolute path blocked -> {}",
             relative_path
         );
@@ -215,7 +215,7 @@ pub fn resolve_markdown_target_path(
         .components()
         .any(|component| matches!(component, std::path::Component::ParentDir));
     if has_parent_escape {
-        eprintln!(
+        log::warn!(
             "[vault] write markdown failed: parent traversal blocked -> {}",
             relative_path
         );
@@ -223,7 +223,7 @@ pub fn resolve_markdown_target_path(
     }
 
     if is_internal_system_relative_path(relative) {
-        eprintln!(
+        log::warn!(
             "[vault] write markdown failed: internal system path blocked -> {}",
             relative_path
         );
@@ -248,13 +248,13 @@ pub fn resolve_binary_target_path(
     relative_path: &str,
 ) -> Result<PathBuf, String> {
     if relative_path.trim().is_empty() {
-        eprintln!("[vault] write binary failed: empty relative path");
+        log::warn!("[vault] write binary failed: empty relative path");
         return Err("relative_path 不能为空".to_string());
     }
 
     let relative = Path::new(relative_path);
     if relative.is_absolute() {
-        eprintln!(
+        log::warn!(
             "[vault] write binary failed: absolute path blocked -> {}",
             relative_path
         );
@@ -265,7 +265,7 @@ pub fn resolve_binary_target_path(
         .components()
         .any(|component| matches!(component, std::path::Component::ParentDir));
     if has_parent_escape {
-        eprintln!(
+        log::warn!(
             "[vault] write binary failed: parent traversal blocked -> {}",
             relative_path
         );
@@ -273,7 +273,7 @@ pub fn resolve_binary_target_path(
     }
 
     if is_internal_system_relative_path(relative) {
-        eprintln!(
+        log::warn!(
             "[vault] write binary failed: internal system path blocked -> {}",
             relative_path
         );
@@ -295,7 +295,7 @@ pub fn resolve_vault_directory_path(
 
     let relative = Path::new(trimmed);
     if relative.is_absolute() {
-        eprintln!(
+        log::warn!(
             "[vault] move markdown failed: absolute directory path blocked -> {}",
             relative_directory_path
         );
@@ -306,7 +306,7 @@ pub fn resolve_vault_directory_path(
         .components()
         .any(|component| matches!(component, std::path::Component::ParentDir));
     if has_parent_escape {
-        eprintln!(
+        log::warn!(
             "[vault] move markdown failed: parent traversal blocked -> {}",
             relative_directory_path
         );
@@ -314,7 +314,7 @@ pub fn resolve_vault_directory_path(
     }
 
     if is_internal_system_relative_path(relative) {
-        eprintln!(
+        log::warn!(
             "[vault] move markdown failed: internal system directory blocked -> {}",
             relative_directory_path
         );
@@ -330,13 +330,13 @@ pub fn resolve_existing_vault_file_path(
     relative_path: &str,
 ) -> Result<PathBuf, String> {
     if relative_path.trim().is_empty() {
-        eprintln!("[vault] read binary failed: empty relative path");
+        log::warn!("[vault] read binary failed: empty relative path");
         return Err("relative_path 不能为空".to_string());
     }
 
     let relative = Path::new(relative_path);
     if relative.is_absolute() {
-        eprintln!(
+        log::warn!(
             "[vault] read binary failed: absolute path blocked -> {}",
             relative_path
         );
@@ -347,7 +347,7 @@ pub fn resolve_existing_vault_file_path(
         .components()
         .any(|component| matches!(component, std::path::Component::ParentDir));
     if has_parent_escape {
-        eprintln!(
+        log::warn!(
             "[vault] read binary failed: parent traversal blocked -> {}",
             relative_path
         );
@@ -355,7 +355,7 @@ pub fn resolve_existing_vault_file_path(
     }
 
     if is_internal_system_relative_path(relative) {
-        eprintln!(
+        log::warn!(
             "[vault] read binary failed: internal system path blocked -> {}",
             relative_path
         );
@@ -371,7 +371,7 @@ pub fn resolve_existing_vault_file_path(
         .map_err(|error| format!("读取目标文件路径失败: {error}"))?;
 
     if !canonical.starts_with(&canonical_vault_root) {
-        eprintln!(
+        log::warn!(
             "[vault] read binary failed: path traversal blocked -> {}",
             relative_path
         );
@@ -379,7 +379,7 @@ pub fn resolve_existing_vault_file_path(
     }
 
     if !canonical.is_file() {
-        eprintln!(
+        log::warn!(
             "[vault] read binary failed: not file -> {}",
             canonical.display()
         );

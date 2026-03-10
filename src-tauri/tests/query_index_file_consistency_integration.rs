@@ -37,7 +37,9 @@ fn markdown_paths_from_search(vault_root: &std::path::Path) -> BTreeSet<String> 
 }
 
 /// 从图谱节点提取路径集合。
-fn markdown_paths_from_graph(vault_root: &std::path::Path) -> (BTreeSet<String>, Vec<(String, String)>) {
+fn markdown_paths_from_graph(
+    vault_root: &std::path::Path,
+) -> (BTreeSet<String>, Vec<(String, String)>) {
     let graph = get_current_vault_markdown_graph_in_root(vault_root).expect("读取图谱索引应成功");
     let nodes = graph
         .nodes
@@ -112,11 +114,10 @@ fn query_index_should_stay_consistent_across_file_write_lifecycle() {
         &vault.root,
     )
     .expect("移动文件应成功");
-    assert!(
-        vault.root
-            .join("archive/index-flow/index-lifecycle-renamed.md")
-            .exists()
-    );
+    assert!(vault
+        .root
+        .join("archive/index-flow/index-lifecycle-renamed.md")
+        .exists());
     assert_query_index_consistency(&vault.root);
 
     delete_vault_markdown_file_in_root(
@@ -124,12 +125,10 @@ fn query_index_should_stay_consistent_across_file_write_lifecycle() {
         &vault.root,
     )
     .expect("删除文件应成功");
-    assert!(
-        !vault
-            .root
-            .join("archive/index-flow/index-lifecycle-renamed.md")
-            .exists()
-    );
+    assert!(!vault
+        .root
+        .join("archive/index-flow/index-lifecycle-renamed.md")
+        .exists());
     assert_query_index_consistency(&vault.root);
 }
 

@@ -39,13 +39,10 @@ fn get_current_vault_markdown_graph_should_return_nodes_and_edges() {
 fn resolve_wikilink_target_should_match_expected_markdown_file() {
     let vault = TestVault::new();
 
-    let resolved = resolve_wikilink_target_in_root(
-        &vault.root,
-        "notes".to_string(),
-        "topic".to_string(),
-    )
-    .expect("解析 wikilink 应成功")
-    .expect("应命中文件");
+    let resolved =
+        resolve_wikilink_target_in_root(&vault.root, "notes".to_string(), "topic".to_string())
+            .expect("解析 wikilink 应成功")
+            .expect("应命中文件");
 
     let resolved_json = serde_json::to_value(resolved).expect("解析响应应可序列化");
     assert_eq!(

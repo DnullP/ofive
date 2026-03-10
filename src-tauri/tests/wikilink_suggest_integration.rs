@@ -45,8 +45,7 @@ fn suggest_wikilink_should_return_results_with_reference_count() {
             .collect::<Vec<_>>()
     );
 
-    let topic_value =
-        serde_json::to_value(topic_item.unwrap()).expect("应可序列化");
+    let topic_value = serde_json::to_value(topic_item.unwrap()).expect("应可序列化");
     let ref_count = topic_value
         .get("referenceCount")
         .and_then(Value::as_u64)
@@ -63,9 +62,8 @@ fn suggest_wikilink_should_return_results_with_reference_count() {
 fn suggest_wikilink_empty_query_should_return_by_hotness() {
     let vault = TestVault::new();
 
-    let results =
-        suggest_wikilink_targets_in_root(&vault.root, "".to_string(), Some(10))
-            .expect("空查询建议应成功");
+    let results = suggest_wikilink_targets_in_root(&vault.root, "".to_string(), Some(10))
+        .expect("空查询建议应成功");
 
     assert_eq!(results.len(), 3, "应返回全部 3 个笔记");
 
@@ -89,9 +87,8 @@ fn suggest_wikilink_should_apply_limit() {
     vault.write_markdown("extra/a.md", "# A\n");
     vault.write_markdown("extra/b.md", "# B\n");
 
-    let results =
-        suggest_wikilink_targets_in_root(&vault.root, "".to_string(), Some(2))
-            .expect("限制条数查询应成功");
+    let results = suggest_wikilink_targets_in_root(&vault.root, "".to_string(), Some(2))
+        .expect("限制条数查询应成功");
 
     assert_eq!(results.len(), 2, "limit=2 时应恰好返回 2 条");
 }
@@ -101,9 +98,8 @@ fn suggest_wikilink_keyword_match_takes_priority() {
     let vault = TestVault::new();
     // guide 没有入链，topic 有入链
     // 当查询 "guide" 时，guide 应排在 topic 前面（关键字优先）
-    let results =
-        suggest_wikilink_targets_in_root(&vault.root, "guide".to_string(), Some(10))
-            .expect("关键字查询应成功");
+    let results = suggest_wikilink_targets_in_root(&vault.root, "guide".to_string(), Some(10))
+        .expect("关键字查询应成功");
 
     assert!(!results.is_empty());
 

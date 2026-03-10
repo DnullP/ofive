@@ -12,10 +12,10 @@ use tauri::State;
 pub fn get_current_vault_markdown_graph_in_root(
     vault_root: &Path,
 ) -> Result<VaultMarkdownGraphResponse, String> {
-    println!("[vault-graph] get_current_vault_markdown_graph start");
+    log::info!("[vault-graph] get_current_vault_markdown_graph start");
     let graph = query_index::load_markdown_graph(vault_root)?;
 
-    println!(
+    log::info!(
         "[vault-graph] get_current_vault_markdown_graph success: nodes={} edges={}",
         graph.nodes.len(),
         graph.edges.len()
