@@ -13,6 +13,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import i18n from "../i18n";
+import { detectExcludedLineRanges, isLineExcluded } from "../utils/markdownBlockDetector";
 
 /**
  * @constant VAULT_FS_EVENT_NAME
@@ -185,6 +186,43 @@ export interface WikiLinkSuggestionItem {
     score: number;
     /** 被引用次数（入链权重和） */
     referenceCount: number;
+}
+
+/**
+ * @interface BacklinkItem
+ * @description 反向链接条目。
+ */
+export interface BacklinkItem {
+    /** 引用源文件相对路径 */
+    sourcePath: string;
+    /** 引用源文件标题 */
+    title: string;
+    /** 引用权重（次数） */
+    weight: number;
+}
+
+/**
+ * @interface OutlineHeading
+ * @description Markdown 大纲标题条目。
+ */
+export interface OutlineHeading {
+    /** 标题级别（1–6） */
+    level: number;
+    /** 标题纯文本 */
+    text: string;
+    /** 所在行号（1-based） */
+    line: number;
+}
+
+/**
+ * @interface OutlineResponse
+ * @description Markdown 大纲接口响应。
+ */
+export interface OutlineResponse {
+    /** 文件相对路径 */
+    relativePath: string;
+    /** 标题列表 */
+    headings: OutlineHeading[];
 }
 
 /**
@@ -465,6 +503,115 @@ function buildBrowserMockMarkdownGraph(): VaultMarkdownGraphResponse {
         nodes,
         edges,
     };
+}
+
+/**
+ * @function extractBrowserFallbackOutline
+ * @description 从浏览器回退模式的 Markdown 内容中提取标题列表。
+ *   语义与后端 outline 接口保持一致：跳过 frontmatter、代码块、LaTeX 块中的伪标题。
+ * @param relativePath 目标文件相对路径。
+ * @returns 大纲响应。
+ */
+function extractBrowserFallbackOutline(relativePath: string): OutlineResponse {
+    const content =
+        BROWSER_MOCK_MARKDOWN_CONTENTS[relativePath] ??
+        `# ${relativePath.split("/").pop() ?? relativePath}\n`;
+    const lines = content.split("\n");
+    const excludedRanges = detectExcludedLineRanges(content);
+    const headings: OutlineHeading[] = [];
+
+    lines.forEach((line, index) => {
+        const lineNumber = index + 1;
+        if (isLineExcluded(lineNumber, excludedRanges)) {
+            return;
+        }
+
+        const matched = line.match(/^(#{1,6})\s+(.+)$/);
+        if (!matched) {
+            return;
+        }
+
+        const hashes = matched[1] ?? "#";
+        const headingText = (matched[2] ?? "").trim();
+        if (!headingText) {
+            return;
+        }
+
+        headings.push({
+            level: Math.min(6, Math.max(1, hashes.length)),
+            text: headingText,
+            line: lineNumber,
+        });
+    });
+
+    return {
+        relativePath,
+        headings,
+    };
+}
+
+/**
+ * @function buildBrowserFallbackBacklinks
+ * @description 在浏览器回退模式下，根据 mock Markdown 文本构建指定文件的反向链接列表。
+ * @param relativePath 目标文件相对路径。
+ * @returns 反向链接列表。
+ */
+function buildBrowserFallbackBacklinks(relativePath: string): BacklinkItem[] {
+    const normalizedTargetPath = normalizeSlashPath(relativePath);
+    const results: BacklinkItem[] = [];
+
+    for (const [sourcePath, content] of Object.entries(BROWSER_MOCK_MARKDOWN_CONTENTS)) {
+        if (normalizeSlashPath(sourcePath) === normalizedTargetPath) {
+            continue;
+        }
+
+        let weight = 0;
+
+        const wikiMatches = Array.from(content.matchAll(/\[\[([^\]]+)\]\]/g));
+        for (const match of wikiMatches) {
+            const normalized = normalizeWikiTarget((match[1] ?? "").trim());
+            if (!normalized) {
+                continue;
+            }
+
+            const targetPath = normalized.endsWith(".md") || normalized.endsWith(".markdown")
+                ? normalized
+                : `${normalized}.md`;
+            if (targetPath === normalizedTargetPath) {
+                weight += 1;
+            }
+        }
+
+        const markdownMatches = Array.from(content.matchAll(/(?<!!)\[[^\]]*\]\(([^)]+)\)/g));
+        for (const match of markdownMatches) {
+            const raw = (match[1] ?? "").split(/\s+/)[0] ?? "";
+            const normalized = normalizeMarkdownLinkTarget(raw);
+            if (!normalized) {
+                continue;
+            }
+
+            const targetPath = normalized.endsWith(".md") || normalized.endsWith(".markdown")
+                ? normalized
+                : `${normalized}.md`;
+            if (targetPath === normalizedTargetPath) {
+                weight += 1;
+            }
+        }
+
+        if (weight <= 0) {
+            continue;
+        }
+
+        results.push({
+            sourcePath,
+            title: sourcePath.split("/").pop()?.replace(/\.(md|markdown)$/i, "") ?? sourcePath,
+            weight,
+        });
+    }
+
+    return results.sort(
+        (left, right) => right.weight - left.weight || left.sourcePath.localeCompare(right.sourcePath),
+    );
 }
 
 /**
@@ -814,6 +961,38 @@ export async function suggestWikiLinkTargets(
     });
 
     return response;
+}
+
+/**
+ * @function getBacklinksForFile
+ * @description 获取指定文件的反向链接列表。
+ * @param relativePath 目标文件相对路径。
+ * @returns 反向链接列表。
+ */
+export async function getBacklinksForFile(relativePath: string): Promise<BacklinkItem[]> {
+    if (!isTauriRuntime()) {
+        return buildBrowserFallbackBacklinks(relativePath);
+    }
+
+    return invoke<BacklinkItem[]>("get_backlinks_for_file", {
+        relativePath,
+    });
+}
+
+/**
+ * @function getVaultMarkdownOutline
+ * @description 获取指定 Markdown 文件的大纲标题列表。
+ * @param relativePath 目标文件相对路径。
+ * @returns 大纲响应。
+ */
+export async function getVaultMarkdownOutline(relativePath: string): Promise<OutlineResponse> {
+    if (!isTauriRuntime()) {
+        return extractBrowserFallbackOutline(relativePath);
+    }
+
+    return invoke<OutlineResponse>("get_vault_markdown_outline", {
+        relativePath,
+    });
 }
 
 /**

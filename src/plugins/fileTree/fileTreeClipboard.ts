@@ -1,22 +1,27 @@
 /**
- * @module commands/fileTreeClipboard
- * @description 文件树剪贴板模块：管理文件树中"复制"操作的临时状态。
- *   当用户在文件树中按 Cmd+C 复制文件或目录时，路径信息存储在此模块中；
- *   按 Cmd+V 粘贴时，从此模块读取源路径并调用后端复制 API。
+ * @module plugins/fileTree/fileTreeClipboard
+ * @description 文件树插件剪贴板模块：管理资源管理器复制操作的临时状态。
+ *
+ *   该模块属于文件树插件领域逻辑，不再挂在核心命令基础设施下：
+ *   - Cmd+C 时记录当前选中的文件/目录
+ *   - Cmd+V 时读取记录并交给文件树插件命令执行复制
  *
  * @dependencies 无
  *
  * @example
- *   import { setFileTreeClipboardEntry, getFileTreeClipboardEntry } from "./fileTreeClipboard";
+ *   import {
+ *       setFileTreeClipboardEntry,
+ *       getFileTreeClipboardEntry,
+ *   } from "./fileTreeClipboard";
  *
  *   setFileTreeClipboardEntry({ path: "notes/test.md", isDir: false });
- *   const entry = getFileTreeClipboardEntry(); // { path: "notes/test.md", isDir: false }
+ *   const entry = getFileTreeClipboardEntry();
  *
- * 导出：
- *  - FileTreeClipboardEntry 接口 — 剪贴板条目结构
- *  - setFileTreeClipboardEntry 函数 — 写入剪贴板
- *  - getFileTreeClipboardEntry 函数 — 读取剪贴板
- *  - clearFileTreeClipboard 函数 — 清空剪贴板
+ * @exports
+ *   - FileTreeClipboardEntry 剪贴板条目结构
+ *   - setFileTreeClipboardEntry 写入剪贴板
+ *   - getFileTreeClipboardEntry 读取剪贴板
+ *   - clearFileTreeClipboard 清空剪贴板
  */
 
 /**
@@ -30,13 +35,14 @@ export interface FileTreeClipboardEntry {
     isDir: boolean;
 }
 
-/** 内部剪贴板状态，模块级单例 */
+/** 文件树插件内部剪贴板状态。 */
 let clipboardEntry: FileTreeClipboardEntry | null = null;
 
 /**
  * @function setFileTreeClipboardEntry
- * @description 设置文件树剪贴板内容（覆盖写入）。
+ * @description 设置文件树剪贴板内容。
  * @param entry 复制的条目信息。
+ * @returns 无返回值。
  */
 export function setFileTreeClipboardEntry(entry: FileTreeClipboardEntry): void {
     clipboardEntry = { ...entry };
@@ -58,6 +64,7 @@ export function getFileTreeClipboardEntry(): FileTreeClipboardEntry | null {
 /**
  * @function clearFileTreeClipboard
  * @description 清空文件树剪贴板。
+ * @returns 无返回值。
  */
 export function clearFileTreeClipboard(): void {
     clipboardEntry = null;

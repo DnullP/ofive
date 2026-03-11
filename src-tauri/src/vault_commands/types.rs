@@ -4,6 +4,8 @@
 
 use serde::Serialize;
 
+use std::collections::BTreeMap;
+
 /// `VaultEntry` 表示仓库目录树中的单个节点。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -184,4 +186,31 @@ pub struct BacklinkItem {
     pub title: String,
     /// 引用权重（同一源文件对目标的引用次数）。
     pub weight: usize,
+}
+
+/// 对外返回的 Markdown AST 节点。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MarkdownAstNode {
+    /// 节点类型，如 `document`、`heading`、`text`、`link`。
+    pub kind: String,
+    /// 节点字面量文本；仅文本、代码、HTML 等叶子节点使用。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    /// 节点附加属性，如标题级别、链接目标、代码语言。
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub attributes: BTreeMap<String, String>,
+    /// 子节点列表。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<MarkdownAstNode>,
+}
+
+/// 对外返回的 Markdown AST 查询结果。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadMarkdownAstResponse {
+    /// 文件相对路径。
+    pub relative_path: String,
+    /// Markdown AST 根节点。
+    pub ast: MarkdownAstNode,
 }

@@ -42,6 +42,7 @@
 import { useEffect } from "react";
 import {
     subscribeEditorContentBusEvent,
+    emitPersistedContentUpdatedEvent,
     type EditorContentChangedBusEvent,
 } from "../events/appEventBus";
 import { saveVaultMarkdownFile } from "../api/vaultApi";
@@ -136,6 +137,7 @@ async function executeSave(path: string, content: string): Promise<void> {
             path,
             bytes: content.length,
         });
+        emitPersistedContentUpdatedEvent({ relativePath: path, source: "save" });
     } catch (error) {
         console.error("[auto-save] save failed", {
             path,

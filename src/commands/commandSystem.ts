@@ -13,9 +13,6 @@ import {
     copyVaultEntry,
     createVaultDirectory,
     createVaultMarkdownFile,
-    deleteVaultBinaryFile,
-    deleteVaultDirectory,
-    deleteVaultMarkdownFile,
     saveVaultMarkdownFile,
 } from "../api/vaultApi";
 import i18n from "../i18n";
@@ -26,16 +23,12 @@ import {
 import { markContentAsSaved } from "../store/autoSaveService";
 import { emitEditorRenameRequestedEvent } from "../events/appEventBus";
 import type { ShortcutCondition } from "./focusContext";
-import {
-    getFileTreeClipboardEntry,
-    setFileTreeClipboardEntry,
-} from "./fileTreeClipboard";
 
 /**
- * @type CommandId
- * @description 指令唯一标识。
+ * @type BuiltinCommandId
+ * @description 内置指令唯一标识。
  */
-export type CommandId =
+type BuiltinCommandId =
     | "tab.closeFocused"
     | "app.quit"
     | "sidebar.left.toggle"
@@ -58,11 +51,15 @@ export type CommandId =
     | "editor.toggleInlineCode"
     | "editor.toggleHighlight"
     | "editor.insertLink"
-    | "fileTree.copySelected"
-    | "fileTree.pasteInDirectory"
-    | "fileTree.deleteSelected"
     | "quickSwitcher.open"
     | "commandPalette.open";
+
+/**
+ * @type CommandId
+ * @description 指令唯一标识。
+ *   为支持插件扩展，命令 id 对外统一视为 string。
+ */
+export type CommandId = string;
 
 /**
  * @type EditorNativeCommandId
@@ -111,8 +108,12 @@ export interface CommandContext {
     closeTab: (tabId: string) => void;
     /** 打开文件 tab 能力 */
     openFileTab: (relativePath: string, content: string) => void;
+    /** 打开任意已注册 tab 能力 */
+    openTab?: (tab: { id: string; title: string; component: string; params?: Record<string, unknown> }) => void;
     /** 获取当前文件树中的 Markdown 相对路径列表 */
     getExistingMarkdownPaths: () => string[];
+    /** 激活侧边栏面板能力 */
+    activatePanel?: (panelId: string) => void;
     /** 打开快速切换浮窗 */
     openQuickSwitcher?: () => void;
     /** 打开指令搜索浮窗 */
@@ -220,7 +221,7 @@ export interface CommandDefinition {
  * @constant COMMAND_DEFINITIONS
  * @description 当前系统内置指令集合。
  */
-export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
+export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = {
     "tab.closeFocused": {
         id: "tab.closeFocused",
         title: "commands.closeCurrentTab",
@@ -573,108 +574,6 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
             context.executeEditorNativeCommand?.("editor.insertLink");
         },
     },
-    "fileTree.copySelected": {
-        id: "fileTree.copySelected",
-        title: "commands.copySelectedFile",
-        condition: "fileTreeFocused",
-        shortcut: {
-            defaultBinding: "Cmd+C",
-            editableInSettings: true,
-        },
-        execute(context) {
-            const selected = context.getFileTreeSelectedItem?.();
-            if (!selected) {
-                console.warn("[command-system] fileTree.copySelected skipped: no selection");
-                return;
-            }
-
-            setFileTreeClipboardEntry(selected);
-        },
-    },
-    "fileTree.pasteInDirectory": {
-        id: "fileTree.pasteInDirectory",
-        title: "commands.pasteFileToDir",
-        condition: "fileTreeFocused",
-        shortcut: {
-            defaultBinding: "Cmd+V",
-            editableInSettings: true,
-        },
-        async execute(context) {
-            const entry = getFileTreeClipboardEntry();
-            if (!entry) {
-                console.warn("[command-system] fileTree.pasteInDirectory skipped: clipboard empty");
-                return;
-            }
-
-            const targetDirectory = context.getFileTreePasteTargetDirectory?.() ?? "";
-
-            console.info("[command-system] fileTree.pasteInDirectory start", {
-                sourcePath: entry.path,
-                targetDirectory,
-                isDir: entry.isDir,
-            });
-
-            try {
-                const result = await copyVaultEntry(entry.path, targetDirectory);
-                console.info("[command-system] fileTree.pasteInDirectory success", {
-                    newPath: result.relativePath,
-                    sourcePath: result.sourceRelativePath,
-                });
-            } catch (error) {
-                console.error("[command-system] fileTree.pasteInDirectory failed", {
-                    sourcePath: entry.path,
-                    targetDirectory,
-                    error: error instanceof Error ? error.message : String(error),
-                });
-            }
-        },
-    },
-    "fileTree.deleteSelected": {
-        id: "fileTree.deleteSelected",
-        title: "commands.deleteSelectedFile",
-        condition: "fileTreeFocused",
-        shortcut: {
-            defaultBinding: "Cmd+Backspace",
-            editableInSettings: true,
-        },
-        async execute(context) {
-            const selected = context.getFileTreeSelectedItem?.();
-            if (!selected) {
-                console.warn("[command-system] fileTree.deleteSelected skipped: no selection");
-                return;
-            }
-
-            console.info("[command-system] fileTree.deleteSelected start", {
-                path: selected.path,
-                isDir: selected.isDir,
-            });
-
-            try {
-                if (selected.isDir) {
-                    await deleteVaultDirectory(selected.path);
-                } else {
-                    // 根据文件扩展名选择对应的删除接口
-                    const isMarkdown =
-                        selected.path.endsWith(".md") || selected.path.endsWith(".markdown");
-                    if (isMarkdown) {
-                        await deleteVaultMarkdownFile(selected.path);
-                    } else {
-                        await deleteVaultBinaryFile(selected.path);
-                    }
-                }
-                console.info("[command-system] fileTree.deleteSelected success", {
-                    path: selected.path,
-                    isDir: selected.isDir,
-                });
-            } catch (error) {
-                console.error("[command-system] fileTree.deleteSelected failed", {
-                    path: selected.path,
-                    isDir: selected.isDir,
-                    error: error instanceof Error ? error.message : String(error),
-                });
-            }
-        },
-    },
     "file.moveFocusedToDirectory": {
         id: "file.moveFocusedToDirectory",
         title: "commands.moveFileToDir",
@@ -724,6 +623,97 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
     },
 };
 
+const commandDefinitionsMap = new Map<string, CommandDefinition>(
+    Object.values(COMMAND_DEFINITIONS).map((definition) => [definition.id, definition]),
+);
+const commandListeners = new Set<() => void>();
+let cachedCommandDefinitions = Array.from(commandDefinitionsMap.values());
+
+/**
+ * @function emitCommandRegistry
+ * @description 广播命令注册表变化。
+ */
+function emitCommandRegistry(): void {
+    cachedCommandDefinitions = Array.from(commandDefinitionsMap.values());
+    commandListeners.forEach((listener) => listener());
+}
+
+/**
+ * @function registerCommand
+ * @description 注册单条命令定义；若 id 已存在则覆盖。
+ * @param definition 命令定义。
+ * @returns 取消注册函数。
+ */
+export function registerCommand(definition: CommandDefinition): () => void {
+    commandDefinitionsMap.set(definition.id, definition);
+    console.info("[command-system] registered command", {
+        commandId: definition.id,
+    });
+    emitCommandRegistry();
+
+    return () => {
+        unregisterCommand(definition.id);
+    };
+}
+
+/**
+ * @function registerCommands
+ * @description 批量注册多条命令定义。
+ * @param definitions 命令定义列表。
+ * @returns 取消注册函数。
+ */
+export function registerCommands(definitions: CommandDefinition[]): () => void {
+    const cleanupFns = definitions.map((definition) => registerCommand(definition));
+    return () => {
+        cleanupFns.forEach((cleanup) => cleanup());
+    };
+}
+
+/**
+ * @function unregisterCommand
+ * @description 注销指定命令。
+ * @param commandId 命令 id。
+ */
+export function unregisterCommand(commandId: CommandId): void {
+    if (commandId in COMMAND_DEFINITIONS) {
+        const builtinDefinition = COMMAND_DEFINITIONS[commandId as BuiltinCommandId];
+        commandDefinitionsMap.set(commandId, builtinDefinition);
+        emitCommandRegistry();
+        return;
+    }
+
+    if (!commandDefinitionsMap.has(commandId)) {
+        return;
+    }
+
+    commandDefinitionsMap.delete(commandId);
+    console.info("[command-system] unregistered command", { commandId });
+    emitCommandRegistry();
+}
+
+/**
+ * @function subscribeCommands
+ * @description 订阅命令注册表变化。
+ * @param listener 监听函数。
+ * @returns 取消订阅函数。
+ */
+export function subscribeCommands(listener: () => void): () => void {
+    commandListeners.add(listener);
+    return () => {
+        commandListeners.delete(listener);
+    };
+}
+
+/**
+ * @function getCommandDefinition
+ * @description 获取单条命令定义。
+ * @param commandId 命令 id。
+ * @returns 命令定义；未找到时返回 undefined。
+ */
+export function getCommandDefinition(commandId: CommandId): CommandDefinition | undefined {
+    return commandDefinitionsMap.get(commandId);
+}
+
 /**
  * @function executeCommand
  * @description 执行指定指令。
@@ -731,7 +721,7 @@ export const COMMAND_DEFINITIONS: Record<CommandId, CommandDefinition> = {
  * @param context 指令执行上下文。
  */
 export function executeCommand(commandId: CommandId, context: CommandContext): void {
-    const command = COMMAND_DEFINITIONS[commandId];
+    const command = getCommandDefinition(commandId);
     if (!command) {
         console.warn("[command-system] command not found", { commandId });
         return;
@@ -755,7 +745,7 @@ export function executeCommand(commandId: CommandId, context: CommandContext): v
  * @returns 指令定义数组。
  */
 export function getEditableShortcutCommandDefinitions(): CommandDefinition[] {
-    return Object.values(COMMAND_DEFINITIONS)
+    return getCommandDefinitions()
         .filter((command) => command.shortcut?.editableInSettings === true);
 }
 
@@ -765,7 +755,7 @@ export function getEditableShortcutCommandDefinitions(): CommandDefinition[] {
  * @returns 指令定义数组。
  */
 export function getCommandDefinitions(): CommandDefinition[] {
-    return Object.values(COMMAND_DEFINITIONS);
+    return cachedCommandDefinitions;
 }
 
 /**
@@ -775,7 +765,7 @@ export function getCommandDefinitions(): CommandDefinition[] {
  * @returns 编辑器作用域返回 true。
  */
 export function isEditorScopedCommand(commandId: CommandId): boolean {
-    return (COMMAND_DEFINITIONS[commandId]?.scope ?? "global") === "editor";
+    return (getCommandDefinition(commandId)?.scope ?? "global") === "editor";
 }
 
 /**
@@ -785,5 +775,5 @@ export function isEditorScopedCommand(commandId: CommandId): boolean {
  * @returns 条件标识；无条件时返回 undefined。
  */
 export function getCommandCondition(commandId: CommandId): ShortcutCondition | undefined {
-    return COMMAND_DEFINITIONS[commandId]?.condition;
+    return getCommandDefinition(commandId)?.condition;
 }

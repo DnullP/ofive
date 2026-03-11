@@ -38,6 +38,10 @@ import {
     reportArticleFocus,
 } from "../store/editorContextStore";
 import {
+    clearActiveEditor,
+    reportActiveEditor,
+} from "../store/activeEditorStore";
+import {
     moveVaultDirectoryToDirectory,
     moveVaultMarkdownFileToDirectory,
     readVaultMarkdownFile,
@@ -108,7 +112,6 @@ import {
     computeCrossContainerDrop,
     computeEmptySidebarDrop,
     computeEmptyRightSidebarDrop,
-    resolveRightActivityIdAfterDrop,
 } from "./layoutStateReducers";
 
 export type PanelPosition = "left" | "right";
@@ -214,6 +217,37 @@ interface MoveSourceSnapshot {
 function isMarkdownPath(path: string): boolean {
     const normalizedPath = path.toLowerCase();
     return normalizedPath.endsWith(".md") || normalizedPath.endsWith(".markdown");
+}
+
+/**
+ * @function syncActiveEditorFromPanel
+ * @description 根据当前激活的 dockview panel 同步活跃 Markdown 编辑器状态。
+ *   仅 Markdown 编辑器标签会写入 activeEditorStore；其他标签会清空该状态。
+ * @param panelId 当前激活 panel ID；null 表示无激活标签。
+ * @param panelParams 当前激活 panel 的参数。
+ */
+function syncActiveEditorFromPanel(
+    panelId: string | null,
+    panelParams: Record<string, unknown> | undefined,
+): void {
+    if (!panelId) {
+        clearActiveEditor();
+        return;
+    }
+
+    const path = typeof panelParams?.path === "string"
+        ? panelParams.path.replace(/\\/g, "/")
+        : null;
+
+    if (!path || !isMarkdownPath(path)) {
+        clearActiveEditor();
+        return;
+    }
+
+    reportActiveEditor({
+        articleId: panelId,
+        path,
+    });
 }
 
 function WelcomeTabComponent(): ReactNode {
@@ -815,6 +849,9 @@ export function DockviewLayout({
         const movedPanelId = paneData.paneId;
         console.info("[DockviewLayout] empty sidebar drop", { movedPanelId, activeActivityId });
 
+        /* icon 与 panel 解耦：面板拖入左侧空占位时不改变 icon 的 bar 归属，
+         * 面板的 activityId 由 computeEmptySidebarDrop 设为当前左侧活动项。 */
+
         /* 保存被拖拽面板的展开状态，以便重建时恢复 */
         const sourceExpanded =
             leftPaneApiRef.current?.getPanel(movedPanelId)?.api.isExpanded ??
@@ -861,6 +898,9 @@ export function DockviewLayout({
             pendingExpandedStateRef.current.set(movedPanelId, sourceExpanded);
         }
 
+        /* icon 与 panel 解耦：面板拖拽不改变 activity icon 的 bar 归属，
+         * 面板的 activityId 由 computeCrossContainerDrop 设为目标面板所属的 activity 分组。 */
+
         queueMicrotask(() => {
             setPanelStates((prev) =>
                 computeCrossContainerDrop({
@@ -871,8 +911,13 @@ export function DockviewLayout({
                     dropPosition: event.position as "top" | "bottom" | "left" | "right",
                     panelById,
                     activeActivityId,
+                    activeRightActivityId,
                 }),
             );
+
+            if (targetPosition === "right") {
+                setIsRightSidebarVisible(true);
+            }
 
             setActivePanelId((currentActivePanelId) => {
                 if (targetPosition === "left") {
@@ -1092,9 +1137,34 @@ export function DockviewLayout({
         setActiveTabId(tabId);
     };
 
+    const activatePanelById = (panelId: string): void => {
+        const targetPanel = panelById.get(panelId);
+        const targetState = panelStates.find((state) => state.id === panelId);
+
+        if (!targetPanel || !targetState) {
+            console.warn("[layout] activate panel skipped: panel not found", { panelId });
+            return;
+        }
+
+        const activityId = activityIdOf(targetPanel);
+        setActivePanelId(panelId);
+
+        if (targetState.position === "right") {
+            setActiveRightActivityId(activityId);
+            setIsRightSidebarVisible(true);
+            console.info("[layout] activated right panel", { panelId, activityId });
+            return;
+        }
+
+        setActiveActivityId(activityId);
+        setIsLeftSidebarVisible(true);
+        console.info("[layout] activated left panel", { panelId, activityId });
+    };
+
     const buildCommandContext = (): CommandContext => ({
         activeTabId,
         closeTab,
+        openTab,
         openQuickSwitcher: () => {
             console.info("[quick-switcher] open requested by command");
             setIsQuickSwitcherOpen(true);
@@ -1138,6 +1208,9 @@ export function DockviewLayout({
                     content,
                 },
             });
+        },
+        activatePanel: (panelId) => {
+            activatePanelById(panelId);
         },
         getExistingMarkdownPaths: () =>
             files
@@ -1950,9 +2023,9 @@ export function DockviewLayout({
         const movedPanelId = paneData.paneId;
         console.info("[DockviewLayout] empty right sidebar drop", { movedPanelId });
 
-        /* 设置 activeRightActivityId 为面板定义中的原始 activityId，
-         * 而非运行时可能已被修改的 activityId（例如面板曾被拖到左侧栏）。 */
-        setActiveRightActivityId(resolveRightActivityIdAfterDrop(movedPanelId, panelById));
+        /* icon 与 panel 解耦：面板拖入右侧空占位时不改变 icon 的 bar 归属，
+         * 面板的 activityId 由 computeEmptyRightSidebarDrop 设为当前右侧活动项。 */
+        setIsRightSidebarVisible(true);
 
         const sourceExpanded =
             leftPaneApiRef.current?.getPanel(movedPanelId)?.api.isExpanded ??
@@ -1963,7 +2036,7 @@ export function DockviewLayout({
 
         queueMicrotask(() => {
             setPanelStates((prev) =>
-                computeEmptyRightSidebarDrop({ prev, movedPanelId, panelById }),
+                computeEmptyRightSidebarDrop({ prev, movedPanelId, panelById, activeRightActivityId }),
             );
         });
     };
@@ -2063,12 +2136,14 @@ export function DockviewLayout({
         api.onDidActivePanelChange((panel) => {
             setActiveTabId(panel?.id ?? null);
 
+            const activeDockPanel = panel ? api.getPanel(panel.id) : null;
+            const params = activeDockPanel?.params as Record<string, unknown> | undefined;
+            syncActiveEditorFromPanel(panel?.id ?? null, params);
+
             if (!panel) {
                 return;
             }
 
-            const activeDockPanel = api.getPanel(panel.id);
-            const params = activeDockPanel?.params as Record<string, unknown> | undefined;
             const hasPath = typeof params?.path === "string" && params.path.length > 0;
 
             if (!hasPath) {
@@ -2084,6 +2159,7 @@ export function DockviewLayout({
         });
 
         if (initialTabs.length === 0) {
+            clearActiveEditor();
             api.addPanel({ id: "welcome", title: t("app.homeTabTitle"), component: "welcome" });
             return;
         }
@@ -2098,6 +2174,7 @@ export function DockviewLayout({
         });
 
         setActiveTabId(initialTabs[0]?.id ?? null);
+        syncActiveEditorFromPanel(initialTabs[0]?.id ?? null, initialTabs[0]?.params);
     };
 
     const activeLeftPanel = visibleLeftPanels.find((panel) => panel.id === activePanelId) ?? visibleLeftPanels[0];
@@ -2148,7 +2225,7 @@ export function DockviewLayout({
                     onBeginResize={(e) => beginResize("left", e)}
                     ariaLabel={t("dockview.leftPanelArea")}
                     header={
-                        <header className="sidebar-header window-drag-region" data-tauri-drag-region>
+                        <header className="sidebar-header window-drag-region" data-tauri-drag-region data-testid="left-sidebar-header">
                             {activeLeftPanel?.title
                                 ?? mergedActivityItems.find((i) => i.id === activeActivityId)?.title
                                 ?? "Panels"}
@@ -2168,6 +2245,7 @@ export function DockviewLayout({
                         /* 该 activity 下暂无左侧面板时显示空状态占位，支持拖入面板 */
                         <div
                             className={`sidebar-empty-placeholder${isEmptySidebarDragOver ? " drag-over" : ""}`}
+                            data-testid="left-sidebar-empty"
                             onDragOver={handleEmptySidebarDragOver}
                             onDragLeave={handleEmptySidebarDragLeave}
                             onDrop={handleEmptySidebarDrop}
@@ -2222,6 +2300,7 @@ export function DockviewLayout({
                         /* 右侧栏暂无面板时显示空状态占位，支持拖入面板 */
                         <div
                             className={`sidebar-empty-placeholder${isEmptyRightSidebarDragOver ? " drag-over" : ""}`}
+                            data-testid="right-sidebar-empty"
                             onDragOver={handleEmptyRightSidebarDragOver}
                             onDragLeave={handleEmptyRightSidebarDragLeave}
                             onDrop={handleEmptyRightSidebarDrop}

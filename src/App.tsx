@@ -1,13 +1,10 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Compass, FolderOpen, Search, Orbit } from "lucide-react";
+import { Search } from "lucide-react";
 import {
   CustomTitlebar,
   DockviewLayout,
-  KnowledgeGraphTab,
-  OutlinePanel,
   SettingsTab,
-  VaultPanel,
   type TabInstanceDefinition,
 } from "./layout";
 import { CodeMirrorEditorTab } from "./layout/editor/CodeMirrorEditorTab";
@@ -19,6 +16,7 @@ import {
 import {
   subscribeVaultFsBusEvent,
   useBackendEventBridge,
+  emitPersistedContentUpdatedEvent,
 } from "./events/appEventBus";
 import {
   reportArticleContentByPath,
@@ -64,15 +62,9 @@ function App() {
     HomeTab: HomeTab,
     CodeMirrorEditorTab,
     ImageViewerTab,
-    KnowledgeGraphTab,
     SettingsTab,
-    VaultPanel,
-    OutlinePanel,
     icons: {
-      files: <FolderOpen size={18} strokeWidth={1.8} />,
       search: <Search size={18} strokeWidth={1.8} />,
-      outline: <Compass size={18} strokeWidth={1.8} />,
-      graph: <Orbit size={18} strokeWidth={1.8} />,
     },
   }), []);
   ensureBuiltinComponentsRegistered(builtinRefs);
@@ -87,6 +79,17 @@ function App() {
           path: payload.relativePath,
         });
         return;
+      }
+
+      /* 将非自触发的文件修改/创建事件转化为持久态更新语义事件 */
+      if (
+        payload.relativePath &&
+        ["modified", "created"].includes(payload.eventType)
+      ) {
+        emitPersistedContentUpdatedEvent({
+          relativePath: payload.relativePath,
+          source: "external",
+        });
       }
 
       const currentFocusedPath = focusedArticle?.path;

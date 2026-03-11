@@ -17,7 +17,7 @@ import {
     useShortcutState,
 } from "../../store/shortcutStore";
 import {
-    getEditableShortcutCommandDefinitions,
+    getCommandDefinitions,
     type CommandId,
 } from "../../commands/commandSystem";
 import { SHORTCUT_CONDITION_LABELS } from "../../commands/focusContext";
@@ -35,8 +35,8 @@ function ShortcutSettingsSection(): ReactNode {
     const [recordingCommandId, setRecordingCommandId] = useState<CommandId | null>(null);
 
     const editableShortcutCommands = useMemo(
-        () => getEditableShortcutCommandDefinitions(),
-        [],
+        () => getCommandDefinitions().filter((command) => command.shortcut?.editableInSettings === true),
+        [shortcutState.bindings],
     );
 
     useEffect(() => {

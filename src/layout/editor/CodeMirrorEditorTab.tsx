@@ -49,7 +49,11 @@ import {
     type ChineseSegmentToken,
 } from "../../api/vaultApi";
 import { useConfigState, DEFAULT_EDITOR_FONT_FAMILY } from "../../store/configStore";
-import { subscribeEditorRenameRequestedEvent } from "../../events/appEventBus";
+import {
+    subscribeEditorRenameRequestedEvent,
+    subscribeEditorRevealRequestedEvent,
+} from "../../events/appEventBus";
+import { useActiveEditor } from "../../store/activeEditorStore";
 import i18n from "../../i18n";
 import { createRegisteredLineSyntaxRenderExtension } from "./syntaxRenderRegistry";
 import { ensureBuiltinSyntaxRenderersRegistered } from "./registerBuiltinSyntaxRenderers";
@@ -341,6 +345,8 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     const [renameError, setRenameError] = useState<string | null>(null);
     const articleId = props.api.id;
     const articleSnapshot = useArticleById(articleId);
+    const activeEditor = useActiveEditor();
+    const isActiveEditor = activeEditor?.articleId === articleId;
 
     useEffect(() => {
         currentFilePathRef.current = currentFilePath;
@@ -379,6 +385,46 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
 
         return unlisten;
     }, [articleId]);
+
+    /* 仅当前活跃 editor 订阅定位请求，避免非活跃 tab 响应外部导航事件 */
+    useEffect(() => {
+        if (!isActiveEditor) {
+            return;
+        }
+
+        const unlisten = subscribeEditorRevealRequestedEvent((payload) => {
+            if (payload.articleId !== articleId) {
+                return;
+            }
+
+            const view = viewRef.current;
+            if (!view) {
+                return;
+            }
+
+            const totalLines = view.state.doc.lines;
+            const safeLineNumber = Math.min(
+                Math.max(1, payload.line),
+                Math.max(1, totalLines),
+            );
+            const targetLine = view.state.doc.line(safeLineNumber);
+
+            view.dispatch({
+                selection: { anchor: targetLine.from },
+                scrollIntoView: true,
+            });
+            view.focus();
+
+            console.info("[editor] reveal requested event handled", {
+                articleId,
+                path: payload.path,
+                line: payload.line,
+                safeLineNumber,
+            });
+        });
+
+        return unlisten;
+    }, [articleId, isActiveEditor]);
 
     useEffect(() => {
         bindingsRef.current = bindings;

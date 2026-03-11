@@ -28,6 +28,7 @@ jieba-rs = "0.8.1"
 base64 = "0.22"
 log = "0.4"
 rusqlite = { version = "0.32", features = ["bundled"] }
+pulldown-cmark = "0.9"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

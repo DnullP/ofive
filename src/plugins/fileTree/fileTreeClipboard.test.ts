@@ -1,9 +1,9 @@
 /**
- * @module commands/fileTreeClipboard.test
- * @description fileTreeClipboard 模块的单元测试。
+ * @module plugins/fileTree/fileTreeClipboard.test
+ * @description 文件树插件剪贴板模块单元测试。
  */
 
-import { describe, expect, test, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import {
     clearFileTreeClipboard,
     getFileTreeClipboardEntry,
@@ -44,7 +44,7 @@ describe("fileTreeClipboard", () => {
         expect(getFileTreeClipboardEntry()).toBeNull();
     });
 
-    test("should create a defensive copy (not share reference)", () => {
+    test("should create a defensive copy", () => {
         const original = { path: "notes/ref.md", isDir: false };
         setFileTreeClipboardEntry(original);
         original.path = "notes/mutated.md";

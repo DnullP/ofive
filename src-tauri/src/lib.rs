@@ -24,6 +24,7 @@ pub use frontend_log::forward_frontend_log;
 /// 对外导出日志模块以支持测试中的日志初始化。
 pub use logging::init as init_logging;
 pub use vault_commands::copy_vault_entry_in_root;
+pub use vault_commands::create_vault_binary_file_in_root;
 pub use vault_commands::create_vault_directory_in_root;
 /// 对外导出仓库命令的 root 级辅助函数以支持集成测试。
 pub use vault_commands::create_vault_markdown_file_in_root;
@@ -36,10 +37,13 @@ pub use vault_commands::get_backlinks_for_file_in_root;
 pub use vault_commands::get_current_vault_config_in_root;
 pub use vault_commands::get_current_vault_markdown_graph_in_root;
 pub use vault_commands::get_current_vault_tree_in_root;
+pub use vault_commands::get_vault_markdown_ast_in_root;
+pub use vault_commands::get_vault_markdown_outline_in_root;
 pub use vault_commands::list_markdown_files;
 pub use vault_commands::load_markdown_graph;
 pub use vault_commands::move_vault_directory_to_directory_in_root;
 pub use vault_commands::move_vault_markdown_file_to_directory_in_root;
+pub use vault_commands::parse_markdown_to_ast;
 pub use vault_commands::read_vault_binary_file_in_root;
 pub use vault_commands::read_vault_markdown_file_in_root;
 pub use vault_commands::rename_vault_directory_in_root;
@@ -189,11 +193,13 @@ pub fn run() {
             vault_commands::resolve_media_embed_target,
             vault_commands::search_vault_markdown_files,
             vault_commands::get_current_vault_markdown_graph,
+            vault_commands::get_vault_markdown_ast,
             vault_commands::segment_chinese_text,
             vault_commands::suggest_wikilink_targets,
             vault_commands::get_current_vault_config,
             vault_commands::save_current_vault_config,
-            vault_commands::get_backlinks_for_file
+            vault_commands::get_backlinks_for_file,
+            vault_commands::get_vault_markdown_outline
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -108,6 +108,7 @@ export function SidebarIconBar(props: SidebarIconBarProps): ReactNode {
                             dragState?.draggedId === item.id ? "dragging" : "",
                         ].filter(Boolean).join(" ")}
                         title={item.title}
+                        data-testid={`right-activity-icon-${item.id}`}
                         onClick={() => {
                             onItemClick(item);
                         }}

@@ -5,13 +5,11 @@
  *  - ./registrars/generalSettingsRegistrar
  *  - ./registrars/editorSettingsRegistrar
  *  - ./registrars/shortcutSettingsRegistrar
- *  - ./registrars/graphSettingsRegistrar
  *  - ./registrars/themeSettingsRegistrar
  */
 
 import { registerEditorSettingsSection } from "./registrars/editorSettingsRegistrar.tsx";
 import { registerGeneralSettingsSection } from "./registrars/generalSettingsRegistrar.tsx";
-import { registerGraphSettingsSection } from "./registrars/graphSettingsRegistrar.tsx";
 import { registerLanguageSettingsSection } from "./registrars/languageSettingsRegistrar.tsx";
 import { registerShortcutSettingsSection } from "./registrars/shortcutSettingsRegistrar.tsx";
 import { registerThemeSettingsSection } from "./registrars/themeSettingsRegistrar.tsx";
@@ -32,6 +30,5 @@ export function ensureBuiltinSettingsRegistered(): void {
     registerThemeSettingsSection();
     registerEditorSettingsSection();
     registerShortcutSettingsSection();
-    registerGraphSettingsSection();
     registered = true;
 }

@@ -19,6 +19,10 @@
  *  - emitEditorFocusChangedEvent: 发布前端编辑焦点变化事件
  *  - subscribeEditorContentBusEvent: 订阅前端编辑内容变化事件
  *  - subscribeEditorFocusBusEvent: 订阅前端编辑焦点变化事件
+ *  - emitEditorRevealRequestedEvent: 发布编辑器定位请求事件
+ *  - subscribeEditorRevealRequestedEvent: 订阅编辑器定位请求事件
+ *  - emitPersistedContentUpdatedEvent: 发布持久态内容更新事件
+ *  - subscribePersistedContentUpdatedEvent: 订阅持久态内容更新事件
  */
 
 import { useEffect } from "react";
@@ -61,12 +65,43 @@ export interface EditorRenameRequestedBusEvent {
     articleId: string;
 }
 
+/**
+ * @interface EditorRevealRequestedBusEvent
+ * @description 请求当前活跃编辑器定位到指定行的事件。
+ * @field eventId - 事件唯一标识
+ * @field articleId - 目标文章 ID（通常为当前活跃 tab id）
+ * @field path - 目标文件相对路径
+ * @field line - 目标行号（1-based）
+ */
+export interface EditorRevealRequestedBusEvent {
+    eventId: string;
+    articleId: string;
+    path: string;
+    line: number;
+}
+
+/**
+ * @interface PersistedContentUpdatedBusEvent
+ * @description 持久态内容更新事件：表示某个文件的持久化内容已变更。
+ *   来源可能是：前端保存成功（source = "save"）或外部文件系统修改（source = "external"）。
+ * @field eventId - 事件唯一标识
+ * @field relativePath - 变更文件的相对路径
+ * @field source - 变更来源："save" 表示前端保存成功，"external" 表示外部修改
+ */
+export interface PersistedContentUpdatedBusEvent {
+    eventId: string;
+    relativePath: string;
+    source: "save" | "external";
+}
+
 type AppBusEventMap = {
     "vault.fs": VaultFsEventPayload;
     "vault.config": VaultConfigEventPayload;
     "editor.content.changed": EditorContentChangedBusEvent;
     "editor.focus.changed": EditorFocusChangedBusEvent;
     "editor.rename.requested": EditorRenameRequestedBusEvent;
+    "editor.reveal.requested": EditorRevealRequestedBusEvent;
+    "persisted.content.updated": PersistedContentUpdatedBusEvent;
 };
 
 const appEventTarget = new EventTarget();
@@ -314,6 +349,63 @@ export function subscribeEditorRenameRequestedEvent(
     listener: (payload: EditorRenameRequestedBusEvent) => void,
 ): () => void {
     return subscribeBusEvent("editor.rename.requested", listener);
+}
+
+/**
+ * @function emitEditorRevealRequestedEvent
+ * @description 发布编辑器定位请求事件。
+ * @param payload 事件负载，包含目标文章、路径和行号。
+ */
+export function emitEditorRevealRequestedEvent(payload: {
+    articleId: string;
+    path: string;
+    line: number;
+}): void {
+    dispatchBusEvent("editor.reveal.requested", {
+        eventId: nextFrontendEventId(),
+        ...payload,
+    });
+}
+
+/**
+ * @function subscribeEditorRevealRequestedEvent
+ * @description 订阅编辑器定位请求事件。
+ * @param listener 监听器。
+ * @returns 取消订阅函数。
+ */
+export function subscribeEditorRevealRequestedEvent(
+    listener: (payload: EditorRevealRequestedBusEvent) => void,
+): () => void {
+    return subscribeBusEvent("editor.reveal.requested", listener);
+}
+
+/**
+ * @function emitPersistedContentUpdatedEvent
+ * @description 发布持久态内容更新事件。
+ *   当前端保存成功或检测到外部文件修改时调用。
+ * @param payload 事件负载（不含 eventId）。
+ */
+export function emitPersistedContentUpdatedEvent(payload: {
+    relativePath: string;
+    source: "save" | "external";
+}): void {
+    dispatchBusEvent("persisted.content.updated", {
+        eventId: nextFrontendEventId(),
+        ...payload,
+    });
+}
+
+/**
+ * @function subscribePersistedContentUpdatedEvent
+ * @description 订阅持久态内容更新事件。
+ *   读型组件（Outline、Graph、Search 等）应订阅此事件以刷新数据。
+ * @param listener 监听器。
+ * @returns 取消订阅函数。
+ */
+export function subscribePersistedContentUpdatedEvent(
+    listener: (payload: PersistedContentUpdatedBusEvent) => void,
+): () => void {
+    return subscribeBusEvent("persisted.content.updated", listener);
 }
 
 // ────────── 仅用于测试的辅助函数 ──────────

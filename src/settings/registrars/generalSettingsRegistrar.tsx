@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import {
     updateRememberLastVault,
     updateSearchEnabled,
+    updateFeatureSetting,
     useConfigState,
 } from "../../store/configStore";
 import { registerSettingsSection } from "../settingsRegistry";
@@ -56,6 +57,22 @@ function GeneralSettingsSection(): ReactNode {
                     checked={configState.featureSettings.searchEnabled}
                     onChange={(event) => {
                         void updateSearchEnabled(event.target.checked);
+                    }}
+                />
+            </label>
+
+            {/* --- 开启知识图谱功能 --- */}
+            <label className="settings-compact-row" htmlFor="knowledge-graph-feature-switch">
+                <div className="settings-compact-info">
+                    <span className="settings-compact-title">{t("settings.enableKnowledgeGraph")}</span>
+                    <span className="settings-compact-desc">{t("settings.enableKnowledgeGraphDesc")}</span>
+                </div>
+                <input
+                    id="knowledge-graph-feature-switch"
+                    type="checkbox"
+                    checked={configState.featureSettings.knowledgeGraphEnabled}
+                    onChange={(event) => {
+                        void updateFeatureSetting("knowledgeGraphEnabled", event.target.checked);
                     }}
                 />
             </label>

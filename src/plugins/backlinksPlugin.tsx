@@ -10,19 +10,20 @@
  *
  * @dependencies
  *   - react
- *   - @tauri-apps/api/core (invoke)
  *   - ../registry/panelRegistry
- *   - ../store/editorContextStore
+ *   - ../store/activeEditorStore
+ *   - ../api/vaultApi
  *   - i18next
  *
  * @exports 无导出（纯副作用模块）
  */
 
 import React, { useEffect, useState, useCallback, type ReactNode } from "react";
+import { registerCommand } from "../commands/commandSystem";
 import { registerPanel } from "../registry/panelRegistry";
 import type { PanelRenderContext } from "../layout/DockviewLayout";
-import { useFocusedArticle } from "../store/editorContextStore";
-import { readVaultMarkdownFile } from "../api/vaultApi";
+import { useActiveEditor } from "../store/activeEditorStore";
+import { getBacklinksForFile, readVaultMarkdownFile, type BacklinkItem } from "../api/vaultApi";
 import i18n from "../i18n";
 import "./backlinksPlugin.css";
 
@@ -41,6 +42,7 @@ i18n.addResourceBundle("en", "translation", {
         loading: "Loading backlinks...",
         loadFailed: "Failed to load backlinks: {{message}}",
         referencedBy: "Referenced by {{count}} note(s)",
+        openCommand: "Open Backlinks Panel",
     },
 }, true, true);
 
@@ -53,52 +55,22 @@ i18n.addResourceBundle("zh", "translation", {
         loading: "正在加载反向链接...",
         loadFailed: "加载反向链接失败：{{message}}",
         referencedBy: "被 {{count}} 篇笔记引用",
+        openCommand: "打开反向链接面板",
     },
 }, true, true);
 
-/* ────────────────── 类型定义 ────────────────── */
+registerCommand({
+    id: "backlinks.open",
+    title: "backlinks.openCommand",
+    execute: (context) => {
+        if (!context.activatePanel) {
+            console.warn("[backlinksPlugin] open command skipped: activatePanel missing");
+            return;
+        }
 
-/**
- * @interface BacklinkItem
- * @description 后端返回的反向链接条目。
- * @field sourcePath - 引用源文件相对路径
- * @field title      - 引用源文件标题
- * @field weight     - 引用权重（次数）
- */
-interface BacklinkItem {
-    sourcePath: string;
-    title: string;
-    weight: number;
-}
-
-/* ────────────────── 后端 API ────────────────── */
-
-/**
- * @function getBacklinksForFile
- * @description 调用后端获取指定文件的反向链接列表。
- *   插件自带 API 封装，无需修改 vaultApi.ts。
- * @param relativePath 目标文件相对路径。
- * @returns 反向链接列表。
- * @throws 后端调用失败时抛出错误字符串。
- */
-async function getBacklinksForFile(relativePath: string): Promise<BacklinkItem[]> {
-    // 检查是否在 Tauri 环境中运行
-    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-        const { invoke } = await import("@tauri-apps/api/core");
-        console.debug("[backlinksPlugin] invoke get_backlinks_for_file", { relativePath });
-        const result = await invoke<BacklinkItem[]>("get_backlinks_for_file", {
-            relativePath,
-        });
-        console.debug("[backlinksPlugin] backlinks loaded", {
-            relativePath,
-            count: result.length,
-        });
-        return result;
-    }
-    // 浏览器开发环境回退
-    console.warn("[backlinksPlugin] not in Tauri environment, returning empty backlinks");
-    return [];
-}
+        context.activatePanel("backlinks");
+    },
+});
 
 /* ────────────────── React 组件 ────────────────── */
 
@@ -111,7 +83,7 @@ async function getBacklinksForFile(relativePath: string): Promise<BacklinkItem[]
  * @returns 面板 ReactNode。
  */
 function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode {
-    const focusedArticle = useFocusedArticle();
+    const activeEditor = useActiveEditor();
     const [backlinks, setBacklinks] = useState<BacklinkItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -155,16 +127,16 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
 
     /* 当聚焦文章变化时加载反向链接 */
     useEffect(() => {
-        if (!focusedArticle) {
+        if (!activeEditor) {
             setBacklinks([]);
             setError(null);
             return;
         }
 
-        const path = focusedArticle.path;
+        const path = activeEditor.path;
         if (!path) {
-            console.warn("[backlinksPlugin] focused article has no path", {
-                articleId: focusedArticle.articleId,
+            console.warn("[backlinksPlugin] active editor has no path", {
+                articleId: activeEditor.articleId,
             });
             setBacklinks([]);
             return;
@@ -202,10 +174,10 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
         return () => {
             cancelled = true;
         };
-    }, [focusedArticle?.path]);
+    }, [activeEditor?.path]);
 
     /* ── 未聚焦文章状态 ── */
-    if (!focusedArticle) {
+    if (!activeEditor) {
         return (
             /* backlinks-panel: 面板根容器 */
             <div className="backlinks-panel">
@@ -225,7 +197,7 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
     if (loading) {
         return (
             <div className="backlinks-panel">
-                <div className="backlinks-panel-header">{focusedArticle.title}</div>
+                <div className="backlinks-panel-header">{activeEditor.title}</div>
                 <div className="backlinks-empty">{t("backlinks.loading")}</div>
             </div>
         );
@@ -235,7 +207,7 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
     if (error) {
         return (
             <div className="backlinks-panel">
-                <div className="backlinks-panel-header">{focusedArticle.title}</div>
+                <div className="backlinks-panel-header">{activeEditor.title}</div>
                 {/* backlinks-error: 错误提示文字 */}
                 <div className="backlinks-error">
                     {t("backlinks.loadFailed", { message: error })}
@@ -248,7 +220,7 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
     return (
         <div className="backlinks-panel">
             <div className="backlinks-panel-header">
-                {focusedArticle.title}
+                {activeEditor.title}
                 {/* backlinks-count: 引用计数标签 */}
                 <span className="backlinks-count">
                     {t("backlinks.referencedBy", { count: backlinks.length })}

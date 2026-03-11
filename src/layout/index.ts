@@ -12,7 +12,6 @@ export type {
 } from './DockviewLayout';
 export { FileTree } from './FileTree';
 export type { FileTreeItem } from './FileTree';
-export { OutlinePanel } from './OutlinePanel';
 export { VaultPanel } from './VaultPanel';
 export { SettingsTab } from './SettingsTab';
 export { ImageViewerTab } from './ImageViewerTab';

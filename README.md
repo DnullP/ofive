@@ -27,6 +27,10 @@ This template should help get you started developing with Tauri, React and Types
 - `web:dev` / `web:preview` 完全不依赖 tauri 命令。
 - `tauri dev` 仍可用于桌面容器联调，两者互不影响。
 
+## 文档
+
+- [插件开发教程](docs/plugin-development-guide.md)
+
 ## Recommended IDE Setup
 
 - [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)

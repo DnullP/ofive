@@ -5,9 +5,9 @@
  *   确保在应用启动时只执行一次。
  *
  *   注册的内置组件包括：
- *   - 活动图标：files, search, knowledge-graph, outline
- *   - 侧边栏面板：files, search, outline
- *   - Tab 组件：home, codemirror, imageviewer, knowledgegraph, settings
+ *   - 活动图标：search
+ *   - 侧边栏面板：search
+ *   - Tab 组件：home, codemirror, imageviewer, settings
  *
  * @dependencies
  *   - ./panelRegistry
@@ -38,10 +38,7 @@ import i18n from "../i18n";
  * @field HomeTab           - 首页 Tab 组件
  * @field CodeMirrorEditorTab - CodeMirror 编辑器 Tab 组件
  * @field ImageViewerTab    - 图片查看器 Tab 组件
- * @field KnowledgeGraphTab - 知识图谱 Tab 组件
  * @field SettingsTab       - 设置 Tab 组件
- * @field VaultPanel        - 文件浏览器面板组件
- * @field OutlinePanel      - 大纲面板组件
  * @field icons             - 图标组件集合
  */
 export interface BuiltinComponentRefs {
@@ -51,20 +48,11 @@ export interface BuiltinComponentRefs {
     CodeMirrorEditorTab: React.ComponentType<any>;
     /** 图片查看器 Tab */
     ImageViewerTab: React.ComponentType<any>;
-    /** 知识图谱 Tab */
-    KnowledgeGraphTab: React.ComponentType<any>;
     /** 设置 Tab */
     SettingsTab: React.ComponentType<any>;
-    /** 文件浏览器面板 */
-    VaultPanel: React.ComponentType<any>;
-    /** 大纲面板 */
-    OutlinePanel: React.ComponentType<any>;
     /** 图标集合 */
     icons: {
-        files: ReactNode;
         search: ReactNode;
-        outline: ReactNode;
-        graph: ReactNode;
     };
 }
 
@@ -89,17 +77,6 @@ function t(key: string): string {
 function registerBuiltinActivities(refs: BuiltinComponentRefs): (() => void)[] {
     const fns: (() => void)[] = [];
 
-    /* 文件浏览器 - 面板容器型 */
-    fns.push(registerActivity({
-        type: "panel-container",
-        id: "files",
-        title: () => t("app.explorer"),
-        icon: refs.icons.files,
-        defaultSection: "top",
-        defaultBar: "left",
-        defaultOrder: 1,
-    }));
-
     /* 搜索 - 面板容器型（可通过 featureFlag 后续控制） */
     fns.push(registerActivity({
         type: "panel-container",
@@ -109,35 +86,6 @@ function registerBuiltinActivities(refs: BuiltinComponentRefs): (() => void)[] {
         defaultSection: "top",
         defaultBar: "left",
         defaultOrder: 2,
-    }));
-
-    /* 知识图谱 - 回调型：点击打开 Tab */
-    fns.push(registerActivity({
-        type: "callback",
-        id: "knowledge-graph",
-        title: () => t("app.knowledgeGraph"),
-        icon: refs.icons.graph,
-        defaultSection: "top",
-        defaultBar: "left",
-        defaultOrder: 3,
-        onActivate: (ctx) => {
-            ctx.openTab({
-                id: "knowledge-graph",
-                title: t("app.knowledgeGraph"),
-                component: "knowledgegraph",
-            });
-        },
-    }));
-
-    /* 大纲 - 面板容器型 */
-    fns.push(registerActivity({
-        type: "panel-container",
-        id: "outline",
-        title: () => t("app.outline"),
-        icon: refs.icons.outline,
-        defaultSection: "top",
-        defaultBar: "right",
-        defaultOrder: 4,
     }));
 
     return fns;
@@ -152,21 +100,6 @@ function registerBuiltinActivities(refs: BuiltinComponentRefs): (() => void)[] {
 function registerBuiltinPanels(refs: BuiltinComponentRefs): (() => void)[] {
     const fns: (() => void)[] = [];
 
-    /* 文件浏览器面板 */
-    fns.push(registerPanel({
-        id: "files",
-        title: () => t("app.explorer"),
-        activityId: "files",
-        defaultPosition: "left",
-        defaultOrder: 1,
-        render: (ctx) =>
-            React.createElement(refs.VaultPanel, {
-                openTab: ctx.openTab,
-                closeTab: ctx.closeTab,
-                requestMoveFileToDirectory: ctx.requestMoveFileToDirectory,
-            }),
-    }));
-
     /* 搜索面板（占位） */
     fns.push(registerPanel({
         id: "search",
@@ -179,16 +112,6 @@ function registerBuiltinPanels(refs: BuiltinComponentRefs): (() => void)[] {
                 React.createElement("h3", null, t("app.searchPanelTitle")),
                 React.createElement("p", null, t("app.searchPanelHint")),
             ),
-    }));
-
-    /* 大纲面板 */
-    fns.push(registerPanel({
-        id: "outline",
-        title: () => t("app.outline"),
-        activityId: "outline",
-        defaultPosition: "right",
-        defaultOrder: 1,
-        render: () => React.createElement(refs.OutlinePanel),
     }));
 
     return fns;
@@ -216,11 +139,6 @@ function registerBuiltinTabComponents(refs: BuiltinComponentRefs): (() => void)[
     fns.push(registerTabComponent({
         id: "imageviewer",
         component: refs.ImageViewerTab as any,
-    }));
-
-    fns.push(registerTabComponent({
-        id: "knowledgegraph",
-        component: refs.KnowledgeGraphTab as any,
     }));
 
     fns.push(registerTabComponent({

@@ -6,7 +6,9 @@
 mod backlinks;
 mod fs_helpers;
 mod graph;
+mod markdown_ast;
 mod markdown_block_detector;
+mod outline;
 mod query_index;
 mod search;
 mod segment;
@@ -45,6 +47,9 @@ macro_rules! timed_command {
 
 pub use backlinks::get_backlinks_for_file_in_root;
 pub use graph::get_current_vault_markdown_graph_in_root;
+pub use markdown_ast::get_vault_markdown_ast_in_root;
+pub use markdown_ast::parse_markdown_to_ast;
+pub use outline::get_vault_markdown_outline_in_root;
 pub use search::search_vault_markdown_files_in_root;
 pub use search::suggest_wikilink_targets_in_root;
 pub use types::*;
@@ -346,6 +351,17 @@ pub fn get_current_vault_markdown_graph(
 }
 
 #[tauri::command]
+pub fn get_vault_markdown_ast(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<ReadMarkdownAstResponse, String> {
+    timed_command!(
+        "get_vault_markdown_ast",
+        markdown_ast::get_vault_markdown_ast(relative_path, state)
+    )
+}
+
+#[tauri::command]
 pub fn segment_chinese_text(text: String) -> Result<Vec<ChineseSegmentToken>, String> {
     timed_command!("segment_chinese_text", segment::segment_chinese_text(text))
 }
@@ -390,6 +406,17 @@ pub fn get_backlinks_for_file(
     timed_command!(
         "get_backlinks_for_file",
         backlinks::get_backlinks_for_file(relative_path, state)
+    )
+}
+
+#[tauri::command]
+pub fn get_vault_markdown_outline(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<outline::OutlineResponse, String> {
+    timed_command!(
+        "get_vault_markdown_outline",
+        outline::get_vault_markdown_outline(relative_path, state)
     )
 }
 

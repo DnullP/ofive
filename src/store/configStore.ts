@@ -63,6 +63,7 @@ const LAST_VAULT_PATH_STORAGE_KEY = "ofive:last-vault-path";
  * @interface FeatureSettings
  * @description 功能开关与编辑器体验配置。
  * @field searchEnabled - 是否开启搜索功能
+ * @field knowledgeGraphEnabled - 是否开启知识图谱功能
  * @field vimModeEnabled - 是否开启 Vim 编辑模式
  * @field editorFontSize - 编辑器字体大小（px），范围 10–32
  * @field editorTabSize - Tab 缩进宽度（空格数），范围 1–8
@@ -75,6 +76,8 @@ const LAST_VAULT_PATH_STORAGE_KEY = "ofive:last-vault-path";
 export interface FeatureSettings {
     /** 是否开启搜索功能（后端配置） */
     searchEnabled: boolean;
+    /** 是否开启知识图谱功能（后端配置） */
+    knowledgeGraphEnabled: boolean;
     /** 是否开启 Vim 编辑模式（后端配置） */
     vimModeEnabled: boolean;
     /** 编辑器字体大小（px），默认 16 */
@@ -187,6 +190,8 @@ function normalizeBackendConfig(config: VaultConfig): {
 
     const searchEnabled =
         typeof featuresObj.searchEnabled === "boolean" ? featuresObj.searchEnabled : true;
+    const knowledgeGraphEnabled =
+        typeof featuresObj.knowledgeGraphEnabled === "boolean" ? featuresObj.knowledgeGraphEnabled : true;
     const vimModeEnabled =
         typeof featuresObj.vimModeEnabled === "boolean" ? featuresObj.vimModeEnabled : false;
     const editorFontSize =
@@ -234,6 +239,7 @@ function normalizeBackendConfig(config: VaultConfig): {
     const nextFeatures = {
         ...featuresObj,
         searchEnabled,
+        knowledgeGraphEnabled,
         vimModeEnabled,
         editorFontSize,
         editorTabSize,
@@ -254,6 +260,7 @@ function normalizeBackendConfig(config: VaultConfig): {
 
     const changed =
         featuresObj.searchEnabled !== searchEnabled ||
+        featuresObj.knowledgeGraphEnabled !== knowledgeGraphEnabled ||
         featuresObj.vimModeEnabled !== vimModeEnabled ||
         featuresObj.editorFontSize !== editorFontSize ||
         featuresObj.editorTabSize !== editorTabSize ||
@@ -267,6 +274,7 @@ function normalizeBackendConfig(config: VaultConfig): {
         nextConfig,
         featureSettings: {
             searchEnabled,
+            knowledgeGraphEnabled,
             vimModeEnabled,
             editorFontSize,
             editorTabSize,
@@ -290,6 +298,7 @@ class ConfigStore {
         backendConfig: null,
         featureSettings: {
             searchEnabled: true,
+            knowledgeGraphEnabled: true,
             vimModeEnabled: false,
             editorFontSize: 16,
             editorTabSize: 4,
@@ -645,6 +654,15 @@ export function useConfigState(): ConfigState {
         () => configStore.getSnapshot(),
         () => configStore.getSnapshot(),
     );
+}
+
+/**
+ * @function getConfigSnapshot
+ * @description 非响应式读取当前配置状态，供插件入口同步 feature flag。
+ * @returns 配置状态快照。
+ */
+export function getConfigSnapshot(): ConfigState {
+    return configStore.getSnapshot();
 }
 
 /**

@@ -344,6 +344,7 @@ describe("computeCrossContainerDrop", () => {
                 dropPosition: "bottom",
                 panelById,
                 activeActivityId: "files",
+                activeRightActivityId: "outline",
             });
 
             const moved = result.find((s) => s.id === "backlinks");
@@ -360,6 +361,7 @@ describe("computeCrossContainerDrop", () => {
                 dropPosition: "bottom",
                 panelById,
                 activeActivityId: "files",
+                activeRightActivityId: "outline",
             });
 
             const moved = result.find((s) => s.id === "backlinks");
@@ -376,6 +378,7 @@ describe("computeCrossContainerDrop", () => {
                 dropPosition: "top",
                 panelById,
                 activeActivityId: "files",
+                activeRightActivityId: "outline",
             });
 
             const moved = result.find((s) => s.id === "backlinks");
@@ -391,6 +394,7 @@ describe("computeCrossContainerDrop", () => {
                 dropPosition: "bottom",
                 panelById,
                 activeActivityId: "files",
+                activeRightActivityId: "outline",
             });
 
             // 右侧只剩 outline，order 应为 0
@@ -401,7 +405,7 @@ describe("computeCrossContainerDrop", () => {
     });
 
     describe("左→右拖拽", () => {
-        it("应将面板移到右侧栏并恢复原始 activityId", () => {
+        it("应将面板移到右侧栏并加入目标 activity 分组", () => {
             const result = computeCrossContainerDrop({
                 prev: initialStates,
                 movedPanelId: "search",
@@ -410,12 +414,13 @@ describe("computeCrossContainerDrop", () => {
                 dropPosition: "bottom",
                 panelById,
                 activeActivityId: "files",
+                activeRightActivityId: "outline",
             });
 
             const moved = result.find((s) => s.id === "search");
             expect(moved?.position).toBe("right");
-            // search 的原始定义 activityId 是 "files"
-            expect(moved?.activityId).toBe("files");
+            // icon 与 panel 解耦：面板加入 drop target 所属 activity（outline），而非恢复原始 activityId
+            expect(moved?.activityId).toBe("outline");
         });
     });
 
@@ -429,6 +434,7 @@ describe("computeCrossContainerDrop", () => {
                 dropPosition: "bottom",
                 panelById,
                 activeActivityId: "files",
+                activeRightActivityId: "outline",
             });
 
             expect(result).toBe(initialStates);
@@ -503,7 +509,7 @@ describe("computeEmptyRightSidebarDrop", () => {
     ];
     const panelById = makePanelById(definitions);
 
-    it("应将面板从左侧移到右侧栏并恢复原始 activityId", () => {
+    it("应将面板从左侧移到右侧栏并加入当前右侧活动分组", () => {
         const prev: PanelRuntimeState[] = [
             state({ id: "files", position: "left", order: 0, activityId: "files" }),
             // backlinks 当前在左侧（被拖过来的），activityId 被改写为 "files"
@@ -514,11 +520,12 @@ describe("computeEmptyRightSidebarDrop", () => {
             prev,
             movedPanelId: "backlinks",
             panelById,
+            activeRightActivityId: "outline",
         });
 
         const moved = result.find((s) => s.id === "backlinks");
         expect(moved?.position).toBe("right");
-        // 关键：activityId 应恢复为定义中的 "outline"，而非运行时的 "files"
+        // icon 与 panel 解耦：面板加入当前右侧活动分组 "outline"
         expect(moved?.activityId).toBe("outline");
         expect(moved?.order).toBe(0);
     });
@@ -539,6 +546,7 @@ describe("computeEmptyRightSidebarDrop", () => {
             prev,
             movedPanelId: "backlinks",
             panelById: byId,
+            activeRightActivityId: "outline",
         });
 
         const moved = result.find((s) => s.id === "backlinks");
@@ -555,6 +563,7 @@ describe("computeEmptyRightSidebarDrop", () => {
             prev,
             movedPanelId: "nonexistent",
             panelById,
+            activeRightActivityId: "outline",
         });
 
         expect(result).toBe(prev);
@@ -608,7 +617,7 @@ describe("回归测试：面板跨容器往返拖拽", () => {
 
     const initialStates: PanelRuntimeState[] = buildInitialPanelStates(definitions);
 
-    it("右→左→右（crossContainer）：activityId 应恢复为原始值", () => {
+    it("右→左→右（crossContainer）：activityId 应加入目标 activity 分组", () => {
         // Step 1: 将 backlinks 从右侧拖到左侧
         const afterRightToLeft = computeCrossContainerDrop({
             prev: initialStates,
@@ -618,6 +627,7 @@ describe("回归测试：面板跨容器往返拖拽", () => {
             dropPosition: "bottom",
             panelById,
             activeActivityId: "files",
+            activeRightActivityId: "outline",
         });
 
         const backlinkAfterStep1 = afterRightToLeft.find((s) => s.id === "backlinks");
@@ -633,15 +643,16 @@ describe("回归测试：面板跨容器往返拖拽", () => {
             dropPosition: "bottom",
             panelById,
             activeActivityId: "files",
+            activeRightActivityId: "outline",
         });
 
         const backlinkAfterStep2 = afterLeftToRight.find((s) => s.id === "backlinks");
         expect(backlinkAfterStep2?.position).toBe("right");
-        // 关键断言：activityId 必须恢复为定义中的 "outline"
+        // icon 与 panel 解耦：面板加入 drop target 的 activityId "outline"
         expect(backlinkAfterStep2?.activityId).toBe("outline");
     });
 
-    it("右→左→右（emptyRightSidebar）：activityId 应恢复为原始值", () => {
+    it("右→左→右（emptyRightSidebar）：activityId 应加入当前右侧活动分组", () => {
         // Step 1: 将 backlinks 从右侧拖到左侧的空区域
         const afterRightToLeft = computeEmptySidebarDrop({
             prev: initialStates,
@@ -658,11 +669,12 @@ describe("回归测试：面板跨容器往返拖拽", () => {
             prev: afterRightToLeft,
             movedPanelId: "backlinks",
             panelById,
+            activeRightActivityId: "outline",
         });
 
         const backlinkAfterStep2 = afterLeftToRight.find((s) => s.id === "backlinks");
         expect(backlinkAfterStep2?.position).toBe("right");
-        // 关键断言：activityId 必须恢复为定义中的 "outline"
+        // icon 与 panel 解耦：面板加入当前右侧活动分组 "outline"
         expect(backlinkAfterStep2?.activityId).toBe("outline");
     });
 
@@ -676,6 +688,7 @@ describe("回归测试：面板跨容器往返拖拽", () => {
             dropPosition: "bottom",
             panelById,
             activeActivityId: "files",
+            activeRightActivityId: "outline",
         });
 
         // Step 2: 左→右
@@ -687,6 +700,7 @@ describe("回归测试：面板跨容器往返拖拽", () => {
             dropPosition: "bottom",
             panelById,
             activeActivityId: "files",
+            activeRightActivityId: "outline",
         });
 
         // 验证：使用 activeRightActivityId="outline" 过滤右侧面板
@@ -714,6 +728,7 @@ describe("回归测试：面板跨容器往返拖拽", () => {
                 dropPosition: "bottom",
                 panelById,
                 activeActivityId: "files",
+                activeRightActivityId: "outline",
             });
 
             const afterLeft = current.find((s) => s.id === "backlinks");
@@ -729,6 +744,7 @@ describe("回归测试：面板跨容器往返拖拽", () => {
                 dropPosition: "bottom",
                 panelById,
                 activeActivityId: "files",
+                activeRightActivityId: "outline",
             });
 
             const afterRight = current.find((s) => s.id === "backlinks");
@@ -771,6 +787,7 @@ describe("跨容器拖拽：排序边界", () => {
             dropPosition: "top",
             panelById: byId,
             activeActivityId: "x",
+            activeRightActivityId: "y",
         });
 
         const orders = result
@@ -789,6 +806,7 @@ describe("跨容器拖拽：排序边界", () => {
             dropPosition: "bottom",
             panelById: byId,
             activeActivityId: "x",
+            activeRightActivityId: "y",
         });
 
         const orders = result
@@ -807,6 +825,7 @@ describe("跨容器拖拽：排序边界", () => {
             dropPosition: "top",
             panelById: byId,
             activeActivityId: "x",
+            activeRightActivityId: "y",
         });
 
         const moved = result.find((s) => s.id === "d");
@@ -822,6 +841,7 @@ describe("跨容器拖拽：排序边界", () => {
             dropPosition: "bottom",
             panelById: byId,
             activeActivityId: "x",
+            activeRightActivityId: "y",
         });
 
         const moved = result.find((s) => s.id === "d");

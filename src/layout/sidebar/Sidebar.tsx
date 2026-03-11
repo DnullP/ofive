@@ -72,6 +72,7 @@ export function Sidebar({
         <section
             className={`sidebar sidebar-${side}`}
             aria-label={ariaLabel}
+            data-testid={`sidebar-${side}`}
         >
             {/* 右侧栏的左边缘调宽手柄 */}
             {side === "right" && (

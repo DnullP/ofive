@@ -160,8 +160,8 @@ function GraphSettingsSection(): ReactNode {
  * @function registerGraphSettingsSection
  * @description 注册图谱设置选栏。
  */
-export function registerGraphSettingsSection(): void {
-    registerSettingsSection({
+export function registerGraphSettingsSection(): () => void {
+    return registerSettingsSection({
         id: "graph-component",
         title: "settings.graphSection",
         order: 40,

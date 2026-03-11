@@ -233,16 +233,18 @@ export interface CrossContainerDropParams {
     panelById: Map<string, PanelDefinitionInfo>;
     /** 当前激活的左侧活动 ID */
     activeActivityId: string | null;
+    /** 当前激活的右侧活动 ID（icon 与 panel 解耦后，面板加入目标 activity 分组） */
+    activeRightActivityId: string | null;
 }
 
 /**
  * 计算跨容器拖拽后的面板状态。
  *
  * 核心逻辑：
- * - 面板拖入左侧栏时，activityId 设为目标面板的活动 ID 或当前活动项
- * - 面板拖入右侧栏时，activityId 必须恢复为面板定义中的原始值
- *   （修复：面板在左侧栏时 activityId 被改写，拖回右侧时必须恢复原值，
- *    否则 visibleRightPanels 按 activeRightActivityId 过滤时找不到它）
+ * - icon 与 panel 解耦：面板拖拽不改变 activity icon 的 bar 归属
+ * - 面板拖入左侧栏时，activityId 设为目标面板的活动 ID 或当前左侧活动项
+ * - 面板拖入右侧栏时，activityId 设为目标面板的活动 ID 或当前右侧活动项
+ *   （面板加入目标侧栏中正在显示的 activity 分组）
  *
  * @param params 跨容器拖拽参数
  * @returns 变更后的状态数组
@@ -258,6 +260,7 @@ export function computeCrossContainerDrop(params: CrossContainerDropParams): Pan
         dropPosition,
         panelById,
         activeActivityId,
+        activeRightActivityId,
     } = params;
 
     const moved = prev.find((item) => item.id === movedPanelId);
@@ -267,34 +270,22 @@ export function computeCrossContainerDrop(params: CrossContainerDropParams): Pan
 
     const sourcePosition = moved.position;
 
-    /* ── 计算目标 activityId ── */
-    const firstLeftActivityId = prev
-        .filter((item) => item.position === "left")
-        .sort((a, b) => a.order - b.order)[0]?.activityId;
-
+    /* ── 计算目标 activityId ──
+     * icon 与 panel 解耦：面板加入目标侧栏中 drop target 所属的 activity 分组。
+     * 若无法确定目标 activity，回退到该侧栏当前激活的 activity。 */
     const targetPanelState = prev.find(
         (item) => item.id === dropTargetPanelId && item.position === targetPosition,
     );
     const targetPanelDefinition = panelById.get(dropTargetPanelId);
     const targetPanelActivityId =
-        targetPosition === "left"
-            ? targetPanelState?.activityId ??
-              (targetPanelDefinition
-                  ? targetPanelDefinition.activityId ?? targetPanelDefinition.id
-                  : undefined)
-            : undefined;
-    const fallbackLeftActivityId =
-        targetPanelActivityId ??
-        firstLeftActivityId ??
-        activeActivityId ??
-        moved.activityId;
+        targetPanelState?.activityId ??
+        (targetPanelDefinition
+            ? targetPanelDefinition.activityId ?? targetPanelDefinition.id
+            : undefined);
 
-    /* 移入右侧栏时必须恢复面板定义中的原始 activityId，
-     * 否则在左 → 右拖拽后面板的 activityId 仍为左侧活动项，
-     * 导致右侧 visibleRightPanels 过滤时找不到它而消失。 */
-    const movedPanelDef = panelById.get(movedPanelId);
-    const originalActivityId = movedPanelDef?.activityId ?? moved.activityId;
-    const nextActivityId = targetPosition === "left" ? fallbackLeftActivityId : originalActivityId;
+    const nextActivityId = targetPosition === "left"
+        ? targetPanelActivityId ?? activeActivityId ?? moved.activityId
+        : targetPanelActivityId ?? activeRightActivityId ?? moved.activityId;
 
     /* ── 计算排序 ── */
     const targetIds = prev
@@ -432,13 +423,15 @@ export interface EmptyRightSidebarDropParams {
     prev: PanelRuntimeState[];
     movedPanelId: string;
     panelById: Map<string, PanelDefinitionInfo>;
+    /** 当前激活的右侧活动 ID（面板加入该 activity 分组） */
+    activeRightActivityId: string | null;
 }
 
 /**
  * 计算拖入空右侧栏后的面板状态。
  *
- * 核心逻辑：恢复面板定义中的原始 activityId，
- * 因为面板在左侧栏时 activityId 可能被改为左侧活动项。
+ * 核心逻辑：面板加入当前右侧活动项的 activity 分组。
+ * icon 与 panel 解耦——面板可自由移动到任意 activity 容器中。
  *
  * @param params 拖入参数
  * @returns 变更后的状态数组
@@ -446,7 +439,7 @@ export interface EmptyRightSidebarDropParams {
  * @sideEffects 无（纯函数）
  */
 export function computeEmptyRightSidebarDrop(params: EmptyRightSidebarDropParams): PanelRuntimeState[] {
-    const { prev, movedPanelId, panelById } = params;
+    const { prev, movedPanelId, panelById, activeRightActivityId } = params;
 
     const moved = prev.find((item) => item.id === movedPanelId);
     if (!moved) {
@@ -454,6 +447,10 @@ export function computeEmptyRightSidebarDrop(params: EmptyRightSidebarDropParams
     }
 
     const sourcePosition = moved.position;
+
+    /* 面板加入当前右侧活动分组；若无活动分组则回退到面板原始定义 */
+    const movedDef = panelById.get(movedPanelId);
+    const nextActivityId = activeRightActivityId ?? movedDef?.activityId ?? moved.activityId;
 
     const targetIds = prev
         .filter((item) => item.position === "right" && item.id !== movedPanelId)
@@ -468,13 +465,11 @@ export function computeEmptyRightSidebarDrop(params: EmptyRightSidebarDropParams
 
     return prev.map((item) => {
         if (item.id === movedPanelId) {
-            const movedDef = panelById.get(movedPanelId);
-            const restoredActivityId = movedDef?.activityId ?? item.activityId;
             return {
                 ...item,
                 position: "right" as PanelPosition,
                 order: targetIds.indexOf(movedPanelId),
-                activityId: restoredActivityId,
+                activityId: nextActivityId,
             };
         }
 

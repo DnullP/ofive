@@ -13,7 +13,6 @@ import React, { useMemo, useEffect, type ReactNode } from "react";
 import { Compass, FolderOpen, Link2 } from "lucide-react";
 import {
     DockviewLayout,
-    OutlinePanel,
     type TabInstanceDefinition,
 } from "../../../src/layout";
 import { CodeMirrorEditorTab } from "../../../src/layout/editor/CodeMirrorEditorTab";
@@ -42,6 +41,19 @@ function MockHomeTab(): ReactNode {
             <h2>ofive Mock Workspace</h2>
             <p>该页面不依赖后端，左侧文件与内容均为前端 mock 数据。</p>
             <p>请测试面板拖拽：将右侧 "反向链接" 拖到左侧，再拖回右侧，观察是否消失。</p>
+        </div>
+    );
+}
+
+/**
+ * @function MockOutlinePanel
+ * @description Mock 大纲面板，用于测试布局拖拽。不依赖后端。
+ */
+function MockOutlinePanel(): ReactNode {
+    return (
+        <div style={{ padding: 12, color: "var(--text-secondary)", fontSize: 12 }}>
+            <strong>Mock Outline Panel</strong>
+            <p>大纲插件已迁移为自注册插件，此处为测试 mock。</p>
         </div>
     );
 }
@@ -109,7 +121,7 @@ function ensureMockComponentsRegistered(): void {
         activityId: "outline",
         defaultPosition: "right",
         defaultOrder: 1,
-        render: () => React.createElement(OutlinePanel),
+        render: () => React.createElement(MockOutlinePanel),
     });
     registerPanel({
         id: "backlinks",

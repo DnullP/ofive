@@ -13,7 +13,11 @@ import {
     saveCurrentVaultConfig,
     type VaultConfig,
 } from "../api/vaultApi";
-import { COMMAND_DEFINITIONS, type CommandId } from "../commands/commandSystem";
+import {
+    getCommandDefinitions,
+    subscribeCommands,
+    type CommandId,
+} from "../commands/commandSystem";
 import i18n from "../i18n";
 
 /**
@@ -26,12 +30,12 @@ const SHORTCUTS_CONFIG_KEY = "commandShortcuts";
  * @constant DEFAULT_SHORTCUTS
  * @description 默认快捷键映射。
  */
-const DEFAULT_SHORTCUTS: Record<CommandId, string> = {
-    ...Object.values(COMMAND_DEFINITIONS).reduce((accumulator, command) => {
+function buildDefaultShortcuts(): Record<CommandId, string> {
+    return getCommandDefinitions().reduce((accumulator, command) => {
         accumulator[command.id] = command.shortcut?.defaultBinding ?? "";
         return accumulator;
-    }, {} as Record<CommandId, string>),
-};
+    }, {} as Record<CommandId, string>);
+}
 
 /**
  * @constant MODIFIER_TOKEN_ORDER
@@ -307,13 +311,47 @@ interface ShortcutState {
  */
 class ShortcutStore {
     private state: ShortcutState = {
-        bindings: { ...DEFAULT_SHORTCUTS },
+        bindings: buildDefaultShortcuts(),
         loadedVaultPath: null,
         isLoading: false,
         error: null,
     };
 
     private listeners = new Set<() => void>();
+
+    constructor() {
+        subscribeCommands(() => {
+            this.syncBindingsWithRegisteredCommands();
+        });
+    }
+
+    /**
+     * @function syncBindingsWithRegisteredCommands
+     * @description 当命令注册表变化时，合并当前绑定与新的默认命令集合。
+     */
+    private syncBindingsWithRegisteredCommands(): void {
+        const defaults = buildDefaultShortcuts();
+        const nextBindings = Object.keys(defaults).reduce((accumulator, commandId) => {
+            accumulator[commandId] = this.state.bindings[commandId] ?? defaults[commandId] ?? "";
+            return accumulator;
+        }, {} as Record<CommandId, string>);
+
+        const currentKeys = Object.keys(this.state.bindings);
+        const nextKeys = Object.keys(nextBindings);
+        const changed =
+            currentKeys.length !== nextKeys.length ||
+            nextKeys.some((commandId) => nextBindings[commandId] !== this.state.bindings[commandId]);
+
+        if (!changed) {
+            return;
+        }
+
+        this.state = {
+            ...this.state,
+            bindings: nextBindings,
+        };
+        this.emit();
+    }
 
     /**
      * @function setError
@@ -375,7 +413,8 @@ class ShortcutStore {
                 ? (rawValue as Record<string, unknown>)
                 : {};
 
-        const normalizedBindings = Object.entries(DEFAULT_SHORTCUTS).reduce(
+        const defaultShortcuts = buildDefaultShortcuts();
+        const normalizedBindings = Object.entries(defaultShortcuts).reduce(
             (accumulator, [commandId, defaultShortcut]) => {
                 const candidate = rawObject[commandId];
                 accumulator[commandId as CommandId] =
@@ -387,7 +426,7 @@ class ShortcutStore {
             {} as Record<CommandId, string>,
         );
 
-        const changedByBinding = Object.keys(DEFAULT_SHORTCUTS).some((commandId) => {
+        const changedByBinding = Object.keys(defaultShortcuts).some((commandId) => {
             return rawObject[commandId] !== normalizedBindings[commandId as CommandId];
         });
 
@@ -451,7 +490,7 @@ class ShortcutStore {
             const message = error instanceof Error ? error.message : i18n.t("settings.loadShortcutFailed");
             this.state = {
                 ...this.state,
-                bindings: { ...DEFAULT_SHORTCUTS },
+                bindings: buildDefaultShortcuts(),
                 loadedVaultPath: vaultPath,
                 isLoading: false,
                 error: message,

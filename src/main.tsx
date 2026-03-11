@@ -8,13 +8,14 @@ import "./i18n";
 setupFrontendLogBridge();
 
 /**
- * 插件自动发现：Vite 在构建时自动导入 src/plugins/ 下所有 .ts/.tsx 模块。
- * 每个模块在被导入时执行自注册副作用（调用 registerPanel / registerActivity 等），
- * 无需在其他文件中手动添加 import。
+ * 插件自动发现：仅导入 src/plugins/ 下的插件入口文件（*Plugin.ts / *Plugin.tsx）。
  *
- * 新增插件只需在 src/plugins/ 下创建文件，遵循自注册模式即可生效。
+ * 这样可以避免把 helper、测试文件或插件内部实现模块误当成插件入口执行，
+ * 否则浏览器环境会意外加载诸如 bun:test 之类仅测试期可用的模块，导致启动失败。
+ *
+ * 新增插件时应将入口命名为 *Plugin，并把非入口代码放在其他文件中。
  */
-import.meta.glob("./plugins/**/*.{ts,tsx}", { eager: true });
+import.meta.glob("./plugins/**/*Plugin.{ts,tsx}", { eager: true });
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

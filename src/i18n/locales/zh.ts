@@ -202,6 +202,8 @@ const zh = {
         rememberLastVaultDesc: "关闭后，下次启动不会自动恢复上次仓库路径",
         enableSearch: "开启搜索功能",
         enableSearchDesc: "关闭后，活动栏将隐藏搜索图标",
+        enableKnowledgeGraph: "开启知识图谱功能",
+        enableKnowledgeGraphDesc: "关闭后，知识图谱入口、命令和设置分区将被隐藏",
         /* 主题设置 */
         themeSection: "风格",
         themeTitle: "界面风格",

@@ -192,6 +192,8 @@ const en = {
         rememberLastVaultDesc: "When off, the last vault path will not be restored on next launch",
         enableSearch: "Enable Search",
         enableSearchDesc: "When off, the search icon in activity bar will be hidden",
+        enableKnowledgeGraph: "Enable Knowledge Graph",
+        enableKnowledgeGraphDesc: "When off, the knowledge graph entry, commands, and settings section will be hidden",
         /* Theme */
         themeSection: "Style",
         themeTitle: "Interface Style",

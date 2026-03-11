@@ -5,13 +5,25 @@
     flex-direction: column;
 }
 
-/* 大纲头部：显示当前追踪文章 */
+/* 大纲头部：显示当前追踪文章路径和持久化提示 */
 .outline-panel-header {
     padding: 10px 12px;
     border-bottom: 1px solid var(--border-color);
     color: var(--text-secondary);
     font-size: 12px;
     user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+/* 持久化提示标签：弱化显示在标题栏右侧 */
+.outline-persisted-hint {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-tertiary, var(--text-secondary));
+    opacity: 0.7;
 }
 
 /* 大纲列表：滚动容器 */
@@ -45,6 +57,14 @@
 .outline-empty {
     padding: 12px;
     color: var(--text-secondary);
+    font-size: 12px;
+    user-select: none;
+}
+
+/* 大纲错误提示文字 */
+.outline-error {
+    padding: 12px;
+    color: var(--error-color, #e74c3c);
     font-size: 12px;
     user-select: none;
 }

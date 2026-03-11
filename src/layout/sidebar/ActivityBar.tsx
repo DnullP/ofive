@@ -155,6 +155,7 @@ function renderSection(
                     dragState?.draggedId === item.id ? "dragging" : "",
                 ].filter(Boolean).join(" ")}
                 title={item.title}
+                data-testid={`activity-bar-item-${item.id}`}
                 data-visual-shift={shouldShift ? String(INDICATOR_GAP) : undefined}
                 style={shouldShift ? { transform: `translateY(${String(INDICATOR_GAP)}px)` } : undefined}
                 onClick={() => {

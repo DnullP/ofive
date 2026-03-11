@@ -59,7 +59,7 @@ const SYSTEM_SHORTCUT_POLICIES: SystemShortcutPolicy[] = [
  */
 export function resolveSystemShortcutCommand(
     event: KeyboardEvent,
-    bindings: Record<CommandId, string>,
+    bindings: Record<string, string>,
 ): SystemShortcutResolution | null {
     const matchedPolicy = SYSTEM_SHORTCUT_POLICIES.find((policy) =>
         matchShortcut(event, policy.reservedBinding),

@@ -13,8 +13,10 @@ import { describe, expect, it } from "bun:test";
 import {
     emitEditorContentChangedEvent,
     emitEditorFocusChangedEvent,
+    emitEditorRevealRequestedEvent,
     subscribeEditorContentBusEvent,
     subscribeEditorFocusBusEvent,
+    subscribeEditorRevealRequestedEvent,
 } from "./appEventBus";
 
 describe("appEventBus editor event flow", () => {
@@ -76,5 +78,33 @@ describe("appEventBus editor event flow", () => {
 
         expect(callCount).toBe(1);
         expect(lastPath).toBe("notes/focus.md");
+    });
+
+    /**
+     * @function should_publish_editor_reveal_event_with_target_line
+     * @description 发布编辑器定位事件后，订阅者应收到正确的文章、路径和行号。
+     */
+    it("should publish editor reveal event with target line", () => {
+        let capturedArticleId = "";
+        let capturedPath = "";
+        let capturedLine = 0;
+
+        const unlisten = subscribeEditorRevealRequestedEvent((payload) => {
+            capturedArticleId = payload.articleId;
+            capturedPath = payload.path;
+            capturedLine = payload.line;
+        });
+
+        emitEditorRevealRequestedEvent({
+            articleId: "file:notes/guide.md",
+            path: "notes/guide.md",
+            line: 12,
+        });
+
+        unlisten();
+
+        expect(capturedArticleId).toBe("file:notes/guide.md");
+        expect(capturedPath).toBe("notes/guide.md");
+        expect(capturedLine).toBe(12);
     });
 });
