@@ -105,7 +105,7 @@ const INFRASTRUCTURE_MODULE_PATHS = new Set([
     "src/layout/MoveFileDirectoryModal.tsx",
     "src/layout/nativeContextMenu.ts",
     "src/layout/panelOrderUtils.ts",
-    "src/layout/fileTabRegistry.ts",
+    "src/layout/openFileService.ts",
     "src/layout/index.ts",
 ]);
 

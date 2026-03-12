@@ -88,6 +88,7 @@ import {
     setupVimEnhancedMotions,
 } from "./vimChineseMotionExtension";
 import { flushAutoSaveByPath } from "../../store/autoSaveService";
+import { openFileInDockview } from "../openFileService";
 
 ensureBuiltinSyntaxRenderersRegistered();
 ensureBuiltinEditPluginsRegistered();
@@ -509,16 +510,10 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 notifyCommandPaletteOpenRequested();
             },
             openFileTab: (relativePath, content) => {
-                const normalizedPath = relativePath.replace(/\\/g, "/");
-                const fileName = normalizedPath.split("/").pop() ?? "untitled.md";
-                props.containerApi.addPanel({
-                    id: `file:${normalizedPath}`,
-                    title: fileName,
-                    component: "codemirror",
-                    params: {
-                        path: normalizedPath,
-                        content,
-                    },
+                void openFileInDockview({
+                    containerApi: props.containerApi,
+                    relativePath,
+                    contentOverride: content,
                 });
             },
             getExistingMarkdownPaths: () =>

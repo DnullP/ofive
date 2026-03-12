@@ -7,7 +7,7 @@
  *   注册的内置组件包括：
  *   - 活动图标：search
  *   - 侧边栏面板：search
- *   - Tab 组件：home, codemirror, imageviewer, settings
+ *   - Tab 组件：home, settings
  *
  * @dependencies
  *   - ./panelRegistry
@@ -36,18 +36,12 @@ import i18n from "../i18n";
  * @interface BuiltinComponentRefs
  * @description 内置组件的引用集合，由外层传入以避免循环依赖。
  * @field HomeTab           - 首页 Tab 组件
- * @field CodeMirrorEditorTab - CodeMirror 编辑器 Tab 组件
- * @field ImageViewerTab    - 图片查看器 Tab 组件
  * @field SettingsTab       - 设置 Tab 组件
  * @field icons             - 图标组件集合
  */
 export interface BuiltinComponentRefs {
     /** 首页 Tab */
     HomeTab: () => ReactNode;
-    /** CodeMirror 编辑器 Tab */
-    CodeMirrorEditorTab: React.ComponentType<any>;
-    /** 图片查看器 Tab */
-    ImageViewerTab: React.ComponentType<any>;
     /** 设置 Tab */
     SettingsTab: React.ComponentType<any>;
     /** 图标集合 */
@@ -129,16 +123,6 @@ function registerBuiltinTabComponents(refs: BuiltinComponentRefs): (() => void)[
     fns.push(registerTabComponent({
         id: "home",
         component: refs.HomeTab as any,
-    }));
-
-    fns.push(registerTabComponent({
-        id: "codemirror",
-        component: refs.CodeMirrorEditorTab as any,
-    }));
-
-    fns.push(registerTabComponent({
-        id: "imageviewer",
-        component: refs.ImageViewerTab as any,
     }));
 
     fns.push(registerTabComponent({

@@ -10,7 +10,8 @@ import type { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import i18n from "../../../i18n";
 import { addDelimitedInlineSyntaxDecoration, registerLineSyntaxRenderer } from "../syntaxRenderRegistry";
-import { readVaultMarkdownFile, resolveWikiLinkTarget } from "../../../api/vaultApi";
+import { resolveWikiLinkTarget } from "../../../api/vaultApi";
+import { openFileInDockview } from "../../openFileService";
 import { resolveParentDirectory } from "../pathUtils";
 
 const WIKI_LINK_PATTERN = /(\[\[)([^\]\n]+?)(\]\])/g;
@@ -159,17 +160,9 @@ export function createWikiLinkNavigationExtension(
                         return;
                     }
 
-                    const fileContent = await readVaultMarkdownFile(resolved.relativePath);
-                    const title = resolved.relativePath.split("/").pop() ?? wikiLink.target;
-
-                    containerApi.addPanel({
-                        id: targetId,
-                        title,
-                        component: "codemirror",
-                        params: {
-                            path: resolved.relativePath,
-                            content: fileContent.content,
-                        },
+                    await openFileInDockview({
+                        containerApi,
+                        relativePath: resolved.relativePath,
                     });
 
                     console.info("[editor] wikilink opened", {
@@ -192,14 +185,10 @@ export function createWikiLinkNavigationExtension(
                     if (fallbackPanel) {
                         fallbackPanel.api.setActive();
                     } else {
-                        containerApi.addPanel({
-                            id: fallbackId,
-                            title: wikiLink.target,
-                            component: "codemirror",
-                            params: {
-                                path: fallbackPath,
-                                content: `# ${wikiLink.target}\n\n${i18n.t("editor.newPageContent", { target: wikiLink.target })}`,
-                            },
+                        void openFileInDockview({
+                            containerApi,
+                            relativePath: fallbackPath,
+                            contentOverride: `# ${wikiLink.target}\n\n${i18n.t("editor.newPageContent", { target: wikiLink.target })}`,
                         });
                     }
                 }

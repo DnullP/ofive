@@ -23,7 +23,7 @@ import { registerCommand } from "../commands/commandSystem";
 import { registerPanel } from "../registry/panelRegistry";
 import type { PanelRenderContext } from "../layout/DockviewLayout";
 import { useActiveEditor } from "../store/activeEditorStore";
-import { getBacklinksForFile, readVaultMarkdownFile, type BacklinkItem } from "../api/vaultApi";
+import { getBacklinksForFile, type BacklinkItem } from "../api/vaultApi";
 import i18n from "../i18n";
 import "./backlinksPlugin.css";
 
@@ -96,8 +96,7 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
     }, []);
 
     /**
-     * 点击反向链接条目：先从后端读取文件内容，再通过 openTab 打开对应笔记。
-     * 必须携带 content 参数，否则编辑器会使用模板内容覆盖原文件。
+     * 点击反向链接条目：通过中心化 opener 服务打开对应笔记。
      * @param item 反向链接条目
      */
     const handleItemClick = useCallback(
@@ -107,12 +106,8 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
                 title: item.title,
             });
             try {
-                const file = await readVaultMarkdownFile(item.sourcePath);
-                context.openTab({
-                    id: `file:${item.sourcePath}`,
-                    title: item.title,
-                    component: "codemirror",
-                    params: { path: item.sourcePath, content: file.content },
+                await context.openFile({
+                    relativePath: item.sourcePath,
                 });
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);

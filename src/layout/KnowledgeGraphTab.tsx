@@ -18,7 +18,7 @@ import { Graph, type GraphConfigInterface } from "@cosmos.gl/graph";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import type { IDockviewPanelProps } from "dockview";
-import { getCurrentVaultMarkdownGraph, readVaultMarkdownFile } from "../api/vaultApi";
+import { getCurrentVaultMarkdownGraph } from "../api/vaultApi";
 import { createKnowledgeGraphInteractionCallbacksFor } from "./knowledgeGraphInteractions";
 import { buildKnowledgeGraphConfig, DEFAULT_KNOWLEDGE_GRAPH_SETTINGS } from "./knowledgeGraphSettings";
 import {
@@ -27,6 +27,7 @@ import {
 } from "../store/graphSettingsStore";
 import { useThemeState } from "../store/themeStore";
 import { useVaultState } from "../store/vaultStore";
+import { openFileInDockview } from "./openFileService";
 import "./KnowledgeGraphTab.css";
 
 /**
@@ -359,33 +360,15 @@ export function KnowledgeGraphTab(
             return;
         }
 
-        const tabId = `file:${relativePath}`;
-        const fileName = relativePath.split("/").pop() ?? relativePath;
-
         console.info("[knowledge-graph] node clicked", { index, relativePath });
 
-        /* 已有 Tab 直接激活 */
-        const existingPanel = props.containerApi.getPanel(tabId);
-        if (existingPanel) {
-            existingPanel.api.setActive();
-            console.info("[knowledge-graph] activated existing tab", { tabId });
-            return;
-        }
-
-        /* 新建 Tab */
         try {
-            const file = await readVaultMarkdownFile(relativePath);
-
-            props.containerApi.addPanel({
-                id: tabId,
-                title: fileName,
-                component: "codemirror",
-                params: {
-                    path: relativePath,
-                    content: file.content,
-                },
+            await openFileInDockview({
+                containerApi: props.containerApi,
+                currentVaultPath,
+                relativePath,
             });
-            console.info("[knowledge-graph] opened new tab from graph node", { tabId });
+            console.info("[knowledge-graph] opened note from graph node", { relativePath });
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.error("[knowledge-graph] failed to open note from graph node", {

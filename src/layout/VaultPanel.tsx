@@ -14,7 +14,7 @@ import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FileTree, type FileTreeItem } from "./FileTree";
 import type { TabInstanceDefinition } from "./DockviewLayout";
-import { resolveFileTabByRegistration } from "./fileTabRegistry";
+import { openFileWithResolver } from "./openFileService";
 import {
     createVaultDirectory,
     createVaultMarkdownFile,
@@ -236,18 +236,16 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
         }
 
         try {
-            const tab = await resolveFileTabByRegistration({
-                item,
+            const tab = await openFileWithResolver({
+                relativePath: item.path,
                 currentVaultPath,
+                openTab,
             });
             if (!tab) {
-                console.warn("[vault-ui] openFile skipped: no tab registration", {
+                console.warn("[vault-ui] openFile skipped: no opener matched", {
                     path: item.path,
                 });
-                return;
             }
-
-            openTab(tab);
         } catch (readError) {
             const message = readError instanceof Error ? readError.message : t("vault.readFileFailed");
             console.error("[vault-ui] openFile:failed", { path: item.path, message });
@@ -307,21 +305,17 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                 await saveVaultMarkdownFile(targetPath, sourceSnapshot.content);
             }
 
-            const newTabId = `file:${targetPath}`;
             closeTab?.(sourceTabId);
 
             const latestContent = sourceSnapshot
                 ? sourceSnapshot.content
                 : await readVaultMarkdownFile(targetPath).then((result) => result.content);
 
-            openTab({
-                id: newTabId,
-                title: targetPath.split("/").pop() ?? targetPath,
-                component: "codemirror",
-                params: {
-                    path: targetPath,
-                    content: latestContent,
-                },
+            await openFileWithResolver({
+                relativePath: targetPath,
+                currentVaultPath,
+                contentOverride: latestContent,
+                openTab,
             });
 
             console.info("[vault-ui] rename success", {
@@ -437,14 +431,11 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             closeTab?.(`file:${sourceRelativePath}`);
 
             const latest = await readVaultMarkdownFile(result.relativePath);
-            openTab({
-                id: `file:${result.relativePath}`,
-                title: result.relativePath.split("/").pop() ?? result.relativePath,
-                component: "codemirror",
-                params: {
-                    path: result.relativePath,
-                    content: latest.content,
-                },
+            await openFileWithResolver({
+                relativePath: result.relativePath,
+                currentVaultPath,
+                contentOverride: latest.content,
+                openTab,
             });
 
             console.info("[vault-ui] drop-move success", {
@@ -478,14 +469,11 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
 
         try {
             await createVaultMarkdownFile(relativePath, "");
-            openTab({
-                id: `file:${relativePath}`,
-                title: relativePath.split("/").pop() ?? relativePath,
-                component: "codemirror",
-                params: {
-                    path: relativePath,
-                    content: "",
-                },
+            await openFileWithResolver({
+                relativePath,
+                currentVaultPath,
+                contentOverride: "",
+                openTab,
             });
             console.info("[vault-ui] create file success", {
                 relativePath,

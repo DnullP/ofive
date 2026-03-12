@@ -113,6 +113,7 @@ import {
     computeEmptySidebarDrop,
     computeEmptyRightSidebarDrop,
 } from "./layoutStateReducers";
+import { openFileWithResolver } from "./openFileService";
 
 export type PanelPosition = "left" | "right";
 
@@ -132,6 +133,11 @@ export interface PanelRenderContext {
     activeTabId: string | null;
     dockviewApi: DockviewApi | null;
     openTab: (tab: TabInstanceDefinition) => void;
+    openFile: (options: {
+        relativePath: string;
+        contentOverride?: string;
+        preferredOpenerId?: string;
+    }) => Promise<void>;
     closeTab: (tabId: string) => void;
     setActiveTab: (tabId: string) => void;
     requestMoveFileToDirectory: (relativePath: string) => void;
@@ -961,25 +967,19 @@ export function DockviewLayout({
     };
 
     const openMarkdownTabByRelativePath = async (relativePath: string): Promise<void> => {
-        const normalizedPath = relativePath.replace(/\\/g, "/");
-        const fileName = normalizedPath.split("/").pop() ?? "untitled.md";
-
-        console.info("[quick-switcher] open markdown tab start", { relativePath: normalizedPath });
-        const file = await readVaultMarkdownFile(normalizedPath);
-
-        openTab({
-            id: `file:${normalizedPath}`,
-            title: fileName,
-            component: "codemirror",
-            params: {
-                path: normalizedPath,
-                content: file.content,
-            },
+        console.info("[quick-switcher] open markdown tab start", { relativePath });
+        const tab = await openFileWithResolver({
+            relativePath,
+            currentVaultPath,
+            openTab,
         });
+        if (!tab) {
+            return;
+        }
 
         console.info("[quick-switcher] open markdown tab success", {
-            relativePath: normalizedPath,
-            bytes: file.content.length,
+            relativePath,
+            tabId: tab.id,
         });
     };
 
@@ -1108,14 +1108,13 @@ export function DockviewLayout({
             }
 
             closeTab(source.articleId);
-            openTab({
-                id: `file:${targetPath}`,
-                title: targetPath.split("/").pop() ?? "untitled.md",
-                component: "codemirror",
-                params: {
-                    path: targetPath,
-                    content: source.hasInMemoryContent ? source.content : await readVaultMarkdownFile(targetPath).then((result) => result.content),
-                },
+            await openFileWithResolver({
+                relativePath: targetPath,
+                currentVaultPath,
+                contentOverride: source.hasInMemoryContent
+                    ? source.content
+                    : await readVaultMarkdownFile(targetPath).then((result) => result.content),
+                openTab,
             });
 
             closeMoveFocusedFileDirectoryModal();
@@ -1197,16 +1196,11 @@ export function DockviewLayout({
             });
         },
         openFileTab: (relativePath, content) => {
-            const normalizedPath = relativePath.replace(/\\/g, "/");
-            const fileName = normalizedPath.split("/").pop() ?? "untitled.md";
-            openTab({
-                id: `file:${normalizedPath}`,
-                title: fileName,
-                component: "codemirror",
-                params: {
-                    path: normalizedPath,
-                    content,
-                },
+            void openFileWithResolver({
+                relativePath,
+                currentVaultPath,
+                contentOverride: content,
+                openTab,
             });
         },
         activatePanel: (panelId) => {
@@ -1468,6 +1462,15 @@ export function DockviewLayout({
         activeTabId,
         dockviewApi,
         openTab,
+        openFile: async ({ relativePath, contentOverride, preferredOpenerId }) => {
+            await openFileWithResolver({
+                relativePath,
+                currentVaultPath,
+                contentOverride,
+                preferredOpenerId,
+                openTab,
+            });
+        },
         closeTab,
         setActiveTab,
         requestMoveFileToDirectory: (relativePath: string) => {

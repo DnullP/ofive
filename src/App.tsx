@@ -7,8 +7,6 @@ import {
   SettingsTab,
   type TabInstanceDefinition,
 } from "./layout";
-import { CodeMirrorEditorTab } from "./layout/editor/CodeMirrorEditorTab";
-import { ImageViewerTab } from "./layout/ImageViewerTab";
 import {
   isSelfTriggeredVaultFsEvent,
   readVaultMarkdownFile,
@@ -60,8 +58,6 @@ function App() {
   /* ── 注册内置组件（幂等，只执行一次） ── */
   const builtinRefs = useMemo(() => ({
     HomeTab: HomeTab,
-    CodeMirrorEditorTab,
-    ImageViewerTab,
     SettingsTab,
     icons: {
       search: <Search size={18} strokeWidth={1.8} />,

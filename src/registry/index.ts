@@ -7,6 +7,7 @@
  *   - ./panelRegistry
  *   - ./tabComponentRegistry
  *   - ./activityRegistry
+ *   - ./fileOpenerRegistry
  *
  * @exports
  *   面板注册：PanelDescriptor, registerPanel, unregisterPanel,
@@ -18,6 +19,11 @@
  *               registerActivity, unregisterActivity, getActivitiesSnapshot,
  *               subscribeActivities, useActivities, getActivityById,
  *               resolveActivityTitle
+ *   文件 opener 注册：FileOpenerDescriptor, registerFileOpener,
+ *                    unregisterFileOpener, getFileOpenersSnapshot,
+ *                    subscribeFileOpeners, useFileOpeners, getFileOpenerById,
+ *                    getMatchingFileOpeners, resolveFileOpener,
+ *                    resolveFileOpenerLabel
  */
 
 /* ── 面板注册 ── */
@@ -41,6 +47,20 @@ export {
     getTabComponentById,
 } from "./tabComponentRegistry";
 export type { TabComponentDescriptor } from "./tabComponentRegistry";
+
+/* ── 文件 opener 注册 ── */
+export {
+    registerFileOpener,
+    unregisterFileOpener,
+    getFileOpenersSnapshot,
+    subscribeFileOpeners,
+    useFileOpeners,
+    getFileOpenerById,
+    getMatchingFileOpeners,
+    resolveFileOpener,
+    resolveFileOpenerLabel,
+} from "./fileOpenerRegistry";
+export type { FileOpenerDescriptor, FileOpenerContext } from "./fileOpenerRegistry";
 
 /* ── 活动图标注册 ── */
 export {
