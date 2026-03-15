@@ -3,14 +3,14 @@
  * @description 风格设置注册：提供日间/夜间主题切换。
  * @dependencies
  *  - react
- *  - ../../store/themeStore
- *  - ../settingsRegistry
+ *  - ../../host/store/themeStore
+ *  - ../../host/settings/settingsRegistry
  */
 
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { updateThemeMode, useThemeState, type ThemeMode } from "../../store/themeStore";
-import { registerSettingsSection } from "../settingsRegistry";
+import { updateThemeMode, useThemeState, type ThemeMode } from "../../host/store/themeStore";
+import { registerSettingsSection } from "../../host/settings/settingsRegistry";
 
 /**
  * @constant THEME_MODE_OPTIONS

@@ -22,7 +22,7 @@ import { useSyncExternalStore } from "react";
 import {
     emitEditorContentChangedEvent,
     emitEditorFocusChangedEvent,
-} from "../events/appEventBus";
+} from "../host/events/appEventBus";
 
 /**
  * @interface ArticleState

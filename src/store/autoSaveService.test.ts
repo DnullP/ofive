@@ -20,6 +20,8 @@ import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
  */
 let savedCalls: Array<{ path: string; content: string }> = [];
 
+const actualAppEventBus = await import("../host/events/appEventBus");
+
 mock.module("../api/vaultApi", () => ({
     saveVaultMarkdownFile: async (path: string, content: string) => {
         savedCalls.push({ path, content });
@@ -30,16 +32,30 @@ mock.module("../api/vaultApi", () => ({
 
 /** 内容变化事件监听器引用 */
 let contentListener: ((payload: unknown) => void) | null = null;
+let contentEventSeq = 1;
 
-mock.module("../events/appEventBus", () => {
+mock.module("../host/events/appEventBus", () => {
     return {
+        ...actualAppEventBus,
         subscribeEditorContentBusEvent: (listener: (payload: unknown) => void) => {
             contentListener = listener;
             return () => {
                 contentListener = null;
             };
         },
-        emitEditorContentChangedEvent: () => { /* noop */ },
+        emitEditorContentChangedEvent: (payload: {
+            articleId: string;
+            path: string;
+            content: string;
+            updatedAt: number;
+        }) => {
+            contentListener?.({
+                eventId: `frontend-${contentEventSeq++}`,
+                sourceTraceId: null,
+                ...payload,
+            });
+        },
+        emitPersistedContentUpdatedEvent: () => { /* noop */ },
     };
 });
 

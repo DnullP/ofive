@@ -15,7 +15,7 @@ import {
     DockviewLayout,
     type TabInstanceDefinition,
 } from "../../../src/layout";
-import { CodeMirrorEditorTab } from "../../../src/layout/editor/CodeMirrorEditorTab";
+import { CodeMirrorEditorTab } from "../../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
 import { SettingsTab } from "../../../src/layout/SettingsTab";
 import { useConfigSync } from "../../../src/store/configStore";
 import { registerActivity } from "../../../src/registry/activityRegistry";

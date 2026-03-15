@@ -36,6 +36,7 @@ const zh = {
         rootDirectory: "(根目录)",
         newFile: "新建文件",
         newFolder: "新建文件夹",
+        moveTo: "移动到",
         rename: "重命名",
         record: "录制",
         resetDefault: "恢复默认",
@@ -70,6 +71,7 @@ const zh = {
         dragMoveFileFailed: "拖拽移动文件失败",
         createFileFailed: "创建文件失败",
         createFolderFailed: "创建文件夹失败",
+        confirmDeleteSelection: "确认删除这 {{count}} 个项目?",
         currentDirectory: "当前目录：",
         openVault: "打开仓库",
         loadTreeFailed: "加载仓库目录树失败",
@@ -80,6 +82,7 @@ const zh = {
         files: "文件",
         newFilePlaceholder: "新建文件",
         newFolderPlaceholder: "新建文件夹",
+        dragSelectionLabel: "移动 {{count}} 个项目",
         emptyHint: "右键空白区域可新建文件或文件夹",
     },
 
@@ -298,6 +301,8 @@ const zh = {
         toggleFullscreen: "切换全屏",
         minimizeWindow: "最小化窗口",
         maximizeWindow: "最大化窗口",
+        showRightSidebar: "显示右侧边栏",
+        hideRightSidebar: "隐藏右侧边栏",
     },
 
     /* ==================== 快速切换 ==================== */
@@ -321,7 +326,10 @@ const zh = {
         vaultRoot: "仓库根目录",
         ariaLabel: "移动当前文件到目录",
         title: "移动当前文件到目录",
+        titleSelection: "移动 {{count}} 个项目到目录",
         placeholder: "搜索目标目录...",
+        ariaLabelSelection: "移动选中项目到目录",
+        selectionSummary: "{{count}} 个项目",
         noMatch: "无匹配目录",
     },
 

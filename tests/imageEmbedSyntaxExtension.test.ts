@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { shouldRebuildImageEmbedDecorations } from "../src/layout/editor/syntaxPlugins/imageEmbedUpdatePolicy";
+import { shouldRebuildImageEmbedDecorations } from "../src/plugins/markdown-codemirror/editor/syntaxPlugins/imageEmbedUpdatePolicy";
 
 describe("shouldRebuildImageEmbedDecorations", () => {
     test("当仅有事务触发（无 doc/selection/viewport/focus 变化）时应返回 true", () => {

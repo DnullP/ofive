@@ -6,7 +6,7 @@
  *  - react
  *  - react-i18next
  *  - ../../i18n （i18n 配置及语言工具）
- *  - ../settingsRegistry
+ *  - ../../host/settings/settingsRegistry
  *
  * @exports
  *  - registerLanguageSettingsSection: 注册语言设置选栏
@@ -20,7 +20,7 @@ import {
     SUPPORTED_LANGUAGES,
     type SupportedLanguage,
 } from "../../i18n";
-import { registerSettingsSection } from "../settingsRegistry";
+import { registerSettingsSection } from "../../host/settings/settingsRegistry";
 
 /**
  * @function LanguageSettingsSection

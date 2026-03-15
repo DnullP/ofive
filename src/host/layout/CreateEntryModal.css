@@ -1,0 +1,88 @@
+/* 创建项全屏遮罩：覆盖主布局并聚焦当前创建输入流程。 */
+.create-entry-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1260;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 12vh;
+    background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+}
+
+/* 创建项浮窗主体：承载标题、路径提示、输入框和动作按钮。 */
+.create-entry-panel {
+    width: min(520px, 86vw);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    padding: 16px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+/* 标题区域：展示当前创建类型。 */
+.create-entry-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* 目标目录提示：展示新建项将落在哪个目录。 */
+.create-entry-directory {
+    font-size: 12px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* 输入框：接收用户输入的新名称。 */
+.create-entry-input {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 1.4;
+    padding: 10px 12px;
+    outline: none;
+}
+
+/* 输入框聚焦态：强调当前编辑状态。 */
+.create-entry-input:focus {
+    border-color: var(--accent-primary);
+}
+
+/* 操作按钮区：右对齐确认和取消按钮。 */
+.create-entry-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* 通用按钮：提供统一的浮窗操作按钮外观。 */
+.create-entry-button {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+/* 主按钮：突出确认动作。 */
+.create-entry-button.primary {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary);
+    color: var(--accent-primary-foreground, #fff);
+}
+
+/* 按钮悬浮态：提供轻微反馈。 */
+.create-entry-button:hover {
+    filter: brightness(0.98);
+}

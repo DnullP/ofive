@@ -3,8 +3,8 @@
  * @description 全局设置注册：注册“通用”与“功能”相关设置项。
  * @dependencies
  *  - react
- *  - ../../store/configStore
- *  - ../settingsRegistry
+ *  - ../../host/store/configStore
+ *  - ../../host/settings/settingsRegistry
  */
 
 import type { ReactNode } from "react";
@@ -14,8 +14,8 @@ import {
     updateSearchEnabled,
     updateFeatureSetting,
     useConfigState,
-} from "../../store/configStore";
-import { registerSettingsSection } from "../settingsRegistry";
+} from "../../host/store/configStore";
+import { registerSettingsSection } from "../../host/settings/settingsRegistry";
 
 /**
  * @function GeneralSettingsSection

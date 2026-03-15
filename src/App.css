@@ -249,6 +249,25 @@ body {
   color: var(--text-secondary);
 }
 
+/* 标题栏动作区：容纳非窗口控制的辅助按钮，并保持右对齐。 */
+.app-titlebar__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 40px;
+}
+
+/* 标题栏右侧插槽：保证辅助按钮贴近右边缘，Windows 下与系统按钮共存。 */
+.app-titlebar__right-slot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 84px;
+}
+
 /* 标题栏控制按钮基础样式。 */
 .app-titlebar__control {
   width: 24px;
@@ -274,6 +293,18 @@ body {
 .app-titlebar__control--close:hover {
   background: var(--accent-primary);
   color: var(--text-primary);
+}
+
+/* 右侧栏切换按钮悬浮态：与普通辅助控制一致。 */
+.app-titlebar__control--sidebar:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* 右侧栏切换按钮：比普通窗口控制更大一档，便于点击。 */
+.app-titlebar__control--sidebar {
+  width: 28px;
+  height: 28px;
 }
 
 /* 窗口交互工具类：可拖拽区域（支持 macOS 三指拖拽）。 */

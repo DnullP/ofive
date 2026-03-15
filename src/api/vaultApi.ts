@@ -513,9 +513,7 @@ function buildBrowserMockMarkdownGraph(): VaultMarkdownGraphResponse {
  * @returns 大纲响应。
  */
 function extractBrowserFallbackOutline(relativePath: string): OutlineResponse {
-    const content =
-        BROWSER_MOCK_MARKDOWN_CONTENTS[relativePath] ??
-        `# ${relativePath.split("/").pop() ?? relativePath}\n`;
+    const content = BROWSER_MOCK_MARKDOWN_CONTENTS[relativePath] ?? "";
     const lines = content.split("\n");
     const excludedRanges = detectExcludedLineRanges(content);
     const headings: OutlineHeading[] = [];
@@ -718,9 +716,7 @@ export async function getCurrentVaultTree(): Promise<VaultTreeResponse> {
  */
 export async function readVaultMarkdownFile(relativePath: string): Promise<ReadMarkdownResponse> {
     if (!isTauriRuntime()) {
-        const mockContent =
-            BROWSER_MOCK_MARKDOWN_CONTENTS[relativePath] ??
-            `# ${relativePath.split("/").pop() ?? relativePath}\n\n${i18n.t("editor.fallbackContent")}`;
+        const mockContent = BROWSER_MOCK_MARKDOWN_CONTENTS[relativePath] ?? "";
 
         return {
             relativePath,

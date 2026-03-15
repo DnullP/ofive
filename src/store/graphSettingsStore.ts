@@ -4,7 +4,7 @@
  * @dependencies
  *  - react (useSyncExternalStore)
  *  - ../api/vaultApi
- *  - ../layout/knowledgeGraphSettings
+ *  - ../plugins/knowledge-graph
  *
  * @design
  *  - 设计原则：除“记住上次仓库”外，业务设置都应持久化在当前仓库配置中。
@@ -22,7 +22,7 @@ import {
     DEFAULT_KNOWLEDGE_GRAPH_SETTINGS,
     type KnowledgeGraphSettingKey,
     type KnowledgeGraphSettings,
-} from "../layout/knowledgeGraphSettings";
+} from "../plugins/knowledge-graph";
 import i18n from "../i18n";
 
 /**

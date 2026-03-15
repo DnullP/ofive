@@ -10,8 +10,8 @@
  *
  * @dependencies
  *   - react
- *   - ../registry/panelRegistry
- *   - ../store/activeEditorStore
+ *   - ../host/registry/panelRegistry
+ *   - ../host/store/activeEditorStore
  *   - ../api/vaultApi
  *   - i18next
  *
@@ -19,10 +19,10 @@
  */
 
 import React, { useEffect, useState, useCallback, type ReactNode } from "react";
-import { registerCommand } from "../commands/commandSystem";
-import { registerPanel } from "../registry/panelRegistry";
-import type { PanelRenderContext } from "../layout/DockviewLayout";
-import { useActiveEditor } from "../store/activeEditorStore";
+import { registerCommand } from "../host/commands/commandSystem";
+import { registerPanel } from "../host/registry/panelRegistry";
+import type { PanelRenderContext } from "../host/layout/DockviewLayout";
+import { useActiveEditor } from "../host/store/activeEditorStore";
 import { getBacklinksForFile, type BacklinkItem } from "../api/vaultApi";
 import i18n from "../i18n";
 import "./backlinksPlugin.css";

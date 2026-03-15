@@ -3,9 +3,9 @@
  * @description 快捷键设置注册：由快捷键系统注册快捷键配置选栏。
  * @dependencies
  *  - react
- *  - ../../store/shortcutStore
- *  - ../../commands/commandSystem
- *  - ../settingsRegistry
+ *  - ../../host/store/shortcutStore
+ *  - ../../host/commands/commandSystem
+ *  - ../../host/settings/settingsRegistry
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -15,13 +15,13 @@ import {
     recordShortcutFromKeyboardEvent,
     updateShortcutBinding,
     useShortcutState,
-} from "../../store/shortcutStore";
+} from "../../host/store/shortcutStore";
 import {
     getCommandDefinitions,
     type CommandId,
-} from "../../commands/commandSystem";
-import { SHORTCUT_CONDITION_LABELS } from "../../commands/focusContext";
-import { registerSettingsSection } from "../settingsRegistry";
+} from "../../host/commands/commandSystem";
+import { SHORTCUT_CONDITION_LABELS } from "../../host/commands/focusContext";
+import { registerSettingsSection } from "../../host/settings/settingsRegistry";
 
 /**
  * @function ShortcutSettingsSection

@@ -11,7 +11,7 @@ import { EditorView } from "@codemirror/view";
 import i18n from "../../../i18n";
 import { addDelimitedInlineSyntaxDecoration, registerLineSyntaxRenderer } from "../syntaxRenderRegistry";
 import { resolveWikiLinkTarget } from "../../../api/vaultApi";
-import { openFileInDockview } from "../../openFileService";
+import { openFileInDockview } from "../../../host/layout/openFileService";
 import { resolveParentDirectory } from "../pathUtils";
 
 const WIKI_LINK_PATTERN = /(\[\[)([^\]\n]+?)(\]\])/g;

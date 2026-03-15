@@ -13,10 +13,10 @@
  * @dependencies
  *   - react
  *   - lucide-react (Compass 图标)
- *   - ../registry/activityRegistry
- *   - ../registry/panelRegistry
- *   - ../store/activeEditorStore
- *   - ../events/appEventBus
+ *   - ../host/registry/activityRegistry
+ *   - ../host/registry/panelRegistry
+ *   - ../host/store/activeEditorStore
+ *   - ../host/events/appEventBus
  *   - ../api/vaultApi
  *   - i18next
  *
@@ -25,16 +25,16 @@
 
 import React, { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { Compass } from "lucide-react";
-import { registerCommand } from "../commands/commandSystem";
-import { registerActivity } from "../registry/activityRegistry";
-import { registerPanel } from "../registry/panelRegistry";
-import { useActiveEditor } from "../store/activeEditorStore";
+import { registerCommand } from "../host/commands/commandSystem";
+import { registerActivity } from "../host/registry/activityRegistry";
+import { registerPanel } from "../host/registry/panelRegistry";
+import { useActiveEditor } from "../host/store/activeEditorStore";
 import { getVaultMarkdownOutline, type OutlineHeading } from "../api/vaultApi";
 import {
     emitEditorRevealRequestedEvent,
     subscribePersistedContentUpdatedEvent,
     type PersistedContentUpdatedBusEvent,
-} from "../events/appEventBus";
+} from "../host/events/appEventBus";
 import i18n from "../i18n";
 import "./outlinePlugin.css";
 

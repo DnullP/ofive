@@ -1,0 +1,143 @@
+/**
+ * 侧边栏容器组件样式。
+ * 从 DockviewLayout.css 中提取的左右侧栏共用样式。
+ */
+
+/* 左右扩展面板容器基础样式 */
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    min-width: 0;
+    position: relative;
+}
+
+/* 左侧栏：右侧边框 */
+.sidebar-left {
+    border-right: 1px solid var(--border-color);
+}
+
+/* 右侧栏：左侧边框 */
+.sidebar-right {
+    border-right: 0;
+    border-left: 1px solid var(--border-color);
+}
+
+/* 侧栏标题栏样式 */
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+/* 侧栏标题拖拽区：支持在标题空白处拖动窗口。 */
+.sidebar-header.window-drag-region {
+    -webkit-app-region: drag;
+    app-region: drag;
+}
+
+/* 标题文本区域：在有右侧按钮时占据剩余空间并允许省略。 */
+.sidebar-header__title {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    flex: 1;
+}
+
+/* 右侧动作区：承载插件注册的图标按钮，禁用窗口拖拽以允许点击。 */
+.sidebar-header__actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+}
+
+/* 标题按钮：提供轻量可点击图标入口。 */
+.sidebar-header__action-button {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+}
+
+/* 标题按钮 hover/focus：突出当前可点击动作。 */
+.sidebar-header__action-button:hover,
+.sidebar-header__action-button:focus-visible {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    outline: none;
+}
+
+/* 扩展面板内容区样式 */
+.sidebar-content {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+/* 侧栏空状态占位：当无面板时显示提示文字 */
+.sidebar-empty-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 24px;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    text-align: center;
+    user-select: none;
+    /* 拖入过渡动画 */
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+    border: 2px dashed transparent;
+}
+
+/* 空侧栏拖入高亮：面板拖入时显示虚线边框和背景色 */
+.sidebar-empty-placeholder.drag-over {
+    background-color: rgba(83, 89, 93, 0.25);
+    border-color: var(--dv-paneview-active-outline-color, dodgerblue);
+}
+
+/* 调宽拖拽手柄 */
+.sidebar-resize-handle {
+    position: absolute;
+    top: 0;
+    width: 4px;
+    height: 100%;
+    cursor: col-resize;
+    background: transparent;
+    z-index: 10;
+}
+
+/* 右边缘手柄（左侧栏使用） */
+.sidebar-resize-handle.right-edge {
+    right: 0;
+}
+
+/* 左边缘手柄（右侧栏使用） */
+.sidebar-resize-handle.left-edge {
+    left: 0;
+}
+
+/* 手柄悬浮/拖拽时高亮 */
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+    background: var(--bg-hover);
+}

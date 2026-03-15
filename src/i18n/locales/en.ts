@@ -26,6 +26,7 @@ const en = {
         rootDirectory: "(Root)",
         newFile: "New File",
         newFolder: "New Folder",
+        moveTo: "Move To",
         rename: "Rename",
         record: "Record",
         resetDefault: "Reset Default",
@@ -60,6 +61,7 @@ const en = {
         dragMoveFileFailed: "Failed to move file by drag",
         createFileFailed: "Failed to create file",
         createFolderFailed: "Failed to create folder",
+        confirmDeleteSelection: "Confirm to delete these {{count}} items?",
         currentDirectory: "Current directory: ",
         openVault: "Open Vault",
         loadTreeFailed: "Failed to load vault tree",
@@ -70,6 +72,7 @@ const en = {
         files: "Files",
         newFilePlaceholder: "New File",
         newFolderPlaceholder: "New Folder",
+        dragSelectionLabel: "Move {{count}} items",
         emptyHint: "Right-click empty area to create file or folder",
     },
 
@@ -288,6 +291,8 @@ const en = {
         toggleFullscreen: "Toggle Fullscreen",
         minimizeWindow: "Minimize Window",
         maximizeWindow: "Maximize Window",
+        showRightSidebar: "Show Right Sidebar",
+        hideRightSidebar: "Hide Right Sidebar",
     },
 
     /* ==================== Quick switcher ==================== */
@@ -311,7 +316,10 @@ const en = {
         vaultRoot: "Vault Root",
         ariaLabel: "Move Current File to Directory",
         title: "Move Current File to Directory",
+        titleSelection: "Move {{count}} Items to Directory",
         placeholder: "Search target directory...",
+        ariaLabelSelection: "Move selected items to directory",
+        selectionSummary: "{{count}} items",
         noMatch: "No matching directories",
     },
 

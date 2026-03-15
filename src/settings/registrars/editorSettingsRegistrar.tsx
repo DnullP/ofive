@@ -3,14 +3,14 @@
  * @description 编辑器设置注册：Vim 模式、字体大小、Tab 宽度、自动换行、行号、自动保存等编辑体验选项。
  * @dependencies
  *  - react
- *  - ../../store/configStore
- *  - ../settingsRegistry
+ *  - ../../host/store/configStore
+ *  - ../../host/settings/settingsRegistry
  */
 
 import type { ChangeEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { updateFeatureSetting, updateVimModeEnabled, useConfigState, DEFAULT_EDITOR_FONT_FAMILY, FONT_FAMILY_PRESETS } from "../../store/configStore";
-import { registerSettingsSection } from "../settingsRegistry";
+import { updateFeatureSetting, updateVimModeEnabled, useConfigState, DEFAULT_EDITOR_FONT_FAMILY, FONT_FAMILY_PRESETS } from "../../host/store/configStore";
+import { registerSettingsSection } from "../../host/settings/settingsRegistry";
 
 /**
  * @function clampNumber

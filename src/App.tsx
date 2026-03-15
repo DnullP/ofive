@@ -6,7 +6,7 @@ import {
   DockviewLayout,
   SettingsTab,
   type TabInstanceDefinition,
-} from "./layout";
+} from "./host/layout";
 import {
   isSelfTriggeredVaultFsEvent,
   readVaultMarkdownFile,
@@ -15,21 +15,21 @@ import {
   subscribeVaultFsBusEvent,
   useBackendEventBridge,
   emitPersistedContentUpdatedEvent,
-} from "./events/appEventBus";
+} from "./host/events/appEventBus";
 import {
   reportArticleContentByPath,
   useFocusedArticle,
-} from "./store/editorContextStore";
-import { useVaultTreeSync } from "./store/vaultStore";
-import { useConfigState, useConfigSync } from "./store/configStore";
-import { useThemeSync } from "./store/themeStore";
-import { useAutoSaveLifecycle } from "./store/autoSaveService";
-import { useVaultState } from "./store/vaultStore";
+} from "./host/store/editorContextStore";
+import { useVaultTreeSync } from "./host/store/vaultStore";
+import { useConfigState, useConfigSync } from "./host/store/configStore";
+import { useThemeSync } from "./host/store/themeStore";
+import { useAutoSaveLifecycle } from "./host/store/autoSaveService";
+import { useVaultState } from "./host/store/vaultStore";
 import { useWindowDragGestureSupport } from "./utils/windowDragGesture";
-import { ensureBuiltinComponentsRegistered } from "./registry/registerBuiltinComponents";
-import { unregisterActivity } from "./registry/activityRegistry";
-import { registerActivity } from "./registry/activityRegistry";
-import { unregisterPanel, registerPanel } from "./registry/panelRegistry";
+import { ensureBuiltinComponentsRegistered } from "./host/registry/registerBuiltinComponents";
+import { unregisterActivity } from "./host/registry/activityRegistry";
+import { registerActivity } from "./host/registry/activityRegistry";
+import { unregisterPanel, registerPanel } from "./host/registry/panelRegistry";
 import "./App.css";
 
 function HomeTab(): ReactNode {

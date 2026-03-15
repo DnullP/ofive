@@ -10,7 +10,7 @@
  * @dependencies
  *   - react
  *   - dockview
- *   - ../../registry
+ *   - ../../host/registry
  *   - ./architectureRegistry
  *   - ./architectureDevtools.css
  *
@@ -21,7 +21,7 @@
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import type { IDockviewPanelProps } from "dockview";
 import i18n from "../../i18n";
-import { useActivities, usePanels, useTabComponents } from "../../registry";
+import { useActivities, usePanels, useTabComponents } from "../../host/registry";
 import {
     useArchitectureSnapshot,
     type ArchitectureEdge,

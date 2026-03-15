@@ -2,7 +2,7 @@
  * @module store/autoSaveService
  * @description 自动保存服务：监听编辑器内容变化事件，通过防抖策略自动将修改持久化到后端。
  * @dependencies
- *  - ../events/appEventBus (subscribeEditorContentBusEvent)
+ *  - ../host/events/appEventBus (subscribeEditorContentBusEvent)
  *  - ../api/vaultApi (saveVaultMarkdownFile)
  *  - ../store/configStore (subscribeConfigChanges)
  *
@@ -44,7 +44,7 @@ import {
     subscribeEditorContentBusEvent,
     emitPersistedContentUpdatedEvent,
     type EditorContentChangedBusEvent,
-} from "../events/appEventBus";
+} from "../host/events/appEventBus";
 import { saveVaultMarkdownFile } from "../api/vaultApi";
 import { subscribeConfigChanges } from "./configStore";
 

@@ -84,29 +84,29 @@ interface ParsedBackendCommand {
 }
 
 const HARD_INFRASTRUCTURE_MODULE_PREFIXES = [
-    "src/registry/",
+    "src/host/registry/",
     "src/commands/",
-    "src/layout/sidebar/",
+    "src/host/layout/sidebar/",
     "src/layout/editor/",
 ] as const;
 
 const INFRASTRUCTURE_MODULE_PREFIXES = [
-    "src/registry/",
+    "src/host/registry/",
     "src/commands/",
     "src/settings/",
-    "src/layout/sidebar/",
+    "src/host/layout/sidebar/",
     "src/layout/editor/",
 ] as const;
 
 const INFRASTRUCTURE_MODULE_PATHS = new Set([
-    "src/layout/DockviewLayout.tsx",
-    "src/layout/CommandPaletteModal.tsx",
-    "src/layout/QuickSwitcherModal.tsx",
-    "src/layout/MoveFileDirectoryModal.tsx",
-    "src/layout/nativeContextMenu.ts",
-    "src/layout/panelOrderUtils.ts",
-    "src/layout/openFileService.ts",
-    "src/layout/index.ts",
+    "src/host/layout/DockviewLayout.tsx",
+    "src/host/layout/CommandPaletteModal.tsx",
+    "src/host/layout/QuickSwitcherModal.tsx",
+    "src/host/layout/MoveFileDirectoryModal.tsx",
+    "src/host/layout/nativeContextMenu.ts",
+    "src/host/layout/panelOrderUtils.ts",
+    "src/host/layout/openFileService.ts",
+    "src/host/layout/index.ts",
 ]);
 
 /**
@@ -565,6 +565,12 @@ function classifyUiModuleLayer(
     visiting.add(path);
 
     if (path.startsWith("src/devtools/") || /KnowledgeGraph|knowledgeGraph/.test(path)) {
+        cache.set(path, "plugin-logic");
+        visiting.delete(path);
+        return "plugin-logic";
+    }
+
+    if (path.startsWith("src/plugins/")) {
         cache.set(path, "plugin-logic");
         visiting.delete(path);
         return "plugin-logic";
@@ -1053,7 +1059,7 @@ function normalizeSymbolName(value: string): string {
 
 /** @function isPluginFile */
 function isPluginFile(path: string): boolean {
-    return /^src\/plugins\/[A-Za-z0-9_$-]+Plugin\.tsx?$/.test(path);
+    return /^src\/plugins\/(?:.+\/)?[A-Za-z0-9_$-]+Plugin\.tsx?$/.test(path);
 }
 
 /** @function isStoreFile */
@@ -1085,9 +1091,11 @@ function isFrontendApiSourceFile(file: SourceFileRecord): boolean {
 function isRegistryOrCommandOrLayoutFile(path: string): boolean {
     return (
         path === "src/App.tsx" ||
-        path.startsWith("src/layout/") ||
+        path.startsWith("src/host/layout/") ||
+        path.startsWith("src/layout/editor/") ||
+        path.startsWith("src/plugins/") ||
         path.startsWith("src/commands/") ||
-        path.startsWith("src/registry/") ||
+        path.startsWith("src/host/registry/") ||
         path.startsWith("src/devtools/")
     );
 }

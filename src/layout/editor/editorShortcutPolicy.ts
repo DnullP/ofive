@@ -2,14 +2,14 @@
  * @module layout/editor/editorShortcutPolicy
  * @description 编辑器快捷键策略模块：维护编辑器托管命令和默认回退组合。
  * @dependencies
- *  - ../../commands/commandSystem
+ *  - ../../host/commands/commandSystem
  */
 
 import {
     COMMAND_DEFINITIONS,
     type CommandId,
     type EditorNativeCommandId,
-} from "../../commands/commandSystem";
+} from "../../host/commands/commandSystem";
 
 /**
  * @constant EDITOR_MANAGED_NATIVE_COMMAND_IDS

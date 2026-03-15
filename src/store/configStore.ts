@@ -14,7 +14,7 @@ import {
     type VaultConfig,
     type VaultConfigEventPayload,
 } from "../api/vaultApi";
-import { subscribeVaultConfigBusEvent } from "../events/appEventBus";
+import { subscribeVaultConfigBusEvent } from "../host/events/appEventBus";
 import i18n from "../i18n";
 
 /**

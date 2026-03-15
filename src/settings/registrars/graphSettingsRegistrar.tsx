@@ -3,7 +3,7 @@
  * @description 图谱设置注册：由图谱组件注册可配置项选栏。
  * @dependencies
  *  - react
- *  - ../../layout/knowledgeGraphSettings
+ *  - ../../plugins/knowledge-graph
  *  - ../../store/graphSettingsStore
  *  - ../settingsRegistry
  */
@@ -14,7 +14,7 @@ import {
     KNOWLEDGE_GRAPH_SETTING_DEFINITIONS,
     type KnowledgeGraphSettingDefinition,
     type KnowledgeGraphSettingKey,
-} from "../../layout/knowledgeGraphSettings";
+} from "../../plugins/knowledge-graph";
 import {
     resetGraphSettings,
     updateGraphSetting,

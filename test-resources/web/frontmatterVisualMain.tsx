@@ -4,7 +4,7 @@
  * @dependencies
  *  - react
  *  - react-dom
- *  - ../../src/layout/editor/components/FrontmatterYamlVisualEditor
+ *  - ../../src/plugins/markdown-codemirror/editor/components/FrontmatterYamlVisualEditor
  *
  * @example
  *   访问 /test-resources/web/frontmatter-visual-test.html
@@ -12,7 +12,7 @@
 
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { FrontmatterYamlVisualEditor } from "../../src/layout/editor/components/FrontmatterYamlVisualEditor";
+import { FrontmatterYamlVisualEditor } from "../../src/plugins/markdown-codemirror/editor/components/FrontmatterYamlVisualEditor";
 import "../../src/App.css";
 
 /**

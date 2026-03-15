@@ -19,9 +19,9 @@ import {
     type VaultEntry,
     type VaultFsEventPayload,
 } from "../api/vaultApi";
-import { subscribeVaultFsBusEvent } from "../events/appEventBus";
+import { subscribeVaultFsBusEvent } from "../host/events/appEventBus";
+import type { FileTreeItem } from "../plugins/file-tree";
 import { isRememberLastVaultEnabled } from "./configStore";
-import type { FileTreeItem } from "../layout";
 import i18n from "../i18n";
 
 /**

@@ -4,7 +4,7 @@
  * @dependencies
  *  - react (useSyncExternalStore)
  *  - ../api/vaultApi
- *  - ../commands/commandSystem
+ *  - ../host/commands/commandSystem
  */
 
 import { useSyncExternalStore } from "react";
@@ -17,7 +17,7 @@ import {
     getCommandDefinitions,
     subscribeCommands,
     type CommandId,
-} from "../commands/commandSystem";
+} from "../host/commands/commandSystem";
 import i18n from "../i18n";
 
 /**
