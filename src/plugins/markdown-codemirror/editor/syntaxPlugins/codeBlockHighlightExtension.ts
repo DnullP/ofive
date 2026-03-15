@@ -11,7 +11,8 @@
  * @dependencies
  *   - @codemirror/state
  *   - @codemirror/view
- *   - highlight.js
+ *   - highlight.js/lib/core
+ *   - highlight.js/lib/languages/*
  *   - ./blockWidgetReplace (hiddenBlockLineDecoration)
  *
  * @example
@@ -32,12 +33,42 @@ import {
     type ViewUpdate,
     WidgetType,
 } from "@codemirror/view";
-import hljs from "highlight.js";
+import hljs from "highlight.js/lib/core";
+import bashLanguage from "highlight.js/lib/languages/bash";
+import cssLanguage from "highlight.js/lib/languages/css";
+import javascriptLanguage from "highlight.js/lib/languages/javascript";
+import jsonLanguage from "highlight.js/lib/languages/json";
+import markdownLanguage from "highlight.js/lib/languages/markdown";
+import plaintextLanguage from "highlight.js/lib/languages/plaintext";
+import rustLanguage from "highlight.js/lib/languages/rust";
+import typescriptLanguage from "highlight.js/lib/languages/typescript";
+import xmlLanguage from "highlight.js/lib/languages/xml";
+import yamlLanguage from "highlight.js/lib/languages/yaml";
 import { hiddenBlockLineDecoration } from "./blockWidgetReplace";
 import {
     setExclusionZones,
     isRangeInsideHigherPriorityZone,
 } from "../syntaxExclusionZones";
+
+hljs.registerLanguage("bash", bashLanguage);
+hljs.registerLanguage("sh", bashLanguage);
+hljs.registerLanguage("shell", bashLanguage);
+hljs.registerLanguage("css", cssLanguage);
+hljs.registerLanguage("html", xmlLanguage);
+hljs.registerLanguage("javascript", javascriptLanguage);
+hljs.registerLanguage("js", javascriptLanguage);
+hljs.registerLanguage("json", jsonLanguage);
+hljs.registerLanguage("markdown", markdownLanguage);
+hljs.registerLanguage("md", markdownLanguage);
+hljs.registerLanguage("plaintext", plaintextLanguage);
+hljs.registerLanguage("text", plaintextLanguage);
+hljs.registerLanguage("rust", rustLanguage);
+hljs.registerLanguage("rs", rustLanguage);
+hljs.registerLanguage("typescript", typescriptLanguage);
+hljs.registerLanguage("ts", typescriptLanguage);
+hljs.registerLanguage("xml", xmlLanguage);
+hljs.registerLanguage("yaml", yamlLanguage);
+hljs.registerLanguage("yml", yamlLanguage);
 
 /* ================================================================== */
 /*  类型定义                                                           */

@@ -26,7 +26,12 @@
  */
 
 import { useEffect } from "react";
-import type { VaultConfigEventPayload, VaultFsEventPayload } from "../../api/vaultApi";
+import {
+    subscribeVaultConfigEvents,
+    subscribeVaultFsEvents,
+    type VaultConfigEventPayload,
+    type VaultFsEventPayload,
+} from "../../api/vaultApi";
 
 /**
  * @interface EditorContentChangedBusEvent
@@ -178,8 +183,6 @@ async function startBackendBridgeIfNeeded(): Promise<void> {
     }
 
     backendBridgeStartPromise = (async () => {
-        const { subscribeVaultFsEvents, subscribeVaultConfigEvents } = await import("../../api/vaultApi");
-
         backendFsUnlisten = await subscribeVaultFsEvents((payload) => {
             dispatchBusEvent("vault.fs", payload);
         });
