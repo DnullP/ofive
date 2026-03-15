@@ -7,6 +7,7 @@
  */
 
 import {
+    memo,
     useEffect,
     useMemo,
     useRef,
@@ -88,7 +89,9 @@ import {
     ensureActivityBarConfigLoaded,
     updateActivityBarConfig,
 } from "../store/activityBarStore";
+import { useConfigState } from "../store/configStore";
 import { showNativeContextMenu } from "./nativeContextMenu";
+import type { NativeContextMenuItem } from "./nativeContextMenu";
 import {
     ActivityBar,
     SidebarHeader,
@@ -113,16 +116,33 @@ import {
 } from "../registry";
 import {
     buildInitialPanelStates,
-    mergePanelStates,
     computeCrossContainerDrop,
     computeEmptySidebarDrop,
     computeEmptyRightSidebarDrop,
+    removeActivityReferencesFromPanelStates,
+    repairUnknownActivityReferencesInPanelStates,
 } from "./layoutStateReducers";
+import { removeCustomActivityFromVaultConfig } from "../../plugins/custom-activity/customActivityConfig";
+import {
+    getSidebarLayoutFromVaultConfig,
+    mergePanelStatesWithSidebarLayoutFallback,
+    restorePanelStatesFromSidebarLayout,
+    saveSidebarLayoutSnapshot,
+    type SidebarLayoutSnapshot,
+} from "./sidebarLayoutPersistence";
 import { openFileWithResolver } from "./openFileService";
 import {
     setRightSidebarVisibilitySnapshot,
     subscribeRightSidebarToggleRequest,
 } from "./rightSidebarVisibilityBridge";
+
+const CUSTOM_ACTIVITY_CREATE_COMMAND_ID = "customActivity.create";
+const CUSTOM_ACTIVITY_REGISTRATION_PREFIX = "custom-activity:";
+const SIDEBAR_MIN_WIDTH = 220;
+const SIDEBAR_MAX_WIDTH = 520;
+const SIDEBAR_LAYOUT_SAVE_DEBOUNCE_MS = 300;
+const SIDEBAR_PANE_MIN_BODY_SIZE = 72;
+const SIDEBAR_PANE_MIN_TOTAL_SIZE = 104;
 
 export type PanelPosition = "left" | "right";
 
@@ -152,6 +172,7 @@ export interface PanelRenderContext {
     closeTab: (tabId: string) => void;
     setActiveTab: (tabId: string) => void;
     activatePanel: (panelId: string) => void;
+    executeCommand: (commandId: CommandId) => void;
     requestMoveFileToDirectory: (relativePath: string) => void;
 }
 
@@ -181,12 +202,6 @@ export interface PanelDefinition {
     activityTitle?: string;
     activityIcon?: ReactNode;
     activitySection?: "top" | "bottom";
-    onActivityClick?: (context: PanelRenderContext) => void;
-    /**
-     * 标记此面板为"仅标签"模式：点击图标只触发 onActivityClick 打开 Tab，
-     * 不在侧边栏中生成面板容器。适用于知识图谱等无需侧边栏面板的活动。
-     */
-    tabOnly?: boolean;
     render: (context: PanelRenderContext) => ReactNode;
 }
 
@@ -275,23 +290,48 @@ function buildInitialConvertibleViewRuntime(
     );
 }
 
-function mergeConvertibleViewRuntime(
+function mergeConvertibleViewRuntimeWithSidebarLayoutFallback(
     previous: Record<string, ConvertibleViewRuntimeState>,
     descriptors: Array<{
         id: string;
         defaultMode: "tab" | "panel";
         getInitialStateKey?: () => string;
     }>,
+    snapshot: SidebarLayoutSnapshot | null,
 ): Record<string, ConvertibleViewRuntimeState> {
+    const persistedById = new Map(
+        snapshot?.convertiblePanelStates.map((item) => [item.descriptorId, item] as const) ?? [],
+    );
+
     return Object.fromEntries(
-        descriptors.map((descriptor) => [
-            descriptor.id,
-            previous[descriptor.id] ?? {
-                descriptorId: descriptor.id,
-                mode: descriptor.defaultMode,
-                stateKey: descriptor.getInitialStateKey?.() ?? descriptor.id,
-            },
-        ]),
+        descriptors.map((descriptor) => {
+            const existing = previous[descriptor.id];
+            if (existing) {
+                return [descriptor.id, existing];
+            }
+
+            const persisted = persistedById.get(descriptor.id);
+            if (persisted) {
+                return [
+                    descriptor.id,
+                    {
+                        descriptorId: descriptor.id,
+                        mode: "panel" as const,
+                        stateKey: persisted.stateKey,
+                        sourceParams: persisted.sourceParams,
+                    },
+                ];
+            }
+
+            return [
+                descriptor.id,
+                {
+                    descriptorId: descriptor.id,
+                    mode: descriptor.defaultMode,
+                    stateKey: descriptor.getInitialStateKey?.() ?? descriptor.id,
+                },
+            ];
+        }),
     );
 }
 
@@ -309,6 +349,27 @@ function stripConvertibleViewTabParam(
 function isMarkdownPath(path: string): boolean {
     const normalizedPath = path.toLowerCase();
     return normalizedPath.endsWith(".md") || normalizedPath.endsWith(".markdown");
+}
+
+function clampSidebarWidth(width: number): number {
+    return Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, width));
+}
+
+function normalizePaneSize(size: number | undefined): number | undefined {
+    if (typeof size !== "number" || Number.isNaN(size)) {
+        return undefined;
+    }
+
+    return Math.max(size, SIDEBAR_PANE_MIN_TOTAL_SIZE);
+}
+
+function isDisposedDockviewResourceError(error: unknown): boolean {
+    return error instanceof Error && error.message.includes("resource is already disposed");
+}
+
+function isRecoverablePaneviewError(error: unknown): boolean {
+    return isDisposedDockviewResourceError(error)
+        || (error instanceof DOMException && error.name === "NotFoundError");
 }
 
 /**
@@ -367,12 +428,12 @@ export function DockviewLayout({
 
     /**
      * 将注册中心的数据转换为内部 PanelDefinition 格式。
-     * 这是一个桥接层，使注册中心数据兼容已有的内部逻辑。
+     * callback activity 只保留为活动栏图标，不再被翻译为虚拟 panel 容器。
      */
     const panels = useMemo<PanelDefinition[]>(() => {
         const result: PanelDefinition[] = [];
 
-        /* 从注册的面板和活动生成 PanelDefinition */
+        /* 从注册的面板生成 PanelDefinition；panel 与 callback 在这里保持互斥。 */
         for (const panelDesc of registeredPanels) {
             const activity = registeredActivities.find((a) => a.id === panelDesc.activityId);
             result.push({
@@ -385,35 +446,7 @@ export function DockviewLayout({
                 activityTitle: activity ? resolveActivityTitle(activity.title) : undefined,
                 activityIcon: activity?.icon,
                 activitySection: activity?.defaultSection,
-                onActivityClick: activity?.type === "callback" ? activity.onActivate : undefined,
-                tabOnly: false,
                 render: panelDesc.render,
-            });
-        }
-
-        /* 回调型活动图标需要生成 tabOnly 的虚拟 PanelDefinition 以保留活动栏图标 */
-        for (const activity of registeredActivities) {
-            if (activity.type !== "callback") {
-                continue;
-            }
-            /* 确保不与已有面板的 activityId 冲突 */
-            const hasPanel = registeredPanels.some((p) => p.activityId === activity.id);
-            if (hasPanel) {
-                continue;
-            }
-            result.push({
-                id: `${activity.id}-activity`,
-                title: resolveActivityTitle(activity.title),
-                icon: activity.icon,
-                position: activity.defaultBar === "right" ? "right" : "left",
-                order: activity.defaultOrder,
-                activityId: activity.id,
-                activityTitle: resolveActivityTitle(activity.title),
-                activityIcon: activity.icon,
-                activitySection: activity.defaultSection,
-                tabOnly: true,
-                onActivityClick: activity.onActivate,
-                render: () => null,
             });
         }
 
@@ -461,8 +494,10 @@ export function DockviewLayout({
         error: vaultError,
         files,
     } = useVaultState();
+    const configState = useConfigState();
     const { bindings } = useShortcutState();
     const activityBarConfigState = useActivityBarConfig();
+    const [paneLayoutRevision, setPaneLayoutRevision] = useState(0);
 
     /** 活动图标拖拽状态：记录被拖拽项 ID、来源栏、目标位置 */
     const [dragState, setDragState] = useState<IconDragState | null>(null);
@@ -483,14 +518,23 @@ export function DockviewLayout({
     const rightPaneApiRef = useRef<PaneviewApi | null>(null);
     const leftUnhandledDragDisposeRef = useRef<{ dispose: () => void } | null>(null);
     const rightUnhandledDragDisposeRef = useRef<{ dispose: () => void } | null>(null);
+    const leftPaneLayoutDisposeRef = useRef<{ dispose: () => void } | null>(null);
+    const rightPaneLayoutDisposeRef = useRef<{ dispose: () => void } | null>(null);
     const pendingExpandedStateRef = useRef<Map<string, boolean>>(new Map());
     const paneExpandedStateRef = useRef<Map<string, boolean>>(new Map());
+    const paneSizeStateRef = useRef<Map<string, number>>(new Map());
     const suppressWindowCloseUntilRef = useRef<number>(0);
     const mainDockHostRef = useRef<HTMLDivElement | null>(null);
     /** 缓存 paneview 面板的标题，用于检测语言切换后标题是否变化 */
     const paneTitleCacheRef = useRef<Map<string, string>>(new Map());
     const dockUnhandledDragDisposeRef = useRef<{ dispose: () => void } | null>(null);
     const lastActiveLeftPanelByActivityRef = useRef<Map<string, string>>(new Map());
+    const sidebarLayoutSnapshotRef = useRef<SidebarLayoutSnapshot | null>(null);
+    const restoredSidebarLayoutVaultPathRef = useRef<string | null>(null);
+    const sidebarLayoutReadyRef = useRef(false);
+    const sidebarLayoutPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const restoredLeftPaneSnapshotVaultPathRef = useRef<string | null>(null);
+    const restoredRightPaneSnapshotVaultPathRef = useRef<string | null>(null);
 
     useEffect(() => {
         dockviewApiRef.current = dockviewApi;
@@ -563,43 +607,138 @@ export function DockviewLayout({
         () => new Map(registeredActivities.map((activity) => [activity.id, activity] as const)),
         [registeredActivities],
     );
-    const activityMetaById = useMemo(
-        () =>
-            new Map(
-                panels.map((panel) => {
-                    const activityId = panel.activityId ?? panel.id;
-                    const activityDescriptor = activityDescriptorById.get(activityId);
-                    return [
-                        activityId,
-                        {
-                            title: activityDescriptor
-                                ? resolveActivityTitle(activityDescriptor.title)
-                                : (panel.activityTitle ?? panel.title),
-                            icon: activityDescriptor?.icon
-                                ?? panel.activityIcon
-                                ?? panel.icon
-                                ?? panel.title.slice(0, 1).toUpperCase(),
-                            section: activityDescriptor?.defaultSection ?? panel.activitySection ?? "top",
-                        },
-                    ] as const;
-                }),
-            ),
-        [activityDescriptorById, panels],
-    );
+    const activityMetaById = useMemo(() => {
+        const meta = new Map<string, {
+            title: string;
+            icon: ReactNode;
+            section: "top" | "bottom";
+        }>();
+
+        registeredActivities.forEach((activity) => {
+            meta.set(activity.id, {
+                title: resolveActivityTitle(activity.title),
+                icon: activity.icon,
+                section: activity.defaultSection,
+            });
+        });
+
+        panels.forEach((panel) => {
+            const activityId = panel.activityId ?? panel.id;
+            if (meta.has(activityId)) {
+                return;
+            }
+            meta.set(activityId, {
+                title: panel.activityTitle ?? panel.title,
+                icon: panel.activityIcon ?? panel.icon ?? panel.title.slice(0, 1).toUpperCase(),
+                section: panel.activitySection ?? "top",
+            });
+        });
+
+        return meta;
+    }, [panels, registeredActivities]);
     const activityIdByPanelId = useMemo(
         () => new Map(panelStates.map((state) => [state.id, state.activityId])),
         [panelStates],
     );
+    const knownActivityIds = useMemo(() => {
+        const ids = new Set<string>();
+
+        panels.forEach((panel) => {
+            ids.add(panel.activityId ?? panel.id);
+        });
+        activityDescriptorById.forEach((_descriptor, id) => {
+            ids.add(id);
+        });
+
+        return ids;
+    }, [activityDescriptorById, panels]);
 
     const activityIdOf = (panel: PanelDefinition): string =>
         activityIdByPanelId.get(panel.id) ?? panel.activityId ?? panel.id;
 
     useEffect(() => {
-        setPanelStates((prev) => mergePanelStates(prev, panels));
+        if (restoredSidebarLayoutVaultPathRef.current !== currentVaultPath) {
+            sidebarLayoutReadyRef.current = false;
+            sidebarLayoutSnapshotRef.current = null;
+            restoredLeftPaneSnapshotVaultPathRef.current = null;
+            restoredRightPaneSnapshotVaultPathRef.current = null;
+            paneExpandedStateRef.current.clear();
+            paneSizeStateRef.current.clear();
+        }
+    }, [currentVaultPath]);
+
+    useEffect(() => {
+        if (!currentVaultPath || !configState.backendConfig) {
+            return;
+        }
+
+        if (restoredSidebarLayoutVaultPathRef.current === currentVaultPath) {
+            return;
+        }
+
+        const snapshot = getSidebarLayoutFromVaultConfig(configState.backendConfig);
+        sidebarLayoutSnapshotRef.current = snapshot;
+        restoredSidebarLayoutVaultPathRef.current = currentVaultPath;
+        sidebarLayoutReadyRef.current = true;
+
+        if (!snapshot) {
+            return;
+        }
+
+        snapshot.paneStates.forEach((item) => {
+            if (typeof item.expanded === "boolean") {
+                paneExpandedStateRef.current.set(item.id, item.expanded);
+            }
+            if (typeof item.size === "number") {
+                paneSizeStateRef.current.set(item.id, item.size);
+            }
+        });
+
+        setLeftSidebarWidth(clampSidebarWidth(snapshot.left.width));
+        setRightSidebarWidth(clampSidebarWidth(snapshot.right.width));
+        setIsLeftSidebarVisible(snapshot.left.visible);
+        setIsRightSidebarVisible(snapshot.right.visible);
+        setActivePanelId(snapshot.left.activePanelId);
+        setActiveActivityId(snapshot.left.activeActivityId);
+        setActiveRightActivityId(snapshot.right.activeActivityId);
+        setPanelStates(restorePanelStatesFromSidebarLayout(panels, snapshot));
+        setConvertibleViewRuntime(() =>
+            mergeConvertibleViewRuntimeWithSidebarLayoutFallback(
+                {},
+                registeredConvertibleViews,
+                snapshot,
+            ));
+        setPaneLayoutRevision((value) => value + 1);
+    }, [configState.backendConfig, currentVaultPath, panels, registeredConvertibleViews]);
+
+    useEffect(() => {
+        if (!sidebarLayoutReadyRef.current) {
+            return;
+        }
+
+        setPanelStates((prev) =>
+            mergePanelStatesWithSidebarLayoutFallback(
+                prev,
+                panels,
+                sidebarLayoutSnapshotRef.current,
+            ));
     }, [panels]);
 
     useEffect(() => {
-        setConvertibleViewRuntime((previous) => mergeConvertibleViewRuntime(previous, registeredConvertibleViews));
+        setPanelStates((prev) => repairUnknownActivityReferencesInPanelStates(
+            prev,
+            panels,
+            knownActivityIds,
+        ));
+    }, [knownActivityIds, panels]);
+
+    useEffect(() => {
+        setConvertibleViewRuntime((previous) =>
+            mergeConvertibleViewRuntimeWithSidebarLayoutFallback(
+                previous,
+                registeredConvertibleViews,
+                sidebarLayoutSnapshotRef.current,
+            ));
     }, [registeredConvertibleViews]);
 
     const convertibleByPanelId = useMemo(
@@ -615,7 +754,24 @@ export function DockviewLayout({
         descriptorId: string,
     ): ConvertibleViewRuntimeState | null => convertibleViewRuntime[descriptorId] ?? null;
 
-    const isConvertiblePanelVisible = (panelId: string): boolean => {
+    const capturePaneLayout = (api: PaneviewApi): void => {
+        try {
+            const serialized = api.toJSON();
+            serialized.views.forEach((view) => {
+                paneExpandedStateRef.current.set(view.data.id, view.expanded ?? true);
+                paneSizeStateRef.current.set(view.data.id, view.size);
+            });
+            setPaneLayoutRevision((value) => value + 1);
+        } catch (error) {
+            if (isDisposedDockviewResourceError(error)) {
+                console.info("[DockviewLayout] skip capture pane layout for disposed resource");
+                return;
+            }
+            throw error;
+        }
+    };
+
+    function isConvertiblePanelVisible(panelId: string): boolean {
         const descriptor = convertibleByPanelId.get(panelId);
         if (!descriptor) {
             return true;
@@ -623,7 +779,26 @@ export function DockviewLayout({
 
         const runtime = getConvertibleRuntimeState(descriptor.id);
         return (runtime?.mode ?? descriptor.defaultMode) === "panel";
-    };
+    }
+
+    const activityIdsWithSidebarContainer = useMemo(() => {
+        const ids = new Set<string>();
+
+        registeredActivities.forEach((activity) => {
+            if (activity.type === "panel-container") {
+                ids.add(activity.id);
+            }
+        });
+
+        panels.forEach((panel) => {
+            if (!isConvertiblePanelVisible(panel.id)) {
+                return;
+            }
+            ids.add(activityIdOf(panel));
+        });
+
+        return ids;
+    }, [activityIdByPanelId, convertibleViewRuntime, convertibleByPanelId, panels, registeredActivities]);
 
     const orderedPanelsByPosition = (position: PanelPosition): PanelDefinition[] =>
         panelStates
@@ -631,8 +806,6 @@ export function DockviewLayout({
             .sort((a, b) => a.order - b.order)
             .map((item) => panelById.get(item.id))
             .filter((item): item is PanelDefinition => item !== undefined)
-            /* tabOnly 的面板只提供活动栏图标，不在侧边栏中生成面板容器 */
-            .filter((item) => !item.tabOnly)
             /* 可转化组件在 tab 模式下隐藏 panel 容器 */
             .filter((item) => isConvertiblePanelVisible(item.id));
 
@@ -646,13 +819,25 @@ export function DockviewLayout({
     );
 
     /**
-     * 活动栏项列表：仅包含显式声明了 activityId 的面板。
-     * 未声明 activityId 的面板不在活动栏显示图标。
-     * 活动栏图标独立于面板当前所在的容器位置存在，面板被拖到其他侧后图标仍保留。
+     * 活动栏项列表：显式 activity 优先，panel 派生项仅用于兜底 orphan panel。
+     * callback activity 直接来源于 activityRegistry，不再通过虚拟 panel 参与布局。
      */
     const activityItems = useMemo<ActivityItem[]>(() => {
         const dedup = new Set<string>();
         const items: ActivityItem[] = [];
+
+        registeredActivities.forEach((activity) => {
+            if (dedup.has(activity.id)) {
+                return;
+            }
+            dedup.add(activity.id);
+            items.push({
+                id: activity.id,
+                title: resolveActivityTitle(activity.title),
+                icon: activity.icon,
+                section: activity.defaultSection,
+            });
+        });
 
         panels.filter((p) => p.activityId !== undefined).forEach((panel) => {
             const activityId = activityIdOf(panel);
@@ -670,7 +855,7 @@ export function DockviewLayout({
         });
 
         return items;
-    }, [panels, activityMetaById]);
+    }, [activityMetaById, panels, registeredActivities]);
 
     /**
      * 将面板派生的活动项与存储的定制配置合并，
@@ -678,22 +863,22 @@ export function DockviewLayout({
      * 面板的初始 position 决定其 activity icon 的默认 bar 归属。
      */
 
-    /** 活动 ID → 默认归属栏（由面板初始 position 决定） */
+    /** 活动 ID → 默认归属栏（显式 activity 优先，其次兜底到 panel 的当前位置） */
     const activityDefaultBar = useMemo(() => {
         const map = new Map<string, "left" | "right">();
-        for (const panel of panels) {
-            if (panel.activityId === undefined) continue;
-            const aid = activityIdOf(panel);
-            if (!map.has(aid)) {
-                const activityDescriptor = activityDescriptorById.get(aid);
-                map.set(
-                    aid,
-                    activityDescriptor?.defaultBar ?? (panel.position === "right" ? "right" : "left"),
-                );
+        registeredActivities.forEach((activity) => {
+            map.set(activity.id, activity.defaultBar);
+        });
+
+        panelStates.forEach((state) => {
+            if (map.has(state.activityId)) {
+                return;
             }
-        }
+            map.set(state.activityId, state.position === "right" ? "right" : "left");
+        });
+
         return map;
-    }, [activityDescriptorById, panels]);
+    }, [panelStates, registeredActivities]);
 
     const mergedActivityItems = useMemo<ActivityIconItem[]>(() => {
         const allDefaults = [
@@ -742,8 +927,8 @@ export function DockviewLayout({
     );
 
     /**
-     * 左侧栏中有面板容器的活动项（排除 tabOnly）。
-     * 仅这些活动项适合作为 activeActivityId 的自动选中候选。
+     * 左侧栏中有真实 panel 容器的活动项。
+     * callback activity 不会进入该集合，因此不会被当成侧栏容器自动选中。
      */
     const leftPanelActivityItems = useMemo(
         () => visibleNonSettingsItems.filter((i) => {
@@ -751,10 +936,9 @@ export function DockviewLayout({
             if (activityDescriptor?.type === "callback") {
                 return false;
             }
-            const panelDef = panels.find((p) => activityIdOf(p) === i.id);
-            return !panelDef?.tabOnly;
+            return activityIdsWithSidebarContainer.has(i.id);
         }),
-        [activityDescriptorById, visibleNonSettingsItems, panels],
+        [activityDescriptorById, activityIdsWithSidebarContainer, visibleNonSettingsItems],
     );
 
     /** 左侧 ActivityBar 中可见的顶部项 */
@@ -792,6 +976,9 @@ export function DockviewLayout({
     /* ────────── 左侧活动项自动选中 ────────── */
 
     useEffect(() => {
+        if (!activityBarConfigState.isLoaded) {
+            return;
+        }
         if (leftPanelActivityItems.length === 0) {
             setActiveActivityId(null);
             return;
@@ -800,24 +987,26 @@ export function DockviewLayout({
         if (!activeActivityId || !leftPanelActivityItems.some((item) => item.id === activeActivityId)) {
             setActiveActivityId(leftPanelActivityItems[0]?.id ?? null);
         }
-    }, [activeActivityId, leftPanelActivityItems]);
+    }, [activeActivityId, activityBarConfigState.isLoaded, leftPanelActivityItems]);
 
     /* ────────── 右侧活动项自动选中 ────────── */
 
     useEffect(() => {
+        if (!activityBarConfigState.isLoaded) {
+            return;
+        }
         if (rightBarItems.length === 0) {
             setActiveRightActivityId(null);
             return;
         }
-        /* 排除 settings 和 tabOnly 的项，它们没有侧边栏面板 */
+        /* 排除 settings 与 callback-only 项，它们没有右侧 panel 容器 */
         const panelRightItems = rightBarItems.filter((i) => {
             const activityDescriptor = activityDescriptorById.get(i.id);
             if (activityDescriptor?.type === "callback") {
                 return false;
             }
             if (i.isSettings) return false;
-            const panelDef = panels.find((p) => activityIdOf(p) === i.id);
-            return !panelDef?.tabOnly;
+            return activityIdsWithSidebarContainer.has(i.id);
         });
         if (panelRightItems.length === 0) {
             setActiveRightActivityId(null);
@@ -826,7 +1015,7 @@ export function DockviewLayout({
         if (!activeRightActivityId || !panelRightItems.some((i) => i.id === activeRightActivityId)) {
             setActiveRightActivityId(panelRightItems[0]?.id ?? null);
         }
-    }, [activeRightActivityId, activityDescriptorById, rightBarItems, panels]);
+    }, [activeRightActivityId, activityBarConfigState.isLoaded, activityDescriptorById, activityIdsWithSidebarContainer, rightBarItems]);
 
     const visibleLeftPanels = useMemo(() => {
         if (!activeActivityId) {
@@ -910,11 +1099,123 @@ export function DockviewLayout({
         return preferredLeftPanelId ?? visibleLeftPanels[0]?.id ?? null;
     }, [activePanelId, preferredLeftPanelId, visibleLeftPanels]);
 
+    const requestPaneviewRelayout = (api: PaneviewApi): void => {
+        const runLayout = (): void => {
+            try {
+                api.layout(api.width, api.height);
+            } catch (error) {
+                if (isRecoverablePaneviewError(error)) {
+                    console.info("[DockviewLayout] skip relayout for recoverable pane error", { error });
+                    return;
+                }
+                throw error;
+            }
+        };
+
+        requestAnimationFrame(() => {
+            runLayout();
+            requestAnimationFrame(() => {
+                runLayout();
+            });
+        });
+
+        window.setTimeout(() => {
+            runLayout();
+        }, 32);
+    };
+
+    const restorePaneviewLayoutFromSnapshot = (
+        api: PaneviewApi,
+        panelList: PanelDefinition[],
+        expandedPanelId: string | null,
+        side: "left" | "right",
+    ): boolean => {
+        if (!currentVaultPath) {
+            return false;
+        }
+
+        const restoredVaultPathRef = side === "left"
+            ? restoredLeftPaneSnapshotVaultPathRef
+            : restoredRightPaneSnapshotVaultPathRef;
+
+        if (restoredVaultPathRef.current === currentVaultPath) {
+            return false;
+        }
+
+        const snapshot = sidebarLayoutSnapshotRef.current;
+        if (!snapshot || panelList.length === 0) {
+            return false;
+        }
+
+        const paneStateById = new Map(snapshot.paneStates.map((item) => [item.id, item] as const));
+        if (!panelList.some((panel) => paneStateById.has(panel.id))) {
+            return false;
+        }
+
+        try {
+            api.fromJSON({
+                size: Math.max(api.height, 0),
+                views: panelList.map((panel) => {
+                    const persistedPaneState = paneStateById.get(panel.id);
+                    const size = normalizePaneSize(
+                        persistedPaneState?.size ?? paneSizeStateRef.current.get(panel.id),
+                    ) ?? SIDEBAR_PANE_MIN_TOTAL_SIZE;
+
+                    paneTitleCacheRef.current.set(panel.id, panel.title);
+
+                    return {
+                        data: {
+                            id: panel.id,
+                            component: panel.id,
+                            title: panel.title,
+                        },
+                        size,
+                        expanded: persistedPaneState?.expanded ?? (expandedPanelId ? panel.id === expandedPanelId : true),
+                    };
+                }),
+            });
+        } catch (error) {
+            if (isRecoverablePaneviewError(error)) {
+                console.warn("[DockviewLayout] skip restoring pane snapshot because paneview rejected the snapshot", {
+                    side,
+                    error,
+                });
+                return false;
+            }
+            throw error;
+        }
+
+        restoredVaultPathRef.current = currentVaultPath;
+        requestPaneviewRelayout(api);
+        capturePaneLayout(api);
+        return true;
+    };
+
     const syncPanePanels = (api: PaneviewApi, panelList: PanelDefinition[], expandedPanelId: string | null): void => {
         const ids = panelList.map((panel) => panel.id);
-        const currentExpandedById = new Map(api.panels.map((panel) => [panel.id, panel.api.isExpanded]));
-        currentExpandedById.forEach((isExpanded, panelId) => {
-            paneExpandedStateRef.current.set(panelId, isExpanded);
+        let didMutateLayout = false;
+        let serializedPaneview;
+        try {
+            serializedPaneview = api.toJSON();
+        } catch (error) {
+            if (isDisposedDockviewResourceError(error)) {
+                console.info("[DockviewLayout] skip syncing disposed pane resource");
+                return;
+            }
+            throw error;
+        }
+        const currentLayoutById = new Map(
+            serializedPaneview.views.map((view) => [
+                view.data.id,
+                {
+                    expanded: view.expanded ?? true,
+                    size: view.size,
+                },
+            ] as const),
+        );
+        currentLayoutById.forEach((layout, panelId) => {
+            paneExpandedStateRef.current.set(panelId, layout.expanded);
+            paneSizeStateRef.current.set(panelId, layout.size);
         });
 
         const stalePanelIds = api.panels
@@ -927,10 +1228,27 @@ export function DockviewLayout({
                 return;
             }
 
-            paneExpandedStateRef.current.set(panelId, stalePanel.api.isExpanded);
+            const staleLayout = currentLayoutById.get(panelId);
+            let fallbackExpanded = true;
+            if (staleLayout?.expanded !== undefined) {
+                fallbackExpanded = staleLayout.expanded;
+            } else {
+                try {
+                    fallbackExpanded = stalePanel.api.isExpanded;
+                } catch (error) {
+                    if (!isDisposedDockviewResourceError(error)) {
+                        throw error;
+                    }
+                }
+            }
+            paneExpandedStateRef.current.set(panelId, fallbackExpanded);
+            if (typeof staleLayout?.size === "number") {
+                paneSizeStateRef.current.set(panelId, staleLayout.size);
+            }
 
             try {
                 api.removePanel(stalePanel);
+                didMutateLayout = true;
             } catch (error) {
                 if (!(error instanceof DOMException && error.name === "NotFoundError")) {
                     console.warn("[DockviewLayout] skip removing stale panel", panelId, error);
@@ -944,8 +1262,24 @@ export function DockviewLayout({
 
             // Paneview 没有 setTitle()，标题变化时需要移除后重新添加面板
             if (existingPanel && cachedTitle !== undefined && cachedTitle !== panel.title) {
-                const wasExpanded = existingPanel.api.isExpanded;
+                const currentLayout = currentLayoutById.get(panel.id);
+                let wasExpanded = currentLayout?.expanded ?? true;
+                if (currentLayout?.expanded === undefined) {
+                    try {
+                        wasExpanded = existingPanel.api.isExpanded;
+                    } catch (error) {
+                        if (!isDisposedDockviewResourceError(error)) {
+                            throw error;
+                        }
+                    }
+                }
+                const previousSize = normalizePaneSize(
+                    currentLayout?.size ?? paneSizeStateRef.current.get(panel.id),
+                );
                 paneExpandedStateRef.current.set(panel.id, wasExpanded);
+                if (typeof previousSize === "number") {
+                    paneSizeStateRef.current.set(panel.id, previousSize);
+                }
                 console.info("[DockviewLayout] paneview panel title changed, re-creating", panel.id, {
                     oldTitle: cachedTitle,
                     newTitle: panel.title,
@@ -959,30 +1293,61 @@ export function DockviewLayout({
                     }
                 }
 
-                api.addPanel({
-                    id: panel.id,
-                    component: panel.id,
-                    title: panel.title,
-                    isExpanded: wasExpanded,
-                    index,
-                });
+                try {
+                    api.addPanel({
+                        id: panel.id,
+                        component: panel.id,
+                        title: panel.title,
+                        minimumBodySize: SIDEBAR_PANE_MIN_BODY_SIZE,
+                        isExpanded: wasExpanded,
+                        index,
+                        size: previousSize,
+                    });
+                } catch (error) {
+                    if (isRecoverablePaneviewError(error)) {
+                        console.warn("[DockviewLayout] skip re-adding title-changed panel", {
+                            panelId: panel.id,
+                            error,
+                        });
+                        return;
+                    }
+                    throw error;
+                }
+                didMutateLayout = true;
                 paneTitleCacheRef.current.set(panel.id, panel.title);
                 return;
             }
 
             if (!existingPanel) {
                 const pendingExpanded = pendingExpandedStateRef.current.get(panel.id);
-                const knownExpanded = currentExpandedById.get(panel.id);
+                const knownExpanded = currentLayoutById.get(panel.id)?.expanded;
                 const cachedExpanded = paneExpandedStateRef.current.get(panel.id);
+                const cachedSize = normalizePaneSize(
+                    currentLayoutById.get(panel.id)?.size ?? paneSizeStateRef.current.get(panel.id),
+                );
                 const fallbackExpanded = expandedPanelId ? panel.id === expandedPanelId : true;
 
-                api.addPanel({
-                    id: panel.id,
-                    component: panel.id,
-                    title: panel.title,
-                    isExpanded: pendingExpanded ?? knownExpanded ?? cachedExpanded ?? fallbackExpanded,
-                    index,
-                });
+                try {
+                    api.addPanel({
+                        id: panel.id,
+                        component: panel.id,
+                        title: panel.title,
+                        minimumBodySize: SIDEBAR_PANE_MIN_BODY_SIZE,
+                        isExpanded: pendingExpanded ?? knownExpanded ?? cachedExpanded ?? fallbackExpanded,
+                        index,
+                        size: cachedSize,
+                    });
+                } catch (error) {
+                    if (isRecoverablePaneviewError(error)) {
+                        console.warn("[DockviewLayout] skip adding pane panel after recoverable pane error", {
+                            panelId: panel.id,
+                            error,
+                        });
+                        return;
+                    }
+                    throw error;
+                }
+                didMutateLayout = true;
 
                 paneTitleCacheRef.current.set(panel.id, panel.title);
 
@@ -995,25 +1360,133 @@ export function DockviewLayout({
         ids.forEach((id, index) => {
             const fromIndex = api.panels.findIndex((panel) => panel.id === id);
             if (fromIndex >= 0 && fromIndex !== index) {
-                api.movePanel(fromIndex, index);
+                try {
+                    api.movePanel(fromIndex, index);
+                } catch (error) {
+                    if (isRecoverablePaneviewError(error)) {
+                        console.warn("[DockviewLayout] skip moving pane panel after recoverable pane error", {
+                            panelId: id,
+                            fromIndex,
+                            toIndex: index,
+                            error,
+                        });
+                        return;
+                    }
+                    throw error;
+                }
+                didMutateLayout = true;
             }
         });
+
+        if (didMutateLayout) {
+            requestPaneviewRelayout(api);
+        }
 
     };
 
     useEffect(() => {
         const api = leftPaneApiRef.current;
         if (api) {
+            if (restorePaneviewLayoutFromSnapshot(api, visibleLeftPanels, expandedLeftPanelId, "left")) {
+                return;
+            }
             syncPanePanels(api, visibleLeftPanels, expandedLeftPanelId);
         }
-    }, [visibleLeftPanels, expandedLeftPanelId]);
+    }, [currentVaultPath, expandedLeftPanelId, visibleLeftPanels]);
 
     useEffect(() => {
         const api = rightPaneApiRef.current;
         if (api) {
+            if (restorePaneviewLayoutFromSnapshot(api, visibleRightPanels, null, "right")) {
+                return;
+            }
             syncPanePanels(api, visibleRightPanels, null);
         }
-    }, [visibleRightPanels]);
+    }, [currentVaultPath, visibleRightPanels]);
+
+    useEffect(
+        () => () => {
+            if (sidebarLayoutPersistTimerRef.current !== null) {
+                clearTimeout(sidebarLayoutPersistTimerRef.current);
+            }
+        },
+        [],
+    );
+
+    useEffect(() => {
+        if (!currentVaultPath || !configState.backendConfig || !sidebarLayoutReadyRef.current) {
+            return;
+        }
+
+        if (sidebarLayoutPersistTimerRef.current !== null) {
+            clearTimeout(sidebarLayoutPersistTimerRef.current);
+        }
+
+        sidebarLayoutPersistTimerRef.current = setTimeout(() => {
+            const knownPanelIds = new Set(panelStates.map((item) => item.id));
+            const paneStates = Array.from(knownPanelIds).reduce<SidebarLayoutSnapshot["paneStates"]>((result, id) => {
+                const expanded = paneExpandedStateRef.current.get(id);
+                const size = paneSizeStateRef.current.get(id);
+                if (expanded === undefined && size === undefined) {
+                    return result;
+                }
+
+                result.push({
+                    id,
+                    expanded,
+                    size,
+                });
+                return result;
+            }, []);
+
+            const snapshot: SidebarLayoutSnapshot = {
+                version: 1,
+                left: {
+                    width: leftSidebarWidth,
+                    visible: isLeftSidebarVisible,
+                    activeActivityId,
+                    activePanelId,
+                },
+                right: {
+                    width: rightSidebarWidth,
+                    visible: isRightSidebarVisible,
+                    activeActivityId: activeRightActivityId,
+                    activePanelId: null,
+                },
+                panelStates,
+                paneStates,
+                convertiblePanelStates: Object.values(convertibleViewRuntime)
+                    .filter((runtime) => runtime.mode === "panel")
+                    .map((runtime) => ({
+                        descriptorId: runtime.descriptorId,
+                        stateKey: runtime.stateKey,
+                        sourceParams: runtime.sourceParams,
+                    })),
+            };
+
+            sidebarLayoutSnapshotRef.current = snapshot;
+            void saveSidebarLayoutSnapshot(snapshot);
+        }, SIDEBAR_LAYOUT_SAVE_DEBOUNCE_MS);
+
+        return () => {
+            if (sidebarLayoutPersistTimerRef.current !== null) {
+                clearTimeout(sidebarLayoutPersistTimerRef.current);
+            }
+        };
+    }, [
+        activeActivityId,
+        activePanelId,
+        activeRightActivityId,
+        currentVaultPath,
+        isLeftSidebarVisible,
+        isRightSidebarVisible,
+        leftSidebarWidth,
+        paneLayoutRevision,
+        panelStates,
+        rightSidebarWidth,
+        convertibleViewRuntime,
+        Boolean(configState.backendConfig),
+    ]);
 
     const resolveActivityIdForPanelDrop = (
         targetPosition: PanelPosition,
@@ -1066,6 +1539,7 @@ export function DockviewLayout({
         const nextActivityId = resolveActivityIdForPanelDrop(options.targetPosition, options.dropTargetPanelId);
 
         pendingExpandedStateRef.current.set(descriptor.panelId, true);
+        paneSizeStateRef.current.delete(descriptor.panelId);
 
         setConvertibleViewRuntime((previous) => ({
             ...previous,
@@ -2226,6 +2700,9 @@ export function DockviewLayout({
         activatePanel: (panelId: string) => {
             activatePanelById(panelId);
         },
+        executeCommand: (commandId: CommandId) => {
+            executeCommand(commandId, buildCommandContext());
+        },
         requestMoveFileToDirectory: (relativePath: string) => {
             openMoveFileDirectoryModalByPath(relativePath);
         },
@@ -2333,6 +2810,22 @@ export function DockviewLayout({
         };
     }, []);
 
+    const createStaleDockviewPlaceholder = (
+        componentKey: string,
+    ): React.FunctionComponent<IDockviewPanelProps<Record<string, unknown>>> => {
+        const Placeholder = memo(function StaleDockviewPlaceholder(): ReactNode {
+            return (
+                <div
+                    {...{ [TAB_COMPONENT_DATA_ATTR]: componentKey }}
+                    tabIndex={-1}
+                    style={{ height: "100%", outline: "none" }}
+                />
+            );
+        });
+        Placeholder.displayName = `StaleDockviewPlaceholder(${componentKey})`;
+        return Placeholder;
+    };
+
     // 为每个 dockview tab 组件包装 data-tab-component 属性容器，
     // 使焦点检测可通过 DOM 属性识别当前聚焦的标签类型
     const dockviewComponents = useMemo<Record<string, (props: IDockviewPanelProps<Record<string, unknown>>) => ReactNode>>(
@@ -2356,99 +2849,149 @@ export function DockviewLayout({
                 return Wrapped;
             };
 
-            return {
-                welcome: wrapTabComponent("welcome", WelcomeTabComponent),
-                ...Object.fromEntries(
-                    tabComponents.map((item) => [item.key, wrapTabComponent(item.key, item.component)]),
-                ),
-            };
+            const componentEntries: Array<
+                readonly [
+                    string,
+                    React.FunctionComponent<IDockviewPanelProps<Record<string, unknown>>>,
+                ]
+            > = [
+                    ["welcome", wrapTabComponent("welcome", WelcomeTabComponent)],
+                    ...tabComponents.map((item) => [item.key, wrapTabComponent(item.key, item.component)] as const),
+                ];
+
+            const knownComponentKeys = new Set(componentEntries.map(([key]) => key));
+            const staleComponentKeys = dockviewApiRef.current?.panels
+                .map((panel) => panel.view.contentComponent)
+                .filter((componentKey) => !knownComponentKeys.has(componentKey))
+                ?? [];
+
+            staleComponentKeys.forEach((componentKey) => {
+                componentEntries.push([componentKey, createStaleDockviewPlaceholder(componentKey)]);
+            });
+
+            return Object.fromEntries(componentEntries);
         },
         [tabComponents],
     );
 
+    const createStalePanePlaceholder = (panelId: string): React.FunctionComponent<IPaneviewPanelProps> => {
+        const Placeholder = memo(function StalePanePlaceholder(): ReactNode {
+            return (
+                <div
+                    className="pane-panel-content"
+                    {...{ [PANEL_ID_DATA_ATTR]: panelId }}
+                    tabIndex={-1}
+                    style={{ outline: "none" }}
+                />
+            );
+        });
+        Placeholder.displayName = `StalePanePlaceholder(${panelId})`;
+        return Placeholder;
+    };
+
     // 为每个侧栏 pane panel 包装 data-panel-id 属性容器，
     // 使焦点检测可通过 DOM 属性识别当前聚焦的面板
     const leftPaneComponents = useMemo(
-        () =>
-            Object.fromEntries(
-                visibleLeftPanels.map((panel) => [
-                    panel.id,
-                    () => (
-                        // tabIndex={-1} 使面板容器可聚焦，点击空白区域触发 focusin
-                        <div
-                            className="pane-panel-content"
-                            {...{ [PANEL_ID_DATA_ATTR]: panel.id }}
-                            tabIndex={-1}
-                            style={{ outline: "none" }}
-                        >
-                            {panel.render({
-                                ...panelRenderContext,
-                                hostPanelId: panel.id,
-                                convertibleView: (() => {
-                                    const descriptor = convertibleByPanelId.get(panel.id);
-                                    if (!descriptor) {
-                                        return null;
-                                    }
+        () => {
+            const componentEntries = visibleLeftPanels.map((panel) => [
+                panel.id,
+                (() => (
+                    // tabIndex={-1} 使面板容器可聚焦，点击空白区域触发 focusin
+                    <div
+                        className="pane-panel-content"
+                        {...{ [PANEL_ID_DATA_ATTR]: panel.id }}
+                        tabIndex={-1}
+                        style={{ outline: "none" }}
+                    >
+                        {panel.render({
+                            ...panelRenderContext,
+                            hostPanelId: panel.id,
+                            convertibleView: (() => {
+                                const descriptor = convertibleByPanelId.get(panel.id);
+                                if (!descriptor) {
+                                    return null;
+                                }
 
-                                    const runtime = getConvertibleRuntimeState(descriptor.id);
-                                    return {
-                                        descriptorId: descriptor.id,
-                                        mode: "panel" as const,
-                                        panelId: panel.id,
-                                        stateKey: runtime?.stateKey
-                                            ?? descriptor.getInitialStateKey?.()
-                                            ?? descriptor.id,
-                                        sourceParams: runtime?.sourceParams,
-                                        sourceTabId: runtime?.sourceTabId,
-                                    } satisfies ConvertiblePanelRenderState;
-                                })(),
-                            })}
-                        </div>
-                    ),
-                ]),
-            ) as Record<string, React.FunctionComponent<IPaneviewPanelProps>>,
+                                const runtime = getConvertibleRuntimeState(descriptor.id);
+                                return {
+                                    descriptorId: descriptor.id,
+                                    mode: "panel" as const,
+                                    panelId: panel.id,
+                                    stateKey: runtime?.stateKey
+                                        ?? descriptor.getInitialStateKey?.()
+                                        ?? descriptor.id,
+                                    sourceParams: runtime?.sourceParams,
+                                    sourceTabId: runtime?.sourceTabId,
+                                } satisfies ConvertiblePanelRenderState;
+                            })(),
+                        })}
+                    </div>
+                )) as React.FunctionComponent<IPaneviewPanelProps>,
+            ] as const);
+
+            const stalePanelIds = leftPaneApiRef.current?.panels
+                .map((panel) => panel.id)
+                .filter((panelId) => !visibleLeftPanels.some((panel) => panel.id === panelId))
+                ?? [];
+
+            stalePanelIds.forEach((panelId) => {
+                componentEntries.push([panelId, createStalePanePlaceholder(panelId)]);
+            });
+
+            return Object.fromEntries(componentEntries) as Record<string, React.FunctionComponent<IPaneviewPanelProps>>;
+        },
         [visibleLeftPanels, panelRenderContext],
     );
 
     const rightPaneComponents = useMemo(
-        () =>
-            Object.fromEntries(
-                rightPanels.map((panel) => [
-                    panel.id,
-                    () => (
-                        // tabIndex={-1} 使面板容器可聚焦，点击空白区域触发 focusin
-                        <div
-                            className="pane-panel-content"
-                            {...{ [PANEL_ID_DATA_ATTR]: panel.id }}
-                            tabIndex={-1}
-                            style={{ outline: "none" }}
-                        >
-                            {panel.render({
-                                ...panelRenderContext,
-                                hostPanelId: panel.id,
-                                convertibleView: (() => {
-                                    const descriptor = convertibleByPanelId.get(panel.id);
-                                    if (!descriptor) {
-                                        return null;
-                                    }
+        () => {
+            const componentEntries = rightPanels.map((panel) => [
+                panel.id,
+                (() => (
+                    // tabIndex={-1} 使面板容器可聚焦，点击空白区域触发 focusin
+                    <div
+                        className="pane-panel-content"
+                        {...{ [PANEL_ID_DATA_ATTR]: panel.id }}
+                        tabIndex={-1}
+                        style={{ outline: "none" }}
+                    >
+                        {panel.render({
+                            ...panelRenderContext,
+                            hostPanelId: panel.id,
+                            convertibleView: (() => {
+                                const descriptor = convertibleByPanelId.get(panel.id);
+                                if (!descriptor) {
+                                    return null;
+                                }
 
-                                    const runtime = getConvertibleRuntimeState(descriptor.id);
-                                    return {
-                                        descriptorId: descriptor.id,
-                                        mode: "panel" as const,
-                                        panelId: panel.id,
-                                        stateKey: runtime?.stateKey
-                                            ?? descriptor.getInitialStateKey?.()
-                                            ?? descriptor.id,
-                                        sourceParams: runtime?.sourceParams,
-                                        sourceTabId: runtime?.sourceTabId,
-                                    } satisfies ConvertiblePanelRenderState;
-                                })(),
-                            })}
-                        </div>
-                    ),
-                ]),
-            ) as Record<string, React.FunctionComponent<IPaneviewPanelProps>>,
+                                const runtime = getConvertibleRuntimeState(descriptor.id);
+                                return {
+                                    descriptorId: descriptor.id,
+                                    mode: "panel" as const,
+                                    panelId: panel.id,
+                                    stateKey: runtime?.stateKey
+                                        ?? descriptor.getInitialStateKey?.()
+                                        ?? descriptor.id,
+                                    sourceParams: runtime?.sourceParams,
+                                    sourceTabId: runtime?.sourceTabId,
+                                } satisfies ConvertiblePanelRenderState;
+                            })(),
+                        })}
+                    </div>
+                )) as React.FunctionComponent<IPaneviewPanelProps>,
+            ] as const);
+
+            const stalePanelIds = rightPaneApiRef.current?.panels
+                .map((panel) => panel.id)
+                .filter((panelId) => !rightPanels.some((panel) => panel.id === panelId))
+                ?? [];
+
+            stalePanelIds.forEach((panelId) => {
+                componentEntries.push([panelId, createStalePanePlaceholder(panelId)]);
+            });
+
+            return Object.fromEntries(componentEntries) as Record<string, React.FunctionComponent<IPaneviewPanelProps>>;
+        },
         [rightPanels, panelRenderContext],
     );
 
@@ -2458,7 +3001,7 @@ export function DockviewLayout({
      * 设计思路：活动栏是左侧栏的入口，点击行为始终围绕左侧栏展开：
      * - 点击当前激活的 activity → 折叠/展开左侧栏（toggle）
      * - 点击不同的 activity → 切换到该 activity 并展开左侧栏
-     * - 若面板有 onActivityClick（如知识图谱打开 Tab），优先执行自定义行为。
+    * - callback activity 直接执行 onActivate，且不会被视为侧栏容器。
      * - 即使该 activity 下的面板已被拖到右侧，点击仍展开左侧栏（空容器可接受拖入）。
      *
      * @param activityId 被点击的活动项 ID。
@@ -2471,11 +3014,6 @@ export function DockviewLayout({
         }
 
         const panel = panels.find((candidate) => activityIdOf(candidate) === activityId);
-
-        if (panel?.onActivityClick) {
-            panel.onActivityClick(panelRenderContext);
-            return;
-        }
 
         if (activityId === activeActivityId) {
             /* 再次点击当前活动项 → toggle 左侧栏可见性 */
@@ -2650,6 +3188,10 @@ export function DockviewLayout({
             menuItems.push({ id: "align-bottom", text: t("dockview.activityAlignBottom") });
         }
         menuItems.push({ id: "hide", text: t("dockview.activityHide") });
+        if (item.id.startsWith(CUSTOM_ACTIVITY_REGISTRATION_PREFIX)) {
+            menuItems.push({ id: "delete-custom-activity", text: t("dockview.activityDeleteCustom") });
+        }
+        menuItems.push({ id: "create-custom-activity", text: t("dockview.activityCreateCustom") });
 
         const selectedId = await showNativeContextMenu(menuItems);
         if (!selectedId) {
@@ -2680,6 +3222,38 @@ export function DockviewLayout({
                 items: updated.map((i) => ({ id: i.id, section: i.section, visible: i.visible, bar: i.bar })),
             });
             console.info("[activity-bar] item hidden", { itemId: item.id });
+        } else if (selectedId === "delete-custom-activity") {
+            const configId = item.id.slice(CUSTOM_ACTIVITY_REGISTRATION_PREFIX.length);
+            const deletedActivityId = item.id;
+            const deletedPanelId = `custom-panel:${configId}`;
+
+            updateActivityBarConfig({
+                items: mergedActivityItems
+                    .filter((candidate) => candidate.id !== deletedActivityId)
+                    .map((candidate) => ({
+                        id: candidate.id,
+                        section: candidate.section,
+                        visible: candidate.visible,
+                        bar: candidate.bar,
+                    })),
+            });
+            setPanelStates((prev) => removeActivityReferencesFromPanelStates(
+                prev,
+                panels,
+                deletedActivityId,
+                deletedPanelId,
+            ));
+            setActiveActivityId((current) => current === deletedActivityId ? null : current);
+            setActiveRightActivityId((current) => current === deletedActivityId ? null : current);
+            setActivePanelId((current) => current === deletedPanelId ? null : current);
+            lastActiveLeftPanelByActivityRef.current.delete(deletedActivityId);
+            paneSizeStateRef.current.delete(deletedPanelId);
+            paneExpandedStateRef.current.delete(deletedPanelId);
+
+            await removeCustomActivityFromVaultConfig(configId);
+            console.info("[activity-bar] custom activity deleted", { itemId: item.id, configId });
+        } else if (selectedId === "create-custom-activity") {
+            executeCommand(CUSTOM_ACTIVITY_CREATE_COMMAND_ID, buildCommandContext());
         }
     };
 
@@ -2696,14 +3270,23 @@ export function DockviewLayout({
         }
         e.preventDefault();
 
-        const menuItems = mergedActivityItems.map((item) => ({
+        const menuItems: NativeContextMenuItem[] = mergedActivityItems.map((item) => ({
             id: item.id,
             text: item.title,
             checked: item.visible,
         }));
+        menuItems.unshift({
+            id: "create-custom-activity",
+            text: t("dockview.activityCreateCustom"),
+        });
 
         const selectedId = await showNativeContextMenu(menuItems);
         if (!selectedId) {
+            return;
+        }
+
+        if (selectedId === "create-custom-activity") {
+            executeCommand(CUSTOM_ACTIVITY_CREATE_COMMAND_ID, buildCommandContext());
             return;
         }
 
@@ -2737,12 +3320,6 @@ export function DockviewLayout({
         const activityDescriptor = activityDescriptorById.get(item.id);
         if (activityDescriptor?.type === "callback") {
             activityDescriptor.onActivate(panelRenderContext);
-            return;
-        }
-
-        const panel = panels.find((p) => activityIdOf(p) === item.id);
-        if (panel?.onActivityClick) {
-            panel.onActivityClick(panelRenderContext);
             return;
         }
 
@@ -2826,26 +3403,25 @@ export function DockviewLayout({
             items: updated.map((i) => ({ id: i.id, section: i.section, visible: i.visible, bar: i.bar })),
         });
 
-        /* 如果 item 是 panel container（有关联面板），将面板移到右侧 */
+        /* 如果 item 有真实 panel container，将关联面板移到右侧 */
         if (!item.isSettings) {
-            const panelDef = panels.find((p) => activityIdOf(p) === itemId);
-            const isTabOnly = panelDef?.tabOnly ?? false;
+            const hasPanelContainer = activityIdsWithSidebarContainer.has(itemId);
 
-            setPanelStates((prev) =>
-                prev.map((ps) => {
-                    const pd = panelById.get(ps.id);
-                    if (pd && activityIdOf(pd) === itemId) {
-                        return { ...ps, position: "right" as PanelPosition };
-                    }
-                    return ps;
-                }),
-            );
+            if (hasPanelContainer) {
+                setPanelStates((prev) =>
+                    prev.map((ps) => {
+                        const pd = panelById.get(ps.id);
+                        if (pd && activityIdOf(pd) === itemId) {
+                            return { ...ps, position: "right" as PanelPosition };
+                        }
+                        return ps;
+                    }),
+                );
 
-            /* tabOnly 的活动不产生侧边栏面板，故不设为 activeRightActivityId */
-            if (!isTabOnly) {
+                /* callback-only 活动不产生侧边栏面板，故不设为 activeRightActivityId */
                 setActiveRightActivityId(itemId);
+                setIsRightSidebarVisible(true);
             }
-            setIsRightSidebarVisible(true);
         }
 
         setDragState(null);
@@ -2877,24 +3453,23 @@ export function DockviewLayout({
 
             /* 将关联面板移回左侧 */
             if (!item.isSettings) {
-                const panelDef = panels.find((p) => activityIdOf(p) === itemId);
-                const isTabOnly = panelDef?.tabOnly ?? false;
+                const hasPanelContainer = activityIdsWithSidebarContainer.has(itemId);
 
-                setPanelStates((prev) =>
-                    prev.map((ps) => {
-                        const pd = panelById.get(ps.id);
-                        if (pd && activityIdOf(pd) === itemId) {
-                            return { ...ps, position: "left" as PanelPosition };
-                        }
-                        return ps;
-                    }),
-                );
+                if (hasPanelContainer) {
+                    setPanelStates((prev) =>
+                        prev.map((ps) => {
+                            const pd = panelById.get(ps.id);
+                            if (pd && activityIdOf(pd) === itemId) {
+                                return { ...ps, position: "left" as PanelPosition };
+                            }
+                            return ps;
+                        }),
+                    );
 
-                /* tabOnly 的活动不产生侧边栏面板，故不设为 activeActivityId */
-                if (!isTabOnly) {
+                    /* callback-only 活动不产生侧边栏面板，故不设为 activeActivityId */
                     setActiveActivityId(itemId);
+                    setIsLeftSidebarVisible(true);
                 }
-                setIsLeftSidebarVisible(true);
             }
 
             setDragState(null);
@@ -3016,11 +3591,16 @@ export function DockviewLayout({
         leftPaneApiRef.current = api;
 
         leftUnhandledDragDisposeRef.current?.dispose();
+        leftPaneLayoutDisposeRef.current?.dispose();
         leftUnhandledDragDisposeRef.current = api.onUnhandledDragOverEvent((dragEvent) => {
             handleUnhandledDragOver(api, dragEvent);
         });
+        leftPaneLayoutDisposeRef.current = api.onDidLayoutChange(() => {
+            capturePaneLayout(api);
+        });
 
         syncPanePanels(api, visibleLeftPanels, expandedLeftPanelId);
+        capturePaneLayout(api);
     };
 
     const handleRightPaneReady = (event: PaneviewReadyEvent): void => {
@@ -3028,15 +3608,23 @@ export function DockviewLayout({
         rightPaneApiRef.current = api;
 
         rightUnhandledDragDisposeRef.current?.dispose();
+        rightPaneLayoutDisposeRef.current?.dispose();
         rightUnhandledDragDisposeRef.current = api.onUnhandledDragOverEvent((dragEvent) => {
             handleUnhandledDragOver(api, dragEvent);
         });
+        rightPaneLayoutDisposeRef.current = api.onDidLayoutChange(() => {
+            capturePaneLayout(api);
+        });
 
         syncPanePanels(api, visibleRightPanels, null);
+        capturePaneLayout(api);
     };
 
     useEffect(
         () => () => {
+            leftPaneLayoutDisposeRef.current?.dispose();
+            rightPaneLayoutDisposeRef.current?.dispose();
+            leftUnhandledDragDisposeRef.current?.dispose();
             rightUnhandledDragDisposeRef.current?.dispose();
             dockUnhandledDragDisposeRef.current?.dispose();
         },

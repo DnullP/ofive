@@ -119,6 +119,17 @@ interface ConfigState {
 }
 
 /**
+ * @interface UpdateBackendConfigOptions
+ * @description 通用后端配置写入选项。
+ */
+interface UpdateBackendConfigOptions {
+    /** 日志标签，用于区分调用来源。 */
+    logLabel?: string;
+    /** 保存失败时的兜底 i18n key。 */
+    fallbackErrorI18nKey?: string;
+}
+
+/**
  * @interface ConfigChangedEventDetail
  * @description 配置变更事件详情。
  */
@@ -621,6 +632,74 @@ class ConfigStore {
             console.error("[config-store] save feature setting failed", { key, nextValue, message });
         }
     }
+
+    /**
+     * @method updateBackendConfig
+     * @description 通用更新后端仓库配置并立即同步到当前 store。
+     * @param recipe 基于当前配置生成下一份配置的变换函数。
+     * @param options 写入日志与错误兜底选项。
+     * @returns 保存完成后的配置快照。
+     * @throws 当配置尚未加载或后端保存失败时抛出异常。
+     * @sideEffects 更新 backendConfig + featureSettings，并调用后端保存接口。
+     */
+    async updateBackendConfig(
+        recipe: (currentConfig: VaultConfig) => VaultConfig,
+        options: UpdateBackendConfigOptions = {},
+    ): Promise<VaultConfig> {
+        const loadedConfig = this.state.backendConfig;
+        if (!loadedConfig) {
+            const message = i18n.t("store.loadConfigFailed");
+            console.warn("[config-store] updateBackendConfig skipped: no backendConfig loaded", {
+                logLabel: options.logLabel ?? "unknown",
+            });
+            throw new Error(message);
+        }
+
+        let currentConfig = loadedConfig;
+        try {
+            currentConfig = await getCurrentVaultConfig();
+        } catch (error) {
+            console.warn("[config-store] updateBackendConfig fallback to in-memory snapshot", {
+                logLabel: options.logLabel ?? "unknown",
+                message: error instanceof Error ? error.message : String(error),
+            });
+        }
+
+        const rawNextConfig = recipe(currentConfig);
+        const { nextConfig, featureSettings } = normalizeBackendConfig(rawNextConfig);
+
+        this.state = {
+            ...this.state,
+            backendConfig: nextConfig,
+            featureSettings,
+            error: null,
+        };
+        this.emit();
+
+        try {
+            await saveCurrentVaultConfig(nextConfig);
+            console.info("[config-store] backend config saved", {
+                logLabel: options.logLabel ?? "unknown",
+            });
+            return nextConfig;
+        } catch (error) {
+            const message = error instanceof Error
+                ? error.message
+                : i18n.t(options.fallbackErrorI18nKey ?? "store.saveConfigFailed", {
+                    key: options.logLabel ?? "backend-config",
+                });
+            this.state = {
+                ...this.state,
+                error: message,
+            };
+            this.emit();
+            console.error("[config-store] backend config save failed", {
+                logLabel: options.logLabel ?? "unknown",
+                message,
+            });
+            throw error instanceof Error ? error : new Error(message);
+        }
+    }
 }
 
 const configStore = new ConfigStore();
@@ -712,6 +791,21 @@ export async function updateFeatureSetting<K extends keyof FeatureSettings>(
 ): Promise<void> {
     await configStore.setFeatureSetting(key, nextValue);
 }
+
+/**
+ * @function updateBackendConfig
+ * @description 通用更新后端仓库配置并持久化。
+ * @param recipe 基于当前配置生成下一份配置的变换函数。
+ * @param options 写入日志与错误兜底选项。
+ * @returns 保存完成后的配置快照。
+ */
+export async function updateBackendConfig(
+    recipe: (currentConfig: VaultConfig) => VaultConfig,
+    options?: { logLabel?: string; fallbackErrorI18nKey?: string },
+): Promise<VaultConfig> {
+    return configStore.updateBackendConfig(recipe, options);
+}
+
 /**
  * @function useConfigSync
  * @description 在仓库就绪后加载并同步配置。

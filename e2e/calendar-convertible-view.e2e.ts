@@ -1,5 +1,5 @@
 /**
- * @module e2e/calendar-convertible-view.spec
+ * @module e2e/calendar-convertible-view.e2e
  * @description 日历可转化视图 E2E 回归测试。
  *
  * 覆盖场景：
@@ -27,9 +27,39 @@ async function waitForLayoutReady(page: Page): Promise<void> {
     await page.locator(".dv-pane-header").first().waitFor({ state: "visible" });
 }
 
+function buildMockVaultUrl(testName: string): string {
+    return `/?mockVaultPath=${encodeURIComponent(`/mock/notes/${testName}-${Date.now()}`)}`;
+}
+
+/**
+ * 读取 pane body 的实际高度，用于检测面板是否被挤压到仅剩标题。
+ *
+ * @param pane - 目标 pane locator
+ * @returns Promise<number>
+ */
+async function getPaneBodyHeight(pane: ReturnType<Page["locator"]>): Promise<number> {
+    return pane.locator(".dv-pane-body").evaluate((element) => {
+        const htmlElement = element as HTMLElement;
+        return htmlElement.getBoundingClientRect().height;
+    });
+}
+
+/**
+ * 读取整个 pane 的实际高度，用于验证 reload 前后尺寸是否保持一致。
+ *
+ * @param pane - 目标 pane locator
+ * @returns Promise<number>
+ */
+async function getPaneHeight(pane: ReturnType<Page["locator"]>): Promise<number> {
+    return pane.evaluate((element) => {
+        const htmlElement = element as HTMLElement;
+        return htmlElement.getBoundingClientRect().height;
+    });
+}
+
 test.describe("日历 tab/panel 转换", () => {
     test("calendar panel 拖回主区域右侧时应恢复为 split tab", async ({ page }) => {
-        await page.goto("/");
+        await page.goto(buildMockVaultUrl("calendar-panel-back-to-tab"));
         await waitForLayoutReady(page);
 
         await page.getByTitle("Calendar").click();
@@ -57,7 +87,7 @@ test.describe("日历 tab/panel 转换", () => {
     });
 
     test("calendar activity icon 在 panel 模式下仍应打开 tab 而不是接管左侧 sidebar", async ({ page }) => {
-        await page.goto("/");
+        await page.goto(buildMockVaultUrl("calendar-panel-icon-behavior"));
         await waitForLayoutReady(page);
 
         const calendarIcon = page.getByTitle("Calendar");
@@ -81,8 +111,34 @@ test.describe("日历 tab/panel 转换", () => {
         ).toHaveCount(0);
     });
 
+    test("calendar tab 拖到右侧后 outline 与 backlinks 的内容不应变空", async ({ page }) => {
+        await page.goto(buildMockVaultUrl("calendar-panel-right-bodies"));
+        await page.setViewportSize({ width: 1527, height: 796 });
+        await waitForLayoutReady(page);
+
+        await page.getByTitle("Calendar").click();
+        const calendarTab = page.locator(".dv-tab", { hasText: "Calendar" });
+        await expect(calendarTab).toBeVisible();
+
+        const rightSidebar = page.locator("[aria-label='Right Extension Panel']");
+        const outlinePane = rightSidebar.locator(".dv-pane").filter({ hasText: "Outline" }).first();
+        const backlinksPane = rightSidebar.locator(".dv-pane").filter({ hasText: "Backlinks" }).first();
+
+        await expect(outlinePane.getByText("No focused article")).toBeVisible();
+        await expect(backlinksPane.getByText("No focused article")).toBeVisible();
+
+        const backlinksHeader = page.locator(".dv-pane-header", { hasText: "Backlinks" });
+        await dockviewDragPanel(page, calendarTab, backlinksHeader);
+
+        await expect(
+            page.locator("[aria-label='Right Extension Panel'] .dv-pane-header", { hasText: "Calendar" }),
+        ).toBeVisible();
+        await expect.poll(() => getPaneBodyHeight(outlinePane)).toBeGreaterThan(60);
+        await expect.poll(() => getPaneBodyHeight(backlinksPane)).toBeGreaterThan(60);
+    });
+
     test("calendar panel 移到左侧后切换 Search/Explorer 应恢复上次展开的 calendar panel", async ({ page }) => {
-        await page.goto("/");
+        await page.goto(buildMockVaultUrl("calendar-panel-left-restore"));
         await waitForLayoutReady(page);
 
         await page.getByTitle("Calendar").click();
@@ -118,7 +174,7 @@ test.describe("日历 tab/panel 转换", () => {
     });
 
     test("left sidebar 全部 pane 折叠后仍可将 calendar tab 放到空白区", async ({ page }) => {
-        await page.goto("/");
+        await page.goto(buildMockVaultUrl("calendar-panel-left-empty-drop"));
         await waitForLayoutReady(page);
 
         await page.getByTitle("Calendar").click();
@@ -136,5 +192,61 @@ test.describe("日历 tab/panel 转换", () => {
         const calendarPane = leftSidebar.locator(".dv-pane").filter({ hasText: "Calendar" }).first();
         await expect(calendarPane.locator(".dv-pane-header")).toBeVisible();
         await expect(page.locator(".dv-tab", { hasText: "Calendar" })).toHaveCount(0);
+    });
+
+    test("calendar tab 拖入右侧后 reload 仍应恢复为右侧 pane", async ({ page }) => {
+        const url = buildMockVaultUrl("calendar-panel-right-reload");
+        await page.goto(url);
+        await waitForLayoutReady(page);
+
+        await page.getByTitle("Calendar").click();
+        const calendarTab = page.locator(".dv-tab", { hasText: "Calendar" });
+        await expect(calendarTab).toBeVisible();
+
+        const backlinksHeader = page.locator(".dv-pane-header", { hasText: "Backlinks" });
+        await dockviewDragPanel(page, calendarTab, backlinksHeader);
+
+        const rightCalendarPaneHeader = page.locator(
+            "[aria-label='Right Extension Panel'] .dv-pane-header",
+            { hasText: "Calendar" },
+        );
+        await expect(rightCalendarPaneHeader).toBeVisible();
+        await expect(page.locator(".dv-tab", { hasText: "Calendar" })).toHaveCount(0);
+
+        await page.waitForTimeout(450);
+        await page.reload();
+        await waitForLayoutReady(page);
+
+        await expect(rightCalendarPaneHeader).toBeVisible();
+        await expect(page.locator(".dv-tab", { hasText: "Calendar" })).toHaveCount(0);
+    });
+
+    test("calendar tab 拖入右侧后 reload 不应改变 panel 高度", async ({ page }) => {
+        const url = buildMockVaultUrl("calendar-panel-right-reload-size");
+        await page.goto(url);
+        await page.setViewportSize({ width: 1527, height: 796 });
+        await waitForLayoutReady(page);
+
+        await page.getByTitle("Calendar").click();
+        const calendarTab = page.locator(".dv-tab", { hasText: "Calendar" });
+        await expect(calendarTab).toBeVisible();
+
+        const backlinksHeader = page.locator(".dv-pane-header", { hasText: "Backlinks" });
+        await dockviewDragPanel(page, calendarTab, backlinksHeader);
+
+        const rightSidebar = page.locator("[aria-label='Right Extension Panel']");
+        const calendarPane = rightSidebar.locator(".dv-pane").filter({ hasText: "Calendar" }).first();
+        await expect(calendarPane.locator(".dv-pane-header")).toBeVisible();
+
+        const heightBeforeReload = await getPaneHeight(calendarPane);
+        await page.waitForTimeout(450);
+        await page.reload();
+        await waitForLayoutReady(page);
+
+        const restoredCalendarPane = rightSidebar.locator(".dv-pane").filter({ hasText: "Calendar" }).first();
+        await expect(restoredCalendarPane.locator(".dv-pane-header")).toBeVisible();
+        const heightAfterReload = await getPaneHeight(restoredCalendarPane);
+
+        expect(Math.abs(heightAfterReload - heightBeforeReload)).toBeLessThanOrEqual(4);
     });
 });

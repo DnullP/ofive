@@ -1,0 +1,3 @@
+- Sidebar workspace persistence uses VaultConfig.entries.sidebarLayout.
+- Persisted sidebar runtime includes left/right rail width, visibility, active activity ids, left active panel id, panelStates, and per-pane size/expanded state.
+- Main dockview tabs are intentionally not persisted; App still boots from initialTabs only.

@@ -1,0 +1,3 @@
+- Raw `bun test` is used for unit-style frontend tests and should stay clean without loading Playwright files.
+- Playwright E2E files use the `.e2e.ts` suffix, and `playwright.config.ts` matches them explicitly via `testMatch`.
+- `src/api/vaultApi.ts` must not assume Vite-only `import.meta.glob` exists during Bun tests; non-Vite runtimes should safely fall back.

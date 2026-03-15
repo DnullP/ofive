@@ -30,6 +30,15 @@ import "../../../src/App.css";
  */
 const MOCK_VAULT_PATH = "/mock/notes";
 
+function resolveMockVaultPath(): string {
+    if (typeof window === "undefined") {
+        return MOCK_VAULT_PATH;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    return params.get("mockVaultPath") || MOCK_VAULT_PATH;
+}
+
 /**
  * @function MockHomeTab
  * @description Mock 页面首页 tab。
@@ -146,7 +155,9 @@ function ensureMockComponentsRegistered(): void {
  * @returns React 节点。
  */
 export function MockApp(): ReactNode {
-    useConfigSync(MOCK_VAULT_PATH, true);
+    const mockVaultPath = useMemo(() => resolveMockVaultPath(), []);
+
+    useConfigSync(mockVaultPath, true);
     ensureMockComponentsRegistered();
 
     const initialTabs = useMemo<TabInstanceDefinition[]>(

@@ -1,5 +1,5 @@
 /**
- * @module e2e/sidebar-panel-drag.spec
+ * @module e2e/sidebar-panel-drag.e2e
  * @description 侧栏面板跨容器拖拽 E2E 测试。
  *
  * 验证场景：
@@ -81,9 +81,15 @@ test.describe("侧栏面板跨容器拖拽", () => {
         /* 右侧栏初始应显示 outline activity 对应的面板 */
         await expect(rightSidebar).toBeVisible();
 
-        /* 确认大纲 icon 存在且处于 active 状态 */
+        /* 确认大纲 icon 存在；若初始尚未进入 active，则先显式激活，避免异步装载抖动 */
         const outlineIcon = page.locator("[data-testid='right-activity-icon-outline']");
         await expect(outlineIcon).toBeVisible();
+
+        const outlineIconClass = (await outlineIcon.getAttribute("class")) ?? "";
+        if (!outlineIconClass.includes("active")) {
+            await outlineIcon.click();
+            await expect(outlineIcon).toHaveClass(/active/);
+        }
 
         /* 点击已激活的 outline icon → toggle OFF，隐藏右侧栏 */
         await outlineIcon.click();

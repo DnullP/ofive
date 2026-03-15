@@ -24,6 +24,8 @@ import { describe, expect, it } from "bun:test";
 import {
     buildInitialPanelStates,
     mergePanelStates,
+    removeActivityReferencesFromPanelStates,
+    repairUnknownActivityReferencesInPanelStates,
     resolveActivityId,
     getVisiblePanelIds,
     autoSelectActivityId,
@@ -168,6 +170,101 @@ describe("mergePanelStates", () => {
         expect(result[0].position).toBe("left");
         expect(result[0].activityId).toBe("files");
         expect(result[0].order).toBe(2);
+    });
+});
+
+describe("removeActivityReferencesFromPanelStates", () => {
+    it("应移除被删除的自定义容器面板，并将挂载面板回退到默认 activity", () => {
+        const prev: PanelRuntimeState[] = [
+            state({
+                id: "custom-panel:custom-calendar",
+                position: "right",
+                order: 0,
+                activityId: "custom-activity:custom-calendar",
+            }),
+            state({
+                id: "calendar-panel",
+                position: "right",
+                order: 1,
+                activityId: "custom-activity:custom-calendar",
+            }),
+            state({
+                id: "outline",
+                position: "right",
+                order: 2,
+                activityId: "outline",
+            }),
+        ];
+        const panels: PanelDefinitionInfo[] = [
+            def({ id: "calendar-panel", activityId: "calendar", position: "right" }),
+            def({ id: "outline", activityId: "outline", position: "right" }),
+        ];
+
+        const result = removeActivityReferencesFromPanelStates(
+            prev,
+            panels,
+            "custom-activity:custom-calendar",
+            "custom-panel:custom-calendar",
+        );
+
+        expect(result).toEqual([
+            {
+                id: "calendar-panel",
+                position: "right",
+                order: 1,
+                activityId: "calendar",
+            },
+            {
+                id: "outline",
+                position: "right",
+                order: 2,
+                activityId: "outline",
+            },
+        ]);
+    });
+});
+
+describe("repairUnknownActivityReferencesInPanelStates", () => {
+    it("应将失效的自定义 activity 引用回退到面板默认 activity", () => {
+        const prev: PanelRuntimeState[] = [
+            state({
+                id: "calendar-panel",
+                position: "right",
+                order: 1,
+                activityId: "custom-activity:deleted-calendar",
+            }),
+            state({
+                id: "outline",
+                position: "right",
+                order: 2,
+                activityId: "outline",
+            }),
+        ];
+        const panels: PanelDefinitionInfo[] = [
+            def({ id: "calendar-panel", activityId: "calendar", position: "right" }),
+            def({ id: "outline", activityId: "outline", position: "right" }),
+        ];
+
+        const result = repairUnknownActivityReferencesInPanelStates(
+            prev,
+            panels,
+            new Set(["calendar", "outline"]),
+        );
+
+        expect(result).toEqual([
+            {
+                id: "calendar-panel",
+                position: "right",
+                order: 1,
+                activityId: "calendar",
+            },
+            {
+                id: "outline",
+                position: "right",
+                order: 2,
+                activityId: "outline",
+            },
+        ]);
     });
 });
 

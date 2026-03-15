@@ -21,6 +21,9 @@ export default defineConfig({
     /** 测试文件目录 */
     testDir: "./e2e",
 
+    /** 仅匹配 Playwright E2E 文件，避免被 Bun 单测发现规则混入 */
+    testMatch: /.*\.e2e\.ts/,
+
     /** 单个测试超时 30s */
     timeout: 30_000,
 

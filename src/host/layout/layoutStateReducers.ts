@@ -111,6 +111,95 @@ export function mergePanelStates(
     });
 }
 
+/**
+ * 删除指定 activity 后，清理 panelStates 中对该 activity 的引用。
+ *
+ * 规则：
+ * - 被删除的容器面板本身直接移除。
+ * - 其他仍存在的面板若挂在该 activity 下，则回退到其定义中的默认 activityId。
+ * - 若定义中也缺少 activityId，则回退到面板自身 id。
+ *
+ * @param prev 当前运行时状态数组
+ * @param panels 当前已注册面板定义
+ * @param removedActivityId 被删除的 activity 注册 ID
+ * @param removedPanelId 被删除的容器面板 ID
+ * @returns 清理后的 panelStates
+ */
+export function removeActivityReferencesFromPanelStates(
+    prev: PanelRuntimeState[],
+    panels: PanelDefinitionInfo[],
+    removedActivityId: string,
+    removedPanelId: string,
+): PanelRuntimeState[] {
+    const panelById = new Map(panels.map((panel) => [panel.id, panel]));
+
+    return prev.flatMap((item) => {
+        if (item.id === removedPanelId) {
+            return [];
+        }
+
+        if (item.activityId !== removedActivityId) {
+            return [item];
+        }
+
+        const panel = panelById.get(item.id);
+        const fallbackActivityId = panel?.activityId ?? panel?.id ?? item.id;
+
+        return [{
+            ...item,
+            activityId: fallbackActivityId,
+        }];
+    });
+}
+
+/**
+ * 修复 panelStates 中指向未知 activity 的脏引用。
+ *
+ * 规则：
+ * - 若面板已不存在，则移除该状态条目。
+ * - 若 activityId 仍然有效，则保持不变。
+ * - 若 activityId 已失效，则回退到面板定义中的默认 activityId。
+ * - 若定义中缺少 activityId，则回退到面板自身 id。
+ *
+ * @param prev 当前运行时状态数组
+ * @param panels 当前已注册面板定义
+ * @param validActivityIds 当前仍有效的 activityId 集合
+ * @returns 修复后的 panelStates；若无需修复则直接返回原数组
+ */
+export function repairUnknownActivityReferencesInPanelStates(
+    prev: PanelRuntimeState[],
+    panels: PanelDefinitionInfo[],
+    validActivityIds: Set<string>,
+): PanelRuntimeState[] {
+    const panelById = new Map(panels.map((panel) => [panel.id, panel]));
+    let changed = false;
+
+    const next = prev.flatMap((item) => {
+        const panel = panelById.get(item.id);
+        if (!panel) {
+            changed = true;
+            return [];
+        }
+
+        if (validActivityIds.has(item.activityId)) {
+            return [item];
+        }
+
+        const fallbackActivityId = panel.activityId ?? panel.id;
+        if (fallbackActivityId !== item.activityId) {
+            changed = true;
+            return [{
+                ...item,
+                activityId: fallbackActivityId,
+            }];
+        }
+
+        return [item];
+    });
+
+    return changed ? next : prev;
+}
+
 /* ────────── Activity ID 解析 ────────── */
 
 /**

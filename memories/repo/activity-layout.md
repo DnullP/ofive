@@ -1,0 +1,3 @@
+- Activity bar items in DockviewLayout should come from registeredActivities first; panel-derived activities are fallback only for orphan panel groups.
+- Callback activities must not be materialized as virtual panel definitions; container checks should rely on real visible panel containers.
+- Convertible panels in tab mode should not make their activity behave like a sidebar container until the runtime mode is panel.

@@ -127,6 +127,28 @@ export interface MergedActivityBarItem {
     bar: "left" | "right";
 }
 
+/**
+ * @function dedupeActivityBarItems
+ * @description 按活动项 id 去重配置，保留最后一次出现的配置。
+ * @param items 原始配置项数组。
+ * @returns 去重后的配置项数组。
+ */
+export function dedupeActivityBarItems(items: ActivityBarItemConfig[]): ActivityBarItemConfig[] {
+    const dedupedReversed: ActivityBarItemConfig[] = [];
+    const seen = new Set<string>();
+
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+        const item = items[index];
+        if (!item || seen.has(item.id)) {
+            continue;
+        }
+        seen.add(item.id);
+        dedupedReversed.push(item);
+    }
+
+    return dedupedReversed.reverse();
+}
+
 /* ────────────────── 配置解析 ────────────────── */
 
 /**
@@ -169,7 +191,7 @@ function parseActivityBarConfig(entries: Record<string, unknown>): ActivityBarCo
         items.push({ id: itemObj.id, section, visible, bar });
     }
 
-    return { items };
+    return { items: dedupeActivityBarItems(items) };
 }
 
 /* ────────────────── 合并逻辑 ────────────────── */
@@ -206,6 +228,9 @@ export function mergeActivityBarConfig(
 
     for (const configItem of config.items) {
         if (!defaultsMap.has(configItem.id)) {
+            continue;
+        }
+        if (seen.has(configItem.id)) {
             continue;
         }
         seen.add(configItem.id);
@@ -345,14 +370,15 @@ class ActivityBarStore {
      * @sideEffects 更新内部状态、广播变更、延迟调用后端保存接口。
      */
     updateConfig(nextConfig: ActivityBarConfig): void {
+        const dedupedItems = dedupeActivityBarItems(nextConfig.items);
         this.state = {
             ...this.state,
-            config: nextConfig,
+            config: { items: dedupedItems },
         };
         this.emit();
         console.info("[activity-bar-store] config updated", {
-            itemCount: nextConfig.items.length,
-            items: nextConfig.items.map(
+            itemCount: dedupedItems.length,
+            items: dedupedItems.map(
                 (i) => `${i.id}:${i.section}:${i.visible ? "v" : "h"}`,
             ),
         });
@@ -383,12 +409,13 @@ class ActivityBarStore {
     private async persistToBackend(): Promise<void> {
         try {
             const rawConfig = await getCurrentVaultConfig();
+            const dedupedItems = dedupeActivityBarItems(this.state.config.items);
             const nextVaultConfig: VaultConfig = {
                 ...rawConfig,
                 entries: {
                     ...rawConfig.entries,
                     activityBar: {
-                        items: this.state.config.items.map((item) => ({
+                        items: dedupedItems.map((item) => ({
                             id: item.id,
                             section: item.section,
                             visible: item.visible,

@@ -1,0 +1,248 @@
+/* custom-activity-overlay: 遮罩层，负责承载并居中 modal。 */
+.custom-activity-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+    backdrop-filter: blur(10px);
+}
+
+/* custom-activity-modal: 弹窗主体容器。 */
+.custom-activity-modal {
+    width: min(760px, 100%);
+    max-height: min(86vh, 820px);
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--bg-secondary);
+    box-shadow: var(--overlay-shadow-strong);
+}
+
+/* custom-activity-modal__header: 标题区。 */
+.custom-activity-modal__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 24px 24px 12px;
+}
+
+/* custom-activity-modal__title: 主标题文字。 */
+.custom-activity-modal__title {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* custom-activity-modal__subtitle: 标题下说明。 */
+.custom-activity-modal__subtitle {
+    margin: 6px 0 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* custom-activity-modal__close: 关闭按钮。 */
+.custom-activity-modal__close {
+    border: 0;
+    border-radius: 10px;
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+/* custom-activity-modal__content: 主内容区。 */
+.custom-activity-modal__content {
+    display: grid;
+    gap: 20px;
+    padding: 0 24px 24px;
+}
+
+/* custom-activity-modal__section: 分区卡片。 */
+.custom-activity-modal__section {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--bg-primary) 28%, var(--bg-secondary));
+}
+
+/* custom-activity-modal__section-title: 分区标题。 */
+.custom-activity-modal__section-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* custom-activity-modal__field: 单个表单项。 */
+.custom-activity-modal__field {
+    display: grid;
+    gap: 8px;
+}
+
+/* custom-activity-modal__label: 表单标签。 */
+.custom-activity-modal__label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* custom-activity-modal__input: 文本输入框。 */
+.custom-activity-modal__input {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 11px 13px;
+    font-size: 14px;
+}
+
+/* custom-activity-modal__select: 下拉选择框。 */
+.custom-activity-modal__select {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 11px 13px;
+    font-size: 14px;
+}
+
+/* custom-activity-modal__type-grid: 类型选项栅格。 */
+.custom-activity-modal__type-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+/* custom-activity-modal__type-option: 类型单选按钮。 */
+.custom-activity-modal__type-option {
+    display: grid;
+    gap: 4px;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--bg-primary);
+    text-align: left;
+    cursor: pointer;
+}
+
+/* custom-activity-modal__type-option.is-selected: 当前选中类型。 */
+.custom-activity-modal__type-option.is-selected {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary-soft-weak);
+    box-shadow: inset 0 0 0 1px var(--accent-primary-soft);
+}
+
+/* custom-activity-modal__type-title: 类型标题。 */
+.custom-activity-modal__type-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* custom-activity-modal__type-desc: 类型说明。 */
+.custom-activity-modal__type-desc {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+/* custom-activity-modal__icon-grid: 图标候选栅格。 */
+.custom-activity-modal__icon-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+
+/* custom-activity-modal__icon-option: 单个图标候选按钮。 */
+.custom-activity-modal__icon-option {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    padding: 12px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+/* custom-activity-modal__icon-option.is-selected: 当前选中的图标候选。 */
+.custom-activity-modal__icon-option.is-selected {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary-soft-weak);
+    color: var(--accent-primary);
+}
+
+/* custom-activity-modal__icon-label: 图标名称。 */
+.custom-activity-modal__icon-label {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* custom-activity-modal__error: 错误提示。 */
+.custom-activity-modal__error {
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--error-color) 14%, var(--bg-secondary));
+    color: var(--error-color);
+    padding: 10px 12px;
+    font-size: 13px;
+}
+
+/* custom-activity-modal__actions: 底部按钮区。 */
+.custom-activity-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* custom-activity-modal__button: 通用按钮。 */
+.custom-activity-modal__button {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    padding: 10px 14px;
+    cursor: pointer;
+}
+
+/* custom-activity-modal__button.primary: 主按钮。 */
+.custom-activity-modal__button.primary {
+    border-color: transparent;
+    background: var(--accent-primary);
+    color: var(--accent-primary-foreground);
+}
+
+/* custom-activity-modal__button:disabled: 禁用态按钮。 */
+.custom-activity-modal__button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+
+    /* custom-activity-modal: 小屏收紧圆角和间距。 */
+    .custom-activity-modal {
+        border-radius: 16px;
+    }
+
+    /* custom-activity-modal__header: 小屏标题区。 */
+    .custom-activity-modal__header {
+        padding: 18px 18px 10px;
+    }
+
+    /* custom-activity-modal__content: 小屏内容区。 */
+    .custom-activity-modal__content {
+        padding: 0 18px 18px;
+    }
+}

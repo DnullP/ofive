@@ -313,6 +313,78 @@ import {
 } from "./selfTriggerTrace";
 
 let browserFallbackVaultPath = "";
+const BROWSER_FALLBACK_VAULT_CONFIG_STORAGE_KEY_PREFIX = "ofive:browser-fallback:vault-config:";
+
+function getBrowserFallbackVaultConfigStorageKey(vaultPath: string): string {
+    return `${BROWSER_FALLBACK_VAULT_CONFIG_STORAGE_KEY_PREFIX}${vaultPath}`;
+}
+
+function readBrowserFallbackVaultConfig(): VaultConfig {
+    if (typeof window === "undefined" || !browserFallbackVaultPath) {
+        return {
+            schemaVersion: 1,
+            entries: {},
+        };
+    }
+
+    try {
+        const raw = window.localStorage.getItem(
+            getBrowserFallbackVaultConfigStorageKey(browserFallbackVaultPath),
+        );
+        if (!raw) {
+            return {
+                schemaVersion: 1,
+                entries: {},
+            };
+        }
+
+        const parsed = JSON.parse(raw) as VaultConfig;
+        if (
+            typeof parsed !== "object"
+            || parsed === null
+            || typeof parsed.schemaVersion !== "number"
+            || typeof parsed.entries !== "object"
+            || parsed.entries === null
+            || Array.isArray(parsed.entries)
+        ) {
+            return {
+                schemaVersion: 1,
+                entries: {},
+            };
+        }
+
+        return parsed;
+    } catch (error) {
+        console.warn("[vaultApi] failed to read browser fallback config", {
+            vaultPath: browserFallbackVaultPath,
+            error,
+        });
+        return {
+            schemaVersion: 1,
+            entries: {},
+        };
+    }
+}
+
+function writeBrowserFallbackVaultConfig(config: VaultConfig): VaultConfig {
+    if (typeof window === "undefined" || !browserFallbackVaultPath) {
+        return config;
+    }
+
+    try {
+        window.localStorage.setItem(
+            getBrowserFallbackVaultConfigStorageKey(browserFallbackVaultPath),
+            JSON.stringify(config),
+        );
+    } catch (error) {
+        console.warn("[vaultApi] failed to persist browser fallback config", {
+            vaultPath: browserFallbackVaultPath,
+            error,
+        });
+    }
+
+    return config;
+}
 
 /**
  * @function isSelfTriggeredVaultFsEvent
@@ -338,11 +410,28 @@ export function isSelfTriggeredVaultConfigEvent(payload: VaultConfigEventPayload
  * @constant BROWSER_MOCK_NOTES_RAW_MODULES
  * @description 浏览器回退模式下，通过 Vite glob 从测试 notes 目录收集 Markdown 原文。
  */
-const BROWSER_MOCK_NOTES_RAW_MODULES = import.meta.glob("../../test-resources/notes/**/*.{md,markdown}", {
-    query: "?raw",
-    import: "default",
-    eager: true,
-}) as Record<string, string>;
+const BROWSER_MOCK_NOTES_RAW_MODULES: Record<string, string> = (() => {
+    const viteImportMeta = import.meta as ImportMeta & {
+        glob?: (
+            pattern: string,
+            options: {
+                query: string;
+                import: string;
+                eager: boolean;
+            },
+        ) => Record<string, string>;
+    };
+
+    if (typeof viteImportMeta.glob !== "function") {
+        return {};
+    }
+
+    return viteImportMeta.glob("../../test-resources/notes/**/*.{md,markdown}", {
+        query: "?raw",
+        import: "default",
+        eager: true,
+    }) as Record<string, string>;
+})();
 
 /**
  * @constant BROWSER_MOCK_MARKDOWN_CONTENTS
@@ -1634,10 +1723,7 @@ export async function subscribeVaultFsEvents(
  */
 export async function getCurrentVaultConfig(): Promise<VaultConfig> {
     if (!isTauriRuntime()) {
-        return {
-            schemaVersion: 1,
-            entries: {},
-        };
+        return readBrowserFallbackVaultConfig();
     }
 
     return invoke<VaultConfig>("get_current_vault_config");
@@ -1651,7 +1737,7 @@ export async function getCurrentVaultConfig(): Promise<VaultConfig> {
  */
 export async function saveCurrentVaultConfig(config: VaultConfig): Promise<VaultConfig> {
     if (!isTauriRuntime()) {
-        return config;
+        return writeBrowserFallbackVaultConfig(config);
     }
 
     const sourceTraceId = createWriteTraceId();

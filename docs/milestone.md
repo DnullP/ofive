@@ -265,3 +265,87 @@
 1. 迁移 Backlinks 到统一 persisted 读取与刷新协议
 2. 迁移 Search/Graph 等读型面板到插件协议
 3. 评估并清理不再需要的内建注册逻辑和重复解析实现
+
+#### 注册系统分层开放计划
+
+目标：梳理当前所有注册系统的动态开放边界，不追求“全部配置化”，而是建立“代码插件可全量扩展、声明式 contribution 可受控开放、宿主内部能力不外泄”的分层模型。
+
+当前已存在的主要注册系统：
+
+1. `activityRegistry`：注册 activity icon
+2. `panelRegistry`：注册 sidebar panel
+3. `tabComponentRegistry`：注册 tab 组件
+4. `overlayRegistry`：注册全局 overlay / modal
+5. `fileOpenerRegistry`：注册文件 opener
+6. `convertibleViewRegistry`：注册 tab/panel 可转化视图
+7. `sidebarHeaderActionRegistry`：注册侧栏 header action
+8. `settingsRegistry`：注册设置页 section
+9. `commandSystem`：注册命令与命令执行入口
+
+开放分层原则：
+
+1. 代码插件层：允许通过稳定 API 动态注册上述对象，作为最高能力层
+2. 声明式 contribution 层：仅开放可序列化、可校验、可持久化的子集
+3. 宿主内部执行层：不直接对配置或外部插件暴露 `render`、`resolveTab`、复杂回调和内部状态机
+
+按扩展类型划分的目标结论：
+
+1. 适合继续向声明式 contribution 开放：`activity`、受限 `panel`、`settings section`、`sidebar header action`、命令别名与绑定
+2. 仅适合对代码插件开放：`tab component`、`file opener`、`convertible view`、自定义 `overlay render`
+3. 不应继续向外开放：布局内部状态、拖拽规则、Dockview/Paneview 运行时细节、宿主私有 store 结构
+
+##### PX1. Registry 盘点与分级
+
+1. 为每个 registry 输出统一清单：注册对象、输入字段、是否含函数、是否依赖 React 组件、是否可序列化
+2. 为每个 registry 标记开放级别：`declarative`、`code-only`、`host-internal`
+3. 明确哪些 registry 已经具备稳定生命周期能力，哪些仍依赖宿主内部细节
+4. 为每个 registry 补充示例，说明推荐使用场景和禁止用法
+
+##### PX2. 统一 Contribution 模型
+
+1. 设计统一的 contribution schema，先覆盖 `activity + panel-shell + command-binding`
+2. 让静态插件注册和运行时配置新增共用同一套 contribution 到 registry 的转换逻辑
+3. 统一 contribution 的校验、默认值填充、冲突处理和日志格式
+4. 为 contribution 增加版本字段，给未来配置迁移留出空间
+
+##### PX3. Activity / Panel 声明式开放
+
+1. 将 activity 能力正式拆成“声明式 descriptor”与“执行式注册”两层
+2. 定义 panel-shell 模型：允许创建默认容器型 panel，但不允许配置任意 render 函数
+3. 让自定义 activity、未来用户插件清单、内置静态 activity 都复用同一转换链路
+4. 为 activity/panel 的排序、默认位置、可见性和右键行为定义统一约束
+
+##### PX4. Settings / Header Action 声明式开放
+
+1. 为 settings section 设计“表单型 section contribution”，避免必须直接注册 React render 函数
+2. 为 sidebar header action 设计“命令按钮型 contribution”，以命令绑定替代任意 onClick 回调
+3. 明确哪些 settings/header action 仍保留为代码插件专用能力
+4. 为这两类 contribution 补充宿主渲染规范和一致的 UI 约束
+
+##### PX5. Code-only Registry 稳定化
+
+1. 将 `tabComponentRegistry`、`fileOpenerRegistry`、`convertibleViewRegistry` 明确标记为 code-only 扩展点
+2. 为这些 registry 输出最小稳定 ABI，减少对布局内部实现细节的耦合
+3. 约束插件只能依赖公开 context，不允许直接依赖 Dockview 私有行为
+4. 为 code-only registry 增加冲突检测和更清晰的错误日志
+
+##### PX6. 宿主内部能力收口
+
+1. 盘点当前暴露给插件的 context 字段，区分稳定 API 与临时兼容字段
+2. 将真正属于宿主内部的布局状态、拖拽状态和 pane 运行时状态从“扩展面”里剥离
+3. 为插件提供更高层、更语义化的宿主能力，例如打开文件、导航、执行命令、请求 modal
+4. 建立“禁止直接依赖”的内部模块清单，写入插件开发规范
+
+##### PX7. 文档与迁移路线
+
+1. 在插件开发文档中补充 registry 分层说明和 contribution 设计原则
+2. 为现有内置插件补一份迁移表：哪些已经符合分层模型，哪些需要重构
+3. 先选 `activity/panel` 作为第一批 contribution 化样板，再评估 `settings/header action`
+4. 在 contribution 模型稳定前，不继续扩大配置化范围到 `tab component`、`file opener`、`convertible view`
+
+##### PX8. 测试与质量门槛
+
+1. 为 contribution 解析、默认值、冲突覆盖、卸载清理建立单元测试
+2. 为 registry 动态注册/注销后的 UI 行为建立集成测试
+3. 为配置驱动 contribution 建立前后端持久化回归测试
+4. 为 code-only registry 建立 ABI 稳定性测试，防止宿主重构破坏已有插件
