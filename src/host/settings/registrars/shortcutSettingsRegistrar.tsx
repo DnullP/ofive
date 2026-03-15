@@ -1,11 +1,11 @@
 /**
- * @module settings/registrars/shortcutSettingsRegistrar
+ * @module host/settings/registrars/shortcutSettingsRegistrar
  * @description 快捷键设置注册：由快捷键系统注册快捷键配置选栏。
  * @dependencies
  *  - react
- *  - ../../host/store/shortcutStore
- *  - ../../host/commands/commandSystem
- *  - ../../host/settings/settingsRegistry
+ *  - ../../store/shortcutStore
+ *  - ../../commands/commandSystem
+ *  - ../settingsRegistry
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -15,19 +15,14 @@ import {
     recordShortcutFromKeyboardEvent,
     updateShortcutBinding,
     useShortcutState,
-} from "../../host/store/shortcutStore";
+} from "../../store/shortcutStore";
 import {
     getCommandDefinitions,
     type CommandId,
-} from "../../host/commands/commandSystem";
-import { SHORTCUT_CONDITION_LABELS } from "../../host/commands/focusContext";
-import { registerSettingsSection } from "../../host/settings/settingsRegistry";
+} from "../../commands/commandSystem";
+import { SHORTCUT_CONDITION_LABELS } from "../../commands/focusContext";
+import { registerSettingsSection } from "../settingsRegistry";
 
-/**
- * @function ShortcutSettingsSection
- * @description 快捷键设置选栏内容。
- * @returns React 节点。
- */
 function ShortcutSettingsSection(): ReactNode {
     const { t } = useTranslation();
     const shortcutState = useShortcutState();
@@ -62,7 +57,6 @@ function ShortcutSettingsSection(): ReactNode {
                 return;
             }
 
-            // 仅更新本地输入显示，保持录制模式激活以便用户点击"保存"持久化
             setShortcutInputs((current) => ({
                 ...current,
                 [recordingCommandId]: recordedShortcut,
@@ -77,11 +71,9 @@ function ShortcutSettingsSection(): ReactNode {
 
     return (
         <div className="settings-shortcut-table-wrapper">
-            {/* 快捷键设置表格：仿 VS Code 表格风格 */}
             <table className="settings-shortcut-table">
                 <thead>
                     <tr>
-                        {/* 表头：命令名 | 快捷键 | 条件 | 操作 */}
                         <th className="settings-shortcut-th">{t("settings.shortcutCommand")}</th>
                         <th className="settings-shortcut-th">{t("settings.shortcutKeybinding")}</th>
                         <th className="settings-shortcut-th">{t("settings.shortcutCondition")}</th>
@@ -99,11 +91,9 @@ function ShortcutSettingsSection(): ReactNode {
                                 key={commandId}
                                 className={`settings-shortcut-row ${isRecordingCurrent ? "recording" : ""}`}
                             >
-                                {/* 命令名称列 */}
                                 <td className="settings-shortcut-td settings-shortcut-td-command">
                                     {t(command.title)}
                                 </td>
-                                {/* 快捷键绑定列：显示键位徽章或录制输入框 */}
                                 <td className="settings-shortcut-td settings-shortcut-td-keybinding">
                                     {isRecordingCurrent ? (
                                         <input
@@ -119,13 +109,9 @@ function ShortcutSettingsSection(): ReactNode {
                                         </kbd>
                                     )}
                                 </td>
-                                {/* 条件列：显示触发条件标签 */}
                                 <td className="settings-shortcut-td settings-shortcut-td-when">
-                                    {command.condition
-                                        ? t(SHORTCUT_CONDITION_LABELS[command.condition])
-                                        : "—"}
+                                    {command.condition ? t(SHORTCUT_CONDITION_LABELS[command.condition]) : "—"}
                                 </td>
-                                {/* 操作列：录制/保存/取消按钮 */}
                                 <td className="settings-shortcut-td settings-shortcut-td-actions">
                                     {isRecordingCurrent ? (
                                         <>
@@ -177,10 +163,6 @@ function ShortcutSettingsSection(): ReactNode {
     );
 }
 
-/**
- * @function registerShortcutSettingsSection
- * @description 注册快捷键设置选栏。
- */
 export function registerShortcutSettingsSection(): void {
     registerSettingsSection({
         id: "shortcut-system",

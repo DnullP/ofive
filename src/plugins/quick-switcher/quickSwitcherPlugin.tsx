@@ -12,7 +12,8 @@
  *   - ./quickSwitcherEvents
  *   - ./overlay/QuickSwitcherOverlay
  *
- * @exports 无导出（纯副作用模块）
+ * @exports
+ *   - activatePlugin 注册并返回清理函数
  */
 
 import React from "react";
@@ -24,23 +25,36 @@ import { notifyQuickSwitcherOpenRequested } from "./quickSwitcherEvents";
 const QUICK_SWITCHER_COMMAND_ID = "quickSwitcher.open";
 const QUICK_SWITCHER_OVERLAY_ID = "quick-switcher";
 
-registerCommand({
-    id: QUICK_SWITCHER_COMMAND_ID,
-    title: "commands.quickSwitcher",
-    shortcut: {
-        defaultBinding: "Cmd+O",
-        editableInSettings: true,
-    },
-    execute() {
-        notifyQuickSwitcherOpenRequested();
-        console.info("[quick-switcher-plugin] quick switcher opened by command");
-    },
-});
+/**
+ * @function activatePlugin
+ * @description 注册 Quick Switcher 插件所需的命令与 overlay。
+ * @returns 插件清理函数。
+ */
+export function activatePlugin(): () => void {
+    const unregisterCommand = registerCommand({
+        id: QUICK_SWITCHER_COMMAND_ID,
+        title: "commands.quickSwitcher",
+        shortcut: {
+            defaultBinding: "Cmd+O",
+            editableInSettings: true,
+        },
+        execute() {
+            notifyQuickSwitcherOpenRequested();
+            console.info("[quick-switcher-plugin] quick switcher opened by command");
+        },
+    });
 
-registerOverlay({
-    id: QUICK_SWITCHER_OVERLAY_ID,
-    order: 20,
-    render: (context) => React.createElement(QuickSwitcherOverlay, { context }),
-});
+    const unregisterOverlay = registerOverlay({
+        id: QUICK_SWITCHER_OVERLAY_ID,
+        order: 20,
+        render: (context) => React.createElement(QuickSwitcherOverlay, { context }),
+    });
 
-console.info("[quick-switcher-plugin] registered quick switcher plugin");
+    console.info("[quick-switcher-plugin] registered quick switcher plugin");
+
+    return () => {
+        unregisterOverlay();
+        unregisterCommand();
+        console.info("[quick-switcher-plugin] unregistered quick switcher plugin");
+    };
+}

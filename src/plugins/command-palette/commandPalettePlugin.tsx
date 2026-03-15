@@ -8,7 +8,8 @@
  *   - ./commandPaletteEvents
  *   - ./overlay/CommandPaletteOverlay
  *
- * @exports 无导出（纯副作用模块）
+ * @exports
+ *   - activatePlugin 注册并返回清理函数
  */
 
 import React from "react";
@@ -20,23 +21,36 @@ import { CommandPaletteOverlay } from "./overlay/CommandPaletteOverlay";
 const COMMAND_PALETTE_COMMAND_ID = "commandPalette.open";
 const COMMAND_PALETTE_OVERLAY_ID = "command-palette";
 
-registerCommand({
-    id: COMMAND_PALETTE_COMMAND_ID,
-    title: "commands.commandPalette",
-    shortcut: {
-        defaultBinding: "Cmd+J",
-        editableInSettings: true,
-    },
-    execute() {
-        notifyCommandPaletteOpenRequested();
-        console.info("[command-palette-plugin] command palette opened by command");
-    },
-});
+/**
+ * @function activatePlugin
+ * @description 注册 Command Palette 插件所需的命令与 overlay。
+ * @returns 插件清理函数。
+ */
+export function activatePlugin(): () => void {
+    const unregisterCommand = registerCommand({
+        id: COMMAND_PALETTE_COMMAND_ID,
+        title: "commands.commandPalette",
+        shortcut: {
+            defaultBinding: "Cmd+J",
+            editableInSettings: true,
+        },
+        execute() {
+            notifyCommandPaletteOpenRequested();
+            console.info("[command-palette-plugin] command palette opened by command");
+        },
+    });
 
-registerOverlay({
-    id: COMMAND_PALETTE_OVERLAY_ID,
-    order: 10,
-    render: (context) => React.createElement(CommandPaletteOverlay, { context }),
-});
+    const unregisterOverlay = registerOverlay({
+        id: COMMAND_PALETTE_OVERLAY_ID,
+        order: 10,
+        render: (context) => React.createElement(CommandPaletteOverlay, { context }),
+    });
 
-console.info("[command-palette-plugin] registered command palette plugin");
+    console.info("[command-palette-plugin] registered command palette plugin");
+
+    return () => {
+        unregisterOverlay();
+        unregisterCommand();
+        console.info("[command-palette-plugin] unregistered command palette plugin");
+    };
+}

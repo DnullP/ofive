@@ -1,21 +1,17 @@
 /**
- * @module settings/registrars/themeSettingsRegistrar
- * @description 风格设置注册：提供日间/夜间主题切换。
+ * @module host/settings/registrars/themeSettingsRegistrar
+ * @description 风格设置注册：提供全局主题切换。
  * @dependencies
  *  - react
- *  - ../../host/store/themeStore
- *  - ../../host/settings/settingsRegistry
+ *  - ../../store/themeStore
+ *  - ../settingsRegistry
  */
 
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { updateThemeMode, useThemeState, type ThemeMode } from "../../host/store/themeStore";
-import { registerSettingsSection } from "../../host/settings/settingsRegistry";
+import { updateThemeMode, useThemeState, type ThemeMode } from "../../store/themeStore";
+import { registerSettingsSection } from "../settingsRegistry";
 
-/**
- * @constant THEME_MODE_OPTIONS
- * @description 风格模式选项。
- */
 const THEME_MODE_OPTIONS: Array<{ value: ThemeMode; labelKey: string; descKey: string }> = [
     {
         value: "dark",
@@ -27,21 +23,19 @@ const THEME_MODE_OPTIONS: Array<{ value: ThemeMode; labelKey: string; descKey: s
         labelKey: "settings.themeLight",
         descKey: "settings.themeLightDesc",
     },
+    {
+        value: "kraft",
+        labelKey: "settings.themeKraft",
+        descKey: "settings.themeKraftDesc",
+    },
 ];
 
-/**
- * @function ThemeSettingsSection
- * @description 风格设置选栏内容。
- * @returns React 节点。
- */
 function ThemeSettingsSection(): ReactNode {
     const { t } = useTranslation();
     const themeState = useThemeState();
 
     return (
         <div className="settings-item-group">
-            {/* --- 界面风格 --- */}
-            {/* styles: .settings-compact-row-column 紧凑纵向行，内含主题按钮 */}
             <div className="settings-compact-row-column">
                 <div className="settings-compact-info">
                     <span className="settings-compact-title">{t("settings.themeTitle")}</span>
@@ -72,10 +66,6 @@ function ThemeSettingsSection(): ReactNode {
     );
 }
 
-/**
- * @function registerThemeSettingsSection
- * @description 注册风格设置选栏。
- */
 export function registerThemeSettingsSection(): void {
     registerSettingsSection({
         id: "theme-style",

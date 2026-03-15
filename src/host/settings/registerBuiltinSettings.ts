@@ -2,17 +2,17 @@
  * @module host/settings/registerBuiltinSettings
  * @description 内置设置注册入口：集中触发各系统设置选栏注册。
  * @dependencies
- *  - ../../settings/registrars/generalSettingsRegistrar
- *  - ../../settings/registrars/editorSettingsRegistrar
- *  - ../../settings/registrars/shortcutSettingsRegistrar
- *  - ../../settings/registrars/themeSettingsRegistrar
+ *  - ./registrars/generalSettingsRegistrar
+ *  - ./registrars/autoSaveSettingsRegistrar
+ *  - ./registrars/shortcutSettingsRegistrar
+ *  - ./registrars/themeSettingsRegistrar
  */
 
-import { registerEditorSettingsSection } from "../../settings/registrars/editorSettingsRegistrar.tsx";
-import { registerGeneralSettingsSection } from "../../settings/registrars/generalSettingsRegistrar.tsx";
-import { registerLanguageSettingsSection } from "../../settings/registrars/languageSettingsRegistrar.tsx";
-import { registerShortcutSettingsSection } from "../../settings/registrars/shortcutSettingsRegistrar.tsx";
-import { registerThemeSettingsSection } from "../../settings/registrars/themeSettingsRegistrar.tsx";
+import { registerAutoSaveSettingsSection } from "./registrars/autoSaveSettingsRegistrar.tsx";
+import { registerGeneralSettingsSection } from "./registrars/generalSettingsRegistrar.tsx";
+import { registerLanguageSettingsSection } from "./registrars/languageSettingsRegistrar.tsx";
+import { registerShortcutSettingsSection } from "./registrars/shortcutSettingsRegistrar.tsx";
+import { registerThemeSettingsSection } from "./registrars/themeSettingsRegistrar.tsx";
 
 let registered = false;
 
@@ -28,7 +28,7 @@ export function ensureBuiltinSettingsRegistered(): void {
     registerGeneralSettingsSection();
     registerLanguageSettingsSection();
     registerThemeSettingsSection();
-    registerEditorSettingsSection();
+    registerAutoSaveSettingsSection();
     registerShortcutSettingsSection();
     registered = true;
 }

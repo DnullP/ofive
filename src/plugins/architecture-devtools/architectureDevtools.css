@@ -1,46 +1,5 @@
 /* architecture-devtools: 页面根容器，提供整体间距与纵向布局 */
 .architecture-devtools {
-    --architecture-surface-hero: linear-gradient(180deg,
-            rgba(15, 23, 42, 0.78),
-            rgba(15, 23, 42, 0.58));
-    --architecture-surface-card: rgba(15, 23, 42, 0.72);
-    --architecture-surface-card-subtle: rgba(15, 23, 42, 0.66);
-    --architecture-surface-card-soft: rgba(15, 23, 42, 0.54);
-    --architecture-surface-chip: rgba(30, 41, 59, 0.82);
-    --architecture-surface-chip-strong: rgba(30, 41, 59, 0.92);
-    --architecture-surface-chip-soft: rgba(51, 65, 85, 0.84);
-    --architecture-surface-input: rgba(2, 6, 23, 0.44);
-    --architecture-surface-grid: linear-gradient(180deg, rgba(15, 23, 42, 0.74), rgba(2, 6, 23, 0.9));
-    --architecture-surface-grid-line-x: rgba(255, 255, 255, 0.04);
-    --architecture-surface-grid-line-y: rgba(255, 255, 255, 0.03);
-    --architecture-surface-item: rgba(30, 41, 59, 0.72);
-    --architecture-surface-item-strong: rgba(15, 23, 42, 0.8);
-    --architecture-surface-item-soft: rgba(15, 23, 42, 0.84);
-    --architecture-border-color: rgba(148, 163, 184, 0.16);
-    --architecture-border-color-soft: rgba(148, 163, 184, 0.12);
-    --architecture-border-color-weak: rgba(148, 163, 184, 0.08);
-    --architecture-border-color-hover: rgba(148, 163, 184, 0.28);
-    --architecture-accent-border: rgba(125, 211, 252, 0.42);
-    --architecture-accent-surface: rgba(8, 47, 73, 0.84);
-    --architecture-accent-surface-strong: rgba(8, 47, 73, 0.88);
-    --architecture-accent-text: #93c5fd;
-    --architecture-text-primary: var(--text-primary, #e2e8f0);
-    --architecture-text-secondary: var(--text-secondary, #94a3b8);
-    --architecture-text-muted: #cbd5e1;
-    --architecture-text-strong: #f8fafc;
-    --architecture-text-soft: rgba(226, 232, 240, 0.84);
-    --architecture-text-faint: rgba(226, 232, 240, 0.72);
-    --architecture-edge-highlight: rgba(248, 250, 252, 0.52);
-    --architecture-edge-dim: rgba(100, 116, 139, 0.22);
-    --architecture-plugin-side-accent: rgba(74, 222, 128, 0.9);
-    --architecture-plugin-side-glow: rgba(34, 197, 94, 0.18);
-    --architecture-infrastructure-accent: rgba(251, 191, 36, 0.92);
-    --architecture-infrastructure-glow: rgba(245, 158, 11, 0.16);
-    --architecture-shadow: 0 18px 38px rgba(2, 6, 23, 0.28);
-    --architecture-shadow-soft: 0 14px 32px rgba(2, 6, 23, 0.22);
-    --architecture-bg-accent-1: rgba(14, 116, 144, 0.18);
-    --architecture-bg-accent-2: rgba(22, 101, 52, 0.12);
-    --architecture-bg-accent-3: rgba(148, 163, 184, 0.06);
     display: flex;
     flex-direction: column;
     gap: 18px;
@@ -53,53 +12,8 @@
     background:
         radial-gradient(circle at top left, var(--architecture-bg-accent-1), transparent 28%),
         radial-gradient(circle at top right, var(--architecture-bg-accent-2), transparent 24%),
-        linear-gradient(180deg, var(--architecture-bg-accent-3), rgba(15, 23, 42, 0));
+        linear-gradient(180deg, var(--architecture-bg-accent-3), transparent);
     color: var(--architecture-text-primary);
-}
-
-/* architecture-devtools: 日间主题变量，覆盖当前页面的局部视觉系统 */
-:root[data-theme="light"] .architecture-devtools {
-    --architecture-surface-hero: linear-gradient(180deg,
-            rgba(255, 255, 255, 0.96),
-            rgba(248, 250, 252, 0.94));
-    --architecture-surface-card: rgba(255, 255, 255, 0.9);
-    --architecture-surface-card-subtle: rgba(255, 255, 255, 0.92);
-    --architecture-surface-card-soft: rgba(248, 250, 252, 0.96);
-    --architecture-surface-chip: rgba(226, 232, 240, 0.9);
-    --architecture-surface-chip-strong: rgba(241, 245, 249, 0.98);
-    --architecture-surface-chip-soft: rgba(226, 232, 240, 0.92);
-    --architecture-surface-input: rgba(255, 255, 255, 0.96);
-    --architecture-surface-grid: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(241, 245, 249, 0.98));
-    --architecture-surface-grid-line-x: rgba(15, 23, 42, 0.05);
-    --architecture-surface-grid-line-y: rgba(15, 23, 42, 0.04);
-    --architecture-surface-item: rgba(248, 250, 252, 0.96);
-    --architecture-surface-item-strong: rgba(241, 245, 249, 0.96);
-    --architecture-surface-item-soft: rgba(241, 245, 249, 0.92);
-    --architecture-border-color: rgba(148, 163, 184, 0.3);
-    --architecture-border-color-soft: rgba(148, 163, 184, 0.24);
-    --architecture-border-color-weak: rgba(148, 163, 184, 0.18);
-    --architecture-border-color-hover: rgba(100, 116, 139, 0.34);
-    --architecture-accent-border: rgba(11, 109, 255, 0.38);
-    --architecture-accent-surface: rgba(219, 234, 254, 0.92);
-    --architecture-accent-surface-strong: rgba(219, 234, 254, 0.98);
-    --architecture-accent-text: #1d4ed8;
-    --architecture-text-primary: var(--text-primary, #1f2937);
-    --architecture-text-secondary: var(--text-secondary, #4b5563);
-    --architecture-text-muted: #334155;
-    --architecture-text-strong: #0f172a;
-    --architecture-text-soft: rgba(30, 41, 59, 0.84);
-    --architecture-text-faint: rgba(51, 65, 85, 0.72);
-    --architecture-edge-highlight: rgba(30, 41, 59, 0.44);
-    --architecture-edge-dim: rgba(100, 116, 139, 0.18);
-    --architecture-plugin-side-accent: rgba(22, 163, 74, 0.92);
-    --architecture-plugin-side-glow: rgba(34, 197, 94, 0.12);
-    --architecture-infrastructure-accent: rgba(217, 119, 6, 0.92);
-    --architecture-infrastructure-glow: rgba(245, 158, 11, 0.12);
-    --architecture-shadow: 0 18px 38px rgba(148, 163, 184, 0.16);
-    --architecture-shadow-soft: 0 14px 32px rgba(148, 163, 184, 0.14);
-    --architecture-bg-accent-1: rgba(14, 165, 233, 0.12);
-    --architecture-bg-accent-2: rgba(34, 197, 94, 0.08);
-    --architecture-bg-accent-3: rgba(148, 163, 184, 0.08);
 }
 
 /* architecture-hero: 页面头部信息块 */
@@ -303,6 +217,22 @@
     gap: 8px;
 }
 
+/* architecture-toolbar-group: 工具栏分组容器 */
+.architecture-toolbar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* architecture-toolbar-label: 工具栏分组标题 */
+.architecture-toolbar-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--architecture-text-secondary);
+}
+
 /* architecture-filter-chip: 类型筛选按钮 */
 .architecture-filter-chip {
     padding: 7px 10px;
@@ -330,15 +260,14 @@
 
 /* architecture-main-grid: DAG 与检查器的主布局 */
 .architecture-main-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.9fr) minmax(320px, 0.92fr);
+    display: flex;
+    flex-direction: column;
     gap: 16px;
-    align-items: start;
 }
 
 /* architecture-dag-card: DAG 外层卡片 */
 .architecture-dag-card,
-.architecture-inspector-card {
+.architecture-inspector-modal {
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -364,34 +293,6 @@
     gap: 10px;
 }
 
-/* architecture-dag-view-switch: DAG 视图切换按钮组 */
-.architecture-dag-view-switch {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px;
-    border: 1px solid var(--architecture-border-color);
-    border-radius: 999px;
-    background: var(--architecture-surface-input);
-}
-
-/* architecture-dag-view-button: DAG 视图切换按钮 */
-.architecture-dag-view-button {
-    padding: 6px 10px;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--architecture-text-muted);
-    font-size: 12px;
-    cursor: pointer;
-}
-
-/* architecture-dag-view-button--active: 当前激活的 DAG 视图按钮 */
-.architecture-dag-view-button--active {
-    background: var(--architecture-accent-surface-strong);
-    color: var(--architecture-text-strong);
-}
-
 /* architecture-dag-meta: DAG 辅助统计文案 */
 .architecture-dag-meta {
     color: var(--architecture-text-secondary);
@@ -404,6 +305,9 @@
     min-height: 420px;
     border-radius: 18px;
     border: 1px solid var(--architecture-border-color-weak);
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: auto;
+    touch-action: pan-x pan-y;
     background:
         var(--architecture-surface-grid),
         linear-gradient(90deg, var(--architecture-surface-grid-line-x) 1px, transparent 1px),
@@ -411,27 +315,21 @@
     background-size: auto, 32px 32px, 32px 32px;
 }
 
-/* architecture-dag-scroll--fit: 总览模式下避免出现不必要的横向滚动 */
-.architecture-dag-scroll--fit {
-    overflow-x: hidden;
+/* architecture-dag-scroll--pinching: 双指缩放期间禁用原生平移，避免与自定义缩放争抢滚动位置 */
+.architecture-dag-scroll--pinching {
+    overflow: hidden;
+    touch-action: none;
+}
+
+/* architecture-dag-viewport: 缩放后的逻辑视口，用于维持滚动尺寸 */
+.architecture-dag-viewport {
+    position: relative;
 }
 
 /* architecture-dag-canvas: SVG 画布 */
 .architecture-dag-canvas {
     display: block;
-}
-
-/* architecture-dag-canvas--fit: 总览模式下按容器宽度缩放整张图 */
-.architecture-dag-canvas--fit {
-    width: 100%;
-    height: auto;
-    min-width: 0;
-}
-
-/* architecture-dag-canvas--actual: 原始尺寸模式下保留真实画布宽度 */
-.architecture-dag-canvas--actual {
-    width: auto;
-    height: auto;
+    will-change: transform;
 }
 
 /* architecture-column-label: DAG 列标题 */
@@ -456,8 +354,10 @@
 /* architecture-edge: DAG 边基础样式 */
 .architecture-edge {
     fill: none;
+    stroke: var(--architecture-edge-dim);
     stroke-width: 2;
-    transition: opacity 160ms ease;
+    opacity: 0.72;
+    transition: opacity 160ms ease, stroke 160ms ease;
 }
 
 /* architecture-edge--highlighted: 选中关联边 */
@@ -501,14 +401,14 @@
 
 /* architecture-node--plugin rect: 插件节点配色 */
 .architecture-node--plugin rect {
-    fill: rgba(20, 83, 45, 0.78);
-    stroke: rgba(74, 222, 128, 0.46);
+    fill: var(--architecture-node-plugin-fill);
+    stroke: var(--architecture-node-plugin-stroke);
 }
 
 /* architecture-node--ui-module rect: 模块节点配色 */
 .architecture-node--ui-module rect {
-    fill: rgba(8, 47, 73, 0.82);
-    stroke: rgba(56, 189, 248, 0.46);
+    fill: var(--architecture-node-module-fill);
+    stroke: var(--architecture-node-module-stroke);
 }
 
 /* architecture-node--plugin-side rect: 插件侧语义强化色 */
@@ -525,31 +425,31 @@
 
 /* architecture-node--store rect: 状态节点配色 */
 .architecture-node--store rect {
-    fill: rgba(76, 29, 149, 0.76);
-    stroke: rgba(167, 139, 250, 0.46);
+    fill: var(--architecture-node-store-fill);
+    stroke: var(--architecture-node-store-stroke);
 }
 
 /* architecture-node--event rect: 事件节点配色 */
 .architecture-node--event rect {
-    fill: rgba(120, 53, 15, 0.78);
-    stroke: rgba(251, 191, 36, 0.5);
+    fill: var(--architecture-node-event-fill);
+    stroke: var(--architecture-node-event-stroke);
 }
 
 /* architecture-node--frontend-api rect: 前端接口节点配色 */
 .architecture-node--frontend-api rect {
-    fill: rgba(17, 94, 89, 0.78);
-    stroke: rgba(45, 212, 191, 0.5);
+    fill: var(--architecture-node-frontend-api-fill);
+    stroke: var(--architecture-node-frontend-api-stroke);
 }
 
 /* architecture-node--backend-api rect: 后端接口节点配色 */
 .architecture-node--backend-api rect {
-    fill: rgba(127, 29, 29, 0.78);
-    stroke: rgba(248, 113, 113, 0.48);
+    fill: var(--architecture-node-backend-api-fill);
+    stroke: var(--architecture-node-backend-api-stroke);
 }
 
 /* architecture-node--selected rect: 选中节点态 */
 .architecture-node--selected rect {
-    stroke: rgba(248, 250, 252, 0.94);
+    stroke: var(--architecture-node-selected-stroke);
 }
 
 /* architecture-node--idle rect: 非关联节点态 */
@@ -613,10 +513,71 @@
     -webkit-box-orient: vertical;
 }
 
-/* architecture-inspector-card: 检查器卡片 */
-.architecture-inspector-card {
-    position: sticky;
-    top: 10px;
+/* architecture-inspector-modal-backdrop: 检查器遮罩层 */
+.architecture-inspector-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--architecture-modal-backdrop);
+    backdrop-filter: blur(10px);
+}
+
+/* architecture-inspector-modal: 检查器弹窗 */
+.architecture-inspector-modal {
+    width: min(720px, calc(100vw - 48px));
+    max-height: min(78vh, 880px);
+    overflow: auto;
+}
+
+/* architecture-inspector-modal-header: 检查器弹窗顶部栏 */
+.architecture-inspector-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+/* architecture-inspector-modal-actions: 检查器弹窗操作按钮组 */
+.architecture-inspector-modal-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* architecture-inspector-tree-action: 查看节点依赖树按钮 */
+.architecture-inspector-tree-action {
+    padding: 8px 12px;
+    border: 1px solid var(--architecture-accent-border);
+    border-radius: 999px;
+    background: var(--architecture-accent-surface);
+    color: var(--architecture-text-strong);
+    cursor: pointer;
+}
+
+/* architecture-inspector-tree-action:hover: 查看节点依赖树按钮悬停态 */
+.architecture-inspector-tree-action:hover {
+    border-color: var(--architecture-border-color-hover);
+}
+
+/* architecture-inspector-close: 检查器关闭按钮 */
+.architecture-inspector-close {
+    padding: 8px 12px;
+    border: 1px solid var(--architecture-border-color);
+    border-radius: 999px;
+    background: var(--architecture-surface-chip);
+    color: var(--architecture-text-primary);
+    cursor: pointer;
+}
+
+/* architecture-inspector-close:hover: 检查器关闭按钮悬停态 */
+.architecture-inspector-close:hover {
+    border-color: var(--architecture-border-color-hover);
 }
 
 /* architecture-inspector-kind: 检查器类别标签 */
@@ -826,12 +787,7 @@
 
     /* architecture-main-grid: 窄屏下切为单列 */
     .architecture-main-grid {
-        grid-template-columns: 1fr;
-    }
-
-    /* architecture-inspector-card: 窄屏下取消吸顶 */
-    .architecture-inspector-card {
-        position: static;
+        gap: 14px;
     }
 }
 
@@ -860,6 +816,28 @@
     /* architecture-runtime-description: 窄屏下左对齐 */
     .architecture-runtime-description {
         text-align: left;
+    }
+
+    /* architecture-inspector-modal-backdrop: 窄屏下收紧遮罩边距 */
+    .architecture-inspector-modal-backdrop {
+        padding: 14px;
+    }
+
+    /* architecture-inspector-modal: 窄屏下尽量铺满可视区域 */
+    .architecture-inspector-modal {
+        width: min(100vw - 28px, 720px);
+        max-height: calc(100vh - 28px);
+    }
+
+    /* architecture-inspector-modal-header: 窄屏下改成纵向排列 */
+    .architecture-inspector-modal-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    /* architecture-inspector-modal-actions: 窄屏下按钮靠左排列 */
+    .architecture-inspector-modal-actions {
+        justify-content: flex-start;
     }
 
     /* architecture-dag-header: 窄屏下改为纵向排列 */

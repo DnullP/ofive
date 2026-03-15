@@ -98,7 +98,6 @@ const INFRASTRUCTURE_MODULE_PREFIXES = [
     "src/host/commands/",
     "src/host/settings/",
     "src/host/store/",
-    "src/settings/",
     "src/host/layout/sidebar/",
 ] as const;
 
@@ -1069,7 +1068,7 @@ function isPluginFile(path: string): boolean {
 /** @function isStoreFile */
 function isStoreFile(path: string): boolean {
     return (
-        (path.startsWith("src/store/") || path.startsWith("src/host/store/")) &&
+        path.startsWith("src/host/store/") &&
         !path.endsWith(".test.ts")
     );
 }

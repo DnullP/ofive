@@ -100,6 +100,7 @@ interface VaultState {
     currentVaultPath: string;
     files: FileTreeItem[];
     isLoadingTree: boolean;
+    backendReady: boolean;
     error: string | null;
 }
 
@@ -111,6 +112,7 @@ interface VaultState {
  *  - currentVaultPath - 当前打开目录 (string) [/Users/kaiqiu/Documents/projects/rust/ofive]
  *  - files - 当前目录下的 Markdown 文件树扁平列表 (FileTreeItem[]) [[]]
  *  - isLoadingTree - 文件树加载中状态 (boolean) [false]
+ *  - backendReady - 当前 vault 是否已成功同步到后端 (boolean) [false]
  *  - error - 最近一次错误信息 (string | null) [null]
  *
  * @lifecycle
@@ -129,6 +131,7 @@ class VaultStore {
         currentVaultPath: readPersistedVaultPath(),
         files: [],
         isLoadingTree: false,
+        backendReady: false,
         error: null,
     };
 
@@ -188,6 +191,7 @@ class VaultStore {
         this.state = {
             ...this.state,
             currentVaultPath: nextPath,
+            backendReady: false,
             error: null,
         };
         persistVaultPath(nextPath);
@@ -277,7 +281,12 @@ class VaultStore {
             }
 
             this.setFiles(files);
-            this.setError(null);
+            this.state = {
+                ...this.state,
+                backendReady: true,
+                error: null,
+            };
+            this.emit();
             console.info("[vault-store] syncTreeByCurrentPath:success", {
                 targetPath,
                 count: files.length,
@@ -288,8 +297,13 @@ class VaultStore {
             }
 
             const message = error instanceof Error ? error.message : i18n.t("vault.loadTreeFailed");
-            this.setFiles([]);
-            this.setError(message);
+            this.state = {
+                ...this.state,
+                files: [],
+                backendReady: false,
+                error: message,
+            };
+            this.emit();
             console.error("[vault-store] syncTreeByCurrentPath:failed", { targetPath, message });
         } finally {
             if (requestId === this.requestVersion) {
@@ -324,7 +338,12 @@ class VaultStore {
             }
 
             this.setFiles(files);
-            this.setError(null);
+            this.state = {
+                ...this.state,
+                backendReady: true,
+                error: null,
+            };
+            this.emit();
             console.info("[vault-store] refreshTreeOnly:success", {
                 targetPath,
                 count: files.length,

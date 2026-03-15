@@ -9,9 +9,17 @@
   --text-tertiary: #7a7a7a;
 
   --accent-primary: #0078d4;
+  --accent-primary-foreground: #ffffff;
   --accent-primary-soft: rgba(0, 120, 212, 0.22);
   --accent-primary-soft-weak: rgba(0, 120, 212, 0.18);
   --scrollbar-thumb-color: rgba(212, 212, 212, 0.38);
+  --error-color: #e74c3c;
+  --text-warning: #e2a33e;
+  --bg-warning: rgba(226, 163, 62, 0.08);
+  --overlay-shadow-floating: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --overlay-shadow-strong: 0 12px 32px rgba(0, 0, 0, 0.18);
+  --sidebar-drop-bg: rgba(83, 89, 93, 0.25);
+  --sidebar-icon-drop-bg: rgba(83, 89, 93, 0.2);
 
   --editor-inline-code-bg: rgba(120, 120, 120, 0.2);
   --editor-link-color: #4ea1ff;
@@ -25,17 +33,79 @@
   --editor-active-line-bg-color: rgba(255, 255, 255, 0.04);
   --editor-active-line-gutter-bg-color: rgba(255, 255, 255, 0.06);
 
-  --graph-bg-primary: #020617;
-  --graph-bg-secondary: #0b1220;
-  --graph-border-color: #1e293b;
-  --graph-status-color: #93c5fd;
-  --graph-text-color: #e2e8f0;
-  --graph-muted-text-color: #94a3b8;
-  --graph-label-bg: rgba(2, 6, 23, 0.82);
+  --graph-bg-primary: var(--bg-primary);
+  --graph-bg-secondary: var(--bg-secondary);
+  --graph-border-color: var(--border-color);
+  --graph-status-color: var(--accent-primary);
+  --graph-text-color: var(--text-primary);
+  --graph-muted-text-color: var(--text-secondary);
+  --graph-point-color: var(--accent-primary);
+  --graph-point-greyout-color: var(--text-tertiary);
+  --graph-point-ring-hover-color: var(--accent-primary);
+  --graph-point-ring-focus-color: var(--text-primary);
+  --graph-link-color: var(--text-tertiary);
+  --graph-link-hover-color: var(--accent-primary);
+  --graph-label-bg: var(--bg-secondary);
+
+  --architecture-surface-hero: var(--bg-secondary);
+  --architecture-surface-card: var(--bg-secondary);
+  --architecture-surface-card-subtle: var(--bg-secondary);
+  --architecture-surface-card-soft: var(--bg-hover);
+  --architecture-surface-chip: var(--bg-hover);
+  --architecture-surface-chip-strong: var(--bg-hover);
+  --architecture-surface-chip-soft: var(--bg-hover);
+  --architecture-surface-input: var(--bg-primary);
+  --architecture-surface-grid: var(--bg-secondary);
+  --architecture-surface-grid-line-x: rgba(255, 255, 255, 0.04);
+  --architecture-surface-grid-line-y: rgba(255, 255, 255, 0.03);
+  --architecture-surface-item: var(--bg-hover);
+  --architecture-surface-item-strong: var(--bg-secondary);
+  --architecture-surface-item-soft: var(--bg-primary);
+  --architecture-border-color: var(--border-color);
+  --architecture-border-color-soft: var(--border-color);
+  --architecture-border-color-weak: var(--border-color);
+  --architecture-border-color-hover: rgba(122, 122, 122, 0.4);
+  --architecture-accent-border: var(--accent-primary);
+  --architecture-accent-surface: var(--accent-primary-soft-weak);
+  --architecture-accent-surface-strong: var(--accent-primary-soft);
+  --architecture-accent-text: var(--accent-primary);
+  --architecture-text-primary: var(--text-primary);
+  --architecture-text-secondary: var(--text-secondary);
+  --architecture-text-muted: var(--text-secondary);
+  --architecture-text-strong: var(--text-primary);
+  --architecture-text-soft: var(--text-secondary);
+  --architecture-text-faint: var(--text-tertiary);
+  --architecture-edge-highlight: var(--accent-primary);
+  --architecture-edge-dim: rgba(122, 122, 122, 0.22);
+  --architecture-plugin-side-accent: rgba(74, 222, 128, 0.9);
+  --architecture-plugin-side-glow: rgba(34, 197, 94, 0.18);
+  --architecture-infrastructure-accent: rgba(251, 191, 36, 0.92);
+  --architecture-infrastructure-glow: rgba(245, 158, 11, 0.16);
+  --architecture-shadow: var(--overlay-shadow-strong);
+  --architecture-shadow-soft: var(--overlay-shadow-floating);
+  --architecture-bg-accent-1: rgba(0, 120, 212, 0.08);
+  --architecture-bg-accent-2: rgba(34, 197, 94, 0.06);
+  --architecture-bg-accent-3: rgba(255, 255, 255, 0.02);
+  --architecture-node-plugin-fill: rgba(34, 197, 94, 0.14);
+  --architecture-node-plugin-stroke: rgba(74, 222, 128, 0.32);
+  --architecture-node-module-fill: rgba(0, 120, 212, 0.16);
+  --architecture-node-module-stroke: rgba(0, 120, 212, 0.36);
+  --architecture-node-store-fill: rgba(168, 85, 247, 0.16);
+  --architecture-node-store-stroke: rgba(167, 139, 250, 0.34);
+  --architecture-node-event-fill: rgba(245, 158, 11, 0.16);
+  --architecture-node-event-stroke: rgba(251, 191, 36, 0.36);
+  --architecture-node-frontend-api-fill: rgba(20, 184, 166, 0.16);
+  --architecture-node-frontend-api-stroke: rgba(45, 212, 191, 0.34);
+  --architecture-node-backend-api-fill: rgba(239, 68, 68, 0.16);
+  --architecture-node-backend-api-stroke: rgba(248, 113, 113, 0.34);
+  --architecture-node-selected-stroke: var(--text-primary);
+  --architecture-modal-backdrop: rgba(0, 0, 0, 0.32);
 
   /* 标题偏红暗色色调（暗色主题） */
   --editor-header-text-color: #d4836a;
   --editor-header-rule-color: #8b5a4a;
+  --editor-highlight-bg: rgba(255, 213, 79, 0.35);
+  --editor-code-block-bg: transparent;
 
   /* highlight.js 语法高亮 Token 颜色（暗色主题） */
   --hljs-keyword: #c678dd;
@@ -63,9 +133,17 @@
   --text-tertiary: #7a7a7a;
 
   --accent-primary: #0078d4;
+  --accent-primary-foreground: #ffffff;
   --accent-primary-soft: rgba(0, 120, 212, 0.22);
   --accent-primary-soft-weak: rgba(0, 120, 212, 0.18);
   --scrollbar-thumb-color: rgba(212, 212, 212, 0.38);
+  --error-color: #e74c3c;
+  --text-warning: #e2a33e;
+  --bg-warning: rgba(226, 163, 62, 0.08);
+  --overlay-shadow-floating: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --overlay-shadow-strong: 0 12px 32px rgba(0, 0, 0, 0.18);
+  --sidebar-drop-bg: rgba(83, 89, 93, 0.25);
+  --sidebar-icon-drop-bg: rgba(83, 89, 93, 0.2);
 
   --editor-inline-code-bg: rgba(120, 120, 120, 0.2);
   --editor-link-color: #4ea1ff;
@@ -79,17 +157,79 @@
   --editor-active-line-bg-color: rgba(255, 255, 255, 0.04);
   --editor-active-line-gutter-bg-color: rgba(255, 255, 255, 0.06);
 
-  --graph-bg-primary: #020617;
-  --graph-bg-secondary: #0b1220;
-  --graph-border-color: #1e293b;
-  --graph-status-color: #93c5fd;
-  --graph-text-color: #e2e8f0;
-  --graph-muted-text-color: #94a3b8;
-  --graph-label-bg: rgba(2, 6, 23, 0.82);
+  --graph-bg-primary: var(--bg-primary);
+  --graph-bg-secondary: var(--bg-secondary);
+  --graph-border-color: var(--border-color);
+  --graph-status-color: var(--accent-primary);
+  --graph-text-color: var(--text-primary);
+  --graph-muted-text-color: var(--text-secondary);
+  --graph-point-color: var(--accent-primary);
+  --graph-point-greyout-color: var(--text-tertiary);
+  --graph-point-ring-hover-color: var(--accent-primary);
+  --graph-point-ring-focus-color: var(--text-primary);
+  --graph-link-color: var(--text-tertiary);
+  --graph-link-hover-color: var(--accent-primary);
+  --graph-label-bg: var(--bg-secondary);
+
+  --architecture-surface-hero: var(--bg-secondary);
+  --architecture-surface-card: var(--bg-secondary);
+  --architecture-surface-card-subtle: var(--bg-secondary);
+  --architecture-surface-card-soft: var(--bg-hover);
+  --architecture-surface-chip: var(--bg-hover);
+  --architecture-surface-chip-strong: var(--bg-hover);
+  --architecture-surface-chip-soft: var(--bg-hover);
+  --architecture-surface-input: var(--bg-primary);
+  --architecture-surface-grid: var(--bg-secondary);
+  --architecture-surface-grid-line-x: rgba(255, 255, 255, 0.04);
+  --architecture-surface-grid-line-y: rgba(255, 255, 255, 0.03);
+  --architecture-surface-item: var(--bg-hover);
+  --architecture-surface-item-strong: var(--bg-secondary);
+  --architecture-surface-item-soft: var(--bg-primary);
+  --architecture-border-color: var(--border-color);
+  --architecture-border-color-soft: var(--border-color);
+  --architecture-border-color-weak: var(--border-color);
+  --architecture-border-color-hover: rgba(122, 122, 122, 0.4);
+  --architecture-accent-border: var(--accent-primary);
+  --architecture-accent-surface: var(--accent-primary-soft-weak);
+  --architecture-accent-surface-strong: var(--accent-primary-soft);
+  --architecture-accent-text: var(--accent-primary);
+  --architecture-text-primary: var(--text-primary);
+  --architecture-text-secondary: var(--text-secondary);
+  --architecture-text-muted: var(--text-secondary);
+  --architecture-text-strong: var(--text-primary);
+  --architecture-text-soft: var(--text-secondary);
+  --architecture-text-faint: var(--text-tertiary);
+  --architecture-edge-highlight: var(--accent-primary);
+  --architecture-edge-dim: rgba(122, 122, 122, 0.22);
+  --architecture-plugin-side-accent: rgba(74, 222, 128, 0.9);
+  --architecture-plugin-side-glow: rgba(34, 197, 94, 0.18);
+  --architecture-infrastructure-accent: rgba(251, 191, 36, 0.92);
+  --architecture-infrastructure-glow: rgba(245, 158, 11, 0.16);
+  --architecture-shadow: var(--overlay-shadow-strong);
+  --architecture-shadow-soft: var(--overlay-shadow-floating);
+  --architecture-bg-accent-1: rgba(0, 120, 212, 0.08);
+  --architecture-bg-accent-2: rgba(34, 197, 94, 0.06);
+  --architecture-bg-accent-3: rgba(255, 255, 255, 0.02);
+  --architecture-node-plugin-fill: rgba(34, 197, 94, 0.14);
+  --architecture-node-plugin-stroke: rgba(74, 222, 128, 0.32);
+  --architecture-node-module-fill: rgba(0, 120, 212, 0.16);
+  --architecture-node-module-stroke: rgba(0, 120, 212, 0.36);
+  --architecture-node-store-fill: rgba(168, 85, 247, 0.16);
+  --architecture-node-store-stroke: rgba(167, 139, 250, 0.34);
+  --architecture-node-event-fill: rgba(245, 158, 11, 0.16);
+  --architecture-node-event-stroke: rgba(251, 191, 36, 0.36);
+  --architecture-node-frontend-api-fill: rgba(20, 184, 166, 0.16);
+  --architecture-node-frontend-api-stroke: rgba(45, 212, 191, 0.34);
+  --architecture-node-backend-api-fill: rgba(239, 68, 68, 0.16);
+  --architecture-node-backend-api-stroke: rgba(248, 113, 113, 0.34);
+  --architecture-node-selected-stroke: var(--text-primary);
+  --architecture-modal-backdrop: rgba(0, 0, 0, 0.32);
 
   /* 标题偏红暗色色调（暗色主题） */
   --editor-header-text-color: #d4836a;
   --editor-header-rule-color: #8b5a4a;
+  --editor-highlight-bg: rgba(255, 213, 79, 0.35);
+  --editor-code-block-bg: transparent;
 
   /* highlight.js 语法高亮 Token 颜色（暗色主题） */
   --hljs-keyword: #c678dd;
@@ -117,9 +257,17 @@
   --text-tertiary: #6b7280;
 
   --accent-primary: #0b6dff;
+  --accent-primary-foreground: #ffffff;
   --accent-primary-soft: rgba(11, 109, 255, 0.2);
   --accent-primary-soft-weak: rgba(11, 109, 255, 0.14);
   --scrollbar-thumb-color: rgba(71, 85, 105, 0.38);
+  --error-color: #dc2626;
+  --text-warning: #b45309;
+  --bg-warning: rgba(217, 119, 6, 0.1);
+  --overlay-shadow-floating: 0 4px 16px rgba(15, 23, 42, 0.12);
+  --overlay-shadow-strong: 0 12px 32px rgba(148, 163, 184, 0.18);
+  --sidebar-drop-bg: rgba(148, 163, 184, 0.2);
+  --sidebar-icon-drop-bg: rgba(148, 163, 184, 0.16);
 
   --editor-inline-code-bg: rgba(15, 23, 42, 0.08);
   --editor-link-color: #0a58ca;
@@ -133,17 +281,79 @@
   --editor-active-line-bg-color: rgba(15, 23, 42, 0.04);
   --editor-active-line-gutter-bg-color: rgba(15, 23, 42, 0.08);
 
-  --graph-bg-primary: #f8fafc;
-  --graph-bg-secondary: #eef3fa;
-  --graph-border-color: #d1dae6;
-  --graph-status-color: #1d4ed8;
-  --graph-text-color: #1e293b;
-  --graph-muted-text-color: #475569;
-  --graph-label-bg: rgba(248, 250, 252, 0.88);
+  --graph-bg-primary: var(--bg-primary);
+  --graph-bg-secondary: var(--bg-secondary);
+  --graph-border-color: var(--border-color);
+  --graph-status-color: var(--accent-primary);
+  --graph-text-color: var(--text-primary);
+  --graph-muted-text-color: var(--text-secondary);
+  --graph-point-color: var(--accent-primary);
+  --graph-point-greyout-color: var(--text-tertiary);
+  --graph-point-ring-hover-color: var(--accent-primary);
+  --graph-point-ring-focus-color: var(--text-primary);
+  --graph-link-color: var(--text-tertiary);
+  --graph-link-hover-color: var(--accent-primary);
+  --graph-label-bg: var(--bg-secondary);
+
+  --architecture-surface-hero: var(--bg-secondary);
+  --architecture-surface-card: var(--bg-secondary);
+  --architecture-surface-card-subtle: var(--bg-secondary);
+  --architecture-surface-card-soft: var(--bg-hover);
+  --architecture-surface-chip: var(--bg-hover);
+  --architecture-surface-chip-strong: var(--bg-hover);
+  --architecture-surface-chip-soft: var(--bg-hover);
+  --architecture-surface-input: var(--bg-primary);
+  --architecture-surface-grid: var(--bg-secondary);
+  --architecture-surface-grid-line-x: rgba(15, 23, 42, 0.05);
+  --architecture-surface-grid-line-y: rgba(15, 23, 42, 0.04);
+  --architecture-surface-item: var(--bg-hover);
+  --architecture-surface-item-strong: var(--bg-secondary);
+  --architecture-surface-item-soft: var(--bg-primary);
+  --architecture-border-color: var(--border-color);
+  --architecture-border-color-soft: var(--border-color);
+  --architecture-border-color-weak: var(--border-color);
+  --architecture-border-color-hover: rgba(107, 114, 128, 0.38);
+  --architecture-accent-border: var(--accent-primary);
+  --architecture-accent-surface: var(--accent-primary-soft-weak);
+  --architecture-accent-surface-strong: var(--accent-primary-soft);
+  --architecture-accent-text: var(--accent-primary);
+  --architecture-text-primary: var(--text-primary);
+  --architecture-text-secondary: var(--text-secondary);
+  --architecture-text-muted: var(--text-secondary);
+  --architecture-text-strong: var(--text-primary);
+  --architecture-text-soft: var(--text-secondary);
+  --architecture-text-faint: var(--text-tertiary);
+  --architecture-edge-highlight: var(--accent-primary);
+  --architecture-edge-dim: rgba(107, 114, 128, 0.2);
+  --architecture-plugin-side-accent: rgba(22, 163, 74, 0.92);
+  --architecture-plugin-side-glow: rgba(34, 197, 94, 0.12);
+  --architecture-infrastructure-accent: rgba(217, 119, 6, 0.92);
+  --architecture-infrastructure-glow: rgba(245, 158, 11, 0.12);
+  --architecture-shadow: var(--overlay-shadow-strong);
+  --architecture-shadow-soft: var(--overlay-shadow-floating);
+  --architecture-bg-accent-1: rgba(11, 109, 255, 0.08);
+  --architecture-bg-accent-2: rgba(34, 197, 94, 0.05);
+  --architecture-bg-accent-3: rgba(15, 23, 42, 0.03);
+  --architecture-node-plugin-fill: rgba(22, 163, 74, 0.1);
+  --architecture-node-plugin-stroke: rgba(22, 163, 74, 0.3);
+  --architecture-node-module-fill: rgba(11, 109, 255, 0.1);
+  --architecture-node-module-stroke: rgba(11, 109, 255, 0.3);
+  --architecture-node-store-fill: rgba(139, 92, 246, 0.1);
+  --architecture-node-store-stroke: rgba(139, 92, 246, 0.3);
+  --architecture-node-event-fill: rgba(217, 119, 6, 0.12);
+  --architecture-node-event-stroke: rgba(217, 119, 6, 0.3);
+  --architecture-node-frontend-api-fill: rgba(13, 148, 136, 0.1);
+  --architecture-node-frontend-api-stroke: rgba(13, 148, 136, 0.28);
+  --architecture-node-backend-api-fill: rgba(220, 38, 38, 0.1);
+  --architecture-node-backend-api-stroke: rgba(220, 38, 38, 0.28);
+  --architecture-node-selected-stroke: var(--text-primary);
+  --architecture-modal-backdrop: rgba(15, 23, 42, 0.18);
 
   /* 标题偏红暗色色调（亮色主题） */
   --editor-header-text-color: #6b2e2e;
   --editor-header-rule-color: #8b4444;
+  --editor-highlight-bg: rgba(255, 213, 79, 0.35);
+  --editor-code-block-bg: transparent;
 
   /* highlight.js 语法高亮 Token 颜色（亮色主题） */
   --hljs-keyword: #d73a49;
@@ -158,6 +368,130 @@
   --hljs-regexp: #032f62;
   --hljs-meta: #6a737d;
   --hljs-attribute: #005cc5;
+}
+
+/* 牛皮纸主题变量：泛黄纸面、棕褐文字与低饱和墨色点缀。 */
+:root[data-theme="kraft"] {
+  --bg-primary: #efe2c3;
+  --bg-secondary: #f7edd4;
+  --bg-hover: #ead9b3;
+  --border-color: #c9b38a;
+  --text-primary: #4e3d2b;
+  --text-secondary: #6f5a43;
+  --text-tertiary: #93785a;
+
+  --accent-primary: #8b5a2b;
+  --accent-primary-foreground: #fff8ec;
+  --accent-primary-soft: rgba(139, 90, 43, 0.2);
+  --accent-primary-soft-weak: rgba(139, 90, 43, 0.13);
+  --scrollbar-thumb-color: rgba(111, 90, 67, 0.38);
+  --error-color: #9f3f2b;
+  --text-warning: #9a5d11;
+  --bg-warning: rgba(154, 93, 17, 0.12);
+  --overlay-shadow-floating: 0 4px 16px rgba(93, 68, 37, 0.14);
+  --overlay-shadow-strong: 0 12px 32px rgba(93, 68, 37, 0.22);
+  --sidebar-drop-bg: rgba(140, 108, 67, 0.2);
+  --sidebar-icon-drop-bg: rgba(140, 108, 67, 0.16);
+
+  --editor-inline-code-bg: rgba(94, 66, 38, 0.08);
+  --editor-link-color: #6d4c2a;
+  --editor-bg-color: #f7edd4;
+  --editor-text-color: #4e3d2b;
+  --editor-gutter-bg-color: #efe2c3;
+  --editor-gutter-text-color: #93785a;
+  --editor-selection-bg-color: rgba(139, 90, 43, 0.18);
+  --editor-selection-text-color: #3d2f22;
+  --editor-caret-color: #4e3d2b;
+  --editor-active-line-bg-color: rgba(94, 66, 38, 0.04);
+  --editor-active-line-gutter-bg-color: rgba(94, 66, 38, 0.08);
+
+  --graph-bg-primary: var(--bg-primary);
+  --graph-bg-secondary: var(--bg-secondary);
+  --graph-border-color: var(--border-color);
+  --graph-status-color: var(--accent-primary);
+  --graph-text-color: var(--text-primary);
+  --graph-muted-text-color: var(--text-secondary);
+  --graph-point-color: var(--accent-primary);
+  --graph-point-greyout-color: var(--text-tertiary);
+  --graph-point-ring-hover-color: #a36a34;
+  --graph-point-ring-focus-color: var(--text-primary);
+  --graph-link-color: #8f775b;
+  --graph-link-hover-color: #6d4c2a;
+  --graph-label-bg: var(--bg-secondary);
+
+  --architecture-surface-hero: var(--bg-secondary);
+  --architecture-surface-card: var(--bg-secondary);
+  --architecture-surface-card-subtle: #f2e4c1;
+  --architecture-surface-card-soft: var(--bg-hover);
+  --architecture-surface-chip: var(--bg-hover);
+  --architecture-surface-chip-strong: #e6d2a8;
+  --architecture-surface-chip-soft: #f1e3c2;
+  --architecture-surface-input: #f5e8c8;
+  --architecture-surface-grid: var(--bg-secondary);
+  --architecture-surface-grid-line-x: rgba(94, 66, 38, 0.06);
+  --architecture-surface-grid-line-y: rgba(94, 66, 38, 0.04);
+  --architecture-surface-item: var(--bg-hover);
+  --architecture-surface-item-strong: #f4e7c7;
+  --architecture-surface-item-soft: #ebdbb7;
+  --architecture-border-color: var(--border-color);
+  --architecture-border-color-soft: rgba(140, 108, 67, 0.45);
+  --architecture-border-color-weak: rgba(140, 108, 67, 0.28);
+  --architecture-border-color-hover: rgba(111, 90, 67, 0.52);
+  --architecture-accent-border: var(--accent-primary);
+  --architecture-accent-surface: rgba(139, 90, 43, 0.1);
+  --architecture-accent-surface-strong: rgba(139, 90, 43, 0.16);
+  --architecture-accent-text: #7b4d24;
+  --architecture-text-primary: var(--text-primary);
+  --architecture-text-secondary: var(--text-secondary);
+  --architecture-text-muted: var(--text-secondary);
+  --architecture-text-strong: #3d2f22;
+  --architecture-text-soft: #7a644b;
+  --architecture-text-faint: var(--text-tertiary);
+  --architecture-edge-highlight: #8b5a2b;
+  --architecture-edge-dim: rgba(111, 90, 67, 0.18);
+  --architecture-plugin-side-accent: rgba(104, 118, 74, 0.9);
+  --architecture-plugin-side-glow: rgba(104, 118, 74, 0.12);
+  --architecture-infrastructure-accent: rgba(160, 104, 36, 0.88);
+  --architecture-infrastructure-glow: rgba(160, 104, 36, 0.12);
+  --architecture-shadow: var(--overlay-shadow-strong);
+  --architecture-shadow-soft: var(--overlay-shadow-floating);
+  --architecture-bg-accent-1: rgba(139, 90, 43, 0.08);
+  --architecture-bg-accent-2: rgba(104, 118, 74, 0.06);
+  --architecture-bg-accent-3: rgba(94, 66, 38, 0.04);
+  --architecture-node-plugin-fill: rgba(104, 118, 74, 0.1);
+  --architecture-node-plugin-stroke: rgba(104, 118, 74, 0.3);
+  --architecture-node-module-fill: rgba(139, 90, 43, 0.12);
+  --architecture-node-module-stroke: rgba(139, 90, 43, 0.3);
+  --architecture-node-store-fill: rgba(122, 89, 63, 0.12);
+  --architecture-node-store-stroke: rgba(122, 89, 63, 0.32);
+  --architecture-node-event-fill: rgba(160, 104, 36, 0.12);
+  --architecture-node-event-stroke: rgba(160, 104, 36, 0.3);
+  --architecture-node-frontend-api-fill: rgba(85, 115, 112, 0.12);
+  --architecture-node-frontend-api-stroke: rgba(85, 115, 112, 0.3);
+  --architecture-node-backend-api-fill: rgba(145, 71, 48, 0.12);
+  --architecture-node-backend-api-stroke: rgba(145, 71, 48, 0.3);
+  --architecture-node-selected-stroke: var(--text-primary);
+  --architecture-modal-backdrop: rgba(63, 46, 28, 0.2);
+
+  /* 标题与高亮颜色：使用棕红墨迹，保留旧纸张上的层次感。 */
+  --editor-header-text-color: #7a3f2b;
+  --editor-header-rule-color: #9a6b4d;
+  --editor-highlight-bg: rgba(196, 150, 74, 0.28);
+  --editor-code-block-bg: transparent;
+
+  /* highlight.js 语法高亮 Token 颜色（牛皮纸主题） */
+  --hljs-keyword: #8b3f2c;
+  --hljs-string: #5c6b3b;
+  --hljs-number: #9a5d11;
+  --hljs-comment: #9a8362;
+  --hljs-type: #6b4f7c;
+  --hljs-function: #6f4c32;
+  --hljs-variable: #b05b33;
+  --hljs-property: #7c5b39;
+  --hljs-operator: #4e3d2b;
+  --hljs-regexp: #4f6b58;
+  --hljs-meta: #8b775e;
+  --hljs-attribute: #7a4f20;
 }
 
 * {

@@ -1,16 +1,22 @@
 /**
- * @module settings/registrars/editorSettingsRegistrar
- * @description 编辑器设置注册：Vim 模式、字体大小、Tab 宽度、自动换行、行号、自动保存等编辑体验选项。
+ * @module plugins/markdown-codemirror/settings/codeMirrorSettingsRegistrar
+ * @description CodeMirror 设置注册：Vim 模式、字体大小、Tab 宽度、自动换行、行号与字体族。
  * @dependencies
  *  - react
- *  - ../../host/store/configStore
- *  - ../../host/settings/settingsRegistry
+ *  - ../../../host/store/configStore
+ *  - ../../../host/settings/settingsRegistry
  */
 
 import type { ChangeEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { updateFeatureSetting, updateVimModeEnabled, useConfigState, DEFAULT_EDITOR_FONT_FAMILY, FONT_FAMILY_PRESETS } from "../../host/store/configStore";
-import { registerSettingsSection } from "../../host/settings/settingsRegistry";
+import {
+    DEFAULT_EDITOR_FONT_FAMILY,
+    FONT_FAMILY_PRESETS,
+    updateFeatureSetting,
+    updateVimModeEnabled,
+    useConfigState,
+} from "../../../host/store/configStore";
+import { registerSettingsSection } from "../../../host/settings/settingsRegistry";
 
 /**
  * @function clampNumber
@@ -26,15 +32,16 @@ function clampNumber(raw: string, min: number, max: number, fallback: number): n
     if (!Number.isFinite(parsed)) {
         return fallback;
     }
+
     return Math.max(min, Math.min(max, Math.round(parsed)));
 }
 
 /**
- * @function EditorSettingsSection
- * @description 编辑器设置选栏内容，包含 Vim 模式、字体族、字体大小、Tab 宽度、自动换行、行号、自动保存等配置。
+ * @function CodeMirrorSettingsSection
+ * @description CodeMirror 编辑器设置选栏内容。
  * @returns React 节点。
  */
-function EditorSettingsSection(): ReactNode {
+function CodeMirrorSettingsSection(): ReactNode {
     const { t } = useTranslation();
     const configState = useConfigState();
     const { featureSettings } = configState;
@@ -49,21 +56,16 @@ function EditorSettingsSection(): ReactNode {
         void updateFeatureSetting("editorTabSize", next);
     };
 
-    const onAutoSaveDelayChange = (event: ChangeEvent<HTMLInputElement>): void => {
-        const next = clampNumber(event.target.value, 500, 10000, featureSettings.autoSaveDelayMs);
-        void updateFeatureSetting("autoSaveDelayMs", next);
-    };
-
-    /** 编辑器字体族变更处理：从预设下拉框选择 */
     const onFontFamilyChange = (event: ChangeEvent<HTMLSelectElement>): void => {
         const next = event.target.value;
-        void updateFeatureSetting("editorFontFamily", next.length > 0 ? next : DEFAULT_EDITOR_FONT_FAMILY);
+        void updateFeatureSetting(
+            "editorFontFamily",
+            next.length > 0 ? next : DEFAULT_EDITOR_FONT_FAMILY,
+        );
     };
 
     return (
         <div className="settings-item-group">
-            {/* --- Vim 编辑模式 --- */}
-            {/* styles: .settings-compact-row 紧凑行布局 */}
             <label className="settings-compact-row" htmlFor="vim-mode-switch">
                 <div className="settings-compact-info">
                     <span className="settings-compact-title">{t("settings.vimMode")}</span>
@@ -79,7 +81,6 @@ function EditorSettingsSection(): ReactNode {
                 />
             </label>
 
-            {/* --- 自动换行 --- */}
             <label className="settings-compact-row" htmlFor="line-wrapping-switch">
                 <div className="settings-compact-info">
                     <span className="settings-compact-title">{t("settings.lineWrapping")}</span>
@@ -95,8 +96,6 @@ function EditorSettingsSection(): ReactNode {
                 />
             </label>
 
-            {/* --- 行号模式 --- */}
-            {/* styles: .settings-compact-row 紧凑行布局, .settings-compact-select 下拉选择框 */}
             <div className="settings-compact-row">
                 <div className="settings-compact-info">
                     <span className="settings-compact-title">{t("settings.lineNumbers")}</span>
@@ -118,8 +117,6 @@ function EditorSettingsSection(): ReactNode {
                 </select>
             </div>
 
-            {/* --- 编辑器字体 --- */}
-            {/* styles: .settings-compact-row 紧凑行布局, .settings-compact-select 下拉选择框 */}
             <div className="settings-compact-row">
                 <div className="settings-compact-info">
                     <span className="settings-compact-title">{t("settings.fontFamily")}</span>
@@ -128,7 +125,7 @@ function EditorSettingsSection(): ReactNode {
                 <select
                     className="settings-compact-select"
                     value={
-                        FONT_FAMILY_PRESETS.some((p) => p.value === featureSettings.editorFontFamily)
+                        FONT_FAMILY_PRESETS.some((preset) => preset.value === featureSettings.editorFontFamily)
                             ? featureSettings.editorFontFamily
                             : DEFAULT_EDITOR_FONT_FAMILY
                     }
@@ -142,8 +139,6 @@ function EditorSettingsSection(): ReactNode {
                 </select>
             </div>
 
-            {/* --- 字体大小 --- */}
-            {/* styles: .settings-compact-row 紧凑行布局 */}
             <div className="settings-compact-row">
                 <div className="settings-compact-info">
                     <span className="settings-compact-title">{t("settings.fontSize")}</span>
@@ -160,7 +155,6 @@ function EditorSettingsSection(): ReactNode {
                 />
             </div>
 
-            {/* --- Tab 缩进宽度 --- */}
             <div className="settings-compact-row">
                 <div className="settings-compact-info">
                     <span className="settings-compact-title">{t("settings.tabSize")}</span>
@@ -177,57 +171,21 @@ function EditorSettingsSection(): ReactNode {
                 />
             </div>
 
-            {/* --- 自动保存 --- */}
-            {/* styles: .settings-compact-row 紧凑行布局 */}
-            <label className="settings-compact-row" htmlFor="auto-save-switch">
-                <div className="settings-compact-info">
-                    <span className="settings-compact-title">自动保存</span>
-                    <span className="settings-compact-desc">编辑后自动保存文件，无需手动 Cmd+S</span>
-                </div>
-                <input
-                    id="auto-save-switch"
-                    type="checkbox"
-                    checked={featureSettings.autoSaveEnabled}
-                    onChange={(event) => {
-                        void updateFeatureSetting("autoSaveEnabled", event.target.checked);
-                    }}
-                />
-            </label>
-
-            {/* --- 自动保存延迟 --- */}
-            {/* styles: .settings-compact-row 紧凑行布局 */}
-            {featureSettings.autoSaveEnabled ? (
-                <div className="settings-compact-row">
-                    <div className="settings-compact-info">
-                        <span className="settings-compact-title">自动保存延迟</span>
-                        <span className="settings-compact-desc">停止输入后多久自动保存（500–10000 ms）</span>
-                    </div>
-                    <input
-                        className="settings-compact-number-input"
-                        type="number"
-                        min={500}
-                        max={10000}
-                        step={100}
-                        value={featureSettings.autoSaveDelayMs}
-                        onChange={onAutoSaveDelayChange}
-                    />
-                </div>
-            ) : null}
-
             {configState.error ? <div className="settings-tab-error">{configState.error}</div> : null}
         </div>
     );
 }
 
 /**
- * @function registerEditorSettingsSection
- * @description 注册编辑器设置选栏。
+ * @function registerCodeMirrorSettingsSection
+ * @description 注册 CodeMirror 设置选栏。
+ * @returns 取消注册函数。
  */
-export function registerEditorSettingsSection(): void {
-    registerSettingsSection({
-        id: "editor-vim",
+export function registerCodeMirrorSettingsSection(): () => void {
+    return registerSettingsSection({
+        id: "codemirror-editor",
         title: "settings.editorSection",
         order: 20,
-        render: () => <EditorSettingsSection />,
+        render: () => <CodeMirrorSettingsSection />,
     });
 }

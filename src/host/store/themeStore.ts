@@ -1,12 +1,13 @@
 /**
  * @module host/store/themeStore
- * @description 主题状态管理：集中维护日间/夜间风格，并同步到文档根节点 CSS 变量。
+ * @description 主题状态管理：集中维护全局界面风格，并同步到文档根节点 CSS 变量。
  * @dependencies
  *  - react (useEffect/useSyncExternalStore)
  *
  * @example
  *  - 在 App 顶层调用 useThemeSync() 同步 data-theme。
  *  - 在设置页调用 updateThemeMode("light") 切换日间主题。
+ *  - 在设置页调用 updateThemeMode("kraft") 切换牛皮纸主题。
  *
  * @exports
  *  - useThemeState
@@ -27,7 +28,7 @@ const THEME_MODE_STORAGE_KEY = "ofive:settings:theme-mode";
  * @type ThemeMode
  * @description 支持的主题模式。
  */
-export type ThemeMode = "dark" | "light";
+export type ThemeMode = "dark" | "light" | "kraft";
 
 /**
  * @interface ThemeState
@@ -45,7 +46,7 @@ interface ThemeState {
  * @returns 合法时返回 true。
  */
 function isThemeMode(value: unknown): value is ThemeMode {
-    return value === "dark" || value === "light";
+    return value === "dark" || value === "light" || value === "kraft";
 }
 
 /**

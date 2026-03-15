@@ -7,7 +7,7 @@ import { describe, expect, test } from "bun:test";
 import {
     createKnowledgeGraphInteractionCallbacksFor,
     type GraphRuntimeLike,
-} from "../src/layout/knowledgeGraphInteractions";
+} from "../src/plugins/knowledge-graph/tab/knowledgeGraphInteractions";
 
 /**
  * @function createMockGraph

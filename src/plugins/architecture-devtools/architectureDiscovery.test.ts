@@ -101,6 +101,22 @@ describe("architectureDiscovery", () => {
         expect(slice.nodes.some((node) => {
             return (
                 node.kind === "ui-module" &&
+                node.title === "codeMirrorSettingsRegistrar" &&
+                node.moduleLayer === "plugin-logic"
+            );
+        })).toBe(true);
+
+        expect(slice.nodes.some((node) => {
+            return (
+                node.kind === "ui-module" &&
+                node.title === "autoSaveSettingsRegistrar" &&
+                node.moduleLayer === "infrastructure"
+            );
+        })).toBe(true);
+
+        expect(slice.nodes.some((node) => {
+            return (
+                node.kind === "ui-module" &&
                 node.title === "FileTree" &&
                 node.moduleLayer === "plugin-logic"
             );

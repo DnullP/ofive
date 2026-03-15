@@ -20,7 +20,8 @@
  *   - ../api/vaultApi
  *   - i18next
  *
- * @exports 无导出（纯副作用模块）
+ * @exports
+ *   - activatePlugin 注册并返回清理函数
  */
 
 import React, { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
@@ -72,18 +73,7 @@ i18n.addResourceBundle("zh", "translation", {
     },
 }, true, true);
 
-registerCommand({
-    id: "outline.open",
-    title: "outlinePlugin.openCommand",
-    execute: (context) => {
-        if (!context.activatePanel) {
-            console.warn("[outlinePlugin] open command skipped: activatePanel missing");
-            return;
-        }
-
-        context.activatePanel("outline");
-    },
-});
+const OUTLINE_PANEL_ID = "outline";
 
 /* ────────────────── 防抖辅助 ────────────────── */
 
@@ -297,23 +287,50 @@ function OutlinePanelPlugin(): ReactNode {
  * 模块加载时自动注册大纲活动图标（面板容器型）和大纲面板。
  * activity 类型为 panel-container，面板通过 activityId 关联。
  */
-registerActivity({
-    type: "panel-container",
-    id: "outline",
-    title: () => i18n.t("outlinePlugin.title"),
-    icon: React.createElement(Compass, { size: 18, strokeWidth: 1.8 }),
-    defaultSection: "top",
-    defaultBar: "right",
-    defaultOrder: 4,
-});
+/**
+ * @function activatePlugin
+ * @description 注册大纲面板、活动图标与打开命令。
+ * @returns 插件清理函数。
+ */
+export function activatePlugin(): () => void {
+    const unregisterCommand = registerCommand({
+        id: "outline.open",
+        title: "outlinePlugin.openCommand",
+        execute: (context) => {
+            if (!context.activatePanel) {
+                console.warn("[outlinePlugin] open command skipped: activatePanel missing");
+                return;
+            }
 
-registerPanel({
-    id: "outline",
-    title: () => i18n.t("outlinePlugin.title"),
-    activityId: "outline",
-    defaultPosition: "right",
-    defaultOrder: 1,
-    render: () => React.createElement(OutlinePanelPlugin),
-});
+            context.activatePanel(OUTLINE_PANEL_ID);
+        },
+    });
 
-console.info("[outlinePlugin] self-registered outline activity and panel");
+    const unregisterActivity = registerActivity({
+        type: "panel-container",
+        id: OUTLINE_PANEL_ID,
+        title: () => i18n.t("outlinePlugin.title"),
+        icon: React.createElement(Compass, { size: 18, strokeWidth: 1.8 }),
+        defaultSection: "top",
+        defaultBar: "right",
+        defaultOrder: 4,
+    });
+
+    const unregisterPanel = registerPanel({
+        id: OUTLINE_PANEL_ID,
+        title: () => i18n.t("outlinePlugin.title"),
+        activityId: OUTLINE_PANEL_ID,
+        defaultPosition: "right",
+        defaultOrder: 1,
+        render: () => React.createElement(OutlinePanelPlugin),
+    });
+
+    console.info("[outlinePlugin] registered outline plugin");
+
+    return () => {
+        unregisterPanel();
+        unregisterActivity();
+        unregisterCommand();
+        console.info("[outlinePlugin] unregistered outline plugin");
+    };
+}

@@ -111,6 +111,7 @@ function buildLineNumbersExtension(
 ): import("@codemirror/state").Extension {
     switch (mode) {
         case "off":
+            /* theme-guard-ignore-next-line: 这里是实例级 gutter 显隐控制，不属于静态主题定义。 */
             return EditorView.theme({
                 ".cm-gutters": { display: "none !important" },
             });
@@ -694,10 +695,12 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 createCodeMirrorThemeExtension(),
                 /* 字体族 Compartment：通过 theme 扩展动态控制 .cm-content 字体族 */
                 fontFamilyCompartmentRef.current.of(
+                    /* theme-guard-ignore-next-line: 这里是实例级字体配置，不属于静态主题定义。 */
                     EditorView.theme({ ".cm-content": { fontFamily: editorFontFamily } }),
                 ),
                 /* 字体大小 Compartment：通过 theme 扩展动态控制 .cm-content 字号 */
                 fontSizeCompartmentRef.current.of(
+                    /* theme-guard-ignore-next-line: 这里是实例级字号配置，不属于静态主题定义。 */
                     EditorView.theme({ ".cm-content": { fontSize: `${editorFontSize}px` } }),
                 ),
                 /* Tab 缩进宽度 Compartment */
@@ -941,6 +944,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
 
         view.dispatch({
             effects: fontFamilyCompartmentRef.current.reconfigure(
+                /* theme-guard-ignore-next-line: 这里是实例级字体配置重设，不属于静态主题定义。 */
                 EditorView.theme({ ".cm-content": { fontFamily: editorFontFamily } }),
             ),
         });
@@ -957,6 +961,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
 
         view.dispatch({
             effects: fontSizeCompartmentRef.current.reconfigure(
+                /* theme-guard-ignore-next-line: 这里是实例级字号配置重设，不属于静态主题定义。 */
                 EditorView.theme({ ".cm-content": { fontSize: `${editorFontSize}px` } }),
             ),
         });

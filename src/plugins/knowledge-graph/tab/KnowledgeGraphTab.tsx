@@ -20,7 +20,7 @@ import { useTranslation } from "react-i18next";
 import type { IDockviewPanelProps } from "dockview";
 import { getCurrentVaultMarkdownGraph } from "../../../api/vaultApi";
 import { createKnowledgeGraphInteractionCallbacksFor } from "./knowledgeGraphInteractions";
-import { buildKnowledgeGraphConfig, DEFAULT_KNOWLEDGE_GRAPH_SETTINGS } from "./knowledgeGraphSettings";
+import { buildKnowledgeGraphConfig } from "./knowledgeGraphSettings";
 import {
     useGraphSettingsState,
     useGraphSettingsSync,
@@ -94,50 +94,6 @@ const LABEL_FADE_RANGE = 0.15;
  * @description fitView 后额外放大的缩放倍率。
  */
 const ZOOM_IN_SCALE_AFTER_FIT = 1.2;
-
-/**
- * @constant LEGACY_THEME_BACKGROUND_COLORS
- * @description 识别历史默认背景值，用于在主题切换时自动跟随新主题色。
- */
-const LEGACY_THEME_BACKGROUND_COLORS = new Set<string>([
-    DEFAULT_KNOWLEDGE_GRAPH_SETTINGS.backgroundColor.toLowerCase(),
-    "#f8fafc",
-]);
-
-/**
- * @function readThemeGraphBackgroundColor
- * @description 读取当前主题下的图谱背景色 token。
- * @returns 背景色字符串；读取失败时返回 null。
- */
-function readThemeGraphBackgroundColor(): string | null {
-    if (typeof window === "undefined") {
-        return null;
-    }
-
-    const rootStyle = window.getComputedStyle(document.documentElement);
-    const value = rootStyle.getPropertyValue("--graph-bg-primary").trim();
-    return value.length > 0 ? value : null;
-}
-
-/**
- * @function resolveGraphBackgroundColor
- * @description 解析最终图谱背景色：用户未自定义时跟随主题变量。
- * @param configuredColor 当前图谱设置中的背景色。
- * @returns 最终用于 GraphConfig 的背景色。
- */
-function resolveGraphBackgroundColor(configuredColor: string): string {
-    const normalizedConfigured = configuredColor.trim().toLowerCase();
-    const themeColor = readThemeGraphBackgroundColor();
-    if (!themeColor) {
-        return configuredColor;
-    }
-
-    if (normalizedConfigured.length === 0 || LEGACY_THEME_BACKGROUND_COLORS.has(normalizedConfigured)) {
-        return themeColor;
-    }
-
-    return configuredColor;
-}
 
 /**
  * @function createSeededRandom
@@ -256,10 +212,7 @@ export function KnowledgeGraphTab(
     });
 
     const graphConfig: GraphConfigInterface = useMemo(
-        () => buildKnowledgeGraphConfig({
-            ...graphSettings,
-            backgroundColor: resolveGraphBackgroundColor(graphSettings.backgroundColor) as never,
-        }),
+        () => buildKnowledgeGraphConfig(graphSettings),
         [graphSettings, themeMode],
     );
 

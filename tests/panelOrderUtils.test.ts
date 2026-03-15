@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { applyPanelOrderForPosition } from "../src/layout/panelOrderUtils";
+import { applyPanelOrderForPosition } from "../src/host/layout/panelOrderUtils";
 
 describe("applyPanelOrderForPosition", () => {
     test("同侧栏拖拽后应按 Paneview 顺序持久化 order", () => {

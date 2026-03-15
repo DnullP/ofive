@@ -58,7 +58,7 @@ import.meta.glob("./plugins/**/*.{ts,tsx}", { eager: true });
 
 activity 是左侧或右侧 icon bar 上的图标入口，注册中心在：
 
-1. [src/registry/activityRegistry.ts](../src/registry/activityRegistry.ts)
+1. [src/host/registry/activityRegistry.ts](../src/host/registry/activityRegistry.ts)
 
 当前支持两种 activity：
 
@@ -104,7 +104,7 @@ registerActivity({
 
 panel 是侧边栏面板，注册中心在：
 
-1. [src/registry/panelRegistry.ts](../src/registry/panelRegistry.ts)
+1. [src/host/registry/panelRegistry.ts](../src/host/registry/panelRegistry.ts)
 
 panel 必须归属于一个 `activityId`：
 
@@ -132,7 +132,7 @@ registerPanel({
 
 tab 组件注册中心在：
 
-1. [src/registry/tabComponentRegistry.ts](../src/registry/tabComponentRegistry.ts)
+1. [src/host/registry/tabComponentRegistry.ts](../src/host/registry/tabComponentRegistry.ts)
 
 注册的是“组件类型”，而不是某个具体实例：
 
@@ -205,7 +205,7 @@ src/
 
 推荐优先读取：
 
-1. [src/store/activeEditorStore.ts](../src/store/activeEditorStore.ts)
+1. [src/host/store/activeEditorStore.ts](../src/host/store/activeEditorStore.ts)
 
 典型用法：
 

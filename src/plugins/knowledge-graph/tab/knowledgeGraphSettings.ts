@@ -10,22 +10,86 @@
  * @exports
  *  - DEFAULT_KNOWLEDGE_GRAPH_SETTINGS
  *  - KNOWLEDGE_GRAPH_SETTING_DEFINITIONS
+ *  - mergeKnowledgeGraphSettings
  *  - buildKnowledgeGraphConfig
  */
 
 import type { GraphConfigInterface } from "@cosmos.gl/graph";
 
 /**
+ * @constant KNOWLEDGE_GRAPH_THEME_COLOR_TOKENS
+ * @description 图谱内部渲染颜色与全局主题 token 的映射关系。
+ */
+const KNOWLEDGE_GRAPH_THEME_COLOR_TOKENS = {
+    backgroundColor: "graph-bg-primary",
+    pointDefaultColor: "graph-point-color",
+    pointGreyoutColor: "graph-point-greyout-color",
+    hoveredPointRingColor: "graph-point-ring-hover-color",
+    focusedPointRingColor: "graph-point-ring-focus-color",
+    linkDefaultColor: "graph-link-color",
+    hoveredLinkColor: "graph-link-hover-color",
+} as const;
+
+/**
+ * @type KnowledgeGraphThemeColorKey
+ * @description 图谱内部主题颜色配置键。
+ */
+type KnowledgeGraphThemeColorKey = keyof typeof KNOWLEDGE_GRAPH_THEME_COLOR_TOKENS;
+
+/**
+ * @function readKnowledgeGraphThemeColorToken
+ * @description 读取当前主题下指定图谱 token 的计算后颜色值。
+ * @param tokenName 主题 token 名称，不包含前导 `--`。
+ * @returns 颜色字符串；不可读取时返回 null。
+ */
+function readKnowledgeGraphThemeColorToken(tokenName: string): string | null {
+    if (typeof window === "undefined") {
+        return null;
+    }
+
+    const rootStyle = window.getComputedStyle(document.documentElement);
+    const value = rootStyle.getPropertyValue(`--${tokenName}`).trim();
+    return value.length > 0 ? value : null;
+}
+
+/**
+ * @function resolveKnowledgeGraphThemeColor
+ * @description 解析指定图谱颜色键在当前主题下的实际颜色值。
+ * @param key 图谱内部主题颜色配置键。
+ * @returns 实际颜色值；若无法解析则返回空字符串。
+ */
+function resolveKnowledgeGraphThemeColor(key: KnowledgeGraphThemeColorKey): string {
+    return readKnowledgeGraphThemeColorToken(KNOWLEDGE_GRAPH_THEME_COLOR_TOKENS[key]) ?? "";
+}
+
+/**
+ * @function createKnowledgeGraphThemeConfig
+ * @description 构建仅由主题控制的图谱颜色配置。
+ * @returns 图谱颜色配置。
+ */
+function createKnowledgeGraphThemeConfig(): Pick<GraphConfigInterface, KnowledgeGraphThemeColorKey> {
+    return {
+        backgroundColor: resolveKnowledgeGraphThemeColor("backgroundColor"),
+        pointDefaultColor: resolveKnowledgeGraphThemeColor("pointDefaultColor"),
+        pointGreyoutColor: resolveKnowledgeGraphThemeColor("pointGreyoutColor"),
+        hoveredPointRingColor: resolveKnowledgeGraphThemeColor("hoveredPointRingColor"),
+        focusedPointRingColor: resolveKnowledgeGraphThemeColor("focusedPointRingColor"),
+        linkDefaultColor: resolveKnowledgeGraphThemeColor("linkDefaultColor"),
+        hoveredLinkColor: resolveKnowledgeGraphThemeColor("hoveredLinkColor"),
+    };
+}
+
+/**
  * @constant DEFAULT_KNOWLEDGE_GRAPH_SETTINGS
- * @description 知识图谱设置默认值（与当前产品默认体验保持一致）。
+ * @description 知识图谱设置默认值。
+ *   仅包含允许持久化和用户调整的结构/交互参数。
+ *   图谱配色完全由主题 token 控制，不暴露为 setting。
  */
 export const DEFAULT_KNOWLEDGE_GRAPH_SETTINGS = {
-    backgroundColor: "#020617",
-    pointDefaultColor: "#60a5fa",
     pointDefaultSize: 2.5,
     pointSizeScale: 1,
     pointOpacity: 1,
-    linkDefaultColor: "#64748b",
+    renderHoveredPointRing: true,
     linkDefaultWidth: 1,
     linkWidthScale: 0.9,
     linkOpacity: 0.43,
@@ -75,7 +139,7 @@ export type KnowledgeGraphSettingKey = keyof KnowledgeGraphSettings;
  * @type SettingFieldType
  * @description 设置字段展示类型。
  */
-export type SettingFieldType = "boolean" | "number" | "color";
+export type SettingFieldType = "boolean" | "number";
 
 /**
  * @interface KnowledgeGraphSettingDefinition
@@ -99,16 +163,37 @@ export interface KnowledgeGraphSettingDefinition {
 }
 
 /**
+ * @function mergeKnowledgeGraphSettings
+ * @description 将候选设置与默认值合并，并丢弃任何未纳入 setting 模型的字段。
+ * @param partialSettings 候选设置。
+ * @returns 结构完整且已清洗的图谱设置。
+ */
+export function mergeKnowledgeGraphSettings(
+    partialSettings: Partial<KnowledgeGraphSettings> | null | undefined,
+): KnowledgeGraphSettings {
+    const merged = { ...DEFAULT_KNOWLEDGE_GRAPH_SETTINGS } as KnowledgeGraphSettings;
+    if (!partialSettings) {
+        return merged;
+    }
+
+    (Object.keys(DEFAULT_KNOWLEDGE_GRAPH_SETTINGS) as KnowledgeGraphSettingKey[]).forEach((key) => {
+        const value = partialSettings[key];
+        if (value !== undefined) {
+            (merged[key] as KnowledgeGraphSettings[typeof key]) = value as KnowledgeGraphSettings[typeof key];
+        }
+    });
+
+    return merged;
+}
+
+/**
  * @constant KNOWLEDGE_GRAPH_SETTING_DEFINITIONS
  * @description 图谱设置项元数据（覆盖当前全部可配置参数）。
  */
 export const KNOWLEDGE_GRAPH_SETTING_DEFINITIONS: KnowledgeGraphSettingDefinition[] = [
-    { key: "backgroundColor", title: "graph.backgroundColor", description: "graph.backgroundColorDesc", fieldType: "color" },
-    { key: "pointDefaultColor", title: "graph.pointDefaultColor", description: "graph.pointDefaultColorDesc", fieldType: "color" },
     { key: "pointDefaultSize", title: "graph.pointDefaultSize", description: "graph.pointDefaultSizeDesc", fieldType: "number", min: 1, max: 30, step: 0.1 },
     { key: "pointSizeScale", title: "graph.pointSizeScale", description: "graph.pointSizeScaleDesc", fieldType: "number", min: 0.1, max: 10, step: 0.1 },
     { key: "pointOpacity", title: "graph.pointOpacity", description: "graph.pointOpacityDesc", fieldType: "number", min: 0, max: 1, step: 0.01 },
-    { key: "linkDefaultColor", title: "graph.linkDefaultColor", description: "graph.linkDefaultColorDesc", fieldType: "color" },
     { key: "linkDefaultWidth", title: "graph.linkDefaultWidth", description: "graph.linkDefaultWidthDesc", fieldType: "number", min: 0.1, max: 20, step: 0.1 },
     { key: "linkWidthScale", title: "graph.linkWidthScale", description: "graph.linkWidthScaleDesc", fieldType: "number", min: 0.1, max: 10, step: 0.1 },
     { key: "linkOpacity", title: "graph.linkOpacity", description: "graph.linkOpacityDesc", fieldType: "number", min: 0, max: 1, step: 0.01 },
@@ -149,7 +234,9 @@ export const KNOWLEDGE_GRAPH_SETTING_DEFINITIONS: KnowledgeGraphSettingDefinitio
  */
 export function buildKnowledgeGraphConfig(settings: KnowledgeGraphSettings): GraphConfigInterface {
     const { labelVisibleZoomLevel: _ignored, ...graphConfig } = settings;
+
     return {
         ...graphConfig,
+        ...createKnowledgeGraphThemeConfig(),
     };
 }

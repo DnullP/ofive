@@ -17,7 +17,7 @@
  *   - ./layoutStateReducers
  *
  * @example
- *   bun test src/layout/layoutStateReducers.test.ts
+ *   bun test src/host/layout/layoutStateReducers.test.ts
  */
 
 import { describe, expect, it } from "bun:test";

@@ -15,7 +15,8 @@
  *   - ../api/vaultApi
  *   - i18next
  *
- * @exports 无导出（纯副作用模块）
+ * @exports
+ *   - activatePlugin 注册并返回清理函数
  */
 
 import React, { useEffect, useState, useCallback, type ReactNode } from "react";
@@ -59,18 +60,7 @@ i18n.addResourceBundle("zh", "translation", {
     },
 }, true, true);
 
-registerCommand({
-    id: "backlinks.open",
-    title: "backlinks.openCommand",
-    execute: (context) => {
-        if (!context.activatePanel) {
-            console.warn("[backlinksPlugin] open command skipped: activatePanel missing");
-            return;
-        }
-
-        context.activatePanel("backlinks");
-    },
-});
+const BACKLINKS_PANEL_ID = "backlinks";
 
 /* ────────────────── React 组件 ────────────────── */
 
@@ -262,13 +252,39 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
  * 模块加载时自动注册反向链接面板到 outline 活动分组。
  * 注册完成后无需其他文件引用该模块。
  */
-registerPanel({
-    id: "backlinks",
-    title: () => i18n.t("backlinks.title"),
-    activityId: "outline",
-    defaultPosition: "right",
-    defaultOrder: 2,
-    render: (ctx) => React.createElement(BacklinksPanel, { context: ctx }),
-});
+/**
+ * @function activatePlugin
+ * @description 注册反向链接面板与打开命令。
+ * @returns 插件清理函数。
+ */
+export function activatePlugin(): () => void {
+    const unregisterCommand = registerCommand({
+        id: "backlinks.open",
+        title: "backlinks.openCommand",
+        execute: (context) => {
+            if (!context.activatePanel) {
+                console.warn("[backlinksPlugin] open command skipped: activatePanel missing");
+                return;
+            }
 
-console.info("[backlinksPlugin] self-registered backlinks panel");
+            context.activatePanel(BACKLINKS_PANEL_ID);
+        },
+    });
+
+    const unregisterPanel = registerPanel({
+        id: BACKLINKS_PANEL_ID,
+        title: () => i18n.t("backlinks.title"),
+        activityId: "outline",
+        defaultPosition: "right",
+        defaultOrder: 2,
+        render: (ctx) => React.createElement(BacklinksPanel, { context: ctx }),
+    });
+
+    console.info("[backlinksPlugin] registered backlinks plugin");
+
+    return () => {
+        unregisterPanel();
+        unregisterCommand();
+        console.info("[backlinksPlugin] unregistered backlinks plugin");
+    };
+}

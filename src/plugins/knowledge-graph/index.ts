@@ -11,6 +11,7 @@ export {
     DEFAULT_KNOWLEDGE_GRAPH_SETTINGS,
     KNOWLEDGE_GRAPH_SETTING_DEFINITIONS,
     buildKnowledgeGraphConfig,
+    mergeKnowledgeGraphSettings,
 } from "./tab/knowledgeGraphSettings";
 export type {
     KnowledgeGraphSettingDefinition,

@@ -18,7 +18,7 @@
  *   - ArchitectureDevtoolsTab
  */
 
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import type { IDockviewPanelProps } from "dockview";
 import i18n from "../../i18n";
 import { useActivities, usePanels, useTabComponents } from "../../host/registry";
@@ -29,6 +29,10 @@ import {
     type ArchitectureNode,
     type ArchitectureNodeKind,
 } from "./architectureRegistry";
+import {
+    buildTransitiveVisibleNodeIds,
+    type GraphTraversalMode,
+} from "./architectureGraphTraversal";
 import "./architectureDevtools.css";
 
 const NODE_WIDTH = 236;
@@ -83,6 +87,95 @@ interface LayoutColumn {
     x: number;
     layer?: number;
     moduleLayer?: ArchitectureModuleLayer;
+}
+
+/**
+ * @interface PinchGestureEventLike
+ * @description WebKit gesture 事件的最小结构，用于桌面触控板双指缩放。
+ * @field scale 当前手势相对起点的缩放比例。
+ * @field clientX 手势焦点 X 坐标。
+ * @field clientY 手势焦点 Y 坐标。
+ */
+interface PinchGestureEventLike extends Event {
+    /** 当前手势相对起点的缩放比例。 */
+    scale: number;
+    /** 手势焦点 X 坐标。 */
+    clientX: number;
+    /** 手势焦点 Y 坐标。 */
+    clientY: number;
+}
+
+/**
+ * @interface DagPinchAnchor
+ * @description 记录一次双指缩放的起始视口状态，用于基于起点计算绝对滚动位置。
+ * @field zoom 手势起点缩放值。
+ * @field viewportOffsetX 手势起点在容器内的 X 偏移。
+ * @field viewportOffsetY 手势起点在容器内的 Y 偏移。
+ * @field logicalContentX 手势起点对应的逻辑内容 X 坐标。
+ * @field logicalContentY 手势起点对应的逻辑内容 Y 坐标。
+ */
+interface DagPinchAnchor {
+    /** 手势起点缩放值。 */
+    zoom: number;
+    /** 手势起点在容器内的 X 偏移。 */
+    viewportOffsetX: number;
+    /** 手势起点在容器内的 Y 偏移。 */
+    viewportOffsetY: number;
+    /** 手势起点对应的逻辑内容 X 坐标。 */
+    logicalContentX: number;
+    /** 手势起点对应的逻辑内容 Y 坐标。 */
+    logicalContentY: number;
+}
+
+/**
+ * @interface DagWheelZoomSession
+ * @description 记录一次 ctrl+wheel 缩放序列的起点与累计滚轮位移。
+ * @field anchor 序列起点锚点。
+ * @field accumulatedDeltaY 自序列开始以来累计的 deltaY。
+ * @field lastEventAt 最近一次事件时间戳。
+ */
+interface DagWheelZoomSession {
+    /** 序列起点锚点。 */
+    anchor: DagPinchAnchor;
+    /** 自序列开始以来累计的 deltaY。 */
+    accumulatedDeltaY: number;
+    /** 最近一次事件时间戳。 */
+    lastEventAt: number;
+}
+
+/**
+ * @interface DagPointerSample
+ * @description 记录最近一次鼠标在 DAG 容器内的位置，包含容器本地偏移与采样时间。
+ * @field clientX 鼠标全局 X 坐标。
+ * @field clientY 鼠标全局 Y 坐标。
+ * @field viewportOffsetX 鼠标在容器内的 X 偏移。
+ * @field viewportOffsetY 鼠标在容器内的 Y 偏移。
+ * @field capturedAt 采样时间戳。
+ */
+interface DagPointerSample {
+    /** 鼠标全局 X 坐标。 */
+    clientX: number;
+    /** 鼠标全局 Y 坐标。 */
+    clientY: number;
+    /** 鼠标在容器内的 X 偏移。 */
+    viewportOffsetX: number;
+    /** 鼠标在容器内的 Y 偏移。 */
+    viewportOffsetY: number;
+    /** 采样时间戳。 */
+    capturedAt: number;
+}
+
+/**
+ * @interface TouchPointLike
+ * @description 双指手势计算所需的最小触点结构，仅依赖 client 坐标。
+ * @field clientX 触点 X 坐标。
+ * @field clientY 触点 Y 坐标。
+ */
+interface TouchPointLike {
+    /** 触点 X 坐标。 */
+    clientX: number;
+    /** 触点 Y 坐标。 */
+    clientY: number;
 }
 
 /**
@@ -326,44 +419,6 @@ function matchesNodeQuery(node: ArchitectureNode, query: string): boolean {
 }
 
 /**
- * @function buildVisibleNodeIds
- * @description 基于匹配结果扩展一跳邻居，保证筛选后仍能看懂上下游依赖。
- * @param nodes 全部节点。
- * @param edges 全部边。
- * @param matchedNodeIds 直接匹配的节点 ID 列表。
- * @param selectedNodeId 当前选中节点。
- * @returns 应展示的节点 ID 集合。
- */
-function buildVisibleNodeIds(
-    nodes: ArchitectureNode[],
-    edges: ArchitectureEdge[],
-    matchedNodeIds: string[],
-    selectedNodeId: string | null,
-): Set<string> {
-    if (matchedNodeIds.length === 0) {
-        return new Set(selectedNodeId ? [selectedNodeId] : []);
-    }
-
-    if (matchedNodeIds.length === nodes.length) {
-        return new Set(nodes.map((node) => node.id));
-    }
-
-    const visible = new Set<string>(matchedNodeIds);
-    if (selectedNodeId) {
-        visible.add(selectedNodeId);
-    }
-
-    edges.forEach((edge) => {
-        if (visible.has(edge.from) || visible.has(edge.to)) {
-            visible.add(edge.from);
-            visible.add(edge.to);
-        }
-    });
-
-    return visible;
-}
-
-/**
  * @function formatEdgeDescription
  * @description 生成检查器里更易读的边描述。
  * @param edge 依赖边。
@@ -488,6 +543,11 @@ function getLayoutColumns(
     const columns: Array<Omit<LayoutColumn, "x">> = [];
 
     KIND_ORDER.forEach((kind) => {
+        const kindNodes = nodes.filter((node) => node.kind === kind);
+        if (kindNodes.length === 0) {
+            return;
+        }
+
         const layerMap = kindLayerMaps.get(kind);
         if (kind === "ui-module") {
             let offset = 0;
@@ -527,7 +587,7 @@ function getLayoutColumns(
 
         const layerCount = Math.max(
             1,
-            Array.from(layerMap?.values() ?? []).reduce((max, layer) => Math.max(max, layer + 1), 0),
+            kindNodes.reduce((max, node) => Math.max(max, (layerMap?.get(node.id) ?? 0) + 1), 0),
         );
 
         Array.from({ length: layerCount }, (_, index) => {
@@ -731,6 +791,43 @@ function edgePath(from: LayoutNode, to: LayoutNode): string {
 }
 
 /**
+ * @function clampDagZoom
+ * @description 限制 DAG 缩放范围，避免过小或过大导致不可用。
+ * @param value 候选缩放值。
+ * @returns 限制后的缩放值。
+ */
+function clampDagZoom(value: number): number {
+    return Math.min(2.5, Math.max(0.45, value));
+}
+
+/**
+ * @function getTouchDistance
+ * @description 计算双触点之间的欧式距离。
+ * @param first 第一触点。
+ * @param second 第二触点。
+ * @returns 两点距离。
+ */
+function getTouchDistance(first: TouchPointLike, second: TouchPointLike): number {
+    const deltaX = first.clientX - second.clientX;
+    const deltaY = first.clientY - second.clientY;
+    return Math.hypot(deltaX, deltaY);
+}
+
+/**
+ * @function getTouchCenter
+ * @description 计算双触点中心点，用于围绕手势焦点缩放。
+ * @param first 第一触点。
+ * @param second 第二触点。
+ * @returns 中心点坐标。
+ */
+function getTouchCenter(first: TouchPointLike, second: TouchPointLike): { x: number; y: number } {
+    return {
+        x: (first.clientX + second.clientX) / 2,
+        y: (first.clientY + second.clientY) / 2,
+    };
+}
+
+/**
  * @function collectRelatedEdges
  * @description 收集与选中节点相关的边。
  * @param edges 全部边。
@@ -762,6 +859,7 @@ function InventorySection(props: {
     nodes: ArchitectureNode[];
     selectedNodeId: string | null;
     onSelect: (nodeId: string) => void;
+    onFocusNode: (nodeId: string | null) => void;
     emptyMessage: string;
 }): ReactElement {
     return (
@@ -786,6 +884,10 @@ function InventorySection(props: {
                                     isSelected ? "architecture-inventory-item--selected" : "",
                                 ].join(" ").trim()}
                                 onClick={() => props.onSelect(node.id)}
+                                onFocus={() => props.onFocusNode(node.id)}
+                                onBlur={() => props.onFocusNode(null)}
+                                onMouseEnter={() => props.onFocusNode(node.id)}
+                                onMouseLeave={() => props.onFocusNode(null)}
                                 type="button"
                             >
                                 {/* architecture-inventory-item-meta: 条目元信息行 */}
@@ -840,14 +942,402 @@ export function ArchitectureDevtoolsTab(
     const tabComponents = useTabComponents();
 
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
+    const [isInspectorOpen, setIsInspectorOpen] = useState(false);
     const [query, setQuery] = useState("");
+    const [exactRootNodeId, setExactRootNodeId] = useState<string | null>(null);
     const [activeKind, setActiveKind] = useState<ArchitectureNodeKind | "all">("all");
-    const [dagViewMode, setDagViewMode] = useState<"fit" | "actual">("fit");
+    const [graphTraversalMode, setGraphTraversalMode] = useState<GraphTraversalMode>("dependencies");
+    const [dagZoom, setDagZoom] = useState(1);
+    const [pinchMode, setPinchMode] = useState<"none" | "touch" | "gesture">("none");
+    const dagScrollRef = useRef<HTMLDivElement | null>(null);
+    const dagZoomRef = useRef(1);
+    const dagScrollPositionRef = useRef({ left: 0, top: 0 });
+    const pinchScrollRestoreFrameRef = useRef<number | null>(null);
+    const pendingDagScrollTargetRef = useRef<{ left: number; top: number } | null>(null);
+    const touchPinchStateRef = useRef<{ distance: number; anchor: DagPinchAnchor } | null>(null);
+    const gesturePinchStateRef = useRef<DagPinchAnchor | null>(null);
+    const globalPointerPositionRef = useRef<{ clientX: number; clientY: number } | null>(null);
+    const dagPointerSampleRef = useRef<DagPointerSample | null>(null);
+    const wheelZoomSessionRef = useRef<DagWheelZoomSession | null>(null);
+    const wheelZoomSuppressionUntilRef = useRef(0);
+    const pinchModeRef = useRef<"none" | "touch" | "gesture">("none");
+    const suppressScrollSyncRef = useRef(false);
+
+    /**
+     * @function resolveDesktopAnchorPoint
+     * @description 解析桌面缩放起点，优先使用最近一次鼠标位置，避免 WebKit 手势中心偏离可见光标。
+     * @param fallbackClientX 回退用 X 坐标。
+     * @param fallbackClientY 回退用 Y 坐标。
+     * @returns 实际用于生成缩放锚点的坐标。
+     */
+    const resolveDesktopAnchorPoint = (
+        fallbackClientX: number,
+        fallbackClientY: number,
+    ): DagPointerSample | { clientX: number; clientY: number } => {
+        const localSample = dagPointerSampleRef.current;
+        if (localSample && Date.now() - localSample.capturedAt < 400) {
+            return localSample;
+        }
+
+        const container = dagScrollRef.current;
+        const pointer = globalPointerPositionRef.current;
+        if (container && pointer) {
+            const rect = container.getBoundingClientRect();
+            const isInsideContainer =
+                pointer.clientX >= rect.left &&
+                pointer.clientX <= rect.right &&
+                pointer.clientY >= rect.top &&
+                pointer.clientY <= rect.bottom;
+
+            if (isInsideContainer) {
+                return pointer;
+            }
+        }
+
+        return {
+            clientX: fallbackClientX,
+            clientY: fallbackClientY,
+        };
+    };
+
+    /**
+     * @function captureDagPinchAnchor
+     * @description 记录当前缩放起点，用于后续按绝对方式求解滚动位置。
+     * @param clientX 起点焦点 X 坐标。
+     * @param clientY 起点焦点 Y 坐标。
+     * @returns 缩放起点信息；容器缺失时返回 null。
+     */
+    const captureDagPinchAnchor = (
+        clientX: number,
+        clientY: number,
+        viewportOffsetOverride?: { x: number; y: number },
+    ): DagPinchAnchor | null => {
+        const container = dagScrollRef.current;
+        if (!container) {
+            return null;
+        }
+
+        const rect = container.getBoundingClientRect();
+        const viewportOffsetX = viewportOffsetOverride?.x ?? (clientX - rect.left);
+        const viewportOffsetY = viewportOffsetOverride?.y ?? (clientY - rect.top);
+
+        return {
+            zoom: dagZoomRef.current,
+            viewportOffsetX,
+            viewportOffsetY,
+            logicalContentX:
+                (dagScrollPositionRef.current.left + viewportOffsetX) / dagZoomRef.current,
+            logicalContentY:
+                (dagScrollPositionRef.current.top + viewportOffsetY) / dagZoomRef.current,
+        };
+    };
+
+    /**
+     * @function beginDagPinch
+     * @description 进入 DAG 双指缩放模式，暂停原生双指滚动对内部锚点的干扰。
+     */
+    const beginDagPinch = (mode: "touch" | "gesture"): void => {
+        pinchModeRef.current = mode;
+        setPinchMode(mode);
+    };
+
+    /**
+     * @function endDagPinch
+     * @description 退出 DAG 双指缩放模式，恢复普通滚动同步。
+     */
+    const endDagPinch = (): void => {
+        pinchModeRef.current = "none";
+        setPinchMode("none");
+    };
+
+    /**
+     * @function openInspectorForNode
+     * @description 选中指定节点并打开检查器弹窗。
+     * @param nodeId 节点 ID。
+     */
+    const openInspectorForNode = (nodeId: string): void => {
+        setSelectedNodeId(nodeId);
+        setIsInspectorOpen(true);
+    };
+
+    /**
+     * @function closeInspectorModal
+     * @description 关闭检查器弹窗，但保留当前选中节点高亮。
+     */
+    const closeInspectorModal = (): void => {
+        setIsInspectorOpen(false);
+    };
+
+    /**
+     * @function focusNodeDependencyTree
+     * @description 以指定节点为精确根节点，切换到下游依赖树视图并关闭检查器。
+     * @param node 目标节点。
+     */
+    const focusNodeDependencyTree = (node: ArchitectureNode): void => {
+        setActiveKind(node.kind);
+        setQuery(node.title);
+        setExactRootNodeId(node.id);
+        setGraphTraversalMode("dependencies");
+        setFocusedNodeId(null);
+        setIsInspectorOpen(false);
+    };
+
+    /**
+     * @function commitDagZoomTarget
+     * @description 提交新的缩放值与目标滚动位置，并在下一次布局提交后统一写回 DOM。
+     * @param nextZoom 目标缩放值。
+     * @param nextScrollLeft 目标横向滚动位置。
+     * @param nextScrollTop 目标纵向滚动位置。
+     */
+    const commitDagZoomTarget = (
+        nextZoom: number,
+        nextScrollLeft: number,
+        nextScrollTop: number,
+    ): void => {
+        dagZoomRef.current = nextZoom;
+        dagScrollPositionRef.current = {
+            left: nextScrollLeft,
+            top: nextScrollTop,
+        };
+        pendingDagScrollTargetRef.current = {
+            left: nextScrollLeft,
+            top: nextScrollTop,
+        };
+        setDagZoom(nextZoom);
+    };
+
+    /**
+     * @function handleDagWheelZoom
+     * @description 处理桌面 ctrl+wheel 缩放，并阻止滚轮事件冒泡到外层滚动容器。
+     * @param event 原生 WheelEvent。
+     */
+    const handleDagWheelZoom = (event: WheelEvent): void => {
+        if (!event.ctrlKey) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (pinchModeRef.current !== "none") {
+            return;
+        }
+
+        if (Date.now() < wheelZoomSuppressionUntilRef.current) {
+            return;
+        }
+
+        const now = Date.now();
+        const shouldStartNewSession =
+            !wheelZoomSessionRef.current ||
+            now - wheelZoomSessionRef.current.lastEventAt > 80;
+
+        if (shouldStartNewSession) {
+            const anchorPoint = resolveDesktopAnchorPoint(event.clientX, event.clientY);
+            const anchor = captureDagPinchAnchor(
+                anchorPoint.clientX,
+                anchorPoint.clientY,
+                "viewportOffsetX" in anchorPoint
+                    ? {
+                        x: anchorPoint.viewportOffsetX,
+                        y: anchorPoint.viewportOffsetY,
+                    }
+                    : undefined,
+            );
+            if (!anchor) {
+                return;
+            }
+
+            wheelZoomSessionRef.current = {
+                anchor,
+                accumulatedDeltaY: 0,
+                lastEventAt: now,
+            };
+        }
+
+        const session = wheelZoomSessionRef.current;
+        if (!session) {
+            return;
+        }
+
+        session.accumulatedDeltaY += event.deltaY;
+        session.lastEventAt = now;
+        applyDagZoomFromAnchor(
+            session.anchor.zoom * Math.exp(-session.accumulatedDeltaY * 0.0025),
+            session.anchor,
+        );
+    };
+
+    /**
+     * @function applyDagZoomFromAnchor
+     * @description 基于双指手势起点的绝对锚点计算缩放后的滚动位置，避免逐帧累计误差。
+     * @param nextZoom 目标缩放值。
+     * @param anchor 手势起点锚点。
+     * @param clientX 当前焦点 X 坐标；未传入时使用起点焦点。
+     * @param clientY 当前焦点 Y 坐标；未传入时使用起点焦点。
+     */
+    const applyDagZoomFromAnchor = (
+        nextZoom: number,
+        anchor: DagPinchAnchor,
+    ): void => {
+        const container = dagScrollRef.current;
+        const clampedZoom = clampDagZoom(nextZoom);
+
+        if (!container || Math.abs(clampedZoom - dagZoomRef.current) < 0.001) {
+            return;
+        }
+
+        commitDagZoomTarget(
+            clampedZoom,
+            anchor.logicalContentX * clampedZoom - anchor.viewportOffsetX,
+            anchor.logicalContentY * clampedZoom - anchor.viewportOffsetY,
+        );
+    };
+
+    useEffect(() => {
+        dagZoomRef.current = dagZoom;
+    }, [dagZoom]);
+
+    useLayoutEffect(() => {
+        const container = dagScrollRef.current;
+        const pendingTarget = pendingDagScrollTargetRef.current;
+        if (!container || !pendingTarget) {
+            return;
+        }
+
+        suppressScrollSyncRef.current = true;
+        container.scrollLeft = pendingTarget.left;
+        container.scrollTop = pendingTarget.top;
+        dagScrollPositionRef.current = {
+            left: container.scrollLeft,
+            top: container.scrollTop,
+        };
+        pendingDagScrollTargetRef.current = null;
+    }, [dagZoom]);
+
+    useEffect(() => {
+        const container = dagScrollRef.current;
+        if (!container) {
+            return;
+        }
+
+        dagScrollPositionRef.current = {
+            left: container.scrollLeft,
+            top: container.scrollTop,
+        };
+
+        return () => {
+            if (pinchScrollRestoreFrameRef.current !== null) {
+                cancelAnimationFrame(pinchScrollRestoreFrameRef.current);
+                pinchScrollRestoreFrameRef.current = null;
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        const handleWindowMouseMove = (event: MouseEvent): void => {
+            globalPointerPositionRef.current = {
+                clientX: event.clientX,
+                clientY: event.clientY,
+            };
+        };
+
+        window.addEventListener("mousemove", handleWindowMouseMove);
+
+        return () => {
+            window.removeEventListener("mousemove", handleWindowMouseMove);
+        };
+    }, []);
+
+    useEffect(() => {
+        const container = dagScrollRef.current;
+        if (!container) {
+            return;
+        }
+
+        const handleGestureStart = (event: Event): void => {
+            const gestureEvent = event as PinchGestureEventLike;
+            const anchorPoint = resolveDesktopAnchorPoint(
+                gestureEvent.clientX,
+                gestureEvent.clientY,
+            );
+            const anchor = captureDagPinchAnchor(
+                anchorPoint.clientX,
+                anchorPoint.clientY,
+                "viewportOffsetX" in anchorPoint
+                    ? {
+                        x: anchorPoint.viewportOffsetX,
+                        y: anchorPoint.viewportOffsetY,
+                    }
+                    : undefined,
+            );
+            if (!anchor) {
+                return;
+            }
+
+            gesturePinchStateRef.current = anchor;
+            wheelZoomSessionRef.current = null;
+            beginDagPinch("gesture");
+            wheelZoomSuppressionUntilRef.current = Date.now() + 180;
+            event.preventDefault();
+        };
+
+        const handleGestureChange = (event: Event): void => {
+            const gestureEvent = event as PinchGestureEventLike;
+            const anchor = gesturePinchStateRef.current;
+            if (!anchor) {
+                return;
+            }
+
+            wheelZoomSessionRef.current = null;
+            wheelZoomSuppressionUntilRef.current = Date.now() + 180;
+            event.preventDefault();
+            applyDagZoomFromAnchor(anchor.zoom * gestureEvent.scale, anchor);
+        };
+
+        const handleGestureEnd = (event: Event): void => {
+            gesturePinchStateRef.current = null;
+            wheelZoomSessionRef.current = null;
+            endDagPinch();
+            wheelZoomSuppressionUntilRef.current = Date.now() + 120;
+            event.preventDefault();
+        };
+
+        container.addEventListener("gesturestart", handleGestureStart, { passive: false });
+        container.addEventListener("gesturechange", handleGestureChange, { passive: false });
+        container.addEventListener("gestureend", handleGestureEnd, { passive: false });
+
+        return () => {
+            container.removeEventListener("gesturestart", handleGestureStart);
+            container.removeEventListener("gesturechange", handleGestureChange);
+            container.removeEventListener("gestureend", handleGestureEnd);
+        };
+    }, []);
+
+    useEffect(() => {
+        const container = dagScrollRef.current;
+        if (!container) {
+            return;
+        }
+
+        container.addEventListener("wheel", handleDagWheelZoom, { passive: false });
+
+        return () => {
+            container.removeEventListener("wheel", handleDagWheelZoom);
+        };
+    }, []);
 
     useEffect(() => {
         if (snapshot.nodes.length === 0) {
             if (selectedNodeId !== null) {
                 setSelectedNodeId(null);
+            }
+            if (focusedNodeId !== null) {
+                setFocusedNodeId(null);
+            }
+            if (isInspectorOpen) {
+                setIsInspectorOpen(false);
             }
             return;
         }
@@ -858,19 +1348,53 @@ export function ArchitectureDevtoolsTab(
 
         if (!hasSelectedNode) {
             setSelectedNodeId(snapshot.nodes[0]?.id ?? null);
+            setIsInspectorOpen(false);
         }
-    }, [selectedNodeId, snapshot.nodes]);
+
+        if (focusedNodeId && !snapshot.nodes.some((node) => node.id === focusedNodeId)) {
+            setFocusedNodeId(null);
+        }
+    }, [focusedNodeId, isInspectorOpen, selectedNodeId, snapshot.nodes]);
+
+    useEffect(() => {
+        if (!isInspectorOpen) {
+            return;
+        }
+
+        const handleWindowKeyDown = (event: KeyboardEvent): void => {
+            if (event.key === "Escape") {
+                closeInspectorModal();
+            }
+        };
+
+        window.addEventListener("keydown", handleWindowKeyDown);
+
+        return () => {
+            window.removeEventListener("keydown", handleWindowKeyDown);
+        };
+    }, [isInspectorOpen]);
 
     const nodeMap = useMemo(() => {
         return new Map(snapshot.nodes.map((node) => [node.id, node]));
     }, [snapshot.nodes]);
 
     const matchedNodes = useMemo(() => {
+        if (exactRootNodeId) {
+            return snapshot.nodes.filter((node) => {
+                const kindMatched = activeKind === "all" || node.kind === activeKind;
+                return kindMatched && node.id === exactRootNodeId;
+            });
+        }
+
         return snapshot.nodes.filter((node) => {
             const kindMatched = activeKind === "all" || node.kind === activeKind;
             return kindMatched && matchesNodeQuery(node, query);
         });
-    }, [activeKind, query, snapshot.nodes]);
+    }, [activeKind, exactRootNodeId, query, snapshot.nodes]);
+
+    const matchedNodeIds = useMemo(() => {
+        return matchedNodes.map((node) => node.id);
+    }, [matchedNodes]);
 
     const kindLayerMaps = useMemo(() => {
         return buildKindLayerMaps(snapshot.nodes, snapshot.edges);
@@ -881,13 +1405,46 @@ export function ArchitectureDevtoolsTab(
     }, [kindLayerMaps, snapshot.edges, snapshot.nodes]);
 
     const visibleNodeIds = useMemo(() => {
-        return buildVisibleNodeIds(
-            snapshot.nodes,
+        return buildTransitiveVisibleNodeIds(
+            snapshot.nodes.map((node) => node.id),
             layeredEdges,
-            matchedNodes.map((node) => node.id),
-            selectedNodeId,
+            matchedNodeIds,
+            graphTraversalMode,
         );
-    }, [layeredEdges, matchedNodes, selectedNodeId, snapshot.nodes]);
+    }, [graphTraversalMode, layeredEdges, matchedNodeIds, snapshot.nodes]);
+
+    useEffect(() => {
+        if (visibleNodeIds.size === 0) {
+            if (selectedNodeId !== null) {
+                setSelectedNodeId(null);
+            }
+            if (focusedNodeId !== null) {
+                setFocusedNodeId(null);
+            }
+            if (isInspectorOpen) {
+                setIsInspectorOpen(false);
+            }
+            return;
+        }
+
+        if (!selectedNodeId || !visibleNodeIds.has(selectedNodeId)) {
+            const nextSelectedNodeId = matchedNodes[0]?.id ?? snapshot.nodes.find((node) => {
+                return visibleNodeIds.has(node.id);
+            })?.id ?? null;
+
+            if (nextSelectedNodeId !== selectedNodeId) {
+                setSelectedNodeId(nextSelectedNodeId);
+            }
+
+            if (isInspectorOpen) {
+                setIsInspectorOpen(false);
+            }
+        }
+
+        if (focusedNodeId && !visibleNodeIds.has(focusedNodeId)) {
+            setFocusedNodeId(null);
+        }
+    }, [focusedNodeId, isInspectorOpen, matchedNodes, selectedNodeId, snapshot.nodes, visibleNodeIds]);
 
     const visibleNodes = useMemo(() => {
         return snapshot.nodes.filter((node) => visibleNodeIds.has(node.id));
@@ -904,29 +1461,26 @@ export function ArchitectureDevtoolsTab(
                 return true;
             }
 
-            return (
-                matchedNodes.some((node) => node.id === edge.from || node.id === edge.to) ||
-                edge.from === selectedNodeId ||
-                edge.to === selectedNodeId
-            );
+            return true;
         });
-    }, [layeredEdges, matchedNodes, selectedNodeId, snapshot.nodes.length, visibleNodeIds]);
+    }, [layeredEdges, matchedNodes, snapshot.nodes.length, visibleNodeIds]);
 
     const layout = useMemo(() => buildLayout(visibleNodes, visibleEdges), [visibleEdges, visibleNodes]);
     const selectedNode = nodeMap.get(selectedNodeId ?? "") ?? null;
-    const relatedEdges = collectRelatedEdges(visibleEdges, selectedNodeId);
+    const selectedNodeRelatedEdges = collectRelatedEdges(visibleEdges, selectedNodeId);
+    const focusedNodeRelatedEdges = collectRelatedEdges(visibleEdges, focusedNodeId);
 
     const highlightedNodeIds = useMemo(() => {
         const next = new Set<string>();
-        if (selectedNodeId) {
-            next.add(selectedNodeId);
+        if (focusedNodeId) {
+            next.add(focusedNodeId);
         }
-        relatedEdges.forEach((edge) => {
+        focusedNodeRelatedEdges.forEach((edge) => {
             next.add(edge.from);
             next.add(edge.to);
         });
         return next;
-    }, [relatedEdges, selectedNodeId]);
+    }, [focusedNodeId, focusedNodeRelatedEdges]);
 
     const inventoryNodes = useMemo(() => {
         return KIND_ORDER.map((kind) => ({
@@ -1021,7 +1575,10 @@ export function ArchitectureDevtoolsTab(
                 <input
                     aria-label={t("architectureDevtools.searchPlaceholder")}
                     className="architecture-search-input"
-                    onChange={(event) => setQuery(event.target.value)}
+                    onChange={(event) => {
+                        setExactRootNodeId(null);
+                        setQuery(event.target.value);
+                    }}
                     placeholder={t("architectureDevtools.searchPlaceholder")}
                     type="search"
                     value={query}
@@ -1039,7 +1596,10 @@ export function ArchitectureDevtoolsTab(
                                     isActive ? "architecture-filter-chip--active" : "",
                                 ].join(" ").trim()}
                                 key={kind}
-                                onClick={() => setActiveKind(kind)}
+                                onClick={() => {
+                                    setExactRootNodeId(null);
+                                    setActiveKind(kind);
+                                }}
                                 type="button"
                             >
                                 {label}
@@ -1047,11 +1607,44 @@ export function ArchitectureDevtoolsTab(
                         );
                     })}
                 </div>
+                <div className="architecture-toolbar-group">
+                    <div className="architecture-toolbar-label">
+                        {t("architectureDevtools.treeMode")}
+                    </div>
+                    <div className="architecture-filter-row">
+                        {([
+                            ["dependencies", t("architectureDevtools.dependencyTree")],
+                            ["dependents", t("architectureDevtools.dependentTree")],
+                            ["neighbors", t("architectureDevtools.neighborGraph")],
+                        ] as Array<[GraphTraversalMode, string]>).map(([mode, label]) => {
+                            const isActive = graphTraversalMode === mode;
+                            return (
+                                <button
+                                    className={[
+                                        "architecture-filter-chip",
+                                        isActive ? "architecture-filter-chip--active" : "",
+                                    ].join(" ").trim()}
+                                    key={mode}
+                                    onClick={() => setGraphTraversalMode(mode)}
+                                    type="button"
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
                 <div className="architecture-toolbar-meta">
-                    {t("architectureDevtools.visibleNodes", {
-                        visible: matchedNodes.length,
-                        total: snapshot.nodes.length,
-                    })}
+                    {query.trim()
+                        ? t("architectureDevtools.treeSummary", {
+                            matched: matchedNodes.length,
+                            visible: visibleNodes.length,
+                            total: snapshot.nodes.length,
+                        })
+                        : t("architectureDevtools.visibleNodes", {
+                            visible: visibleNodes.length,
+                            total: snapshot.nodes.length,
+                        })}
                 </div>
             </section>
 
@@ -1064,40 +1657,15 @@ export function ArchitectureDevtoolsTab(
                             {t("architectureDevtools.dagTitle")}
                         </div>
                         <div className="architecture-dag-actions">
-                            <div className="architecture-dag-view-switch">
-                                <button
-                                    aria-pressed={dagViewMode === "fit"}
-                                    className={[
-                                        "architecture-dag-view-button",
-                                        dagViewMode === "fit"
-                                            ? "architecture-dag-view-button--active"
-                                            : "",
-                                    ].join(" ").trim()}
-                                    onClick={() => setDagViewMode("fit")}
-                                    type="button"
-                                >
-                                    {t("architectureDevtools.dagFitView")}
-                                </button>
-                                <button
-                                    aria-pressed={dagViewMode === "actual"}
-                                    className={[
-                                        "architecture-dag-view-button",
-                                        dagViewMode === "actual"
-                                            ? "architecture-dag-view-button--active"
-                                            : "",
-                                    ].join(" ").trim()}
-                                    onClick={() => setDagViewMode("actual")}
-                                    type="button"
-                                >
-                                    {t("architectureDevtools.dagActualView")}
-                                </button>
-                            </div>
                             <div className="architecture-dag-meta">
                                 {matchedNodes.length === 0
                                     ? t("architectureDevtools.noMatches")
                                     : t("architectureDevtools.relatedEdges", {
-                                        count: visibleEdges.length,
+                                        count: focusedNodeId
+                                            ? focusedNodeRelatedEdges.length
+                                            : visibleEdges.length,
                                     })}
+                                {matchedNodes.length > 0 ? ` · ${String(Math.round(dagZoom * 100))}%` : ""}
                             </div>
                         </div>
                     </div>
@@ -1105,208 +1673,360 @@ export function ArchitectureDevtoolsTab(
                     <div
                         className={[
                             "architecture-dag-scroll",
-                            dagViewMode === "fit" ? "architecture-dag-scroll--fit" : "",
+                            pinchMode === "touch" ? "architecture-dag-scroll--pinching" : "",
                         ].join(" ").trim()}
+                        onMouseEnter={(event) => {
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            dagPointerSampleRef.current = {
+                                clientX: event.clientX,
+                                clientY: event.clientY,
+                                viewportOffsetX: event.clientX - rect.left,
+                                viewportOffsetY: event.clientY - rect.top,
+                                capturedAt: Date.now(),
+                            };
+                        }}
+                        onMouseLeave={() => {
+                            dagPointerSampleRef.current = null;
+                        }}
+                        onMouseMove={(event) => {
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            dagPointerSampleRef.current = {
+                                clientX: event.clientX,
+                                clientY: event.clientY,
+                                viewportOffsetX: event.clientX - rect.left,
+                                viewportOffsetY: event.clientY - rect.top,
+                                capturedAt: Date.now(),
+                            };
+                        }}
+                        onScroll={(event) => {
+                            if (suppressScrollSyncRef.current) {
+                                suppressScrollSyncRef.current = false;
+                                dagScrollPositionRef.current = {
+                                    left: event.currentTarget.scrollLeft,
+                                    top: event.currentTarget.scrollTop,
+                                };
+                                return;
+                            }
+
+                            if (pinchModeRef.current === "touch") {
+                                if (pinchScrollRestoreFrameRef.current !== null) {
+                                    cancelAnimationFrame(pinchScrollRestoreFrameRef.current);
+                                }
+
+                                const container = event.currentTarget;
+                                pinchScrollRestoreFrameRef.current = requestAnimationFrame(() => {
+                                    pinchScrollRestoreFrameRef.current = null;
+                                    suppressScrollSyncRef.current = true;
+                                    container.scrollLeft = dagScrollPositionRef.current.left;
+                                    container.scrollTop = dagScrollPositionRef.current.top;
+                                });
+                                return;
+                            }
+
+                            dagScrollPositionRef.current = {
+                                left: event.currentTarget.scrollLeft,
+                                top: event.currentTarget.scrollTop,
+                            };
+                        }}
+                        onTouchEnd={() => {
+                            touchPinchStateRef.current = null;
+                            endDagPinch();
+                        }}
+                        onTouchMove={(event) => {
+                            if (event.touches.length !== 2) {
+                                touchPinchStateRef.current = null;
+                                endDagPinch();
+                                return;
+                            }
+
+                            const [firstTouch, secondTouch] = [event.touches[0], event.touches[1]];
+                            if (!firstTouch || !secondTouch) {
+                                return;
+                            }
+
+                            const pinchState = touchPinchStateRef.current;
+                            if (!pinchState) {
+                                return;
+                            }
+
+                            const distance = getTouchDistance(firstTouch, secondTouch);
+                            event.preventDefault();
+                            applyDagZoomFromAnchor(
+                                pinchState.anchor.zoom * (distance / pinchState.distance),
+                                pinchState.anchor,
+                            );
+                        }}
+                        onTouchStart={(event) => {
+                            if (event.touches.length !== 2) {
+                                touchPinchStateRef.current = null;
+                                endDagPinch();
+                                return;
+                            }
+
+                            const [firstTouch, secondTouch] = [event.touches[0], event.touches[1]];
+                            if (!firstTouch || !secondTouch) {
+                                return;
+                            }
+
+                            const center = getTouchCenter(firstTouch, secondTouch);
+                            const anchor = captureDagPinchAnchor(center.x, center.y);
+                            if (!anchor) {
+                                return;
+                            }
+
+                            touchPinchStateRef.current = {
+                                distance: getTouchDistance(firstTouch, secondTouch),
+                                anchor,
+                            };
+                            beginDagPinch("touch");
+                            console.info("[architectureDevtools] touch pinch start", {
+                                zoom: dagZoomRef.current,
+                            });
+                        }}
+                        ref={dagScrollRef}
                     >
                         {matchedNodes.length === 0 ? (
                             <div className="architecture-empty-state">
                                 {t("architectureDevtools.noMatches")}
                             </div>
                         ) : (
-                            <svg
-                                className={[
-                                    "architecture-dag-canvas",
-                                    dagViewMode === "fit"
-                                        ? "architecture-dag-canvas--fit"
-                                        : "architecture-dag-canvas--actual",
-                                ].join(" ").trim()}
-                                height={dagViewMode === "fit" ? undefined : layout.height}
-                                preserveAspectRatio="xMinYMin meet"
-                                viewBox={`0 0 ${layout.width} ${layout.height}`}
-                                width={dagViewMode === "fit" ? undefined : layout.width}
+                            <div
+                                className="architecture-dag-viewport"
+                                style={{
+                                    width: `${String(layout.width * dagZoom)}px`,
+                                    height: `${String(layout.height * dagZoom)}px`,
+                                }}
                             >
-                                {layout.columns.map((column) => {
-                                    return (
-                                        <text
-                                            className={[
-                                                "architecture-column-label",
-                                                getColumnSemanticClass(column),
-                                            ].join(" ").trim()}
-                                            key={column.id}
-                                            x={column.x}
-                                            y={18}
-                                        >
-                                            {column.label}
-                                        </text>
-                                    );
-                                })}
-
-                                {visibleEdges.map((edge) => {
-                                    const from = layout.positions.get(edge.from);
-                                    const to = layout.positions.get(edge.to);
-                                    if (!from || !to) {
-                                        return null;
-                                    }
-
-                                    const isHighlighted =
-                                        !selectedNodeId ||
-                                        edge.from === selectedNodeId ||
-                                        edge.to === selectedNodeId;
-
-                                    return (
-                                        <path
-                                            className={[
-                                                "architecture-edge",
-                                                isHighlighted
-                                                    ? "architecture-edge--highlighted"
-                                                    : "architecture-edge--dimmed",
-                                            ].join(" ")}
-                                            d={edgePath(from, to)}
-                                            key={`${edge.from}-${edge.to}-${edge.kind}-${edge.label ?? ""}`}
-                                        />
-                                    );
-                                })}
-
-                                {layout.layoutNodes.map((layoutNode) => {
-                                    const isSelected = selectedNodeId === layoutNode.node.id;
-                                    const isRelated = highlightedNodeIds.has(layoutNode.node.id);
-
-                                    return (
-                                        <g
-                                            className={[
-                                                "architecture-node",
-                                                getKindColorClass(layoutNode.node.kind),
-                                                getNodeSemanticColorClass(layoutNode.node),
-                                                isSelected
-                                                    ? "architecture-node--selected"
-                                                    : isRelated
-                                                        ? "architecture-node--related"
-                                                        : "architecture-node--idle",
-                                            ].join(" ")}
-                                            key={layoutNode.node.id}
-                                            onClick={() => setSelectedNodeId(layoutNode.node.id)}
-                                            onKeyDown={(event) => {
-                                                if (event.key === "Enter" || event.key === " ") {
-                                                    event.preventDefault();
-                                                    setSelectedNodeId(layoutNode.node.id);
-                                                }
-                                            }}
-                                            role="button"
-                                            tabIndex={0}
-                                        >
-                                            <title>{`${layoutNode.node.title}: ${layoutNode.node.summary}`}</title>
-                                            <rect
-                                                height={NODE_HEIGHT}
-                                                rx={18}
-                                                width={NODE_WIDTH}
-                                                x={layoutNode.x}
-                                                y={layoutNode.y}
-                                            />
+                                <svg
+                                    className="architecture-dag-canvas"
+                                    height={layout.height}
+                                    preserveAspectRatio="xMinYMin meet"
+                                    style={{
+                                        transform: `scale(${String(dagZoom)})`,
+                                        transformOrigin: "top left",
+                                    }}
+                                    viewBox={`0 0 ${layout.width} ${layout.height}`}
+                                    width={layout.width}
+                                >
+                                    {layout.columns.map((column) => {
+                                        return (
                                             <text
-                                                className="architecture-node-kind"
-                                                x={layoutNode.x + 16}
-                                                y={layoutNode.y + 24}
+                                                className={[
+                                                    "architecture-column-label",
+                                                    getColumnSemanticClass(column),
+                                                ].join(" ").trim()}
+                                                key={column.id}
+                                                x={column.x}
+                                                y={18}
                                             >
-                                                {getKindLabel(layoutNode.node.kind)}
+                                                {column.label}
                                             </text>
-                                            <foreignObject
-                                                height={28}
-                                                width={NODE_WIDTH - 32}
-                                                x={layoutNode.x + 16}
-                                                y={layoutNode.y + 31}
+                                        );
+                                    })}
+
+                                    {visibleEdges.map((edge) => {
+                                        const from = layout.positions.get(edge.from);
+                                        const to = layout.positions.get(edge.to);
+                                        if (!from || !to) {
+                                            return null;
+                                        }
+
+                                        const isHighlighted =
+                                            focusedNodeId !== null &&
+                                            (edge.from === focusedNodeId || edge.to === focusedNodeId);
+
+                                        return (
+                                            <path
+                                                className={[
+                                                    "architecture-edge",
+                                                    focusedNodeId === null
+                                                        ? ""
+                                                        : isHighlighted
+                                                            ? "architecture-edge--highlighted"
+                                                            : "architecture-edge--dimmed",
+                                                ].join(" ")}
+                                                d={edgePath(from, to)}
+                                                key={`${edge.from}-${edge.to}-${edge.kind}-${edge.label ?? ""}`}
+                                            />
+                                        );
+                                    })}
+
+                                    {layout.layoutNodes.map((layoutNode) => {
+                                        const isFocused = focusedNodeId === layoutNode.node.id;
+                                        const isRelated = highlightedNodeIds.has(layoutNode.node.id);
+
+                                        return (
+                                            <g
+                                                className={[
+                                                    "architecture-node",
+                                                    getKindColorClass(layoutNode.node.kind),
+                                                    getNodeSemanticColorClass(layoutNode.node),
+                                                    isFocused
+                                                        ? "architecture-node--selected"
+                                                        : isRelated
+                                                            ? "architecture-node--related"
+                                                            : "architecture-node--idle",
+                                                ].join(" ")}
+                                                key={layoutNode.node.id}
+                                                onClick={() => openInspectorForNode(layoutNode.node.id)}
+                                                onFocus={() => setFocusedNodeId(layoutNode.node.id)}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === "Enter" || event.key === " ") {
+                                                        event.preventDefault();
+                                                        openInspectorForNode(layoutNode.node.id);
+                                                    }
+                                                }}
+                                                onMouseEnter={() => setFocusedNodeId(layoutNode.node.id)}
+                                                onMouseLeave={() => setFocusedNodeId((currentNodeId) => {
+                                                    return currentNodeId === layoutNode.node.id ? null : currentNodeId;
+                                                })}
+                                                onBlur={() => setFocusedNodeId((currentNodeId) => {
+                                                    return currentNodeId === layoutNode.node.id ? null : currentNodeId;
+                                                })}
+                                                role="button"
+                                                tabIndex={0}
                                             >
-                                                <div className="architecture-node-title-box">
-                                                    {layoutNode.node.title}
-                                                </div>
-                                            </foreignObject>
-                                            <foreignObject
-                                                height={38}
-                                                width={NODE_WIDTH - 32}
-                                                x={layoutNode.x + 16}
-                                                y={layoutNode.y + 58}
-                                            >
-                                                <div className="architecture-node-summary-box">
-                                                    {layoutNode.node.summary}
-                                                </div>
-                                            </foreignObject>
-                                        </g>
-                                    );
-                                })}
-                            </svg>
+                                                <title>{`${layoutNode.node.title}: ${layoutNode.node.summary}`}</title>
+                                                <rect
+                                                    height={NODE_HEIGHT}
+                                                    rx={18}
+                                                    width={NODE_WIDTH}
+                                                    x={layoutNode.x}
+                                                    y={layoutNode.y}
+                                                />
+                                                <text
+                                                    className="architecture-node-kind"
+                                                    x={layoutNode.x + 16}
+                                                    y={layoutNode.y + 24}
+                                                >
+                                                    {getKindLabel(layoutNode.node.kind)}
+                                                </text>
+                                                <foreignObject
+                                                    height={28}
+                                                    width={NODE_WIDTH - 32}
+                                                    x={layoutNode.x + 16}
+                                                    y={layoutNode.y + 31}
+                                                >
+                                                    <div className="architecture-node-title-box">
+                                                        {layoutNode.node.title}
+                                                    </div>
+                                                </foreignObject>
+                                                <foreignObject
+                                                    height={38}
+                                                    width={NODE_WIDTH - 32}
+                                                    x={layoutNode.x + 16}
+                                                    y={layoutNode.y + 58}
+                                                >
+                                                    <div className="architecture-node-summary-box">
+                                                        {layoutNode.node.summary}
+                                                    </div>
+                                                </foreignObject>
+                                            </g>
+                                        );
+                                    })}
+                                </svg>
+                            </div>
                         )}
                     </div>
                 </div>
 
-                {/* architecture-inspector-card: 右侧检查器 */}
-                <aside className="architecture-inspector-card">
-                    <div className="architecture-section-title">
-                        {t("architectureDevtools.inspector")}
-                    </div>
-                    {selectedNode ? (
-                        <>
-                            {/* architecture-inspector-kind: 节点类别标签 */}
-                            <div className="architecture-inspector-kind">
-                                {(() => {
-                                    const moduleLayer = selectedNode.kind === "ui-module"
-                                        ? getNodeModuleLayer(selectedNode)
-                                        : null;
-                                    return moduleLayer
-                                        ? `${getKindLabel(selectedNode.kind)} · ${getModuleLayerLabel(moduleLayer)}`
-                                        : getKindLabel(selectedNode.kind);
-                                })()}
+            </section>
+
+            {isInspectorOpen ? (
+                <div
+                    className="architecture-inspector-modal-backdrop"
+                    onClick={closeInspectorModal}
+                    role="presentation"
+                >
+                    <aside
+                        aria-label={t("architectureDevtools.inspector")}
+                        aria-modal="true"
+                        className="architecture-inspector-modal"
+                        onClick={(event) => event.stopPropagation()}
+                        role="dialog"
+                    >
+                        <div className="architecture-inspector-modal-header">
+                            <div className="architecture-section-title">
+                                {t("architectureDevtools.inspector")}
                             </div>
-                            {/* architecture-inspector-title: 节点标题 */}
-                            <h3 className="architecture-inspector-title">
-                                {selectedNode.title}
-                            </h3>
-                            {/* architecture-inspector-summary: 节点摘要 */}
-                            <p className="architecture-inspector-summary">
-                                {selectedNode.summary}
-                            </p>
-                            {selectedNode.location ? (
-                                /* architecture-location-chip: 源码位置 */
-                                <div className="architecture-location-chip">
-                                    {selectedNode.location}
+                            <div className="architecture-inspector-modal-actions">
+                                {selectedNode ? (
+                                    <button
+                                        className="architecture-inspector-tree-action"
+                                        onClick={() => focusNodeDependencyTree(selectedNode)}
+                                        type="button"
+                                    >
+                                        {t("architectureDevtools.viewNodeDependencyTree")}
+                                    </button>
+                                ) : null}
+                                <button
+                                    className="architecture-inspector-close"
+                                    onClick={closeInspectorModal}
+                                    type="button"
+                                >
+                                    {t("common.close")}
+                                </button>
+                            </div>
+                        </div>
+                        {selectedNode ? (
+                            <>
+                                <div className="architecture-inspector-kind">
+                                    {(() => {
+                                        const moduleLayer = selectedNode.kind === "ui-module"
+                                            ? getNodeModuleLayer(selectedNode)
+                                            : null;
+                                        return moduleLayer
+                                            ? `${getKindLabel(selectedNode.kind)} · ${getModuleLayerLabel(moduleLayer)}`
+                                            : getKindLabel(selectedNode.kind);
+                                    })()}
                                 </div>
-                            ) : null}
-                            {selectedNode.details && selectedNode.details.length > 0 ? (
-                                /* architecture-inspector-list: 节点明细 */
+                                <h3 className="architecture-inspector-title">
+                                    {selectedNode.title}
+                                </h3>
+                                <p className="architecture-inspector-summary">
+                                    {selectedNode.summary}
+                                </p>
+                                {selectedNode.location ? (
+                                    <div className="architecture-location-chip">
+                                        {selectedNode.location}
+                                    </div>
+                                ) : null}
+                                {selectedNode.details && selectedNode.details.length > 0 ? (
+                                    <div className="architecture-inspector-list">
+                                        {selectedNode.details.map((detail) => (
+                                            <div
+                                                className="architecture-inspector-item"
+                                                key={`${selectedNode.id}-${detail}`}
+                                            >
+                                                {detail}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : null}
+                                <div className="architecture-inspector-subtitle">
+                                    {t("architectureDevtools.relatedEdges", {
+                                        count: selectedNodeRelatedEdges.length,
+                                    })}
+                                </div>
                                 <div className="architecture-inspector-list">
-                                    {selectedNode.details.map((detail) => (
+                                    {selectedNodeRelatedEdges.map((edge) => (
                                         <div
                                             className="architecture-inspector-item"
-                                            key={`${selectedNode.id}-${detail}`}
+                                            key={`${edge.from}-${edge.to}-${edge.kind}-${edge.label ?? ""}`}
                                         >
-                                            {detail}
+                                            {formatEdgeDescription(edge, nodeMap)}
                                         </div>
                                     ))}
                                 </div>
-                            ) : null}
-
-                            {/* architecture-inspector-subtitle: 关联边标题 */}
-                            <div className="architecture-inspector-subtitle">
-                                {t("architectureDevtools.relatedEdges", {
-                                    count: relatedEdges.length,
-                                })}
-                            </div>
-                            <div className="architecture-inspector-list">
-                                {relatedEdges.map((edge) => (
-                                    <div
-                                        className="architecture-inspector-item"
-                                        key={`${edge.from}-${edge.to}-${edge.kind}-${edge.label ?? ""}`}
-                                    >
-                                        {formatEdgeDescription(edge, nodeMap)}
-                                    </div>
-                                ))}
-                            </div>
-                        </>
-                    ) : (
-                        <p className="architecture-inspector-summary">
-                            {t("architectureDevtools.emptySelection")}
-                        </p>
-                    )}
-                </aside>
-            </section>
+                            </>
+                        ) : (
+                            <p className="architecture-inspector-summary">
+                                {t("architectureDevtools.emptySelection")}
+                            </p>
+                        )}
+                    </aside>
+                </div>
+            ) : null}
 
             {/* architecture-runtime-grid: 当前运行时扩展注册面 */}
             <section className="architecture-runtime-grid">
@@ -1354,7 +2074,8 @@ export function ArchitectureDevtoolsTab(
                         emptyMessage={t("architectureDevtools.noMatches")}
                         key={section.kind}
                         nodes={section.nodes}
-                        onSelect={setSelectedNodeId}
+                        onFocusNode={setFocusedNodeId}
+                        onSelect={openInspectorForNode}
                         sectionTitle={section.label}
                         selectedNodeId={selectedNodeId}
                     />

@@ -19,9 +19,10 @@
  *   - ./state/fileTreeClipboard
  *
  * @example
- *   放置于 src/plugins/ 后，应用启动时会被 main.tsx 自动导入并完成注册。
+ *   放置于 src/plugins/ 后，应用启动时会由插件运行时自动发现并激活。
  *
- * @exports 无导出（纯副作用模块）
+ * @exports
+ *   - activatePlugin 注册并返回清理函数
  */
 
 import React from "react";
@@ -70,162 +71,178 @@ i18n.addResourceBundle("zh", "translation", {
     },
 }, true, true);
 
-registerActivity({
-    type: "panel-container",
-    id: FILE_TREE_ACTIVITY_ID,
-    title: () => i18n.t("app.explorer"),
-    icon: React.createElement(FolderOpen, { size: 18, strokeWidth: 1.8 }),
-    defaultSection: "top",
-    defaultBar: "left",
-    defaultOrder: 1,
-});
+/**
+ * @function activatePlugin
+ * @description 注册文件树活动、面板、标题按钮与相关命令。
+ * @returns 插件清理函数。
+ */
+export function activatePlugin(): () => void {
+    const unregisterActivity = registerActivity({
+        type: "panel-container",
+        id: FILE_TREE_ACTIVITY_ID,
+        title: () => i18n.t("app.explorer"),
+        icon: React.createElement(FolderOpen, { size: 18, strokeWidth: 1.8 }),
+        defaultSection: "top",
+        defaultBar: "left",
+        defaultOrder: 1,
+    });
 
-registerPanel({
-    id: FILE_TREE_PANEL_ID,
-    title: () => i18n.t("app.explorer"),
-    activityId: FILE_TREE_ACTIVITY_ID,
-    defaultPosition: "left",
-    defaultOrder: 1,
-    render: (context) => React.createElement(VaultPanel, {
-        openTab: context.openTab,
-        closeTab: context.closeTab,
-        requestMoveFileToDirectory: context.requestMoveFileToDirectory,
-    }),
-});
+    const unregisterPanel = registerPanel({
+        id: FILE_TREE_PANEL_ID,
+        title: () => i18n.t("app.explorer"),
+        activityId: FILE_TREE_ACTIVITY_ID,
+        defaultPosition: "left",
+        defaultOrder: 1,
+        render: (context) => React.createElement(VaultPanel, {
+            openTab: context.openTab,
+            closeTab: context.closeTab,
+            requestMoveFileToDirectory: context.requestMoveFileToDirectory,
+        }),
+    });
 
-registerSidebarHeaderAction({
-    id: "files.create-note",
-    activityId: FILE_TREE_ACTIVITY_ID,
-    title: () => i18n.t("common.newFile"),
-    icon: React.createElement(FilePlus2, { size: 15, strokeWidth: 1.8 }),
-    order: 10,
-    onClick: (context) => {
-        context.executeCommand("note.createNew");
-    },
-});
-
-registerSidebarHeaderAction({
-    id: "files.create-folder",
-    activityId: FILE_TREE_ACTIVITY_ID,
-    title: () => i18n.t("common.newFolder"),
-    icon: React.createElement(FolderPlus, { size: 15, strokeWidth: 1.8 }),
-    order: 20,
-    onClick: (context) => {
-        context.executeCommand("folder.createInFocusedDirectory");
-    },
-});
-
-registerCommands([
-    {
-        id: FILE_TREE_OPEN_COMMAND_ID,
-        title: "fileTreePlugin.openCommand",
-        execute: (context) => {
-            if (!context.activatePanel) {
-                console.warn("[fileTreePlugin] open command skipped: activatePanel missing");
-                return;
-            }
-
-            context.activatePanel(FILE_TREE_PANEL_ID);
+    const unregisterCreateNoteAction = registerSidebarHeaderAction({
+        id: "files.create-note",
+        activityId: FILE_TREE_ACTIVITY_ID,
+        title: () => i18n.t("common.newFile"),
+        icon: React.createElement(FilePlus2, { size: 15, strokeWidth: 1.8 }),
+        order: 10,
+        onClick: (context) => {
+            context.executeCommand("note.createNew");
         },
-    },
-    {
-        id: "fileTree.copySelected",
-        title: "commands.copySelectedFile",
-        condition: "fileTreeFocused",
-        shortcut: {
-            defaultBinding: "Cmd+C",
-            editableInSettings: true,
+    });
+
+    const unregisterCreateFolderAction = registerSidebarHeaderAction({
+        id: "files.create-folder",
+        activityId: FILE_TREE_ACTIVITY_ID,
+        title: () => i18n.t("common.newFolder"),
+        icon: React.createElement(FolderPlus, { size: 15, strokeWidth: 1.8 }),
+        order: 20,
+        onClick: (context) => {
+            context.executeCommand("folder.createInFocusedDirectory");
         },
-        execute(context) {
-            const selected = context.getFileTreeSelectedItem?.();
-            if (!selected) {
-                console.warn("[fileTreePlugin] fileTree.copySelected skipped: no selection");
-                return;
-            }
+    });
 
-            setFileTreeClipboardEntry(selected);
-        },
-    },
-    {
-        id: "fileTree.pasteInDirectory",
-        title: "commands.pasteFileToDir",
-        condition: "fileTreeFocused",
-        shortcut: {
-            defaultBinding: "Cmd+V",
-            editableInSettings: true,
-        },
-        async execute(context) {
-            const entry = getFileTreeClipboardEntry();
-            if (!entry) {
-                console.warn("[fileTreePlugin] fileTree.pasteInDirectory skipped: clipboard empty");
-                return;
-            }
-
-            const targetDirectory = context.getFileTreePasteTargetDirectory?.() ?? "";
-
-            console.info("[fileTreePlugin] fileTree.pasteInDirectory start", {
-                sourcePath: entry.path,
-                targetDirectory,
-                isDir: entry.isDir,
-            });
-
-            try {
-                const result = await copyVaultEntry(entry.path, targetDirectory);
-                console.info("[fileTreePlugin] fileTree.pasteInDirectory success", {
-                    newPath: result.relativePath,
-                    sourcePath: result.sourceRelativePath,
-                });
-            } catch (error) {
-                console.error("[fileTreePlugin] fileTree.pasteInDirectory failed", {
-                    sourcePath: entry.path,
-                    targetDirectory,
-                    error: error instanceof Error ? error.message : String(error),
-                });
-            }
-        },
-    },
-    {
-        id: "fileTree.deleteSelected",
-        title: "commands.deleteSelectedFile",
-        condition: "fileTreeFocused",
-        shortcut: {
-            defaultBinding: "Cmd+Backspace",
-            editableInSettings: true,
-        },
-        async execute(context) {
-            const selected = context.getFileTreeSelectedItem?.();
-            if (!selected) {
-                console.warn("[fileTreePlugin] fileTree.deleteSelected skipped: no selection");
-                return;
-            }
-
-            console.info("[fileTreePlugin] fileTree.deleteSelected start", {
-                path: selected.path,
-                isDir: selected.isDir,
-            });
-
-            try {
-                if (selected.isDir) {
-                    await deleteVaultDirectory(selected.path);
-                } else if (isMarkdownPath(selected.path)) {
-                    await deleteVaultMarkdownFile(selected.path);
-                } else {
-                    await deleteVaultBinaryFile(selected.path);
+    const unregisterCommands = registerCommands([
+        {
+            id: FILE_TREE_OPEN_COMMAND_ID,
+            title: "fileTreePlugin.openCommand",
+            execute: (context) => {
+                if (!context.activatePanel) {
+                    console.warn("[fileTreePlugin] open command skipped: activatePanel missing");
+                    return;
                 }
 
-                console.info("[fileTreePlugin] fileTree.deleteSelected success", {
-                    path: selected.path,
-                    isDir: selected.isDir,
-                });
-            } catch (error) {
-                console.error("[fileTreePlugin] fileTree.deleteSelected failed", {
-                    path: selected.path,
-                    isDir: selected.isDir,
-                    error: error instanceof Error ? error.message : String(error),
-                });
-            }
+                context.activatePanel(FILE_TREE_PANEL_ID);
+            },
         },
-    },
-]);
+        {
+            id: "fileTree.copySelected",
+            title: "commands.copySelectedFile",
+            condition: "fileTreeFocused",
+            shortcut: {
+                defaultBinding: "Cmd+C",
+                editableInSettings: true,
+            },
+            execute(context) {
+                const selected = context.getFileTreeSelectedItem?.();
+                if (!selected) {
+                    console.warn("[fileTreePlugin] fileTree.copySelected skipped: no selection");
+                    return;
+                }
 
-console.info("[fileTreePlugin] registered file tree plugin");
+                setFileTreeClipboardEntry(selected);
+            },
+        },
+        {
+            id: "fileTree.pasteInDirectory",
+            title: "commands.pasteFileToDir",
+            condition: "fileTreeFocused",
+            shortcut: {
+                defaultBinding: "Cmd+V",
+                editableInSettings: true,
+            },
+            async execute(context) {
+                const entry = getFileTreeClipboardEntry();
+                if (!entry) {
+                    console.warn("[fileTreePlugin] fileTree.pasteInDirectory skipped: clipboard empty");
+                    return;
+                }
+
+                const targetDirectory = context.getFileTreePasteTargetDirectory?.() ?? "";
+
+                console.info("[fileTreePlugin] fileTree.pasteInDirectory start", {
+                    sourcePath: entry.path,
+                    targetDirectory,
+                    isDir: entry.isDir,
+                });
+
+                try {
+                    const result = await copyVaultEntry(entry.path, targetDirectory);
+                    console.info("[fileTreePlugin] fileTree.pasteInDirectory success", {
+                        newPath: result.relativePath,
+                        sourcePath: result.sourceRelativePath,
+                    });
+                } catch (error) {
+                    console.error("[fileTreePlugin] fileTree.pasteInDirectory failed", {
+                        sourcePath: entry.path,
+                        targetDirectory,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+            },
+        },
+        {
+            id: "fileTree.deleteSelected",
+            title: "commands.deleteSelectedFile",
+            condition: "fileTreeFocused",
+            shortcut: {
+                defaultBinding: "Cmd+Backspace",
+                editableInSettings: true,
+            },
+            async execute(context) {
+                const selected = context.getFileTreeSelectedItem?.();
+                if (!selected) {
+                    console.warn("[fileTreePlugin] fileTree.deleteSelected skipped: no selection");
+                    return;
+                }
+
+                console.info("[fileTreePlugin] fileTree.deleteSelected start", {
+                    path: selected.path,
+                    isDir: selected.isDir,
+                });
+
+                try {
+                    if (selected.isDir) {
+                        await deleteVaultDirectory(selected.path);
+                    } else if (isMarkdownPath(selected.path)) {
+                        await deleteVaultMarkdownFile(selected.path);
+                    } else {
+                        await deleteVaultBinaryFile(selected.path);
+                    }
+
+                    console.info("[fileTreePlugin] fileTree.deleteSelected success", {
+                        path: selected.path,
+                        isDir: selected.isDir,
+                    });
+                } catch (error) {
+                    console.error("[fileTreePlugin] fileTree.deleteSelected failed", {
+                        path: selected.path,
+                        isDir: selected.isDir,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+            },
+        },
+    ]);
+
+    console.info("[fileTreePlugin] registered file tree plugin");
+
+    return () => {
+        unregisterCommands();
+        unregisterCreateFolderAction();
+        unregisterCreateNoteAction();
+        unregisterPanel();
+        unregisterActivity();
+        console.info("[fileTreePlugin] unregistered file tree plugin");
+    };
+}

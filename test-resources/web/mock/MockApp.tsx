@@ -4,8 +4,8 @@
  * @dependencies
  *  - react
  *  - lucide-react
- *  - ../../../src/layout
- *  - ../../../src/registry
+ *  - ../../../src/host/layout
+ *  - ../../../src/host/registry
  *  - ./MockVaultPanel
  */
 
@@ -14,13 +14,13 @@ import { Compass, FolderOpen, Link2 } from "lucide-react";
 import {
     DockviewLayout,
     type TabInstanceDefinition,
-} from "../../../src/layout";
+} from "../../../src/host/layout";
 import { CodeMirrorEditorTab } from "../../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
-import { SettingsTab } from "../../../src/layout/SettingsTab";
-import { useConfigSync } from "../../../src/store/configStore";
-import { registerActivity } from "../../../src/registry/activityRegistry";
-import { registerPanel } from "../../../src/registry/panelRegistry";
-import { registerTabComponent } from "../../../src/registry/tabComponentRegistry";
+import { SettingsTab } from "../../../src/host/layout/SettingsTab";
+import { useConfigSync } from "../../../src/host/store/configStore";
+import { registerActivity } from "../../../src/host/registry/activityRegistry";
+import { registerPanel } from "../../../src/host/registry/panelRegistry";
+import { registerTabComponent } from "../../../src/host/registry/tabComponentRegistry";
 import { MockVaultPanel } from "./MockVaultPanel";
 import "../../../src/App.css";
 

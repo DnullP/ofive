@@ -20,7 +20,7 @@
     border-radius: 10px;
     background: var(--bg-secondary);
     padding: 16px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--overlay-shadow-strong);
 }
 
 /* 标题区域：展示当前创建类型。 */
@@ -79,7 +79,7 @@
 .create-entry-button.primary {
     border-color: var(--accent-primary);
     background: var(--accent-primary);
-    color: var(--accent-primary-foreground, #fff);
+    color: var(--accent-primary-foreground);
 }
 
 /* 按钮悬浮态：提供轻微反馈。 */

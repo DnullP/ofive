@@ -232,7 +232,7 @@
 
 /* 快捷键表格行录制态：轻微高亮 */
 .settings-shortcut-row.recording {
-    background: var(--accent-primary-soft, rgba(0, 120, 212, 0.08));
+    background: var(--accent-primary-soft);
 }
 
 /* 快捷键表格单元格通用样式 */
@@ -268,7 +268,7 @@
 /* 快捷键内联录制输入框 */
 .settings-shortcut-inline-input {
     width: 120px;
-    border: 1px solid var(--accent-primary, #007acc);
+    border: 1px solid var(--accent-primary);
     border-radius: 4px;
     background: var(--bg-primary);
     color: var(--text-primary);
@@ -309,7 +309,7 @@
 
 /* 快捷键保存按钮：强调色 */
 .settings-shortcut-action-save {
-    color: var(--accent-primary, #007acc);
+    color: var(--accent-primary);
     font-weight: 500;
 }
 

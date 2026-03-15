@@ -3,15 +3,15 @@
  * @description 前端 Mock 资源管理器面板：不依赖后端接口，使用内置样例文件列表与内容。
  * @dependencies
  *  - react
- *  - ../../../src/layout/FileTree
- *  - ../../../src/layout/DockviewLayout
- *  - ../../../src/layout/VaultPanel.css
+ *  - ../../../src/plugins/file-tree/panel/FileTree
+ *  - ../../../src/host/layout/DockviewLayout
+ *  - ../../../src/plugins/file-tree/panel/VaultPanel.css
  */
 
 import { useMemo, type ReactNode } from "react";
-import { FileTree, type FileTreeItem } from "../../../src/layout/FileTree";
-import type { TabInstanceDefinition } from "../../../src/layout/DockviewLayout";
-import "../../../src/layout/VaultPanel.css";
+import { FileTree, type FileTreeItem } from "../../../src/plugins/file-tree/panel/FileTree";
+import type { TabInstanceDefinition } from "../../../src/host/layout/DockviewLayout";
+import "../../../src/plugins/file-tree/panel/VaultPanel.css";
 
 /**
  * @constant MOCK_VAULT_PATH

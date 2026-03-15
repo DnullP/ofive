@@ -14,7 +14,7 @@ import {
     KNOWLEDGE_GRAPH_SETTING_DEFINITIONS,
     type KnowledgeGraphSettingDefinition,
     type KnowledgeGraphSettingKey,
-} from "..";
+} from "../tab/knowledgeGraphSettings";
 import {
     resetGraphSettings,
     updateGraphSetting,
@@ -58,10 +58,6 @@ function GraphSettingField({ definition }: { definition: KnowledgeGraphSettingDe
         );
     };
 
-    const onColorChange = (event: ChangeEvent<HTMLInputElement>): void => {
-        updateGraphSetting(definition.key, event.target.value as never);
-    };
-
     /* boolean 类型：紧凑横向行，复选框在右侧。描述通过 title 属性（tooltip）展示 */
     if (definition.fieldType === "boolean") {
         return (
@@ -76,41 +72,21 @@ function GraphSettingField({ definition }: { definition: KnowledgeGraphSettingDe
         );
     }
 
-    /* number / color 类型：紧凑横向行，控件在右侧。描述通过 title 属性（tooltip）展示 */
+    /* number 类型：紧凑横向行，控件在右侧。描述通过 title 属性（tooltip）展示 */
     return (
         <div className="settings-dense-row" key={definition.key} title={t(definition.description)}>
             <span className="settings-dense-title">{t(definition.title)}</span>
 
             <div className="settings-graph-control-row">
-                {definition.fieldType === "number" ? (
-                    <input
-                        className="settings-compact-number-input"
-                        type="number"
-                        value={String(currentValue)}
-                        min={definition.min}
-                        max={definition.max}
-                        step={definition.step ?? 1}
-                        onChange={onNumberChange}
-                    />
-                ) : null}
-
-                {definition.fieldType === "color" ? (
-                    <>
-                        <input
-                            className="settings-graph-color-input"
-                            type="color"
-                            value={String(currentValue)}
-                            onChange={onColorChange}
-                        />
-                        <input
-                            className="settings-compact-number-input"
-                            type="text"
-                            value={String(currentValue)}
-                            style={{ width: 80 }}
-                            onChange={onColorChange}
-                        />
-                    </>
-                ) : null}
+                <input
+                    className="settings-compact-number-input"
+                    type="number"
+                    value={String(currentValue)}
+                    min={definition.min}
+                    max={definition.max}
+                    step={definition.step ?? 1}
+                    onChange={onNumberChange}
+                />
             </div>
         </div>
     );
@@ -123,7 +99,6 @@ function GraphSettingField({ definition }: { definition: KnowledgeGraphSettingDe
  */
 function GraphSettingsSection(): ReactNode {
     const { t } = useTranslation();
-    const { settings } = useGraphSettingsState();
     const { currentVaultPath } = useVaultState();
     useGraphSettingsSync(currentVaultPath, true);
 
@@ -135,7 +110,9 @@ function GraphSettingsSection(): ReactNode {
                 <div className="settings-compact-info">
                     <span className="settings-compact-title">{t("graph.settingsTitle")}</span>
                     <span className="settings-compact-desc">
-                        {t("graph.settingsCountDesc", { count: Object.keys(settings).length })}
+                        {t("graph.settingsCountDesc", {
+                            count: KNOWLEDGE_GRAPH_SETTING_DEFINITIONS.length,
+                        })}
                     </span>
                 </div>
                 <button

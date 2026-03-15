@@ -111,7 +111,7 @@
 
 /* 空侧栏拖入高亮：面板拖入时显示虚线边框和背景色 */
 .sidebar-empty-placeholder.drag-over {
-    background-color: rgba(83, 89, 93, 0.25);
+    background-color: var(--sidebar-drop-bg);
     border-color: var(--dv-paneview-active-outline-color, dodgerblue);
 }
 

@@ -14,7 +14,10 @@
  *   - ../../host/registry/tabComponentRegistry
  *
  * @example
- *   放入 src/plugins/ 后由 main.tsx 自动发现。
+ *   放入 src/plugins/ 后由插件运行时自动发现并激活。
+ *
+ * @exports
+ *   - activatePlugin 注册并返回清理函数
  */
 
 import { ImageViewerTab } from "./tab/ImageViewerTab";
@@ -26,27 +29,42 @@ function isImagePath(relativePath: string): boolean {
     return /\.(png|jpg|jpeg|gif|webp|bmp|svg|ico)$/i.test(relativePath);
 }
 
-registerTabComponent({
-    id: "imageviewer",
-    component: ImageViewerTab as any,
-});
+/**
+ * @function activatePlugin
+ * @description 注册图片查看器 opener 与对应 Tab 组件。
+ * @returns 插件清理函数。
+ */
+export function activatePlugin(): () => void {
+    const unregisterTabComponent = registerTabComponent({
+        id: "imageviewer",
+        component: ImageViewerTab as any,
+    });
 
-registerFileOpener({
-    id: "image.default-viewer",
-    label: "Default Image Viewer",
-    kind: "image",
-    priority: 100,
-    matches: ({ relativePath }) => isImagePath(relativePath),
-    async resolveTab({ relativePath, currentVaultPath }) {
-        const normalizedPath = normalizeRelativePath(relativePath);
-        return {
-            id: buildFileTabId(normalizedPath),
-            title: normalizedPath.split("/").pop() ?? normalizedPath,
-            component: "imageviewer",
-            params: {
-                path: normalizedPath,
-                absolutePath: joinVaultAbsolutePath(currentVaultPath, normalizedPath),
-            },
-        };
-    },
-});
+    const unregisterFileOpener = registerFileOpener({
+        id: "image.default-viewer",
+        label: "Default Image Viewer",
+        kind: "image",
+        priority: 100,
+        matches: ({ relativePath }) => isImagePath(relativePath),
+        async resolveTab({ relativePath, currentVaultPath }) {
+            const normalizedPath = normalizeRelativePath(relativePath);
+            return {
+                id: buildFileTabId(normalizedPath),
+                title: normalizedPath.split("/").pop() ?? normalizedPath,
+                component: "imageviewer",
+                params: {
+                    path: normalizedPath,
+                    absolutePath: joinVaultAbsolutePath(currentVaultPath, normalizedPath),
+                },
+            };
+        },
+    });
+
+    console.info("[imageViewerOpenerPlugin] registered image opener plugin");
+
+    return () => {
+        unregisterFileOpener();
+        unregisterTabComponent();
+        console.info("[imageViewerOpenerPlugin] unregistered image opener plugin");
+    };
+}

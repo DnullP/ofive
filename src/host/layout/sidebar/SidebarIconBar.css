@@ -20,7 +20,7 @@
 
 /* 图标栏拖入高亮 */
 .sidebar-icon-bar.drag-over {
-    background-color: rgba(83, 89, 93, 0.2);
+    background-color: var(--sidebar-icon-drop-bg);
 }
 
 /* 横向图标按钮 */

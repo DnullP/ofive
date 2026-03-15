@@ -6,6 +6,7 @@
  * - 仅允许 `src/App.css` 声明颜色字面量（主题 token 定义处）。
  * - 其余 src 下的 CSS 文件一旦出现颜色字面量（hex/rgb/hsl/white/black）即报错。
  * - src 下 TSX 的 style={{...}} 内禁止直接写颜色字面量。
+ * - src 下 TS/TSX 的主题/图形配置对象禁止直接写颜色字面量。
  * - 禁止直接引入 `@codemirror/theme-one-dark`。
  * - 禁止在统一适配文件外直接使用 `EditorView.theme(...)`。
  * - 支持单行忽略：在目标行上一行添加 `theme-guard-ignore-next-line` 注释。
@@ -20,8 +21,9 @@ const cssAllowList = new Set([path.join(srcRoot, "App.css")]);
 const colorPattern = /#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|(?:^|[\s:(,])(white|black)(?=$|[\s);,])/g;
 const inlineStyleBlockPattern = /style=\{\{[\s\S]*?\}\}/g;
 const inlineStyleColorPattern = /\b(?:color|background|backgroundColor|borderColor|outlineColor|fill|stroke|textDecorationColor|boxShadow)\s*:\s*(['"`])(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]+\)|hsla?\([^)]+\)|white|black)\1/g;
+const sourceColorPropertyPattern = /(?:\b[a-zA-Z_$][\w$]*Color\b|\b(?:background|backgroundColor|borderColor|outlineColor|fill|stroke|textDecorationColor)\b)\s*:\s*(['"`])(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]+\)|hsla?\([^)]+\)|white|black)\1/g;
 const codemirrorThemeAdapterAllowList = new Set([
-    path.join(srcRoot, "layout", "editor", "codemirrorTheme.ts"),
+    path.join(srcRoot, "plugins", "markdown-codemirror", "editor", "codemirrorTheme.ts"),
 ]);
 
 /**
@@ -178,6 +180,36 @@ function checkTsxFileInlineStyle(filePath) {
 }
 
 /**
+ * @function checkSourceColorLiteralUsage
+ * @description 校验普通 TS/TSX 源文件中的颜色配置对象，避免图形库或主题配置绕过主题系统。
+ * @param filePath 文件绝对路径。
+ * @returns 违规项数组。
+ */
+function checkSourceColorLiteralUsage(filePath) {
+    const content = fs.readFileSync(filePath, "utf8");
+    const lines = content.split(/\r?\n/);
+    const violations = [];
+
+    const colorMatches = Array.from(content.matchAll(sourceColorPropertyPattern));
+    for (const colorMatch of colorMatches) {
+        const line = offsetToLineNumber(content, colorMatch.index ?? 0);
+        const previousLine = lines[line - 2] ?? "";
+
+        if (previousLine.includes("theme-guard-ignore-next-line")) {
+            continue;
+        }
+
+        violations.push({
+            line,
+            value: colorMatch[0],
+            text: "禁止在源文件配置对象中直接写颜色字面量，请改为使用全局主题 token 或运行时 token 解析。",
+        });
+    }
+
+    return violations;
+}
+
+/**
  * @function checkCodeMirrorThemeUsage
  * @description 校验 TS/TSX 是否绕过统一 CodeMirror 主题接入层。
  * @param filePath 文件绝对路径。
@@ -185,6 +217,7 @@ function checkTsxFileInlineStyle(filePath) {
  */
 function checkCodeMirrorThemeUsage(filePath) {
     const content = fs.readFileSync(filePath, "utf8");
+    const lines = content.split(/\r?\n/);
     const violations = [];
 
     const importOneDarkMatch = content.match(/@codemirror\/theme-one-dark|\boneDark\b/);
@@ -198,13 +231,19 @@ function checkCodeMirrorThemeUsage(filePath) {
     }
 
     if (!codemirrorThemeAdapterAllowList.has(filePath)) {
-        const directThemeMatch = content.match(/EditorView\.theme\s*\(/);
-        if (directThemeMatch) {
+        const directThemeMatches = Array.from(content.matchAll(/EditorView\.theme\s*\(/g));
+        for (const directThemeMatch of directThemeMatches) {
             const line = offsetToLineNumber(content, directThemeMatch.index ?? 0);
+            const previousLine = lines[line - 2] ?? "";
+
+            if (previousLine.includes("theme-guard-ignore-next-line")) {
+                continue;
+            }
+
             violations.push({
                 line,
                 value: directThemeMatch[0],
-                text: "禁止直接定义 EditorView.theme，请使用 layout/editor/codemirrorTheme.ts。",
+                text: "禁止直接定义 EditorView.theme，请使用 plugins/markdown-codemirror/editor/codemirrorTheme.ts。",
             });
         }
     }
@@ -232,7 +271,10 @@ for (const tsxFile of tsxFiles) {
 }
 
 for (const sourceFile of sourceFiles) {
-    const violations = checkCodeMirrorThemeUsage(sourceFile);
+    const violations = [
+        ...checkSourceColorLiteralUsage(sourceFile),
+        ...checkCodeMirrorThemeUsage(sourceFile),
+    ];
     if (violations.length > 0) {
         allViolations.push({ filePath: sourceFile, violations });
     }

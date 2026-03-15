@@ -215,8 +215,11 @@ const zh = {
         themeDarkDesc: "适合弱光环境，降低屏幕眩光。",
         themeLight: "日间",
         themeLightDesc: "适合明亮环境，提升文本对比度。",
+        themeKraft: "牛皮纸",
+        themeKraftDesc: "泛黄纸面与棕褐墨色，适合测试全局主题扩展能力。",
         /* 编辑器设置 */
         editorSection: "编辑器",
+        saveSection: "保存",
         vimMode: "Vim 编辑模式",
         vimModeDesc: "使用 Vim 键位（普通/插入模式）",
         lineWrapping: "自动换行",
@@ -237,6 +240,10 @@ const zh = {
         fontPresetMonospace: "等宽字体",
         tabSize: "Tab 缩进宽度",
         tabSizeDesc: "Tab 键对应的空格数量（1–8）",
+        autoSave: "自动保存",
+        autoSaveDesc: "编辑后自动保存 Markdown 文件，无需手动按 Cmd+S",
+        autoSaveDelay: "自动保存延迟",
+        autoSaveDelayDesc: "停止输入后多久自动保存（500–10000 ms）",
         /* 快捷键设置 */
         shortcutSection: "快捷键",
         shortcutCommand: "命令",

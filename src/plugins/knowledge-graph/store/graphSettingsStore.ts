@@ -20,6 +20,7 @@ import {
 } from "../../../api/vaultApi";
 import {
     DEFAULT_KNOWLEDGE_GRAPH_SETTINGS,
+    mergeKnowledgeGraphSettings,
     type KnowledgeGraphSettingKey,
     type KnowledgeGraphSettings,
 } from "..";
@@ -56,19 +57,26 @@ interface GraphSettingsState {
 function mergeWithDefaultSettings(
     partialSettings: Partial<KnowledgeGraphSettings> | null | undefined,
 ): KnowledgeGraphSettings {
-    const merged = { ...DEFAULT_KNOWLEDGE_GRAPH_SETTINGS } as KnowledgeGraphSettings;
-    if (!partialSettings) {
-        return merged;
+    return mergeKnowledgeGraphSettings(partialSettings);
+}
+
+/**
+ * @function hasPersistedGraphSettingsMismatch
+ * @description 检查原始持久化对象是否包含已废弃字段或缺失默认字段，用于触发配置清洗回写。
+ * @param raw 原始持久化对象。
+ * @param merged 清洗后的设置对象。
+ * @returns 是否存在需要回写的差异。
+ */
+function hasPersistedGraphSettingsMismatch(
+    raw: Record<string, unknown>,
+    merged: KnowledgeGraphSettings,
+): boolean {
+    const defaultKeys = Object.keys(DEFAULT_KNOWLEDGE_GRAPH_SETTINGS) as KnowledgeGraphSettingKey[];
+    if (Object.keys(raw).some((key) => !defaultKeys.includes(key as KnowledgeGraphSettingKey))) {
+        return true;
     }
 
-    (Object.keys(DEFAULT_KNOWLEDGE_GRAPH_SETTINGS) as KnowledgeGraphSettingKey[]).forEach((key) => {
-        const value = partialSettings[key];
-        if (value !== undefined) {
-            (merged[key] as KnowledgeGraphSettings[typeof key]) = value as KnowledgeGraphSettings[typeof key];
-        }
-    });
-
-    return merged;
+    return defaultKeys.some((key) => raw[key] !== merged[key]);
 }
 
 /**
@@ -231,6 +239,13 @@ class GraphSettingsStore {
 
         try {
             const config = await getCurrentVaultConfig();
+            const persistedRaw = config.entries?.[GRAPH_SETTINGS_CONFIG_KEY];
+            const persistedObject =
+                persistedRaw &&
+                    typeof persistedRaw === "object" &&
+                    !Array.isArray(persistedRaw)
+                    ? (persistedRaw as Record<string, unknown>)
+                    : null;
             let loadedSettings = readGraphSettingsFromConfig(config);
 
             this.state = {
@@ -241,11 +256,7 @@ class GraphSettingsStore {
             };
             this.emit();
 
-            const persistedRaw = config.entries?.[GRAPH_SETTINGS_CONFIG_KEY];
-            const hasPersisted =
-                persistedRaw &&
-                typeof persistedRaw === "object" &&
-                !Array.isArray(persistedRaw);
+            const hasPersisted = persistedObject !== null;
             if (!hasPersisted) {
                 const legacySettings = readLegacyGraphSettingsFromLocal();
                 if (legacySettings) {
@@ -258,6 +269,11 @@ class GraphSettingsStore {
                 }
                 await writeGraphSettingsToConfig(loadedSettings);
                 clearLegacyGraphSettingsFromLocal();
+            } else if (hasPersistedGraphSettingsMismatch(persistedObject, loadedSettings)) {
+                await writeGraphSettingsToConfig(loadedSettings);
+                console.info("[graph-settings-store] sanitized persisted settings", {
+                    vaultPath,
+                });
             }
 
             console.info("[graph-settings-store] loaded", {

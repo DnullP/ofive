@@ -205,8 +205,11 @@ const en = {
         themeDarkDesc: "Suitable for low-light environments, reduces screen glare.",
         themeLight: "Light",
         themeLightDesc: "Suitable for bright environments, improves text contrast.",
+        themeKraft: "Kraft Paper",
+        themeKraftDesc: "Warm paper tones and sepia ink for testing global theme extensibility.",
         /* Editor */
         editorSection: "Editor",
+        saveSection: "Saving",
         vimMode: "Vim Mode",
         vimModeDesc: "Use Vim keybindings (normal/insert mode)",
         lineWrapping: "Line Wrapping",
@@ -227,6 +230,10 @@ const en = {
         fontPresetMonospace: "Monospace",
         tabSize: "Tab Size",
         tabSizeDesc: "Number of spaces per Tab key press (1–8)",
+        autoSave: "Auto Save",
+        autoSaveDesc: "Save markdown files automatically after editing, without manually pressing Cmd+S",
+        autoSaveDelay: "Auto Save Delay",
+        autoSaveDelayDesc: "Delay before auto save after typing stops (500–10000 ms)",
         /* Shortcuts */
         shortcutSection: "Shortcuts",
         shortcutCommand: "Command",

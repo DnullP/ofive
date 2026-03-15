@@ -19,9 +19,10 @@
  *   - ../../i18n
  *
  * @example
- *   插件无需手工导入；应用启动时自动完成注册。
+ *   插件无需手工导入；应用启动时由插件运行时自动激活。
  *
- * @exports 无导出（纯副作用模块）
+ * @exports
+ *   - activatePlugin 注册并返回清理函数
  */
 
 import React from "react";
@@ -59,8 +60,6 @@ i18n.addResourceBundle("zh", "translation", {
 function t(key: string): string {
     return i18n.t(key);
 }
-
-let disposeKnowledgeGraphRegistration: (() => void) | null = null;
 
 /**
  * @function registerKnowledgeGraphPlugin
@@ -125,22 +124,54 @@ function registerKnowledgeGraphPlugin(): () => void {
  * @description 根据 feature flag 同步知识图谱插件的注册状态。
  * @param enabled 当前是否启用知识图谱。
  */
-function syncKnowledgeGraphPluginRegistration(enabled: boolean): void {
+function syncKnowledgeGraphPluginRegistration(
+    enabled: boolean,
+    currentDispose: (() => void) | null,
+    setDispose: (dispose: (() => void) | null) => void,
+): void {
     if (enabled) {
-        if (!disposeKnowledgeGraphRegistration) {
-            disposeKnowledgeGraphRegistration = registerKnowledgeGraphPlugin();
+        if (!currentDispose) {
+            setDispose(registerKnowledgeGraphPlugin());
         }
         return;
     }
 
-    disposeKnowledgeGraphRegistration?.();
-    disposeKnowledgeGraphRegistration = null;
+    currentDispose?.();
+    setDispose(null);
 }
 
-syncKnowledgeGraphPluginRegistration(
-    getConfigSnapshot().featureSettings.knowledgeGraphEnabled,
-);
+/**
+ * @function activatePlugin
+ * @description 注册知识图谱插件，并在 feature flag 切换时同步其注册状态。
+ * @returns 插件清理函数。
+ */
+export function activatePlugin(): () => void {
+    let disposeKnowledgeGraphRegistration: (() => void) | null = null;
 
-subscribeConfigChanges((state) => {
-    syncKnowledgeGraphPluginRegistration(state.featureSettings.knowledgeGraphEnabled);
-});
+    const setDispose = (dispose: (() => void) | null): void => {
+        disposeKnowledgeGraphRegistration = dispose;
+    };
+
+    syncKnowledgeGraphPluginRegistration(
+        getConfigSnapshot().featureSettings.knowledgeGraphEnabled,
+        disposeKnowledgeGraphRegistration,
+        setDispose,
+    );
+
+    const unsubscribeConfigChanges = subscribeConfigChanges((state) => {
+        syncKnowledgeGraphPluginRegistration(
+            state.featureSettings.knowledgeGraphEnabled,
+            disposeKnowledgeGraphRegistration,
+            setDispose,
+        );
+    });
+
+    console.info("[knowledgeGraphPlugin] activated plugin runtime binding");
+
+    return () => {
+        unsubscribeConfigChanges();
+        disposeKnowledgeGraphRegistration?.();
+        disposeKnowledgeGraphRegistration = null;
+        console.info("[knowledgeGraphPlugin] deactivated plugin runtime binding");
+    };
+}

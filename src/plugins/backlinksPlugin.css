@@ -70,7 +70,7 @@
     flex-shrink: 0;
     font-size: 11px;
     color: var(--text-secondary);
-    background: var(--bg-secondary, rgba(128, 128, 128, 0.15));
+    background: var(--bg-secondary);
     padding: 1px 5px;
     border-radius: 4px;
 }
@@ -86,7 +86,7 @@
 /* 错误提示文字 */
 .backlinks-error {
     padding: 12px;
-    color: var(--error-color, #e74c3c);
+    color: var(--error-color);
     font-size: 12px;
     user-select: none;
 }

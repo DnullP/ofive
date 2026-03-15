@@ -16,7 +16,8 @@
  *   - ./ArchitectureDevtoolsTab
  *   - ../../i18n
  *
- * @exports 无导出（纯副作用模块）
+ * @exports
+ *   - activatePlugin 注册并返回清理函数
  */
 
 import { Workflow } from "lucide-react";
@@ -53,15 +54,19 @@ i18n.addResourceBundle("en", "translation", {
         inspector: "Inspector",
         relatedEdges: "Related edges ({{count}})",
         emptySelection: "Select a node in the graph or inventory to inspect it.",
-        searchPlaceholder: "Search nodes, files or details",
+        searchPlaceholder: "Search root nodes, files or details",
         allKinds: "All",
         visibleNodes: "Showing {{visible}} / {{total}} nodes",
+        treeMode: "Traversal",
+        dependencyTree: "Dependencies",
+        dependentTree: "Dependents",
+        neighborGraph: "Both Ways",
+        treeSummary: "Roots {{matched}} · Expanded {{visible}} / {{total}} nodes",
+        viewNodeDependencyTree: "View this node dependency tree",
         inventoryTitle: "Architecture Inventory",
         runtimeSurfaceTitle: "Runtime Surface",
         runtimeSurfaceDescription: "Currently registered activity, panel and tab extensions.",
         noMatches: "No architecture nodes match the current filter.",
-        dagFitView: "Overview",
-        dagActualView: "Actual Size",
         openCommand: "Open Architecture DevTools",
     },
 }, true, true);
@@ -88,58 +93,79 @@ i18n.addResourceBundle("zh", "translation", {
         inspector: "检查器",
         relatedEdges: "关联边（{{count}}）",
         emptySelection: "从 DAG 或下方清单中选择一个节点以查看详情。",
-        searchPlaceholder: "搜索节点、源码位置或细节",
+        searchPlaceholder: "搜索根节点、源码位置或细节",
         allKinds: "全部",
         visibleNodes: "显示 {{visible}} / {{total}} 个节点",
+        treeMode: "遍历方式",
+        dependencyTree: "下游依赖树",
+        dependentTree: "上游被依赖树",
+        neighborGraph: "双向关系",
+        treeSummary: "根节点 {{matched}} 个 · 展开 {{visible}} / {{total}} 个节点",
+        viewNodeDependencyTree: "查看此节点下游依赖树",
         inventoryTitle: "架构清单",
         runtimeSurfaceTitle: "运行时注册面",
         runtimeSurfaceDescription: "当前已注册的 Activity、Panel 和 Tab 扩展。",
         noMatches: "当前过滤条件下没有匹配的架构节点。",
-        dagFitView: "总览",
-        dagActualView: "原始尺寸",
         openCommand: "打开架构 DevTools",
     },
 }, true, true);
 
-registerArchitectureSlice(createAutoDiscoveredArchitectureSlice());
+/**
+ * @function activatePlugin
+ * @description 注册架构 DevTools 的架构切片、命令、活动与 Tab 组件。
+ * @returns 插件清理函数。
+ */
+export function activatePlugin(): () => void {
+    const unregisterArchitectureSlice = registerArchitectureSlice(
+        createAutoDiscoveredArchitectureSlice(),
+    );
 
-registerCommand({
-    id: OPEN_ARCHITECTURE_DEVTOOLS_COMMAND_ID,
-    title: "architectureDevtools.openCommand",
-    execute: (context) => {
-        if (!context.openTab) {
-            console.warn("[architectureDevtoolsPlugin] open command skipped: openTab missing");
-            return;
-        }
+    const unregisterCommand = registerCommand({
+        id: OPEN_ARCHITECTURE_DEVTOOLS_COMMAND_ID,
+        title: "architectureDevtools.openCommand",
+        execute: (context) => {
+            if (!context.openTab) {
+                console.warn("[architectureDevtoolsPlugin] open command skipped: openTab missing");
+                return;
+            }
 
-        context.openTab({
-            id: ARCHITECTURE_TAB_ID,
-            title: i18n.t("architectureDevtools.title"),
-            component: ARCHITECTURE_TAB_ID,
-        });
-    },
-});
+            context.openTab({
+                id: ARCHITECTURE_TAB_ID,
+                title: i18n.t("architectureDevtools.title"),
+                component: ARCHITECTURE_TAB_ID,
+            });
+        },
+    });
 
-registerTabComponent({
-    id: ARCHITECTURE_TAB_ID,
-    component: ArchitectureDevtoolsTab,
-});
+    const unregisterTabComponent = registerTabComponent({
+        id: ARCHITECTURE_TAB_ID,
+        component: ArchitectureDevtoolsTab,
+    });
 
-registerActivity({
-    type: "callback",
-    id: ARCHITECTURE_TAB_ID,
-    title: () => i18n.t("architectureDevtools.title"),
-    icon: <Workflow size={18} strokeWidth={1.8} />,
-    defaultSection: "top",
-    defaultBar: "left",
-    defaultOrder: 5,
-    onActivate: (context) => {
-        context.openTab({
-            id: ARCHITECTURE_TAB_ID,
-            title: i18n.t("architectureDevtools.title"),
-            component: ARCHITECTURE_TAB_ID,
-        });
-    },
-});
+    const unregisterActivity = registerActivity({
+        type: "callback",
+        id: ARCHITECTURE_TAB_ID,
+        title: () => i18n.t("architectureDevtools.title"),
+        icon: <Workflow size={18} strokeWidth={1.8} />,
+        defaultSection: "top",
+        defaultBar: "left",
+        defaultOrder: 5,
+        onActivate: (context) => {
+            context.openTab({
+                id: ARCHITECTURE_TAB_ID,
+                title: i18n.t("architectureDevtools.title"),
+                component: ARCHITECTURE_TAB_ID,
+            });
+        },
+    });
 
-console.info("[architectureDevtoolsPlugin] registered architecture devtools plugin");
+    console.info("[architectureDevtoolsPlugin] registered architecture devtools plugin");
+
+    return () => {
+        unregisterActivity();
+        unregisterTabComponent();
+        unregisterCommand();
+        unregisterArchitectureSlice();
+        console.info("[architectureDevtoolsPlugin] unregistered architecture devtools plugin");
+    };
+}

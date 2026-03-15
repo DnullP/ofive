@@ -64,7 +64,7 @@
 /* 大纲错误提示文字 */
 .outline-error {
     padding: 12px;
-    color: var(--error-color, #e74c3c);
+    color: var(--error-color);
     font-size: 12px;
     user-select: none;
 }

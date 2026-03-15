@@ -368,7 +368,13 @@ export function DockviewLayout({
         initialValue: string;
         resolve: (value: string | null) => void;
     } | null>(null);
-    const { currentVaultPath, isLoadingTree, error: vaultError, files } = useVaultState();
+    const {
+        currentVaultPath,
+        isLoadingTree,
+        backendReady,
+        error: vaultError,
+        files,
+    } = useVaultState();
     const { bindings } = useShortcutState();
     const activityBarConfigState = useActivityBarConfig();
 
@@ -416,10 +422,10 @@ export function DockviewLayout({
 
     /* 仓库就绪后加载活动栏定制配置 */
     useEffect(() => {
-        if (currentVaultPath && !isLoadingTree && !vaultError) {
+        if (currentVaultPath && backendReady && !isLoadingTree && !vaultError) {
             void ensureActivityBarConfigLoaded(currentVaultPath);
         }
-    }, [currentVaultPath, isLoadingTree, vaultError]);
+    }, [backendReady, currentVaultPath, isLoadingTree, vaultError]);
 
     /**
      * 监听 i18n 语言切换事件，动态更新 dockview 主区域已打开面板的标题。
@@ -1350,12 +1356,12 @@ export function DockviewLayout({
     }, []);
 
     useEffect(() => {
-        if (!currentVaultPath || isLoadingTree || vaultError) {
+        if (!currentVaultPath || !backendReady || isLoadingTree || vaultError) {
             return;
         }
 
         void ensureShortcutBindingsLoaded(currentVaultPath);
-    }, [currentVaultPath, isLoadingTree, vaultError]);
+    }, [backendReady, currentVaultPath, isLoadingTree, vaultError]);
 
     useEffect(() => {
         let unlisten: (() => void) | null = null;
