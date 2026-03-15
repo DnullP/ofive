@@ -21,13 +21,14 @@ import {
     PaneviewReact,
     type DockviewApi,
     type DockviewReadyEvent,
+    type IDockviewPanel,
     type IDockviewPanelProps,
     type IPaneviewPanelProps,
     type PaneviewApi,
     type PaneviewReadyEvent,
 } from "dockview";
-import type { PaneviewDndOverlayEvent, PaneviewDropEvent } from "dockview-core";
-import { getPaneData } from "dockview-core";
+import type { DockviewDidDropEvent, PaneviewDndOverlayEvent, PaneviewDropEvent } from "dockview-core";
+import { getPaneData, getPanelData, type Direction } from "dockview-core";
 import "dockview/dist/styles/dockview.css";
 import "./DockviewLayout.css";
 import { Settings } from "lucide-react";
@@ -104,8 +105,11 @@ import {
     useOverlays,
     usePanels,
     useTabComponents,
+    useConvertibleViews,
     resolveTitle,
     resolveActivityTitle,
+    buildConvertibleViewTabParams,
+    readConvertibleViewTabState,
 } from "../registry";
 import {
     buildInitialPanelStates,
@@ -137,6 +141,8 @@ export interface TabInstanceDefinition {
 export interface PanelRenderContext {
     activeTabId: string | null;
     dockviewApi: DockviewApi | null;
+    hostPanelId: string | null;
+    convertibleView: ConvertiblePanelRenderState | null;
     openTab: (tab: TabInstanceDefinition) => void;
     openFile: (options: {
         relativePath: string;
@@ -145,7 +151,24 @@ export interface PanelRenderContext {
     }) => Promise<void>;
     closeTab: (tabId: string) => void;
     setActiveTab: (tabId: string) => void;
+    activatePanel: (panelId: string) => void;
     requestMoveFileToDirectory: (relativePath: string) => void;
+}
+
+/** Panel 渲染时可读取的可转化视图上下文。 */
+export interface ConvertiblePanelRenderState {
+    /** 可转化视图描述符 ID。 */
+    descriptorId: string;
+    /** 当前容器模式。 */
+    mode: "panel";
+    /** 当前面板 ID。 */
+    panelId: string;
+    /** 状态共享键。 */
+    stateKey: string;
+    /** 上一次从 Tab 转入时携带的源参数。 */
+    sourceParams?: Record<string, unknown>;
+    /** 来源 Tab ID。 */
+    sourceTabId?: string;
 }
 
 export interface PanelDefinition {
@@ -225,6 +248,64 @@ interface MoveSourceSnapshot {
     hasInMemoryContent: boolean;
 }
 
+interface ConvertibleViewRuntimeState {
+    descriptorId: string;
+    mode: "tab" | "panel";
+    stateKey: string;
+    sourceParams?: Record<string, unknown>;
+    sourceTabId?: string;
+}
+
+function buildInitialConvertibleViewRuntime(
+    descriptors: Array<{
+        id: string;
+        defaultMode: "tab" | "panel";
+        getInitialStateKey?: () => string;
+    }>,
+): Record<string, ConvertibleViewRuntimeState> {
+    return Object.fromEntries(
+        descriptors.map((descriptor) => [
+            descriptor.id,
+            {
+                descriptorId: descriptor.id,
+                mode: descriptor.defaultMode,
+                stateKey: descriptor.getInitialStateKey?.() ?? descriptor.id,
+            } satisfies ConvertibleViewRuntimeState,
+        ]),
+    );
+}
+
+function mergeConvertibleViewRuntime(
+    previous: Record<string, ConvertibleViewRuntimeState>,
+    descriptors: Array<{
+        id: string;
+        defaultMode: "tab" | "panel";
+        getInitialStateKey?: () => string;
+    }>,
+): Record<string, ConvertibleViewRuntimeState> {
+    return Object.fromEntries(
+        descriptors.map((descriptor) => [
+            descriptor.id,
+            previous[descriptor.id] ?? {
+                descriptorId: descriptor.id,
+                mode: descriptor.defaultMode,
+                stateKey: descriptor.getInitialStateKey?.() ?? descriptor.id,
+            },
+        ]),
+    );
+}
+
+function stripConvertibleViewTabParam(
+    params: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+    if (!params) {
+        return undefined;
+    }
+
+    const { __convertibleView: _ignored, ...rest } = params;
+    return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
 function isMarkdownPath(path: string): boolean {
     const normalizedPath = path.toLowerCase();
     return normalizedPath.endsWith(".md") || normalizedPath.endsWith(".markdown");
@@ -281,6 +362,7 @@ export function DockviewLayout({
     const registeredActivities = useActivities();
     const registeredPanels = usePanels();
     const registeredTabComponents = useTabComponents();
+    const registeredConvertibleViews = useConvertibleViews();
     const registeredOverlays = useOverlays();
 
     /**
@@ -303,6 +385,7 @@ export function DockviewLayout({
                 activityTitle: activity ? resolveActivityTitle(activity.title) : undefined,
                 activityIcon: activity?.icon,
                 activitySection: activity?.defaultSection,
+                onActivityClick: activity?.type === "callback" ? activity.onActivate : undefined,
                 tabOnly: false,
                 render: panelDesc.render,
             });
@@ -354,6 +437,9 @@ export function DockviewLayout({
     const [panelStates, setPanelStates] = useState<PanelRuntimeState[]>(() =>
         buildInitialPanelStates(panels),
     );
+    const [convertibleViewRuntime, setConvertibleViewRuntime] = useState<Record<string, ConvertibleViewRuntimeState>>(
+        () => buildInitialConvertibleViewRuntime(registeredConvertibleViews),
+    );
     const [activePanelId, setActivePanelId] = useState<string | null>(initialActivePanelId ?? null);
     const [activeActivityId, setActiveActivityId] = useState<string | null>(null);
     /** 右侧栏当前激活的活动分组 ID */
@@ -385,6 +471,10 @@ export function DockviewLayout({
     const [isEmptySidebarDragOver, setIsEmptySidebarDragOver] = useState(false);
     /** 空侧栏拖入高亮状态：paneview 面板拖入空的右侧栏占位区域时为 true */
     const [isEmptyRightSidebarDragOver, setIsEmptyRightSidebarDragOver] = useState(false);
+    /** 全折叠左侧 pane 空白区拖入高亮状态。 */
+    const [isCollapsedLeftSidebarDragOver, setIsCollapsedLeftSidebarDragOver] = useState(false);
+    /** 全折叠右侧 pane 空白区拖入高亮状态。 */
+    const [isCollapsedRightSidebarDragOver, setIsCollapsedRightSidebarDragOver] = useState(false);
     /** 右侧图标栏拖入高亮状态：活动图标从 ActivityBar 拖入时为 true */
     const [isRightIconBarDragOver, setIsRightIconBarDragOver] = useState(false);
 
@@ -394,10 +484,13 @@ export function DockviewLayout({
     const leftUnhandledDragDisposeRef = useRef<{ dispose: () => void } | null>(null);
     const rightUnhandledDragDisposeRef = useRef<{ dispose: () => void } | null>(null);
     const pendingExpandedStateRef = useRef<Map<string, boolean>>(new Map());
+    const paneExpandedStateRef = useRef<Map<string, boolean>>(new Map());
     const suppressWindowCloseUntilRef = useRef<number>(0);
     const mainDockHostRef = useRef<HTMLDivElement | null>(null);
     /** 缓存 paneview 面板的标题，用于检测语言切换后标题是否变化 */
     const paneTitleCacheRef = useRef<Map<string, string>>(new Map());
+    const dockUnhandledDragDisposeRef = useRef<{ dispose: () => void } | null>(null);
+    const lastActiveLeftPanelByActivityRef = useRef<Map<string, string>>(new Map());
 
     useEffect(() => {
         dockviewApiRef.current = dockviewApi;
@@ -466,22 +559,32 @@ export function DockviewLayout({
     }, []);
 
     const panelById = useMemo(() => new Map(panels.map((panel) => [panel.id, panel])), [panels]);
+    const activityDescriptorById = useMemo(
+        () => new Map(registeredActivities.map((activity) => [activity.id, activity] as const)),
+        [registeredActivities],
+    );
     const activityMetaById = useMemo(
         () =>
             new Map(
                 panels.map((panel) => {
                     const activityId = panel.activityId ?? panel.id;
+                    const activityDescriptor = activityDescriptorById.get(activityId);
                     return [
                         activityId,
                         {
-                            title: panel.activityTitle ?? panel.title,
-                            icon: panel.activityIcon ?? panel.icon ?? panel.title.slice(0, 1).toUpperCase(),
-                            section: panel.activitySection ?? "top",
+                            title: activityDescriptor
+                                ? resolveActivityTitle(activityDescriptor.title)
+                                : (panel.activityTitle ?? panel.title),
+                            icon: activityDescriptor?.icon
+                                ?? panel.activityIcon
+                                ?? panel.icon
+                                ?? panel.title.slice(0, 1).toUpperCase(),
+                            section: activityDescriptor?.defaultSection ?? panel.activitySection ?? "top",
                         },
                     ] as const;
                 }),
             ),
-        [panels],
+        [activityDescriptorById, panels],
     );
     const activityIdByPanelId = useMemo(
         () => new Map(panelStates.map((state) => [state.id, state.activityId])),
@@ -495,6 +598,33 @@ export function DockviewLayout({
         setPanelStates((prev) => mergePanelStates(prev, panels));
     }, [panels]);
 
+    useEffect(() => {
+        setConvertibleViewRuntime((previous) => mergeConvertibleViewRuntime(previous, registeredConvertibleViews));
+    }, [registeredConvertibleViews]);
+
+    const convertibleByPanelId = useMemo(
+        () => new Map(registeredConvertibleViews.map((descriptor) => [descriptor.panelId, descriptor] as const)),
+        [registeredConvertibleViews],
+    );
+    const convertibleByTabComponentId = useMemo(
+        () => new Map(registeredConvertibleViews.map((descriptor) => [descriptor.tabComponentId, descriptor] as const)),
+        [registeredConvertibleViews],
+    );
+
+    const getConvertibleRuntimeState = (
+        descriptorId: string,
+    ): ConvertibleViewRuntimeState | null => convertibleViewRuntime[descriptorId] ?? null;
+
+    const isConvertiblePanelVisible = (panelId: string): boolean => {
+        const descriptor = convertibleByPanelId.get(panelId);
+        if (!descriptor) {
+            return true;
+        }
+
+        const runtime = getConvertibleRuntimeState(descriptor.id);
+        return (runtime?.mode ?? descriptor.defaultMode) === "panel";
+    };
+
     const orderedPanelsByPosition = (position: PanelPosition): PanelDefinition[] =>
         panelStates
             .filter((item) => item.position === position)
@@ -502,10 +632,18 @@ export function DockviewLayout({
             .map((item) => panelById.get(item.id))
             .filter((item): item is PanelDefinition => item !== undefined)
             /* tabOnly 的面板只提供活动栏图标，不在侧边栏中生成面板容器 */
-            .filter((item) => !item.tabOnly);
+            .filter((item) => !item.tabOnly)
+            /* 可转化组件在 tab 模式下隐藏 panel 容器 */
+            .filter((item) => isConvertiblePanelVisible(item.id));
 
-    const leftPanels = useMemo(() => orderedPanelsByPosition("left"), [panelStates, panelById]);
-    const rightPanels = useMemo(() => orderedPanelsByPosition("right"), [panelStates, panelById]);
+    const leftPanels = useMemo(
+        () => orderedPanelsByPosition("left"),
+        [panelStates, panelById, convertibleViewRuntime, convertibleByPanelId],
+    );
+    const rightPanels = useMemo(
+        () => orderedPanelsByPosition("right"),
+        [panelStates, panelById, convertibleViewRuntime, convertibleByPanelId],
+    );
 
     /**
      * 活动栏项列表：仅包含显式声明了 activityId 的面板。
@@ -547,11 +685,15 @@ export function DockviewLayout({
             if (panel.activityId === undefined) continue;
             const aid = activityIdOf(panel);
             if (!map.has(aid)) {
-                map.set(aid, panel.position === "right" ? "right" : "left");
+                const activityDescriptor = activityDescriptorById.get(aid);
+                map.set(
+                    aid,
+                    activityDescriptor?.defaultBar ?? (panel.position === "right" ? "right" : "left"),
+                );
             }
         }
         return map;
-    }, [panels]);
+    }, [activityDescriptorById, panels]);
 
     const mergedActivityItems = useMemo<ActivityIconItem[]>(() => {
         const allDefaults = [
@@ -605,10 +747,14 @@ export function DockviewLayout({
      */
     const leftPanelActivityItems = useMemo(
         () => visibleNonSettingsItems.filter((i) => {
+            const activityDescriptor = activityDescriptorById.get(i.id);
+            if (activityDescriptor?.type === "callback") {
+                return false;
+            }
             const panelDef = panels.find((p) => activityIdOf(p) === i.id);
             return !panelDef?.tabOnly;
         }),
-        [visibleNonSettingsItems, panels],
+        [activityDescriptorById, visibleNonSettingsItems, panels],
     );
 
     /** 左侧 ActivityBar 中可见的顶部项 */
@@ -665,6 +811,10 @@ export function DockviewLayout({
         }
         /* 排除 settings 和 tabOnly 的项，它们没有侧边栏面板 */
         const panelRightItems = rightBarItems.filter((i) => {
+            const activityDescriptor = activityDescriptorById.get(i.id);
+            if (activityDescriptor?.type === "callback") {
+                return false;
+            }
             if (i.isSettings) return false;
             const panelDef = panels.find((p) => activityIdOf(p) === i.id);
             return !panelDef?.tabOnly;
@@ -676,7 +826,7 @@ export function DockviewLayout({
         if (!activeRightActivityId || !panelRightItems.some((i) => i.id === activeRightActivityId)) {
             setActiveRightActivityId(panelRightItems[0]?.id ?? null);
         }
-    }, [activeRightActivityId, rightBarItems, panels]);
+    }, [activeRightActivityId, activityDescriptorById, rightBarItems, panels]);
 
     const visibleLeftPanels = useMemo(() => {
         if (!activeActivityId) {
@@ -685,17 +835,47 @@ export function DockviewLayout({
         return leftPanels.filter((panel) => activityIdOf(panel) === activeActivityId);
     }, [activeActivityId, leftPanels]);
 
+    const preferredLeftPanelId = useMemo(() => {
+        if (!activeActivityId) {
+            return null;
+        }
+
+        const candidatePanels = leftPanels.filter((panel) => activityIdOf(panel) === activeActivityId);
+        if (candidatePanels.length === 0) {
+            return null;
+        }
+
+        const rememberedPanelId = lastActiveLeftPanelByActivityRef.current.get(activeActivityId);
+        if (rememberedPanelId && candidatePanels.some((panel) => panel.id === rememberedPanelId)) {
+            return rememberedPanelId;
+        }
+
+        return candidatePanels[0]?.id ?? null;
+    }, [activeActivityId, leftPanels, activityIdByPanelId]);
+
     useEffect(() => {
         if (!activePanelId) {
-            setActivePanelId(visibleLeftPanels[0]?.id ?? rightPanels[0]?.id ?? null);
+            setActivePanelId(preferredLeftPanelId ?? rightPanels[0]?.id ?? null);
             return;
         }
 
         const exists = [...visibleLeftPanels, ...rightPanels].some((panel) => panel.id === activePanelId);
         if (!exists) {
-            setActivePanelId(visibleLeftPanels[0]?.id ?? rightPanels[0]?.id ?? null);
+            setActivePanelId(preferredLeftPanelId ?? rightPanels[0]?.id ?? null);
         }
-    }, [activePanelId, visibleLeftPanels, rightPanels]);
+    }, [activePanelId, preferredLeftPanelId, visibleLeftPanels, rightPanels]);
+
+    useEffect(() => {
+        if (!activeActivityId || !activePanelId) {
+            return;
+        }
+
+        if (!visibleLeftPanels.some((panel) => panel.id === activePanelId)) {
+            return;
+        }
+
+        lastActiveLeftPanelByActivityRef.current.set(activeActivityId, activePanelId);
+    }, [activeActivityId, activePanelId, visibleLeftPanels]);
 
     useEffect(() => {
         if (!activePanelId) {
@@ -727,12 +907,15 @@ export function DockviewLayout({
         if (activePanelId && visibleLeftPanels.some((panel) => panel.id === activePanelId)) {
             return activePanelId;
         }
-        return visibleLeftPanels[0]?.id ?? null;
-    }, [activePanelId, visibleLeftPanels]);
+        return preferredLeftPanelId ?? visibleLeftPanels[0]?.id ?? null;
+    }, [activePanelId, preferredLeftPanelId, visibleLeftPanels]);
 
     const syncPanePanels = (api: PaneviewApi, panelList: PanelDefinition[], expandedPanelId: string | null): void => {
         const ids = panelList.map((panel) => panel.id);
         const currentExpandedById = new Map(api.panels.map((panel) => [panel.id, panel.api.isExpanded]));
+        currentExpandedById.forEach((isExpanded, panelId) => {
+            paneExpandedStateRef.current.set(panelId, isExpanded);
+        });
 
         const stalePanelIds = api.panels
             .map((panel) => panel.id)
@@ -743,6 +926,8 @@ export function DockviewLayout({
             if (!stalePanel) {
                 return;
             }
+
+            paneExpandedStateRef.current.set(panelId, stalePanel.api.isExpanded);
 
             try {
                 api.removePanel(stalePanel);
@@ -760,6 +945,7 @@ export function DockviewLayout({
             // Paneview 没有 setTitle()，标题变化时需要移除后重新添加面板
             if (existingPanel && cachedTitle !== undefined && cachedTitle !== panel.title) {
                 const wasExpanded = existingPanel.api.isExpanded;
+                paneExpandedStateRef.current.set(panel.id, wasExpanded);
                 console.info("[DockviewLayout] paneview panel title changed, re-creating", panel.id, {
                     oldTitle: cachedTitle,
                     newTitle: panel.title,
@@ -787,13 +973,14 @@ export function DockviewLayout({
             if (!existingPanel) {
                 const pendingExpanded = pendingExpandedStateRef.current.get(panel.id);
                 const knownExpanded = currentExpandedById.get(panel.id);
+                const cachedExpanded = paneExpandedStateRef.current.get(panel.id);
                 const fallbackExpanded = expandedPanelId ? panel.id === expandedPanelId : true;
 
                 api.addPanel({
                     id: panel.id,
                     component: panel.id,
                     title: panel.title,
-                    isExpanded: pendingExpanded ?? knownExpanded ?? fallbackExpanded,
+                    isExpanded: pendingExpanded ?? knownExpanded ?? cachedExpanded ?? fallbackExpanded,
                     index,
                 });
 
@@ -828,17 +1015,388 @@ export function DockviewLayout({
         }
     }, [visibleRightPanels]);
 
+    const resolveActivityIdForPanelDrop = (
+        targetPosition: PanelPosition,
+        dropTargetPanelId?: string | null,
+    ): string | null => {
+        if (dropTargetPanelId) {
+            const targetState = panelStates.find((item) => item.id === dropTargetPanelId);
+            if (targetState) {
+                return targetState.activityId;
+            }
+
+            const targetDefinition = panelById.get(dropTargetPanelId);
+            if (targetDefinition) {
+                return targetDefinition.activityId ?? targetDefinition.id;
+            }
+        }
+
+        return targetPosition === "left" ? activeActivityId : activeRightActivityId;
+    };
+
+    const convertDockviewTabToPanel = (options: {
+        targetPosition: PanelPosition;
+        dropTargetPanelId?: string;
+        dropPosition?: "top" | "bottom" | "left" | "right";
+        emptyTarget?: boolean;
+    }): boolean => {
+        const transfer = getPanelData();
+        if (!transfer || !transfer.panelId) {
+            return false;
+        }
+
+        const sourceDockPanel = dockviewApiRef.current?.getPanel(transfer.panelId);
+        if (!sourceDockPanel) {
+            return false;
+        }
+
+        const descriptor = convertibleByTabComponentId.get(sourceDockPanel.view.contentComponent);
+        if (!descriptor) {
+            return false;
+        }
+
+        const tabParams = sourceDockPanel.params as Record<string, unknown> | undefined;
+        const tabState = readConvertibleViewTabState(tabParams);
+        const fallbackRuntime = getConvertibleRuntimeState(descriptor.id);
+        const stateKey = tabState?.stateKey
+            ?? fallbackRuntime?.stateKey
+            ?? descriptor.getInitialStateKey?.()
+            ?? descriptor.id;
+        const sourceParams = stripConvertibleViewTabParam(tabParams);
+        const nextActivityId = resolveActivityIdForPanelDrop(options.targetPosition, options.dropTargetPanelId);
+
+        pendingExpandedStateRef.current.set(descriptor.panelId, true);
+
+        setConvertibleViewRuntime((previous) => ({
+            ...previous,
+            [descriptor.id]: {
+                descriptorId: descriptor.id,
+                mode: "panel",
+                stateKey,
+                sourceParams,
+                sourceTabId: sourceDockPanel.id,
+            },
+        }));
+
+        queueMicrotask(() => {
+            setPanelStates((previous) => {
+                if (options.emptyTarget) {
+                    return options.targetPosition === "left"
+                        ? computeEmptySidebarDrop({
+                            prev: previous,
+                            movedPanelId: descriptor.panelId,
+                            activeActivityId: activeActivityId,
+                        })
+                        : computeEmptyRightSidebarDrop({
+                            prev: previous,
+                            movedPanelId: descriptor.panelId,
+                            panelById,
+                            activeRightActivityId,
+                        });
+                }
+
+                return computeCrossContainerDrop({
+                    prev: previous,
+                    movedPanelId: descriptor.panelId,
+                    targetPosition: options.targetPosition,
+                    dropTargetPanelId: options.dropTargetPanelId ?? descriptor.panelId,
+                    dropPosition: options.dropPosition ?? "bottom",
+                    panelById,
+                    activeActivityId,
+                    activeRightActivityId,
+                });
+            });
+
+            setActivePanelId(descriptor.panelId);
+            if (options.targetPosition === "right") {
+                setIsRightSidebarVisible(true);
+                if (nextActivityId) {
+                    setActiveRightActivityId(nextActivityId);
+                }
+            } else {
+                setIsLeftSidebarVisible(true);
+                if (nextActivityId) {
+                    setActiveActivityId(nextActivityId);
+                }
+            }
+        });
+
+        sourceDockPanel.api.close();
+        console.info("[DockviewLayout] converted tab to panel", {
+            descriptorId: descriptor.id,
+            tabId: sourceDockPanel.id,
+            panelId: descriptor.panelId,
+            targetPosition: options.targetPosition,
+        });
+        return true;
+    };
+
+    const convertPanePanelToTab = (dropEvent?: DockviewDidDropEvent): boolean => {
+        const transfer = getPaneData();
+        if (!transfer) {
+            return false;
+        }
+
+        const descriptor = convertibleByPanelId.get(transfer.paneId);
+        if (!descriptor) {
+            return false;
+        }
+
+        const runtime = getConvertibleRuntimeState(descriptor.id);
+        const tabDefinition = descriptor.buildTabInstance({
+            stateKey: runtime?.stateKey ?? descriptor.getInitialStateKey?.() ?? descriptor.id,
+            panelId: descriptor.panelId,
+            params: runtime?.sourceParams,
+        });
+
+        openTabAtDropTarget(tabDefinition, {
+            referencePanel: dropEvent?.panel ?? dropEvent?.group?.activePanel,
+            position: dropEvent?.position,
+        });
+        setActivePanelId((current) => (current === descriptor.panelId ? null : current));
+        console.info("[DockviewLayout] converted panel to tab", {
+            descriptorId: descriptor.id,
+            panelId: descriptor.panelId,
+            tabId: tabDefinition.id,
+            dropPosition: dropEvent?.position,
+            dropTargetPanelId: dropEvent?.panel?.id,
+        });
+        return true;
+    };
+
     const handleUnhandledDragOver = (targetApi: PaneviewApi, event: PaneviewDndOverlayEvent): void => {
         const data = event.getData();
-        if (!data) {
+        if (data) {
+            if (targetApi.getPanel(data.paneId)) {
+                return;
+            }
+
+            if (panelById.has(data.paneId)) {
+                event.accept();
+            }
             return;
         }
 
-        if (targetApi.getPanel(data.paneId)) {
+        const dockviewTransfer = getPanelData();
+        if (!dockviewTransfer || !dockviewTransfer.panelId) {
             return;
         }
 
-        if (panelById.has(data.paneId)) {
+        const sourceDockPanel = dockviewApiRef.current?.getPanel(dockviewTransfer.panelId);
+        if (!sourceDockPanel) {
+            return;
+        }
+
+        if (convertibleByTabComponentId.has(sourceDockPanel.view.contentComponent)) {
+            event.accept();
+        }
+    };
+
+    /**
+     * 判断当前拖拽是否可被侧栏 pane 容器接收。
+     *
+     * 接受两类来源：现有 paneview pane，以及可转换为 panel 的 dockview tab。
+     */
+    const canAcceptSidebarPaneDrop = (): boolean => {
+        const paneData = getPaneData();
+        if (paneData && panelById.has(paneData.paneId)) {
+            return true;
+        }
+
+        const dockviewTransfer = getPanelData();
+        if (!dockviewTransfer || !dockviewTransfer.panelId) {
+            return false;
+        }
+
+        const sourceDockPanel = dockviewApiRef.current?.getPanel(dockviewTransfer.panelId);
+        if (!sourceDockPanel) {
+            return false;
+        }
+
+        return convertibleByTabComponentId.has(sourceDockPanel.view.contentComponent);
+    };
+
+    /**
+     * 判断指定侧栏当前可见 pane 是否全部为折叠态。
+     *
+     * 当 PaneviewReact 只剩标题高度时，需要由外围容器补充空白区 drop target。
+     */
+    const areAllVisiblePanesCollapsed = (
+        api: PaneviewApi | null,
+        panelList: PanelDefinition[],
+    ): boolean => {
+        if (!api || panelList.length === 0 || api.panels.length === 0) {
+            return false;
+        }
+
+        const visibleIds = new Set(panelList.map((panel) => panel.id));
+        const visiblePanes = api.panels.filter((panel) => visibleIds.has(panel.id));
+        if (visiblePanes.length === 0) {
+            return false;
+        }
+
+        return visiblePanes.every((panel) => !panel.api.isExpanded);
+    };
+
+    /** 根据侧栏位置返回对应 PaneviewApi。 */
+    const getPaneApiForPosition = (targetPosition: PanelPosition): PaneviewApi | null =>
+        targetPosition === "left" ? leftPaneApiRef.current : rightPaneApiRef.current;
+
+    /** 根据侧栏位置返回当前可见 panel 列表。 */
+    const getVisiblePanelsForPosition = (targetPosition: PanelPosition): PanelDefinition[] =>
+        targetPosition === "left" ? visibleLeftPanels : visibleRightPanels;
+
+    /** 清除全折叠侧栏空白区拖入高亮。 */
+    const clearCollapsedSidebarDragOver = (targetPosition: PanelPosition): void => {
+        if (targetPosition === "left") {
+            setIsCollapsedLeftSidebarDragOver(false);
+            return;
+        }
+
+        setIsCollapsedRightSidebarDragOver(false);
+    };
+
+    /**
+     * 判断当前指针是否位于“最后一个折叠 pane 底部以下”的侧栏空白区。
+     *
+     * 这样可以只接管真正的空白区释放，不影响标题区域原有的 paneview drop 逻辑。
+     */
+    const isPointerInCollapsedSidebarWhitespace = (
+        container: HTMLDivElement,
+        clientY: number,
+    ): boolean => {
+        const paneElements = Array.from(container.querySelectorAll<HTMLElement>(".dv-pane"));
+        if (paneElements.length === 0) {
+            return false;
+        }
+
+        const lastPaneBottom = Math.max(
+            ...paneElements.map((paneElement) => paneElement.getBoundingClientRect().bottom),
+        );
+
+        return clientY > lastPaneBottom;
+    };
+
+    /**
+     * 全折叠侧栏空白区 dragover：为空白区域提供 pane/tab 释放落点。
+     */
+    const handleCollapsedSidebarSurfaceDragOver = (
+        targetPosition: PanelPosition,
+        e: React.DragEvent<HTMLDivElement>,
+    ): void => {
+        const api = getPaneApiForPosition(targetPosition);
+        const visiblePanels = getVisiblePanelsForPosition(targetPosition);
+        if (
+            !areAllVisiblePanesCollapsed(api, visiblePanels)
+            || !canAcceptSidebarPaneDrop()
+            || !isPointerInCollapsedSidebarWhitespace(e.currentTarget, e.clientY)
+        ) {
+            clearCollapsedSidebarDragOver(targetPosition);
+            return;
+        }
+
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+
+        if (targetPosition === "left") {
+            setIsCollapsedLeftSidebarDragOver(true);
+            return;
+        }
+
+        setIsCollapsedRightSidebarDragOver(true);
+    };
+
+    /** 全折叠侧栏空白区 dragleave：清除高亮。 */
+    const handleCollapsedSidebarSurfaceDragLeave = (
+        targetPosition: PanelPosition,
+        e: React.DragEvent<HTMLDivElement>,
+    ): void => {
+        clearCollapsedSidebarDragOver(targetPosition);
+    };
+
+    /**
+     * 全折叠侧栏空白区 drop：按空侧栏语义将面板追加到当前 activity 容器末尾。
+     */
+    const handleCollapsedSidebarSurfaceDrop = (
+        targetPosition: PanelPosition,
+        e: React.DragEvent<HTMLDivElement>,
+    ): void => {
+        e.preventDefault();
+        clearCollapsedSidebarDragOver(targetPosition);
+
+        const api = getPaneApiForPosition(targetPosition);
+        const visiblePanels = getVisiblePanelsForPosition(targetPosition);
+        if (
+            !areAllVisiblePanesCollapsed(api, visiblePanels)
+            || !isPointerInCollapsedSidebarWhitespace(e.currentTarget, e.clientY)
+        ) {
+            return;
+        }
+
+        if (convertDockviewTabToPanel({
+            targetPosition,
+            emptyTarget: true,
+        })) {
+            console.info("[DockviewLayout] collapsed sidebar whitespace drop converted tab to panel", {
+                targetPosition,
+            });
+            return;
+        }
+
+        const paneData = getPaneData();
+        if (!paneData || !panelById.has(paneData.paneId)) {
+            console.warn("[DockviewLayout] collapsed sidebar whitespace drop: no valid pane data", {
+                targetPosition,
+            });
+            return;
+        }
+
+        const movedPanelId = paneData.paneId;
+        const sourceExpanded =
+            leftPaneApiRef.current?.getPanel(movedPanelId)?.api.isExpanded ??
+            rightPaneApiRef.current?.getPanel(movedPanelId)?.api.isExpanded;
+        if (typeof sourceExpanded === "boolean") {
+            pendingExpandedStateRef.current.set(movedPanelId, sourceExpanded);
+        }
+
+        console.info("[DockviewLayout] collapsed sidebar whitespace drop", {
+            targetPosition,
+            movedPanelId,
+        });
+
+        queueMicrotask(() => {
+            setPanelStates((prev) =>
+                targetPosition === "left"
+                    ? computeEmptySidebarDrop({
+                        prev,
+                        movedPanelId,
+                        activeActivityId,
+                    })
+                    : computeEmptyRightSidebarDrop({
+                        prev,
+                        movedPanelId,
+                        panelById,
+                        activeRightActivityId,
+                    }),
+            );
+
+            if (targetPosition === "right") {
+                setIsRightSidebarVisible(true);
+            } else {
+                setIsLeftSidebarVisible(true);
+            }
+
+            setActivePanelId(movedPanelId);
+        });
+    };
+
+    const handleDockviewUnhandledDragOver = (event: any): void => {
+        const paneTransfer = event.getData?.() ?? getPaneData();
+        if (!paneTransfer) {
+            return;
+        }
+
+        if (convertibleByPanelId.has(paneTransfer.paneId)) {
             event.accept();
         }
     };
@@ -854,9 +1412,23 @@ export function DockviewLayout({
      */
     const handleEmptySidebarDragOver = (e: React.DragEvent<HTMLDivElement>): void => {
         const paneData = getPaneData();
-        if (!paneData || !panelById.has(paneData.paneId)) {
+        if (paneData && panelById.has(paneData.paneId)) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            setIsEmptySidebarDragOver(true);
             return;
         }
+
+        const dockviewTransfer = getPanelData();
+        if (!dockviewTransfer || !dockviewTransfer.panelId) {
+            return;
+        }
+
+        const sourceDockPanel = dockviewApiRef.current?.getPanel(dockviewTransfer.panelId);
+        if (!sourceDockPanel || !convertibleByTabComponentId.has(sourceDockPanel.view.contentComponent)) {
+            return;
+        }
+
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         setIsEmptySidebarDragOver(true);
@@ -880,6 +1452,13 @@ export function DockviewLayout({
     const handleEmptySidebarDrop = (e: React.DragEvent<HTMLDivElement>): void => {
         e.preventDefault();
         setIsEmptySidebarDragOver(false);
+
+        if (convertDockviewTabToPanel({
+            targetPosition: "left",
+            emptyTarget: true,
+        })) {
+            return;
+        }
 
         const paneData = getPaneData();
         if (!paneData || !panelById.has(paneData.paneId)) {
@@ -911,6 +1490,14 @@ export function DockviewLayout({
     };
 
     const handleCrossContainerDrop = (targetPosition: PanelPosition, event: PaneviewDropEvent): void => {
+        if (convertDockviewTabToPanel({
+            targetPosition,
+            dropTargetPanelId: event.panel.id,
+            dropPosition: event.position as "top" | "bottom" | "left" | "right",
+        })) {
+            return;
+        }
+
         const data = event.getData();
         if (!data) {
             return;
@@ -983,19 +1570,140 @@ export function DockviewLayout({
         if (!api) {
             return;
         }
-        const existing = api.getPanel(tab.id);
+
+        const descriptor = convertibleByTabComponentId.get(tab.component);
+        const existingRuntime = descriptor ? getConvertibleRuntimeState(descriptor.id) : null;
+        const tabConvertibleState = descriptor
+            ? (readConvertibleViewTabState(tab.params) ?? {
+                descriptorId: descriptor.id,
+                stateKey: existingRuntime?.stateKey ?? descriptor.getInitialStateKey?.() ?? descriptor.id,
+            })
+            : null;
+        const normalizedTab = descriptor && tabConvertibleState
+            ? {
+                ...tab,
+                params: buildConvertibleViewTabParams(tabConvertibleState, tab.params),
+            }
+            : tab;
+
+        if (descriptor && tabConvertibleState) {
+            setConvertibleViewRuntime((previous) => ({
+                ...previous,
+                [descriptor.id]: {
+                    descriptorId: descriptor.id,
+                    mode: "tab",
+                    stateKey: tabConvertibleState.stateKey,
+                    sourceParams: stripConvertibleViewTabParam(
+                        normalizedTab.params as Record<string, unknown> | undefined,
+                    ),
+                },
+            }));
+        }
+
+        const existing = api.getPanel(normalizedTab.id);
         if (existing) {
             existing.api.setActive();
             return;
         }
+
         api.addPanel({
-            id: tab.id,
-            title: tab.title,
-            component: tab.component,
-            params: tab.params,
+            id: normalizedTab.id,
+            title: normalizedTab.title,
+            component: normalizedTab.component,
+            params: normalizedTab.params,
         });
-        api.getPanel(tab.id)?.api.setActive();
-        setActiveTabId(tab.id);
+        api.getPanel(normalizedTab.id)?.api.setActive();
+        setActiveTabId(normalizedTab.id);
+    };
+
+    /**
+     * 按实际 drop 落点在 dockview 中打开标签。
+     * panel -> tab 转换时，如果用户将面板拖到主区域右侧/上方等位置，
+     * 应保留对应 split，而不是仅恢复为普通 tab。
+     */
+    const openTabAtDropTarget = (
+        tab: TabInstanceDefinition,
+        options?: {
+            referencePanel?: IDockviewPanel;
+            position?: "top" | "bottom" | "left" | "right" | "center";
+        },
+    ): void => {
+        const api = dockviewApiRef.current;
+        if (!api) {
+            return;
+        }
+
+        const descriptor = convertibleByTabComponentId.get(tab.component);
+        const existingRuntime = descriptor ? getConvertibleRuntimeState(descriptor.id) : null;
+        const tabConvertibleState = descriptor
+            ? (readConvertibleViewTabState(tab.params) ?? {
+                descriptorId: descriptor.id,
+                stateKey: existingRuntime?.stateKey ?? descriptor.getInitialStateKey?.() ?? descriptor.id,
+            })
+            : null;
+        const normalizedTab = descriptor && tabConvertibleState
+            ? {
+                ...tab,
+                params: buildConvertibleViewTabParams(tabConvertibleState, tab.params),
+            }
+            : tab;
+
+        if (descriptor && tabConvertibleState) {
+            setConvertibleViewRuntime((previous) => ({
+                ...previous,
+                [descriptor.id]: {
+                    descriptorId: descriptor.id,
+                    mode: "tab",
+                    stateKey: tabConvertibleState.stateKey,
+                    sourceParams: stripConvertibleViewTabParam(
+                        normalizedTab.params as Record<string, unknown> | undefined,
+                    ),
+                },
+            }));
+        }
+
+        const existing = api.getPanel(normalizedTab.id);
+        if (existing) {
+            existing.api.setActive();
+            return;
+        }
+
+        const directionByPosition: Record<"top" | "bottom" | "left" | "right", Direction> = {
+            top: "above",
+            bottom: "below",
+            left: "left",
+            right: "right",
+        };
+
+        const addPanelOptions = {
+            id: normalizedTab.id,
+            title: normalizedTab.title,
+            component: normalizedTab.component,
+            params: normalizedTab.params,
+        };
+
+        if (options?.referencePanel && options.position && options.position !== "center") {
+            api.addPanel({
+                ...addPanelOptions,
+                position: {
+                    referencePanel: options.referencePanel,
+                    direction: directionByPosition[options.position],
+                },
+            });
+        } else if (options?.referencePanel) {
+            api.addPanel({
+                ...addPanelOptions,
+                position: {
+                    referencePanel: options.referencePanel,
+                    direction: "within",
+                },
+            });
+        } else {
+            api.addPanel(addPanelOptions);
+        }
+
+        api.getPanel(normalizedTab.id)?.api.setActive();
+        setActiveTabId(normalizedTab.id);
     };
 
     const closeTab = (tabId: string): void => {
@@ -1196,6 +1904,23 @@ export function DockviewLayout({
         if (!targetPanel || !targetState) {
             console.warn("[layout] activate panel skipped: panel not found", { panelId });
             return;
+        }
+
+        const convertibleDescriptor = convertibleByPanelId.get(panelId);
+        if (convertibleDescriptor) {
+            const existingRuntime = getConvertibleRuntimeState(convertibleDescriptor.id);
+            setConvertibleViewRuntime((previous) => ({
+                ...previous,
+                [convertibleDescriptor.id]: {
+                    descriptorId: convertibleDescriptor.id,
+                    mode: "panel",
+                    stateKey: existingRuntime?.stateKey
+                        ?? convertibleDescriptor.getInitialStateKey?.()
+                        ?? convertibleDescriptor.id,
+                    sourceParams: existingRuntime?.sourceParams,
+                    sourceTabId: existingRuntime?.sourceTabId,
+                },
+            }));
         }
 
         const activityId = activityIdOf(targetPanel);
@@ -1484,6 +2209,8 @@ export function DockviewLayout({
     const panelRenderContext: PanelRenderContext = {
         activeTabId,
         dockviewApi,
+        hostPanelId: null,
+        convertibleView: null,
         openTab,
         openFile: async ({ relativePath, contentOverride, preferredOpenerId }) => {
             await openFileWithResolver({
@@ -1496,6 +2223,9 @@ export function DockviewLayout({
         },
         closeTab,
         setActiveTab,
+        activatePanel: (panelId: string) => {
+            activatePanelById(panelId);
+        },
         requestMoveFileToDirectory: (relativePath: string) => {
             openMoveFileDirectoryModalByPath(relativePath);
         },
@@ -1651,7 +2381,28 @@ export function DockviewLayout({
                             tabIndex={-1}
                             style={{ outline: "none" }}
                         >
-                            {panel.render(panelRenderContext)}
+                            {panel.render({
+                                ...panelRenderContext,
+                                hostPanelId: panel.id,
+                                convertibleView: (() => {
+                                    const descriptor = convertibleByPanelId.get(panel.id);
+                                    if (!descriptor) {
+                                        return null;
+                                    }
+
+                                    const runtime = getConvertibleRuntimeState(descriptor.id);
+                                    return {
+                                        descriptorId: descriptor.id,
+                                        mode: "panel" as const,
+                                        panelId: panel.id,
+                                        stateKey: runtime?.stateKey
+                                            ?? descriptor.getInitialStateKey?.()
+                                            ?? descriptor.id,
+                                        sourceParams: runtime?.sourceParams,
+                                        sourceTabId: runtime?.sourceTabId,
+                                    } satisfies ConvertiblePanelRenderState;
+                                })(),
+                            })}
                         </div>
                     ),
                 ]),
@@ -1672,7 +2423,28 @@ export function DockviewLayout({
                             tabIndex={-1}
                             style={{ outline: "none" }}
                         >
-                            {panel.render(panelRenderContext)}
+                            {panel.render({
+                                ...panelRenderContext,
+                                hostPanelId: panel.id,
+                                convertibleView: (() => {
+                                    const descriptor = convertibleByPanelId.get(panel.id);
+                                    if (!descriptor) {
+                                        return null;
+                                    }
+
+                                    const runtime = getConvertibleRuntimeState(descriptor.id);
+                                    return {
+                                        descriptorId: descriptor.id,
+                                        mode: "panel" as const,
+                                        panelId: panel.id,
+                                        stateKey: runtime?.stateKey
+                                            ?? descriptor.getInitialStateKey?.()
+                                            ?? descriptor.id,
+                                        sourceParams: runtime?.sourceParams,
+                                        sourceTabId: runtime?.sourceTabId,
+                                    } satisfies ConvertiblePanelRenderState;
+                                })(),
+                            })}
                         </div>
                     ),
                 ]),
@@ -1692,6 +2464,12 @@ export function DockviewLayout({
      * @param activityId 被点击的活动项 ID。
      */
     const handleActivityItemClick = (activityId: string): void => {
+        const activityDescriptor = activityDescriptorById.get(activityId);
+        if (activityDescriptor?.type === "callback") {
+            activityDescriptor.onActivate(panelRenderContext);
+            return;
+        }
+
         const panel = panels.find((candidate) => activityIdOf(candidate) === activityId);
 
         if (panel?.onActivityClick) {
@@ -1707,9 +2485,19 @@ export function DockviewLayout({
 
         setActiveActivityId(activityId);
         setIsLeftSidebarVisible(true);
-        if (panel) {
-            setActivePanelId(panel.id);
-        }
+        setActivePanelId(() => {
+            const candidatePanels = leftPanels.filter((item) => activityIdOf(item) === activityId);
+            if (candidatePanels.length === 0) {
+                return panel?.id ?? null;
+            }
+
+            const rememberedPanelId = lastActiveLeftPanelByActivityRef.current.get(activityId);
+            if (rememberedPanelId && candidatePanels.some((item) => item.id === rememberedPanelId)) {
+                return rememberedPanelId;
+            }
+
+            return candidatePanels[0]?.id ?? panel?.id ?? null;
+        });
     };
 
     /**
@@ -1946,6 +2734,12 @@ export function DockviewLayout({
             return;
         }
 
+        const activityDescriptor = activityDescriptorById.get(item.id);
+        if (activityDescriptor?.type === "callback") {
+            activityDescriptor.onActivate(panelRenderContext);
+            return;
+        }
+
         const panel = panels.find((p) => activityIdOf(p) === item.id);
         if (panel?.onActivityClick) {
             panel.onActivityClick(panelRenderContext);
@@ -2120,9 +2914,23 @@ export function DockviewLayout({
      */
     const handleEmptyRightSidebarDragOver = (e: React.DragEvent<HTMLDivElement>): void => {
         const paneData = getPaneData();
-        if (!paneData || !panelById.has(paneData.paneId)) {
+        if (paneData && panelById.has(paneData.paneId)) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            setIsEmptyRightSidebarDragOver(true);
             return;
         }
+
+        const dockviewTransfer = getPanelData();
+        if (!dockviewTransfer || !dockviewTransfer.panelId) {
+            return;
+        }
+
+        const sourceDockPanel = dockviewApiRef.current?.getPanel(dockviewTransfer.panelId);
+        if (!sourceDockPanel || !convertibleByTabComponentId.has(sourceDockPanel.view.contentComponent)) {
+            return;
+        }
+
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         setIsEmptyRightSidebarDragOver(true);
@@ -2141,6 +2949,13 @@ export function DockviewLayout({
     const handleEmptyRightSidebarDrop = (e: React.DragEvent<HTMLDivElement>): void => {
         e.preventDefault();
         setIsEmptyRightSidebarDragOver(false);
+
+        if (convertDockviewTabToPanel({
+            targetPosition: "right",
+            emptyTarget: true,
+        })) {
+            return;
+        }
 
         const paneData = getPaneData();
         if (!paneData || !panelById.has(paneData.paneId)) {
@@ -2223,6 +3038,7 @@ export function DockviewLayout({
     useEffect(
         () => () => {
             rightUnhandledDragDisposeRef.current?.dispose();
+            dockUnhandledDragDisposeRef.current?.dispose();
         },
         [],
     );
@@ -2260,6 +3076,11 @@ export function DockviewLayout({
     const handleReady = (event: DockviewReadyEvent): void => {
         const api = event.api;
         setDockviewApi(api);
+
+        dockUnhandledDragDisposeRef.current?.dispose();
+        dockUnhandledDragDisposeRef.current = api.onUnhandledDragOverEvent((dragEvent) => {
+            handleDockviewUnhandledDragOver(dragEvent);
+        });
 
         api.onDidActivePanelChange((panel) => {
             setActiveTabId(panel?.id ?? null);
@@ -2385,14 +3206,28 @@ export function DockviewLayout({
                     }
                 >
                     {visibleLeftPanels.length > 0 ? (
-                        <PaneviewReact
-                            className="dockview-theme-abyss sidebar-paneview-container"
-                            components={leftPaneComponents}
-                            onReady={handleLeftPaneReady}
-                            onDidDrop={(event) => {
-                                handleCrossContainerDrop("left", event);
+                        <div
+                            className={`sidebar-paneview-drop-surface${isCollapsedLeftSidebarDragOver ? " drag-over" : ""}`}
+                            data-testid="left-sidebar-collapsed-drop-surface"
+                            onDragOver={(e) => {
+                                handleCollapsedSidebarSurfaceDragOver("left", e);
                             }}
-                        />
+                            onDragLeave={(e) => {
+                                handleCollapsedSidebarSurfaceDragLeave("left", e);
+                            }}
+                            onDrop={(e) => {
+                                handleCollapsedSidebarSurfaceDrop("left", e);
+                            }}
+                        >
+                            <PaneviewReact
+                                className="dockview-theme-abyss sidebar-paneview-container"
+                                components={leftPaneComponents}
+                                onReady={handleLeftPaneReady}
+                                onDidDrop={(event) => {
+                                    handleCrossContainerDrop("left", event);
+                                }}
+                            />
+                        </div>
                     ) : (
                         /* 该 activity 下暂无左侧面板时显示空状态占位，支持拖入面板 */
                         <div
@@ -2414,6 +3249,9 @@ export function DockviewLayout({
                         className="dockview-theme-abyss main-dockview"
                         components={dockviewComponents}
                         onReady={handleReady}
+                        onDidDrop={(event) => {
+                            void convertPanePanelToTab(event);
+                        }}
                     />
                 </div>
             </main>
@@ -2440,14 +3278,28 @@ export function DockviewLayout({
                     }
                 >
                     {visibleRightPanels.length > 0 ? (
-                        <PaneviewReact
-                            className="dockview-theme-abyss sidebar-paneview-container"
-                            components={rightPaneComponents}
-                            onReady={handleRightPaneReady}
-                            onDidDrop={(event) => {
-                                handleCrossContainerDrop("right", event);
+                        <div
+                            className={`sidebar-paneview-drop-surface${isCollapsedRightSidebarDragOver ? " drag-over" : ""}`}
+                            data-testid="right-sidebar-collapsed-drop-surface"
+                            onDragOver={(e) => {
+                                handleCollapsedSidebarSurfaceDragOver("right", e);
                             }}
-                        />
+                            onDragLeave={(e) => {
+                                handleCollapsedSidebarSurfaceDragLeave("right", e);
+                            }}
+                            onDrop={(e) => {
+                                handleCollapsedSidebarSurfaceDrop("right", e);
+                            }}
+                        >
+                            <PaneviewReact
+                                className="dockview-theme-abyss sidebar-paneview-container"
+                                components={rightPaneComponents}
+                                onReady={handleRightPaneReady}
+                                onDidDrop={(event) => {
+                                    handleCrossContainerDrop("right", event);
+                                }}
+                            />
+                        </div>
                     ) : (
                         /* 右侧栏暂无面板时显示空状态占位，支持拖入面板 */
                         <div

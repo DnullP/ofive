@@ -4,6 +4,7 @@
 //! WikiLink 解析、图谱构建、快速切换搜索、反向链接与中文分词命令。
 
 mod backlinks;
+mod frontmatter_query;
 mod fs_helpers;
 mod graph;
 mod markdown_ast;
@@ -46,6 +47,7 @@ macro_rules! timed_command {
 }
 
 pub use backlinks::get_backlinks_for_file_in_root;
+pub use frontmatter_query::query_vault_markdown_frontmatter_in_root;
 pub use graph::get_current_vault_markdown_graph_in_root;
 pub use markdown_ast::get_vault_markdown_ast_in_root;
 pub use markdown_ast::parse_markdown_to_ast;
@@ -417,6 +419,18 @@ pub fn get_vault_markdown_outline(
     timed_command!(
         "get_vault_markdown_outline",
         outline::get_vault_markdown_outline(relative_path, state)
+    )
+}
+
+#[tauri::command]
+pub fn query_vault_markdown_frontmatter(
+    field_name: String,
+    field_value: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<FrontmatterQueryResponse, String> {
+    timed_command!(
+        "query_vault_markdown_frontmatter",
+        frontmatter_query::query_vault_markdown_frontmatter(field_name, field_value, state)
     )
 }
 

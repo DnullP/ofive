@@ -38,6 +38,7 @@ const en = {
         homeDescription: "Main area powered by Dockview React adapter, supports pluggable tab components.",
         homeTabTitle: "Home",
         explorer: "Explorer",
+        calendar: "Calendar",
         knowledgeGraph: "Knowledge Graph",
         graphPanelHint: "Click the graph icon in the activity bar to open Knowledge Graph Tab.",
         searchPanel: "Search",
@@ -182,6 +183,28 @@ const en = {
         loadSettingsFailed: "Failed to load graph settings",
         saveSettingsFailed: "Failed to save graph settings",
         resetSettingsFailed: "Failed to reset graph settings",
+    },
+
+    /* ==================== Calendar ==================== */
+    calendar: {
+        title: "Calendar",
+        description: "Group notes by frontmatter.date in the current vault and create daily notes.",
+        sourceHint: "Data comes from Markdown notes in the current vault that contain a frontmatter.date field.",
+        loading: "Loading notes with frontmatter.date...",
+        loadFailed: "Load failed: {{message}}",
+        noVault: "No vault is currently open.",
+        noDateNotes: "No notes with frontmatter.date were found in the current vault.",
+        previousMonth: "Previous Month",
+        nextMonth: "Next Month",
+        today: "Today",
+        openCommand: "Open Calendar",
+        createDailyNote: "Create Daily Note",
+        openDailyNote: "Open Daily Note",
+        notesForDay: "Notes for {{day}}",
+        notesForDayCount: "{{count}} notes",
+        notesForDayEmpty: "No notes match frontmatter.date for this day yet.",
+        clickDayHint: "Click a day to expand the note list for that date.",
+        dailyNoteCreated: "Created daily note {{path}}",
     },
 
     /* ==================== Settings ==================== */

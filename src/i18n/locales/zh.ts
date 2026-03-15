@@ -48,6 +48,7 @@ const zh = {
         homeDescription: "主区域由 dockview 官方 React 适配驱动，支持可插拔的 tab 组件。",
         homeTabTitle: "首页",
         explorer: "资源管理器",
+        calendar: "日历",
         knowledgeGraph: "知识图谱",
         graphPanelHint: "点击活动栏图谱图标打开知识图谱 Tab。",
         searchPanel: "搜索",
@@ -192,6 +193,28 @@ const zh = {
         loadSettingsFailed: "加载图谱设置失败",
         saveSettingsFailed: "保存图谱设置失败",
         resetSettingsFailed: "重置图谱设置失败",
+    },
+
+    /* ==================== 日历 ==================== */
+    calendar: {
+        title: "日历",
+        description: "按 frontmatter.date 聚合当前仓库中的笔记，并支持创建每日笔记。",
+        sourceHint: "数据来自当前仓库中带有 frontmatter.date 字段的 Markdown 笔记。",
+        loading: "正在加载带有日期 frontmatter 的笔记...",
+        loadFailed: "加载失败：{{message}}",
+        noVault: "当前尚未打开仓库。",
+        noDateNotes: "当前仓库中没有包含 frontmatter.date 的笔记。",
+        previousMonth: "上个月",
+        nextMonth: "下个月",
+        today: "今天",
+        openCommand: "打开日历",
+        createDailyNote: "创建每日笔记",
+        openDailyNote: "打开每日笔记",
+        notesForDay: "{{day}} 的笔记",
+        notesForDayCount: "共 {{count}} 篇",
+        notesForDayEmpty: "这一天还没有匹配 frontmatter.date 的笔记。",
+        clickDayHint: "点击某一天可展开当日笔记列表。",
+        dailyNoteCreated: "已创建每日笔记 {{path}}",
     },
 
     /* ==================== 设置 ==================== */

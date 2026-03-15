@@ -214,3 +214,29 @@ pub struct ReadMarkdownAstResponse {
     /// Markdown AST 根节点。
     pub ast: MarkdownAstNode,
 }
+
+/// 对外返回的 frontmatter 查询命中条目。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrontmatterQueryMatchItem {
+    /// 命中文件相对路径（相对于 vault 根目录）。
+    pub relative_path: String,
+    /// 展示标题（默认取 frontmatter.title，其次文件名去后缀）。
+    pub title: String,
+    /// 命中的字段名。
+    pub matched_field_name: String,
+    /// 命中的字段值（已规范化为字符串数组）。
+    pub matched_field_values: Vec<String>,
+    /// 解析后的 frontmatter JSON 对象。
+    pub frontmatter: serde_json::Value,
+}
+
+/// 对外返回的 frontmatter 查询结果。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrontmatterQueryResponse {
+    /// 查询字段名。
+    pub field_name: String,
+    /// 命中条目列表。
+    pub matches: Vec<FrontmatterQueryMatchItem>,
+}

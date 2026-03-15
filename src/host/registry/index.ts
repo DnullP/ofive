@@ -29,6 +29,12 @@
  *   Overlay 注册：OverlayDescriptor, OverlayRenderContext,
  *                registerOverlay, unregisterOverlay, getOverlaysSnapshot,
  *                subscribeOverlays, useOverlays
+ *   可转化视图注册：ConvertibleViewDescriptor, ConvertibleViewMode,
+ *                ConvertibleViewTabState, registerConvertibleView,
+ *                unregisterConvertibleView, getConvertibleViewsSnapshot,
+ *                subscribeConvertibleViews, useConvertibleViews,
+ *                getConvertibleViewByPanelId, getConvertibleViewByTabComponentId,
+ *                buildConvertibleViewTabParams, readConvertibleViewTabState
  *   Sidebar Header Action 注册：SidebarHeaderActionDescriptor,
  *                SidebarHeaderActionContext, registerSidebarHeaderAction,
  *                unregisterSidebarHeaderAction, getSidebarHeaderActionsSnapshot,
@@ -81,6 +87,27 @@ export {
     useOverlays,
 } from "./overlayRegistry";
 export type { OverlayDescriptor, OverlayRenderContext } from "./overlayRegistry";
+
+/* ── 可转化视图注册 ── */
+export {
+    CONVERTIBLE_VIEW_TAB_PARAM_KEY,
+    registerConvertibleView,
+    unregisterConvertibleView,
+    getConvertibleViewsSnapshot,
+    subscribeConvertibleViews,
+    useConvertibleViews,
+    getConvertibleViewByPanelId,
+    getConvertibleViewByTabComponentId,
+    buildConvertibleViewTabParams,
+    readConvertibleViewTabState,
+} from "./convertibleViewRegistry";
+export type {
+    ConvertibleViewDescriptor,
+    ConvertibleViewMode,
+    ConvertibleViewTabState,
+    ConvertibleTabInstanceDefinition,
+    BuildConvertibleTabInstanceOptions,
+} from "./convertibleViewRegistry";
 
 /* ── Sidebar Header Action 注册 ── */
 export {

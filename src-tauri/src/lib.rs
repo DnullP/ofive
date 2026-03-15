@@ -44,6 +44,7 @@ pub use vault_commands::load_markdown_graph;
 pub use vault_commands::move_vault_directory_to_directory_in_root;
 pub use vault_commands::move_vault_markdown_file_to_directory_in_root;
 pub use vault_commands::parse_markdown_to_ast;
+pub use vault_commands::query_vault_markdown_frontmatter_in_root;
 pub use vault_commands::read_vault_binary_file_in_root;
 pub use vault_commands::read_vault_markdown_file_in_root;
 pub use vault_commands::rename_vault_directory_in_root;
@@ -199,7 +200,8 @@ pub fn run() {
             vault_commands::get_current_vault_config,
             vault_commands::save_current_vault_config,
             vault_commands::get_backlinks_for_file,
-            vault_commands::get_vault_markdown_outline
+            vault_commands::get_vault_markdown_outline,
+            vault_commands::query_vault_markdown_frontmatter
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

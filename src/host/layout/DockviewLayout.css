@@ -41,6 +41,22 @@
   height: 100%;
 }
 
+/* 侧栏 paneview 外层落点面：为全折叠时的空白区提供拖拽承载层。 */
+.sidebar-paneview-drop-surface {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* 全折叠空白区拖入高亮：提示整个空白区域都可释放。 */
+.sidebar-paneview-drop-surface.drag-over {
+  background-color: var(--accent-primary-soft-weak);
+  outline: 2px dashed var(--accent-primary);
+  outline-offset: -4px;
+  border-radius: 4px;
+}
+
 /* dockview 主题变量覆写：增强拖拽预高亮可见性 */
 .dockview-theme-abyss,
 .dv-dockview,

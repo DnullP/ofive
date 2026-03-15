@@ -12,6 +12,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import YAML from "yaml";
 import i18n from "../i18n";
 import { detectExcludedLineRanges, isLineExcluded } from "../utils/markdownBlockDetector";
 
@@ -158,6 +159,34 @@ export interface VaultMarkdownGraphResponse {
     nodes: VaultMarkdownGraphNode[];
     /** 图谱边 */
     edges: VaultMarkdownGraphEdge[];
+}
+
+/**
+ * @interface FrontmatterQueryMatchItem
+ * @description frontmatter 查询命中项。
+ */
+export interface FrontmatterQueryMatchItem {
+    /** 命中文件相对路径 */
+    relativePath: string;
+    /** 展示标题 */
+    title: string;
+    /** 命中的字段名 */
+    matchedFieldName: string;
+    /** 命中的字段值列表 */
+    matchedFieldValues: string[];
+    /** 解析后的 frontmatter 对象 */
+    frontmatter: Record<string, unknown>;
+}
+
+/**
+ * @interface FrontmatterQueryResponse
+ * @description frontmatter 查询响应。
+ */
+export interface FrontmatterQueryResponse {
+    /** 查询字段名 */
+    fieldName: string;
+    /** 命中项列表 */
+    matches: FrontmatterQueryMatchItem[];
 }
 
 /**
@@ -429,6 +458,133 @@ function normalizeMarkdownLinkTarget(target: string): string | null {
     }
 
     return normalized;
+}
+
+/**
+ * @function extractBrowserFallbackFrontmatterText
+ * @description 从浏览器回退模式的 Markdown 内容中提取文档开头的 frontmatter YAML 文本。
+ * @param content Markdown 原文。
+ * @returns frontmatter YAML 文本；不存在时返回 null。
+ */
+function extractBrowserFallbackFrontmatterText(content: string): string | null {
+    const lines = content.split("\n");
+    if ((lines[0] ?? "").trimEnd() !== "---") {
+        return null;
+    }
+
+    for (let index = 1; index < lines.length; index += 1) {
+        if ((lines[index] ?? "").trimEnd() === "---") {
+            return lines.slice(1, index).join("\n");
+        }
+    }
+
+    return null;
+}
+
+/**
+ * @function toBrowserFallbackFrontmatterMatchValues
+ * @description 将浏览器回退模式下的 frontmatter 字段值规范化为字符串数组。
+ * @param value frontmatter 字段值。
+ * @returns 规范化后的字符串数组。
+ */
+function toBrowserFallbackFrontmatterMatchValues(value: unknown): string[] {
+    if (Array.isArray(value)) {
+        return value.flatMap((item) => toBrowserFallbackFrontmatterMatchValues(item));
+    }
+
+    if (value instanceof Date) {
+        return [value.toISOString().slice(0, 10)];
+    }
+
+    if (value === null) {
+        return ["null"];
+    }
+
+    if (typeof value === "string") {
+        const normalized = value.trim();
+        return normalized ? [normalized] : [];
+    }
+
+    if (typeof value === "number" || typeof value === "boolean") {
+        return [String(value)];
+    }
+
+    return [];
+}
+
+/**
+ * @function buildBrowserFallbackFrontmatterQuery
+ * @description 在浏览器回退模式下查询具有指定 frontmatter 字段的 Markdown 笔记。
+ * @param fieldName 查询字段名。
+ * @param fieldValue 可选字段值过滤。
+ * @returns 查询响应。
+ */
+function buildBrowserFallbackFrontmatterQuery(
+    fieldName: string,
+    fieldValue?: string,
+): FrontmatterQueryResponse {
+    const normalizedFieldName = fieldName.trim();
+    const normalizedFieldValue = fieldValue?.trim();
+    const matches: FrontmatterQueryMatchItem[] = [];
+
+    Object.entries(BROWSER_MOCK_MARKDOWN_CONTENTS).forEach(([relativePath, content]) => {
+        const frontmatterText = extractBrowserFallbackFrontmatterText(content);
+        if (!frontmatterText) {
+            return;
+        }
+
+        try {
+            const parsed = YAML.parse(frontmatterText);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+                return;
+            }
+
+            const frontmatterRecord = parsed as Record<string, unknown>;
+            const matchedValue = frontmatterRecord[normalizedFieldName];
+            if (matchedValue === undefined) {
+                return;
+            }
+
+            const matchedFieldValues = toBrowserFallbackFrontmatterMatchValues(matchedValue);
+            if (matchedFieldValues.length === 0) {
+                console.warn("[vault-api] browser fallback frontmatter field resolved empty", {
+                    relativePath,
+                    fieldName: normalizedFieldName,
+                });
+                return;
+            }
+
+            if (normalizedFieldValue && !matchedFieldValues.includes(normalizedFieldValue)) {
+                return;
+            }
+
+            const titleFromFrontmatter =
+                typeof frontmatterRecord.title === "string" && frontmatterRecord.title.trim()
+                    ? frontmatterRecord.title.trim()
+                    : null;
+
+            matches.push({
+                relativePath,
+                title:
+                    titleFromFrontmatter ??
+                    relativePath.split("/").pop()?.replace(/\.(md|markdown)$/i, "") ??
+                    relativePath,
+                matchedFieldName: normalizedFieldName,
+                matchedFieldValues,
+                frontmatter: frontmatterRecord,
+            });
+        } catch (error) {
+            console.warn("[vault-api] browser fallback frontmatter parse failed", {
+                relativePath,
+                message: error instanceof Error ? error.message : String(error),
+            });
+        }
+    });
+
+    return {
+        fieldName: normalizedFieldName,
+        matches,
+    };
 }
 
 /**
@@ -989,6 +1145,39 @@ export async function getVaultMarkdownOutline(relativePath: string): Promise<Out
     return invoke<OutlineResponse>("get_vault_markdown_outline", {
         relativePath,
     });
+}
+
+/**
+ * @function queryVaultMarkdownFrontmatter
+ * @description 查询当前 vault 中具有指定 frontmatter 字段的 Markdown 笔记。
+ * @param fieldName frontmatter 字段名，如 `date`。
+ * @param fieldValue 可选字段值；为空时匹配所有包含该字段的笔记。
+ * @returns 查询响应。
+ */
+export async function queryVaultMarkdownFrontmatter(
+    fieldName: string,
+    fieldValue?: string,
+): Promise<FrontmatterQueryResponse> {
+    if (!isTauriRuntime()) {
+        return buildBrowserFallbackFrontmatterQuery(fieldName, fieldValue);
+    }
+
+    console.info("[vault-api] queryVaultMarkdownFrontmatter invoke start", {
+        fieldName,
+        fieldValue: fieldValue ?? null,
+    });
+
+    const response = await invoke<FrontmatterQueryResponse>("query_vault_markdown_frontmatter", {
+        fieldName,
+        fieldValue: fieldValue ?? null,
+    });
+
+    console.info("[vault-api] queryVaultMarkdownFrontmatter invoke success", {
+        fieldName,
+        matchCount: response.matches.length,
+    });
+
+    return response;
 }
 
 /**

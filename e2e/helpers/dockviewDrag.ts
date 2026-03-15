@@ -17,6 +17,17 @@
 import type { Locator, Page } from "@playwright/test";
 
 /**
+ * @interface DockviewDragTargetOffset
+ * @description 拖放目标点在目标元素中的归一化偏移。
+ */
+export interface DockviewDragTargetOffset {
+    /** 水平偏移：0 为最左，1 为最右。 */
+    x: number;
+    /** 垂直偏移：0 为最上，1 为最下。 */
+    y: number;
+}
+
+/**
  * 在 dockview PaneviewReact 面板之间执行 HTML5 拖拽。
  *
  * 通过 `page.evaluate` 在浏览器上下文中派发一整套 DragEvent，
@@ -32,6 +43,7 @@ export async function dockviewDragPanel(
     page: Page,
     source: Locator,
     target: Locator,
+    targetOffset: DockviewDragTargetOffset = { x: 0.5, y: 0.5 },
 ): Promise<void> {
     /* 确保两个元素可见 */
     await source.waitFor({ state: "visible" });
@@ -46,8 +58,8 @@ export async function dockviewDragPanel(
     /* 计算中心点坐标 */
     const srcX = srcBox.x + srcBox.width / 2;
     const srcY = srcBox.y + srcBox.height / 2;
-    const tgtX = tgtBox.x + tgtBox.width / 2;
-    const tgtY = tgtBox.y + tgtBox.height / 2;
+    const tgtX = tgtBox.x + tgtBox.width * targetOffset.x;
+    const tgtY = tgtBox.y + tgtBox.height * targetOffset.y;
 
     /* 在浏览器上下文中派发 HTML5 DragEvent 序列 */
     await page.evaluate(
