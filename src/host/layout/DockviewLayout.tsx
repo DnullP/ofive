@@ -1309,7 +1309,7 @@ export function DockviewLayout({
     /** 全折叠侧栏空白区 dragleave：清除高亮。 */
     const handleCollapsedSidebarSurfaceDragLeave = (
         targetPosition: PanelPosition,
-        e: React.DragEvent<HTMLDivElement>,
+        _e: React.DragEvent<HTMLDivElement>,
     ): void => {
         clearCollapsedSidebarDragOver(targetPosition);
     };

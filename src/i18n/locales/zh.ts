@@ -213,7 +213,7 @@ const zh = {
         notesForDay: "{{day}} 的笔记",
         notesForDayCount: "共 {{count}} 篇",
         notesForDayEmpty: "这一天还没有匹配 frontmatter.date 的笔记。",
-        clickDayHint: "点击某一天可展开当日笔记列表。",
+        clickDayHint: "点击某一天可查看当日笔记列表。",
         dailyNoteCreated: "已创建每日笔记 {{path}}",
     },
 

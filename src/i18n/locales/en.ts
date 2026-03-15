@@ -203,7 +203,7 @@ const en = {
         notesForDay: "Notes for {{day}}",
         notesForDayCount: "{{count}} notes",
         notesForDayEmpty: "No notes match frontmatter.date for this day yet.",
-        clickDayHint: "Click a day to expand the note list for that date.",
+        clickDayHint: "Click a day to view notes for that date.",
         dailyNoteCreated: "Created daily note {{path}}",
     },
 

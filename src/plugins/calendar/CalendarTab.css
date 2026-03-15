@@ -8,12 +8,13 @@
     background: radial-gradient(circle at top left, var(--bg-hover), transparent 48%), var(--bg-primary);
     color: var(--text-primary);
     overflow: auto;
+    container-type: inline-size;
 }
 
 /* Panel 模式根容器：降低间距与内边距，以适配窄侧栏。 */
 .calendar-tab--panel {
-    gap: 12px;
-    padding: 12px;
+    gap: 10px;
+    padding: 10px;
 }
 
 /* 日历头部：容纳标题说明和月份切换动作。 */
@@ -27,6 +28,7 @@
 /* Panel 模式头部：改为纵向堆叠，适配窄宽度。 */
 .calendar-tab--panel .calendar-tab__header {
     flex-direction: column;
+    gap: 10px;
 }
 
 /* 头部标题组：垂直排列标题与说明。 */
@@ -43,11 +45,22 @@
     font-weight: 700;
 }
 
+/* Panel 模式主标题：略微收紧字号，避免占用过多垂直空间。 */
+.calendar-tab--panel .calendar-tab__title {
+    font-size: 18px;
+}
+
 /* 说明文本：提示数据来源和交互方式。 */
 .calendar-tab__description {
     margin: 0;
     font-size: 13px;
     color: var(--text-secondary);
+}
+
+/* Panel 模式说明文本：限制行宽并收紧字号，优先保留操作区空间。 */
+.calendar-tab--panel .calendar-tab__description {
+    max-width: 30ch;
+    font-size: 12px;
 }
 
 /* 月份导航区：排列上月、今天、下月按钮与月份标题。 */
@@ -61,7 +74,10 @@
 
 /* Panel 模式月份导航：左对齐并允许更紧凑地换行。 */
 .calendar-tab--panel .calendar-tab__month-nav {
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
 }
 
 /* 导航按钮：统一月历操作按钮的尺寸、边框和悬浮态。 */
@@ -81,7 +97,12 @@
 
 /* Panel 模式导航按钮：缩小内边距。 */
 .calendar-tab--panel .calendar-tab__nav-button {
-    padding: 6px 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-width: 0;
+    padding: 6px 8px;
 }
 
 /* 月份标签：展示当前正在查看的年月。 */
@@ -94,7 +115,11 @@
 
 /* Panel 模式月份标签：缩短最小宽度避免换行挤压。 */
 .calendar-tab--panel .calendar-tab__month-label {
-    min-width: 132px;
+    order: -1;
+    grid-column: 1 / -1;
+    min-width: 0;
+    text-align: left;
+    font-size: 18px;
 }
 
 /* 状态卡片：用于加载、错误和空状态提示。 */
@@ -118,7 +143,30 @@
 
 /* Panel 模式主体：缩小区块间距。 */
 .calendar-tab--panel .calendar-tab__body {
+    gap: 10px;
+    overflow: visible;
+}
+
+/* 月历面板：承载星期标题与日期网格，形成独立视觉区块。 */
+.calendar-tab__calendar-surface {
+    display: flex;
+    flex-direction: column;
     gap: 12px;
+    padding: 16px;
+    position: relative;
+    border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+    border-radius: 18px;
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 92%, transparent), var(--bg-secondary)),
+        radial-gradient(circle at top center, var(--accent-primary-soft-weak), transparent 60%);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+/* Panel 模式月历面板：压缩内边距与圆角，适配侧栏宽度。 */
+.calendar-tab--panel .calendar-tab__calendar-surface {
+    gap: 8px;
+    padding: 10px;
+    border-radius: 14px;
 }
 
 /* 星期标题行：7 列网格承载周一到周日标题。 */
@@ -128,12 +176,22 @@
     gap: 8px;
 }
 
+/* Panel 模式星期标题行：进一步缩小列间距。 */
+.calendar-tab--panel .calendar-tab__weekdays {
+    gap: 4px;
+}
+
 /* 星期标题单元：展示周标题并与日期网格对齐。 */
 .calendar-tab__weekday {
     font-size: 12px;
     font-weight: 600;
     color: var(--text-secondary);
     text-align: center;
+}
+
+/* Panel 模式星期标题：收紧字号，避免标题挤压日期单元。 */
+.calendar-tab--panel .calendar-tab__weekday {
+    font-size: 11px;
 }
 
 /* 日期网格：固定 7 列，用于渲染 6 周月历。 */
@@ -146,7 +204,7 @@
 
 /* Panel 模式日期网格：减小间距以容纳窄栏。 */
 .calendar-tab--panel .calendar-tab__grid {
-    gap: 6px;
+    gap: 4px;
 }
 
 /* 日期按钮：单天单元格，支持点击展开与右键创建每日笔记。 */
@@ -154,6 +212,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
+    justify-content: space-between;
     gap: 8px;
     min-height: 88px;
     padding: 10px;
@@ -167,9 +226,20 @@
 
 /* Panel 模式日期单元：降低高度与内边距，突出数字和数量。 */
 .calendar-tab--panel .calendar-tab__day {
-    min-height: 64px;
-    gap: 6px;
-    padding: 8px;
+    position: relative;
+    width: 100%;
+    max-width: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    justify-self: center;
+    gap: 0;
+    padding: 0;
+    border-radius: 999px;
+    box-sizing: border-box;
+    text-align: center;
 }
 
 /* 日期按钮悬浮态：提示单元格可点击。 */
@@ -202,6 +272,21 @@
 /* Panel 模式日期数字：略微缩小字号。 */
 .calendar-tab--panel .calendar-tab__day-number {
     font-size: 15px;
+    line-height: 1;
+}
+
+/* Panel 模式含笔记日期：通过底色和边框提升信息密度，不再显示数量。 */
+.calendar-tab--panel .calendar-tab__day--has-notes {
+    background: color-mix(in srgb, var(--accent-primary-soft) 78%, var(--bg-secondary));
+    border-color: color-mix(in srgb, var(--accent-primary) 32%, var(--border-color));
+}
+
+/* Panel 模式已选中日期：强化边框与阴影，作为当前浮窗锚点。 */
+.calendar-tab--panel .calendar-tab__day--selected {
+    border-color: color-mix(in srgb, var(--accent-primary) 72%, var(--border-color));
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--accent-primary) 22%, transparent),
+        0 6px 14px color-mix(in srgb, var(--accent-primary-soft) 48%, transparent);
 }
 
 /* 日期附加信息区：显示当日笔记数量和提示。 */
@@ -210,6 +295,11 @@
     flex-direction: column;
     gap: 4px;
     width: 100%;
+}
+
+/* Panel 模式日期附加信息：将数量贴齐右下，提升窄列可读性。 */
+.calendar-tab--panel .calendar-tab__day-meta {
+    display: none;
 }
 
 /* 笔记数量徽标：显示该日期关联笔记数量。 */
@@ -226,6 +316,16 @@
     font-weight: 600;
 }
 
+/* Panel 模式数量徽标：进一步压缩尺寸，避免覆盖日期主体。 */
+.calendar-tab--panel .calendar-tab__day-count {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    min-width: 22px;
+    padding: 1px 6px;
+    font-size: 11px;
+}
+
 /* 日期键文本：展示 YYYY-MM-DD，便于识别跨月单元格。 */
 .calendar-tab__day-key {
     font-size: 11px;
@@ -235,6 +335,113 @@
 /* Panel 模式日期键：隐藏长日期字符串，避免横向拥挤。 */
 .calendar-tab--panel .calendar-tab__day-key {
     display: none;
+}
+
+/* Panel 浮动笔记窗：锚定到选中日期附近显示，不再占用下半区布局。 */
+.calendar-tab__panel-popover {
+    position: absolute;
+    z-index: 3;
+    width: min(280px, calc(100% - 16px));
+    max-height: 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 18%, var(--border-color));
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg-primary) 94%, transparent);
+    box-shadow: var(--overlay-shadow-strong);
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px) scale(0.98);
+    transform-origin: top left;
+    transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+/* 已定位后的 panel 浮动笔记窗：激活交互并显式显示。 */
+.calendar-tab__panel-popover.is-positioned {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+
+/* 向上弹出时的 panel 浮窗：切换动画原点便于视觉跟随锚点。 */
+.calendar-tab__panel-popover[data-placement="above"] {
+    transform-origin: bottom left;
+}
+
+/* Panel 浮窗标题栏：排列日期标题组与关闭按钮。 */
+.calendar-tab__panel-popover-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+/* Panel 浮窗标题组：纵向堆叠日期标题与数量。 */
+.calendar-tab__panel-popover-heading-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+/* Panel 浮窗标题：显示当前选中日期。 */
+.calendar-tab__panel-popover-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+/* Panel 浮窗副标题：显示命中笔记数量。 */
+.calendar-tab__panel-popover-subtitle {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Panel 浮窗关闭按钮：提供轻量关闭入口，不打断锚定布局。 */
+.calendar-tab__panel-popover-close {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+/* Panel 浮窗关闭按钮悬浮态：明确可点击反馈。 */
+.calendar-tab__panel-popover-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* Panel 浮窗空状态：在无笔记时保持较高信息密度与可读性。 */
+.calendar-tab__panel-popover-empty {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+/* Panel 浮窗笔记列表：限制最大高度并允许滚动。 */
+.calendar-tab__panel-popover-note-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    overflow: auto;
+}
+
+/* Panel 浮窗笔记按钮：进一步压缩卡片高度，适应小窗口信息密度。 */
+.calendar-tab__note-button--panel-popover {
+    padding: 9px 10px;
+    border-radius: 10px;
 }
 
 /* 明细区域：承载当前选中日期的笔记列表。 */
@@ -256,6 +463,7 @@
     min-height: 0;
     flex: 1;
     padding: 12px;
+    border-radius: 14px;
 }
 
 /* 明细标题行：排列选中日期标题与数量。 */
@@ -265,6 +473,12 @@
     justify-content: space-between;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+/* Panel 模式明细标题行：改为纵向堆叠，避免副标题挤压主标题。 */
+.calendar-tab--panel .calendar-tab__details-header {
+    align-items: flex-start;
+    gap: 4px;
 }
 
 /* 明细标题：展示当前展开日期。 */
@@ -331,6 +545,72 @@
 /* Panel 模式笔记按钮：缩小卡片内边距。 */
 .calendar-tab--panel .calendar-tab__note-button {
     padding: 10px;
+}
+
+/* Panel 模式笔记标题：微调字号避免列表卡片过高。 */
+.calendar-tab--panel .calendar-tab__note-title {
+    font-size: 13px;
+}
+
+/* Panel 模式笔记路径：进一步降低层级，避免长路径抢占空间。 */
+.calendar-tab--panel .calendar-tab__note-path {
+    font-size: 11px;
+}
+
+/* 宽容器 tab 模式：让月历与详情并排，充分利用主编辑区横向空间。 */
+@container (min-width: 980px) {
+    .calendar-tab--tab .calendar-tab__body {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.95fr);
+        align-items: stretch;
+    }
+
+    .calendar-tab--tab .calendar-tab__calendar-surface {
+        min-height: 0;
+    }
+
+    .calendar-tab--tab .calendar-tab__details {
+        min-height: 0;
+        flex: 1 1 auto;
+    }
+}
+
+/* 超窄 panel 容器：进一步压缩日期格与操作按钮，避免侧栏出现溢出。 */
+@container (max-width: 360px) {
+    .calendar-tab--panel .calendar-tab__month-nav {
+        gap: 6px;
+    }
+
+    .calendar-tab--panel .calendar-tab__nav-button {
+        padding: 6px;
+        font-size: 12px;
+    }
+
+    .calendar-tab--panel .calendar-tab__day {
+        max-width: 30px;
+        min-width: 30px;
+        min-height: 30px;
+        height: 30px;
+        padding: 0;
+    }
+
+    .calendar-tab--panel .calendar-tab__day-number {
+        font-size: 12px;
+    }
+
+    /* 超窄 panel 浮窗：进一步收紧宽度和内边距，避免遮挡过多日期。 */
+    .calendar-tab__panel-popover {
+        width: min(244px, calc(100% - 12px));
+        padding: 10px;
+    }
+
+    .calendar-tab--panel .calendar-tab__day-count {
+        right: 3px;
+        bottom: 3px;
+        min-width: 18px;
+        padding: 1px 5px;
+        font-size: 10px;
+    }
 }
 
 /* 笔记按钮悬浮态：提升可点击反馈。 */
