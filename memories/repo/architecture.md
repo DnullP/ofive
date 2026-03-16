@@ -1,6 +1,0 @@
-- Global overlays are registered through src/host/registry/overlayRegistry.ts and rendered centrally by src/host/layout/DockviewLayout.tsx.
-- quickSwitcher.open is now plugin-owned in src/plugins/quick-switcher/quickSwitcherPlugin.tsx rather than a builtin host command.
-- commandPalette.open is now plugin-owned in src/plugins/command-palette/commandPalettePlugin.tsx rather than a builtin host command.
-- MoveFileDirectoryModal remains host-owned, but its render path now also goes through overlayRegistry instead of being directly mounted in DockviewLayout.tsx.
-- New standalone modal-like features should prefer overlayRegistry before adding feature-specific state to DockviewLayout.
-- Sidebar header action buttons are plugin-extensible through src/host/registry/sidebarHeaderActionRegistry.ts and currently used by the file-tree activity header.
