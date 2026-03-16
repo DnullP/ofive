@@ -911,6 +911,7 @@ pub fn get_backlinks_for_file(
     vault_root: &Path,
     relative_path: &str,
 ) -> Result<Vec<BacklinkItem>, String> {
+    ensure_query_index_current(vault_root)?;
     let connection = open_index_for_read(vault_root)?;
 
     let mut statement = connection

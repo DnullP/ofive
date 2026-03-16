@@ -212,6 +212,10 @@ function normalizeSelectedVaultPath(selected: unknown): string | null {
  *   若路径无斜杠分隔则 prefix 为空。
  */
 function splitVaultDisplayPath(fullPath: string): [string, string] {
+    if (!fullPath || fullPath.trim().length === 0) {
+        return ["", ""];
+    }
+
     const normalized = fullPath.replace(/\\/g, "/").replace(/\/+$/, "");
     const lastSlash = normalized.lastIndexOf("/");
     if (lastSlash < 0) {
@@ -233,6 +237,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
     const { currentVaultPath, files, isLoadingTree, error } = useVaultState();
     const focusedArticle = useFocusedArticle();
     const [moveSelection, setMoveSelection] = useState<FileTreeItem[] | null>(null);
+    const [vaultPathPrefix, vaultPathRootName] = splitVaultDisplayPath(currentVaultPath);
 
     /**
      * @function resolveErrorMessage
@@ -709,6 +714,9 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
     return (
         <div className="vault-panel-root">
             {error ? <p className="vault-toolbar-error">{error}</p> : null}
+            {!error && !isLoadingTree && !currentVaultPath ? (
+                <p className="vault-toolbar-error">{t("vault.noVault")}</p>
+            ) : null}
 
             <FileTree
                 items={files}
@@ -776,14 +784,22 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                     }
                 }}
             >
-                {/* 前缀：可被 CSS 省略截断 */}
-                <span className="vault-separator-prefix">
-                    {splitVaultDisplayPath(currentVaultPath)[0]}
-                </span>
-                {/* 仓库根目录名：始终完整显示 */}
-                <span className="vault-separator-root">
-                    {splitVaultDisplayPath(currentVaultPath)[1]}
-                </span>
+                {currentVaultPath ? (
+                    <>
+                        {/* 前缀：可被 CSS 省略截断 */}
+                        <span className="vault-separator-prefix">
+                            {vaultPathPrefix}
+                        </span>
+                        {/* 仓库根目录名：始终完整显示 */}
+                        <span className="vault-separator-root">
+                            {vaultPathRootName}
+                        </span>
+                    </>
+                ) : (
+                    <span className="vault-separator-root">
+                        {t("vault.openVault")}
+                    </span>
+                )}
             </div>
         </div>
     );

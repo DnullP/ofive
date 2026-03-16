@@ -1414,7 +1414,7 @@ export function DockviewLayout({
     );
 
     useEffect(() => {
-        if (!currentVaultPath || !configState.backendConfig || !sidebarLayoutReadyRef.current) {
+        if (!currentVaultPath || !sidebarLayoutReadyRef.current) {
             return;
         }
 
@@ -2828,7 +2828,7 @@ export function DockviewLayout({
 
     // 为每个 dockview tab 组件包装 data-tab-component 属性容器，
     // 使焦点检测可通过 DOM 属性识别当前聚焦的标签类型
-    const dockviewComponents = useMemo<Record<string, (props: IDockviewPanelProps<Record<string, unknown>>) => ReactNode>>(
+    const dockviewComponents = useMemo<Record<string, React.FunctionComponent<IDockviewPanelProps<Record<string, unknown>>>>>(
         () => {
             const wrapTabComponent = (
                 componentKey: string,

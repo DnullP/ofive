@@ -25,10 +25,10 @@ import { isRememberLastVaultEnabled } from "./configStore";
 import i18n from "../../i18n";
 
 /**
- * @constant DEFAULT_VAULT_PATH
- * @description 默认仓库路径。
+ * @constant EMPTY_VAULT_PATH
+ * @description 未选择仓库时的空路径标记。
  */
-export const DEFAULT_VAULT_PATH = "/Users/kaiqiu/Documents/projects/rust/ofive";
+export const EMPTY_VAULT_PATH = "";
 
 /**
  * @constant LAST_VAULT_PATH_STORAGE_KEY
@@ -49,20 +49,20 @@ const TREE_REFRESH_EVENT_TYPES: VaultFsEventPayload["eventType"][] = [
 /**
  * @function readPersistedVaultPath
  * @description 从本地存储读取上次打开的仓库路径。
- * @returns 若存在有效路径则返回该路径，否则返回默认路径。
+ * @returns 若存在有效路径则返回该路径，否则返回空路径。
  */
 function readPersistedVaultPath(): string {
     if (!isRememberLastVaultEnabled()) {
-        return DEFAULT_VAULT_PATH;
+        return EMPTY_VAULT_PATH;
     }
 
     if (typeof window === "undefined") {
-        return DEFAULT_VAULT_PATH;
+        return EMPTY_VAULT_PATH;
     }
 
     const persisted = window.localStorage.getItem(LAST_VAULT_PATH_STORAGE_KEY);
     if (!persisted || persisted.trim().length === 0) {
-        return DEFAULT_VAULT_PATH;
+        return EMPTY_VAULT_PATH;
     }
 
     return persisted;
@@ -109,7 +109,7 @@ interface VaultState {
  * @description 维护 vault 相关前端状态，并提供状态订阅能力。
  *
  * @state
- *  - currentVaultPath - 当前打开目录 (string) [/Users/kaiqiu/Documents/projects/rust/ofive]
+ *  - currentVaultPath - 当前打开目录 (string) [""]
  *  - files - 当前目录下的 Markdown 文件树扁平列表 (FileTreeItem[]) [[]]
  *  - isLoadingTree - 文件树加载中状态 (boolean) [false]
  *  - backendReady - 当前 vault 是否已成功同步到后端 (boolean) [false]
@@ -264,6 +264,19 @@ class VaultStore {
      */
     async syncTreeByCurrentPath(): Promise<void> {
         const targetPath = this.state.currentVaultPath;
+        if (!targetPath || targetPath.trim().length === 0) {
+            this.state = {
+                ...this.state,
+                files: [],
+                isLoadingTree: false,
+                backendReady: false,
+                error: null,
+            };
+            this.emit();
+            console.info("[vault-store] syncTreeByCurrentPath skipped: no vault selected");
+            return;
+        }
+
         const requestId = ++this.requestVersion;
 
         this.setLoading(true);
@@ -406,6 +419,10 @@ export function useVaultTreeSync(): void {
     }, [currentPath]);
 
     useEffect(() => {
+        if (!currentPath || currentPath.trim().length === 0) {
+            return;
+        }
+
         let refreshTimer: number | null = null;
 
         const scheduleTreeRefresh = (): void => {

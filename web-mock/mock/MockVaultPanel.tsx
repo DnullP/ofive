@@ -1,28 +1,20 @@
 /**
- * @module test-resources/web/mock/MockVaultPanel
+ * @module web-mock/mock/MockVaultPanel
  * @description 前端 Mock 资源管理器面板：不依赖后端接口，使用内置样例文件列表与内容。
  * @dependencies
  *  - react
- *  - ../../../src/plugins/file-tree/panel/FileTree
- *  - ../../../src/host/layout/DockviewLayout
- *  - ../../../src/plugins/file-tree/panel/VaultPanel.css
+ *  - ../../src/plugins/file-tree/panel/FileTree
+ *  - ../../src/host/layout/DockviewLayout
+ *  - ../../src/plugins/file-tree/panel/VaultPanel.css
  */
 
 import { useMemo, type ReactNode } from "react";
-import { FileTree, type FileTreeItem } from "../../../src/plugins/file-tree/panel/FileTree";
-import type { TabInstanceDefinition } from "../../../src/host/layout/DockviewLayout";
-import "../../../src/plugins/file-tree/panel/VaultPanel.css";
+import { FileTree, type FileTreeItem } from "../../src/plugins/file-tree/panel/FileTree";
+import type { TabInstanceDefinition } from "../../src/host/layout/DockviewLayout";
+import "../../src/plugins/file-tree/panel/VaultPanel.css";
 
-/**
- * @constant MOCK_VAULT_PATH
- * @description Mock 页面显示用的仓库路径。
- */
 const MOCK_VAULT_PATH = "/mock/notes";
 
-/**
- * @constant NETWORK_SEGMENT_SAMPLE
- * @description 用户提供的测试文本，用于验证 Header/Bold 折叠效果。
- */
 const NETWORK_SEGMENT_SAMPLE = `---
 title: Network Segment
 category:
@@ -38,10 +30,6 @@ aliases:
 
 A **network segment** is a portion of a **computer network** . The nature and extent of a segment depends on the nature of the network and the device or devices used to interconnect end stations.`;
 
-/**
- * @constant LATEX_TEST_SAMPLE
- * @description LaTeX 语法渲染测试文本，包含行内公式、单行块级公式、多行块级公式和边界情况。
- */
 const LATEX_TEST_SAMPLE = `# LaTeX 渲染测试
 
 ## 1. 行内公式
@@ -92,31 +80,16 @@ $$
 错误的 LaTeX：$\\invalidcommand{test}$
 `;
 
-/**
- * @constant MOCK_FILE_CONTENTS
- * @description Mock 文件内容映射。
- */
 const MOCK_FILE_CONTENTS: Record<string, string> = {
     "test-resources/notes/network-segment.md": NETWORK_SEGMENT_SAMPLE,
     "test-resources/notes/latex-test.md": LATEX_TEST_SAMPLE,
     "test-resources/notes/guide.md": "# Guide\n\nThis is a mock markdown document.",
 };
 
-/**
- * @interface MockVaultPanelProps
- * @description Mock 资源管理器参数。
- */
 interface MockVaultPanelProps {
     openTab: (tab: TabInstanceDefinition) => void;
 }
 
-/**
- * @function createFileTab
- * @description 根据文件路径与内容创建编辑器 tab。
- * @param item 文件项。
- * @param content 文件内容。
- * @returns Tab 定义。
- */
 function createFileTab(item: FileTreeItem, content: string): TabInstanceDefinition {
     const fileName = item.path.split("/").pop() ?? item.path;
     return {
@@ -130,12 +103,6 @@ function createFileTab(item: FileTreeItem, content: string): TabInstanceDefiniti
     };
 }
 
-/**
- * @function MockVaultPanel
- * @description 渲染 Mock 资源管理器面板。
- * @param props 面板参数。
- * @returns React 节点。
- */
 export function MockVaultPanel(props: MockVaultPanelProps): ReactNode {
     const { openTab } = props;
 

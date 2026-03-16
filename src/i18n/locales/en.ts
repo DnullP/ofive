@@ -65,6 +65,7 @@ const en = {
         confirmDeleteSelection: "Confirm to delete these {{count}} items?",
         currentDirectory: "Current directory: ",
         openVault: "Open Vault",
+        noVault: "No vault is currently open. Please choose a directory first.",
         loadTreeFailed: "Failed to load vault tree",
     },
 

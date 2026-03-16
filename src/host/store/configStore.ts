@@ -646,21 +646,51 @@ class ConfigStore {
         recipe: (currentConfig: VaultConfig) => VaultConfig,
         options: UpdateBackendConfigOptions = {},
     ): Promise<VaultConfig> {
-        const loadedConfig = this.state.backendConfig;
-        if (!loadedConfig) {
-            const message = i18n.t("store.loadConfigFailed");
-            console.warn("[config-store] updateBackendConfig skipped: no backendConfig loaded", {
-                logLabel: options.logLabel ?? "unknown",
-            });
-            throw new Error(message);
+        const logLabel = options.logLabel ?? "unknown";
+        let currentConfig = this.state.backendConfig;
+
+        if (!currentConfig) {
+            if (!this.state.loadedVaultPath) {
+                const message = i18n.t("store.loadConfigFailed");
+                console.warn("[config-store] updateBackendConfig skipped: no vault context", {
+                    logLabel,
+                });
+                throw new Error(message);
+            }
+
+            try {
+                const rawConfig = await getCurrentVaultConfig();
+                const { nextConfig, featureSettings } = normalizeBackendConfig(rawConfig);
+                currentConfig = nextConfig;
+
+                this.state = {
+                    ...this.state,
+                    backendConfig: nextConfig,
+                    featureSettings,
+                    error: null,
+                };
+                this.emit();
+
+                console.info("[config-store] updateBackendConfig loaded missing backendConfig", {
+                    logLabel,
+                    vaultPath: this.state.loadedVaultPath,
+                });
+            } catch (error) {
+                const message = error instanceof Error ? error.message : i18n.t("store.loadConfigFailed");
+                console.warn("[config-store] updateBackendConfig skipped: unable to load backendConfig", {
+                    logLabel,
+                    message,
+                    vaultPath: this.state.loadedVaultPath,
+                });
+                throw error instanceof Error ? error : new Error(message);
+            }
         }
 
-        let currentConfig = loadedConfig;
         try {
             currentConfig = await getCurrentVaultConfig();
         } catch (error) {
             console.warn("[config-store] updateBackendConfig fallback to in-memory snapshot", {
-                logLabel: options.logLabel ?? "unknown",
+                logLabel,
                 message: error instanceof Error ? error.message : String(error),
             });
         }
@@ -679,14 +709,14 @@ class ConfigStore {
         try {
             await saveCurrentVaultConfig(nextConfig);
             console.info("[config-store] backend config saved", {
-                logLabel: options.logLabel ?? "unknown",
+                logLabel,
             });
             return nextConfig;
         } catch (error) {
             const message = error instanceof Error
                 ? error.message
                 : i18n.t(options.fallbackErrorI18nKey ?? "store.saveConfigFailed", {
-                    key: options.logLabel ?? "backend-config",
+                    key: logLabel,
                 });
             this.state = {
                 ...this.state,
@@ -694,7 +724,7 @@ class ConfigStore {
             };
             this.emit();
             console.error("[config-store] backend config save failed", {
-                logLabel: options.logLabel ?? "unknown",
+                logLabel,
                 message,
             });
             throw error instanceof Error ? error : new Error(message);

@@ -14,6 +14,7 @@
 
 import { expect, test, type Page } from "@playwright/test";
 import { dockviewDragPanel } from "./helpers/dockviewDrag";
+import { gotoMockVaultPage } from "./helpers/mockVault";
 
 /**
  * 等待布局进入可操作状态。
@@ -25,10 +26,6 @@ async function waitForLayoutReady(page: Page): Promise<void> {
     await page.getByRole("main", { name: "Dockview Main Area" }).waitFor({ state: "visible" });
     await page.locator(".dv-tab").first().waitFor({ state: "visible" });
     await page.locator(".dv-pane-header").first().waitFor({ state: "visible" });
-}
-
-function buildMockVaultUrl(testName: string): string {
-    return `/?mockVaultPath=${encodeURIComponent(`/mock/notes/${testName}-${Date.now()}`)}`;
 }
 
 async function deleteCustomActivity(page: Page, activityId: string): Promise<void> {
@@ -136,12 +133,12 @@ test.describe("自定义 Activity", () => {
     test("可通过现有指令创建自定义按钮并正常打开 panel", async ({ page }) => {
         const activityName = `测试按钮-${Date.now()}`;
 
-        await page.goto(buildMockVaultUrl("custom-activity-create-command"));
+        await gotoMockVaultPage(page, "custom-activity-create-command");
         await waitForLayoutReady(page);
 
-        const explorerActivityButton = page.getByTitle("Explorer");
-        const searchActivityButton = page.getByTitle("Search");
-        const calendarActivityButton = page.getByTitle("Calendar");
+        const explorerActivityButton = page.getByTestId("activity-bar-item-files");
+        const searchActivityButton = page.getByTestId("activity-bar-item-search");
+        const calendarActivityButton = page.getByTestId("activity-bar-item-calendar");
         await expect(explorerActivityButton).toBeVisible();
         await expect(searchActivityButton).toBeVisible();
         await expect(calendarActivityButton).toBeVisible();
@@ -165,10 +162,10 @@ test.describe("自定义 Activity", () => {
     test("创建使用 Calendar 图标的自定义 Activity 后不应让原生日历按钮消失", async ({ page }) => {
         const activityName = `MCP自定义日历-${Date.now()}`;
 
-        await page.goto(buildMockVaultUrl("custom-activity-calendar-icon"));
+        await gotoMockVaultPage(page, "custom-activity-calendar-icon");
         await waitForLayoutReady(page);
 
-        const calendarActivityButton = page.getByTitle("Calendar");
+        const calendarActivityButton = page.getByTestId("activity-bar-item-calendar");
         await expect(calendarActivityButton).toBeVisible();
 
         await page.keyboard.press("Meta+J");
@@ -200,7 +197,7 @@ test.describe("自定义 Activity", () => {
 
         const activityName = `删除测试-${Date.now()}`;
 
-        await page.goto(buildMockVaultUrl("custom-activity-delete-no-crash"));
+        await gotoMockVaultPage(page, "custom-activity-delete-no-crash");
         await waitForLayoutReady(page);
 
         await createCustomPanelContainer(page, activityName);
@@ -221,9 +218,7 @@ test.describe("自定义 Activity", () => {
 
     test("删除自定义 Activity 后 reload 不应恢复该 icon", async ({ page }) => {
         const activityName = `删除持久化-${Date.now()}`;
-        const url = buildMockVaultUrl("custom-activity-delete-persistence");
-
-        await page.goto(url);
+        await gotoMockVaultPage(page, "custom-activity-delete-persistence");
         await waitForLayoutReady(page);
 
         await createCustomPanelContainer(page, activityName);
@@ -241,14 +236,12 @@ test.describe("自定义 Activity", () => {
         await waitForLayoutReady(page);
 
         await expect(page.getByTitle(activityName)).toHaveCount(0);
-        await expect(page.getByTitle("Calendar")).toBeVisible();
+        await expect(page.getByTestId("activity-bar-item-calendar")).toBeVisible();
     });
 
     test("右侧自定义容器中的日历 panel 在 reload 后应与 icon 位置一起恢复", async ({ page }) => {
         const activityName = `右栏日历容器-${Date.now()}`;
-        const url = buildMockVaultUrl("custom-activity-right-calendar-reload");
-
-        await page.goto(url);
+        await gotoMockVaultPage(page, "custom-activity-right-calendar-reload");
         await waitForLayoutReady(page);
 
         await createCustomPanelContainer(page, activityName);
@@ -266,7 +259,7 @@ test.describe("自定义 Activity", () => {
         const rightEmptyContainer = rightSidebar.getByTestId("right-sidebar-empty");
         await expect(rightEmptyContainer).toBeVisible();
 
-        await page.getByTitle("Calendar").click();
+        await page.getByTestId("activity-bar-item-calendar").click();
         const calendarTab = page.locator(".dv-tab", { hasText: "Calendar" });
         await expect(calendarTab).toBeVisible();
 
@@ -294,9 +287,7 @@ test.describe("自定义 Activity", () => {
         });
 
         const activityName = "日历";
-        const url = buildMockVaultUrl("custom-activity-delete-calendar-named-container");
-
-        await page.goto(url);
+        await gotoMockVaultPage(page, "custom-activity-delete-calendar-named-container");
         await waitForLayoutReady(page);
 
         await page.keyboard.press("Meta+J");
@@ -322,7 +313,7 @@ test.describe("自定义 Activity", () => {
         const rightEmptyContainer = rightSidebar.getByTestId("right-sidebar-empty");
         await expect(rightEmptyContainer).toBeVisible();
 
-        await page.getByTitle("Calendar").click();
+        await page.getByTestId("activity-bar-item-calendar").click();
         const calendarTab = page.locator(".dv-tab", { hasText: "Calendar" });
         await expect(calendarTab).toBeVisible();
         await dockviewDragPanel(page, calendarTab, rightEmptyContainer);
@@ -341,7 +332,7 @@ test.describe("自定义 Activity", () => {
 
         await expect(page.getByTestId(`right-activity-icon-${activityRegistrationId}`)).toHaveCount(0);
         await expect(page.getByTitle(activityName)).toHaveCount(0);
-        await expect(page.getByTitle("Calendar")).toBeVisible();
+        await expect(page.getByTestId("activity-bar-item-calendar")).toBeVisible();
         expect(pageErrors).toEqual([]);
     });
 });

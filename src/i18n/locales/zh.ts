@@ -75,6 +75,7 @@ const zh = {
         confirmDeleteSelection: "确认删除这 {{count}} 个项目?",
         currentDirectory: "当前目录：",
         openVault: "打开仓库",
+        noVault: "当前尚未打开任何仓库，请先选择目录。",
         loadTreeFailed: "加载仓库目录树失败",
     },
 

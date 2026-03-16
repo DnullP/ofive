@@ -120,6 +120,8 @@ pub fn search_vault_markdown_files_in_root(
         effective_limit
     );
 
+    query_index::ensure_query_index_current(vault_root)?;
+
     let indexed_files = query_index::list_markdown_files(vault_root)?;
     let mut markdown_paths = indexed_files
         .iter()
@@ -218,6 +220,8 @@ pub fn suggest_wikilink_targets_in_root(
         query,
         effective_limit
     );
+
+    query_index::ensure_query_index_current(vault_root)?;
 
     let files_with_counts = query_index::list_markdown_files_with_inbound_count(vault_root)?;
 

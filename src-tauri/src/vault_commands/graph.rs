@@ -13,6 +13,7 @@ pub fn get_current_vault_markdown_graph_in_root(
     vault_root: &Path,
 ) -> Result<VaultMarkdownGraphResponse, String> {
     log::info!("[vault-graph] get_current_vault_markdown_graph start");
+    query_index::ensure_query_index_current(vault_root)?;
     let graph = query_index::load_markdown_graph(vault_root)?;
 
     log::info!(

@@ -28,7 +28,7 @@ import { dockviewDragPanel } from "./helpers/dockviewDrag";
 /**
  * Mock 页面路径（不依赖 Tauri 后端）
  */
-const MOCK_PAGE = "/test-resources/web/mock-tauri-test.html";
+const MOCK_PAGE = "/web-mock/mock-tauri-test.html";
 
 /**
  * 等待应用就绪：侧栏面板渲染完毕。

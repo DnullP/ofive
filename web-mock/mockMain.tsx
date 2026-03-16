@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { MockApp } from "./mock/MockApp";
-import { setupFrontendLogBridge } from "../../src/utils/frontendLogBridge";
+import { setupFrontendLogBridge } from "../src/utils/frontendLogBridge";
 
 setupFrontendLogBridge();
 

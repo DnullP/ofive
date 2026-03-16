@@ -326,6 +326,7 @@ fn resolve_wikilink_target_path_in_vault_internal(
     }
 
     let mut candidates = if allow_index_lookup {
+        query_index::ensure_query_index_current(&canonical_vault_root)?;
         query_index::find_markdown_candidates_by_stem(&canonical_vault_root, &normalized_target)?
     } else {
         let mut scanned = Vec::new();

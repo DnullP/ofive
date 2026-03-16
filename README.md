@@ -31,6 +31,37 @@ This template should help get you started developing with Tauri, React and Types
 
 - [插件开发教程](docs/plugin-development-guide.md)
 
+## Release 构建
+
+GitHub Actions 只会在你给某个 commit 打 tag 并 push tag 之后触发多平台打包，不会在普通 push 时执行 release 构建。
+
+Release workflow 在真正开始多平台打包前，会先执行完整测试准入：
+
+1. `bun test`
+2. `cargo test --manifest-path src-tauri/Cargo.toml`
+3. `bunx playwright test`
+4. `bun run build`
+
+示例：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+工作流会在 GitHub Release 下构建并上传不同平台的安装包与压缩产物。
+
+## CI
+
+普通 push 和 pull request 会自动执行全量测试，不会自动执行 release 打包。
+
+CI 覆盖：
+
+1. `bun test`
+2. `cargo test --manifest-path src-tauri/Cargo.toml`
+3. `bunx playwright test`
+4. `bun run build`
+
 ## Recommended IDE Setup
 
 - [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)

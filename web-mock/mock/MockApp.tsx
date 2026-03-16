@@ -1,33 +1,29 @@
 /**
- * @module test-resources/web/mock/MockApp
+ * @module web-mock/mock/MockApp
  * @description 前端 Mock 测试页：复用主应用布局和编辑器，不依赖 Tauri 后端。
  * @dependencies
  *  - react
  *  - lucide-react
- *  - ../../../src/host/layout
- *  - ../../../src/host/registry
+ *  - ../../src/host/layout
+ *  - ../../src/host/registry
  *  - ./MockVaultPanel
  */
 
-import React, { useMemo, useEffect, type ReactNode } from "react";
+import React, { useMemo, type ReactNode } from "react";
 import { Compass, FolderOpen, Link2 } from "lucide-react";
 import {
     DockviewLayout,
     type TabInstanceDefinition,
-} from "../../../src/host/layout";
-import { CodeMirrorEditorTab } from "../../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
-import { SettingsTab } from "../../../src/host/layout/SettingsTab";
-import { useConfigSync } from "../../../src/host/store/configStore";
-import { registerActivity } from "../../../src/host/registry/activityRegistry";
-import { registerPanel } from "../../../src/host/registry/panelRegistry";
-import { registerTabComponent } from "../../../src/host/registry/tabComponentRegistry";
+} from "../../src/host/layout";
+import { CodeMirrorEditorTab } from "../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
+import { SettingsTab } from "../../src/host/layout/SettingsTab";
+import { useConfigSync } from "../../src/host/store/configStore";
+import { registerActivity } from "../../src/host/registry/activityRegistry";
+import { registerPanel } from "../../src/host/registry/panelRegistry";
+import { registerTabComponent } from "../../src/host/registry/tabComponentRegistry";
 import { MockVaultPanel } from "./MockVaultPanel";
-import "../../../src/App.css";
+import "../../src/App.css";
 
-/**
- * @constant MOCK_VAULT_PATH
- * @description Mock 页面用于配置加载的虚拟仓库路径。
- */
 const MOCK_VAULT_PATH = "/mock/notes";
 
 function resolveMockVaultPath(): string {
@@ -39,11 +35,6 @@ function resolveMockVaultPath(): string {
     return params.get("mockVaultPath") || MOCK_VAULT_PATH;
 }
 
-/**
- * @function MockHomeTab
- * @description Mock 页面首页 tab。
- * @returns React 节点。
- */
 function MockHomeTab(): ReactNode {
     return (
         <div className="editor-tab-view">
@@ -54,10 +45,6 @@ function MockHomeTab(): ReactNode {
     );
 }
 
-/**
- * @function MockOutlinePanel
- * @description Mock 大纲面板，用于测试布局拖拽。不依赖后端。
- */
 function MockOutlinePanel(): ReactNode {
     return (
         <div style={{ padding: 12, color: "var(--text-secondary)", fontSize: 12 }}>
@@ -67,10 +54,6 @@ function MockOutlinePanel(): ReactNode {
     );
 }
 
-/**
- * @function MockBacklinksPanel
- * @description Mock 反向链接面板，用于复现拖拽 bug。
- */
 function MockBacklinksPanel(): ReactNode {
     return (
         <div style={{ padding: 12, color: "var(--text-secondary)", fontSize: 12 }}>
@@ -80,13 +63,8 @@ function MockBacklinksPanel(): ReactNode {
     );
 }
 
-/* 静态标记：确保注册只执行一次 */
 let mockRegistered = false;
 
-/**
- * @function ensureMockComponentsRegistered
- * @description 注册 mock 测试所需的内置组件（幂等）。
- */
 function ensureMockComponentsRegistered(): void {
     if (mockRegistered) return;
     mockRegistered = true;
@@ -95,7 +73,6 @@ function ensureMockComponentsRegistered(): void {
     const outlineIcon = React.createElement(Compass, { size: 18, strokeWidth: 1.8 });
     const backlinksIcon = React.createElement(Link2, { size: 18, strokeWidth: 1.8 });
 
-    /* 活动图标 */
     registerActivity({
         type: "panel-container",
         id: "files",
@@ -115,7 +92,6 @@ function ensureMockComponentsRegistered(): void {
         defaultOrder: 2,
     });
 
-    /* 面板 */
     registerPanel({
         id: "files",
         title: () => "资源管理器",
@@ -141,19 +117,13 @@ function ensureMockComponentsRegistered(): void {
         render: () => React.createElement(MockBacklinksPanel),
     });
 
-    /* Tab 组件 */
-    registerTabComponent({ id: "home", component: MockHomeTab as any });
-    registerTabComponent({ id: "codemirror", component: CodeMirrorEditorTab as any });
-    registerTabComponent({ id: "settings", component: SettingsTab as any });
+    registerTabComponent({ id: "home", component: MockHomeTab as never });
+    registerTabComponent({ id: "codemirror", component: CodeMirrorEditorTab as never });
+    registerTabComponent({ id: "settings", component: SettingsTab as never });
 
     console.info("[MockApp] mock components registered");
 }
 
-/**
- * @function MockApp
- * @description 渲染类 Tauri 主界面测试页面。
- * @returns React 节点。
- */
 export function MockApp(): ReactNode {
     const mockVaultPath = useMemo(() => resolveMockVaultPath(), []);
 
