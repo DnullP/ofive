@@ -159,11 +159,7 @@ fn ast_node_from_tag(tag: Tag<'_>) -> MarkdownAstNode {
                 })
                 .collect::<Vec<_>>()
                 .join(",");
-            insert_attr_if_non_empty(
-                &mut node.attributes,
-                "alignments",
-                alignments_text,
-            );
+            insert_attr_if_non_empty(&mut node.attributes, "alignments", alignments_text);
             node
         }
         Tag::TableHead => new_ast_node("tableHead"),
@@ -228,9 +224,9 @@ pub fn parse_markdown_to_ast(content: &str) -> Result<MarkdownAstNode, String> {
                 let node = stack
                     .pop()
                     .ok_or_else(|| "Markdown AST 构建失败：节点栈为空".to_string())?;
-                let parent = stack.last_mut().ok_or_else(|| {
-                    "Markdown AST 构建失败：缺少父节点容器".to_string()
-                })?;
+                let parent = stack
+                    .last_mut()
+                    .ok_or_else(|| "Markdown AST 构建失败：缺少父节点容器".to_string())?;
                 parent.children.push(node);
             }
             Event::Text(text) => stack
@@ -350,7 +346,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_nanos())
             .unwrap_or(0);
-        let root = std::env::temp_dir().join(format!("ofive-markdown-ast-test-{unique}-{sequence}"));
+        let root =
+            std::env::temp_dir().join(format!("ofive-markdown-ast-test-{unique}-{sequence}"));
         fs::create_dir_all(root.join(".ofive")).expect("应成功创建测试根目录");
         root
     }
@@ -363,7 +360,10 @@ mod tests {
         assert_eq!(ast.kind, "document");
         assert_eq!(ast.children.len(), 2);
         assert_eq!(ast.children[0].kind, "heading");
-        assert_eq!(ast.children[0].attributes.get("level"), Some(&"1".to_string()));
+        assert_eq!(
+            ast.children[0].attributes.get("level"),
+            Some(&"1".to_string())
+        );
         assert_eq!(ast.children[0].children[0].value.as_deref(), Some("Title"));
 
         let paragraph = &ast.children[1];
@@ -372,9 +372,10 @@ mod tests {
             node.kind == "link"
                 && node.attributes.get("destination") == Some(&"./topic.md".to_string())
         }));
-        assert!(paragraph.children.iter().any(|node| {
-            node.kind == "code" && node.value.as_deref() == Some("code")
-        }));
+        assert!(paragraph
+            .children
+            .iter()
+            .any(|node| { node.kind == "code" && node.value.as_deref() == Some("code") }));
     }
 
     #[test]
@@ -387,7 +388,10 @@ mod tests {
             ast.children[0].attributes.get("ordered"),
             Some(&"true".to_string())
         );
-        assert_eq!(ast.children[0].attributes.get("start"), Some(&"1".to_string()));
+        assert_eq!(
+            ast.children[0].attributes.get("start"),
+            Some(&"1".to_string())
+        );
 
         assert_eq!(ast.children[1].kind, "codeBlock");
         assert_eq!(
@@ -404,10 +408,8 @@ mod tests {
     fn get_vault_markdown_ast_in_root_should_read_file_and_return_ast() {
         let root = create_test_root();
         let file_path = root.join("notes/guide.md");
-        fs::create_dir_all(file_path.parent().expect("应存在父目录"))
-            .expect("应成功创建笔记目录");
-        fs::write(&file_path, "# Guide\n\nParagraph")
-            .expect("应成功写入 Markdown 文件");
+        fs::create_dir_all(file_path.parent().expect("应存在父目录")).expect("应成功创建笔记目录");
+        fs::write(&file_path, "# Guide\n\nParagraph").expect("应成功写入 Markdown 文件");
 
         let response = get_vault_markdown_ast_in_root(&root, "notes/guide.md".to_string())
             .expect("读取 Markdown AST 应成功");

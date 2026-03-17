@@ -26,6 +26,7 @@
 //! ## 导出
 //! - `init`：初始化全局日志记录器
 //! - `set_vault_log_path`：设置/清除日志文件持久化目录
+//! - `forward_sidecar_output`：将 AI sidecar 输出转发到标准日志 target
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
 use std::fs::{self, File, OpenOptions};
@@ -135,6 +136,41 @@ pub fn set_vault_log_path(dir: Option<PathBuf>) {
 
     if let Ok(mut guard) = LOG_FILE_PATH.write() {
         *guard = dir;
+    }
+}
+
+/// 将 AI sidecar 的 stdout/stderr 内容转发到标准日志流。
+///
+/// # 参数
+/// - `stream`：sidecar 输出流名称，支持 `stdout` 与 `stderr`
+/// - `text`：sidecar 输出内容，可包含多行
+///
+/// # 副作用
+/// - 按流类型映射到固定 target：`ai-sidecar.stdout` / `ai-sidecar.stderr`
+/// - 通过全局 `log` 框架输出，因此会跟随后端标准日志一起写入 `<vault>/.ofive/ofive.log`
+pub(crate) fn forward_sidecar_output(stream: &str, text: &str) {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+
+    let (level, target) = sidecar_log_route(stream);
+    for line in trimmed.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        log::log!(target: target, level, "{line}");
+    }
+}
+
+/// 计算 sidecar 输出流对应的标准日志路由。
+///
+/// # 参数
+/// - `stream`：输出流名称
+///
+/// # 返回
+/// - `(Level, target)`：日志级别与标准 target 名称
+fn sidecar_log_route(stream: &str) -> (Level, &'static str) {
+    match stream {
+        "stderr" => (Level::Warn, "ai-sidecar.stderr"),
+        _ => (Level::Info, "ai-sidecar.stdout"),
     }
 }
 
@@ -353,5 +389,13 @@ mod tests {
         set_vault_log_path(None);
         let guard = LOG_FILE_PATH.read().unwrap();
         assert!(guard.is_none());
+    }
+
+    /// 验证 sidecar 输出路由到固定日志 target。
+    #[test]
+    fn sidecar_log_route_should_map_stream_to_standard_target() {
+        assert_eq!(sidecar_log_route("stdout"), (Level::Info, "ai-sidecar.stdout"));
+        assert_eq!(sidecar_log_route("stderr"), (Level::Warn, "ai-sidecar.stderr"));
+        assert_eq!(sidecar_log_route("other"), (Level::Info, "ai-sidecar.stdout"));
     }
 }

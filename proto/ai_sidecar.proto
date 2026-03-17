@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package ofive.ai.v1;
+
+option go_package = "ofive/sidecars/go/ofive-ai-agent/gen/ofive/aiv1;aiv1";
+
+service AiAgentService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc Chat(ChatRequest) returns (stream ChatChunk);
+  rpc SubmitConfirmation(ConfirmationRequest) returns (stream ChatChunk);
+}
+
+message ToolDescriptor {
+  string capability_id = 1;
+  string name = 2;
+  string description = 3;
+  string input_schema_json = 4;
+  string output_schema_json = 5;
+  string risk_level = 6;
+  bool requires_confirmation = 7;
+  string api_version = 8;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  string agent_name = 2;
+  string version = 3;
+  int64 pid = 4;
+}
+
+message ChatRequest {
+  string session_id = 1;
+  string user_id = 2;
+  string message = 3;
+  map<string, string> vendor_config = 4;
+  string vendor_id = 5;
+  string model = 6;
+  repeated ToolDescriptor tools = 7;
+  string capability_callback_url = 8;
+  string capability_callback_token = 9;
+  string mcp_server_url = 10;
+  string mcp_auth_token = 11;
+}
+
+message ConfirmationRequest {
+  string session_id = 1;
+  string user_id = 2;
+  string confirmation_id = 3;
+  bool confirmed = 4;
+  map<string, string> vendor_config = 5;
+  string vendor_id = 6;
+  string model = 7;
+  repeated ToolDescriptor tools = 8;
+  string mcp_server_url = 9;
+  string mcp_auth_token = 10;
+}
+
+message ChatChunk {
+  string session_id = 1;
+  string delta_text = 2;
+  string agent_name = 3;
+  string accumulated_text = 4;
+  bool done = 5;
+  string event_type = 6;
+  string error = 7;
+  string debug_title = 8;
+  string debug_text = 9;
+  string confirmation_id = 10;
+  string confirmation_hint = 11;
+  string confirmation_tool_name = 12;
+  string confirmation_tool_args_json = 13;
+}

@@ -124,6 +124,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
+    user-select: none;
 }
 
 /* architecture-runtime-description: 运行时概览描述 */
@@ -284,6 +285,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    user-select: none;
 }
 
 /* architecture-dag-actions: DAG 标题右侧控制区 */
@@ -539,6 +541,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    user-select: none;
 }
 
 /* architecture-inspector-modal-actions: 检查器弹窗操作按钮组 */
@@ -645,6 +648,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    user-select: none;
 }
 
 /* architecture-inventory-grid: 底部清单网格 */

@@ -7,6 +7,7 @@
     "dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
     "web:dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
     "tauri:web:dev": "vite --port 1420 --strictPort",
+    "build:sidecar": "node scripts/build-sidecar.mjs",
     "check:backend-logs": "node scripts/check-backend-logs.mjs",
     "fix:backend-logs": "node scripts/check-backend-logs.mjs --fix",
     "check:theme-colors": "node scripts/check-theme-colors.mjs",

@@ -23,6 +23,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
+    user-select: none;
 }
 
 /* Panel 模式头部：改为纵向堆叠，适配窄宽度。 */
@@ -377,6 +378,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 8px;
+    user-select: none;
 }
 
 /* Panel 浮窗标题组：纵向堆叠日期标题与数量。 */
@@ -473,6 +475,7 @@
     justify-content: space-between;
     gap: 8px;
     flex-wrap: wrap;
+    user-select: none;
 }
 
 /* Panel 模式明细标题行：改为纵向堆叠，避免副标题挤压主标题。 */

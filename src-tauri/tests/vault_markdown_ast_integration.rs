@@ -20,7 +20,10 @@ fn parse_markdown_to_ast_should_serialize_expected_shape() {
         .get("children")
         .and_then(Value::as_array)
         .expect("document.children 应为数组");
-    assert_eq!(children[0].get("kind").and_then(Value::as_str), Some("heading"));
+    assert_eq!(
+        children[0].get("kind").and_then(Value::as_str),
+        Some("heading")
+    );
     assert_eq!(
         children[0]
             .get("attributes")
@@ -54,7 +57,7 @@ fn get_vault_markdown_ast_should_return_note_ast_data() {
         .get("children")
         .and_then(Value::as_array)
         .expect("ast.children 应为数组");
-    assert!(children.iter().any(|node| {
-        node.get("kind").and_then(Value::as_str) == Some("heading")
-    }));
+    assert!(children
+        .iter()
+        .any(|node| { node.get("kind").and_then(Value::as_str) == Some("heading") }));
 }

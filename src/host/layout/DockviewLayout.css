@@ -114,3 +114,13 @@
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
+
+/* Dockview paneview header：禁止文本选中，避免点击时误选。 */
+.dv-pane-header,
+.dv-pane-header-icon,
+.dv-tab,
+.dv-action,
+.dv-tab-close {
+  user-select: none;
+  -webkit-user-select: none;
+}

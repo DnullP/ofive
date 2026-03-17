@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.kaiqiu.ofive",
   "build": {
-    "beforeDevCommand": "bun run tauri:web:dev",
+    "beforeDevCommand": "bun run build:sidecar && bun run tauri:web:dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run build",
+    "beforeBuildCommand": "bun run build:sidecar && bun run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -27,6 +27,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": [
+      "binaries/ofive-ai-sidecar"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

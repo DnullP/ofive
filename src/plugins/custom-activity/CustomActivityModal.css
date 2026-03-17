@@ -29,6 +29,7 @@
     justify-content: space-between;
     gap: 16px;
     padding: 24px 24px 12px;
+    user-select: none;
 }
 
 /* custom-activity-modal__title: 主标题文字。 */

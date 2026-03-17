@@ -30,3 +30,5 @@ blob-report/
 .tmp/
 tmp/
 memories/
+sidecars/go/**/.bin/
+src-tauri/binaries/

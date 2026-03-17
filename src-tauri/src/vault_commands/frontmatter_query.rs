@@ -70,10 +70,7 @@ fn collect_yaml_match_values(value: &YamlValue) -> Vec<String> {
         YamlValue::Bool(inner) => vec![inner.to_string()],
         YamlValue::Number(inner) => vec![inner.to_string()],
         YamlValue::String(inner) => vec![inner.trim().to_string()],
-        YamlValue::Sequence(items) => items
-            .iter()
-            .flat_map(collect_yaml_match_values)
-            .collect(),
+        YamlValue::Sequence(items) => items.iter().flat_map(collect_yaml_match_values).collect(),
         YamlValue::Tagged(tagged) => collect_yaml_match_values(&tagged.value),
         YamlValue::Mapping(_) => Vec::new(),
     }
@@ -97,7 +94,10 @@ fn yaml_to_json_value(value: &YamlValue) -> Option<JsonValue> {
             if let Some(unsigned) = inner.as_u64() {
                 return Some(JsonValue::from(unsigned));
             }
-            inner.as_f64().and_then(serde_json::Number::from_f64).map(JsonValue::Number)
+            inner
+                .as_f64()
+                .and_then(serde_json::Number::from_f64)
+                .map(JsonValue::Number)
         }
         YamlValue::String(inner) => Some(JsonValue::String(inner.clone())),
         YamlValue::Sequence(items) => Some(JsonValue::Array(
@@ -231,7 +231,9 @@ pub fn query_vault_markdown_frontmatter_in_root(
         }
 
         if let Some(expected_value) = &normalized_field_value {
-            let matched_expected = matched_field_values.iter().any(|value| value == expected_value);
+            let matched_expected = matched_field_values
+                .iter()
+                .any(|value| value == expected_value);
             if !matched_expected {
                 continue;
             }
@@ -339,16 +341,8 @@ mod tests {
     #[test]
     fn query_vault_markdown_frontmatter_should_filter_by_exact_value() {
         let root = create_test_root();
-        write_markdown_file(
-            &root,
-            "notes/a.md",
-            "---\ndate: 2024-07-09\n---\n# A\n",
-        );
-        write_markdown_file(
-            &root,
-            "notes/b.md",
-            "---\ndate: 2024-07-10\n---\n# B\n",
-        );
+        write_markdown_file(&root, "notes/a.md", "---\ndate: 2024-07-09\n---\n# A\n");
+        write_markdown_file(&root, "notes/b.md", "---\ndate: 2024-07-10\n---\n# B\n");
 
         let response = query_vault_markdown_frontmatter_in_root(
             &root,

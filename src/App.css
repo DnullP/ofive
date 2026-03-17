@@ -523,6 +523,30 @@ body {
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
+  /* 全局禁用文本选择，UI元素不应被选中 */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 内容区域恢复文本选择功能 */
+input,
+textarea,
+[contenteditable],
+.cm-content,
+.cm-line,
+.selectable-text,
+.ai-chat-messages,
+.ai-chat-message-bubble,
+.ai-chat-message-content,
+.ai-chat-status,
+.ai-chat-status-title,
+.ai-chat-status-detail,
+.outline-error,
+.backlinks-error,
+.panel-placeholder,
+.editor-tab-view {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .app-shell {
