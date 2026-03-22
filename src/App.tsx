@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
 import {
@@ -11,6 +11,7 @@ import {
   isSelfTriggeredVaultFsEvent,
   readVaultMarkdownFile,
 } from "./api/vaultApi";
+import { updateMainWindowAcrylicEffect } from "./api/windowApi";
 import {
   subscribeVaultFsBusEvent,
   useBackendEventBridge,
@@ -30,6 +31,7 @@ import { ensureBuiltinComponentsRegistered } from "./host/registry/registerBuilt
 import { unregisterActivity } from "./host/registry/activityRegistry";
 import { registerActivity } from "./host/registry/activityRegistry";
 import { unregisterPanel, registerPanel } from "./host/registry/panelRegistry";
+import { buildGlassRuntimeStyle } from "./host/layout/glassRuntimeStyle";
 import "./App.css";
 
 function HomeTab(): ReactNode {
@@ -44,6 +46,22 @@ function HomeTab(): ReactNode {
 
 function App() {
   const { t } = useTranslation();
+  const runtimeInfo = useMemo(() => {
+    const runtimeWindow = window as Window & {
+      __TAURI_INTERNALS__?: unknown;
+      __TAURI__?: unknown;
+    };
+    const isTauriRuntime = Boolean(runtimeWindow.__TAURI_INTERNALS__ || runtimeWindow.__TAURI__);
+    const platformFingerprint = typeof navigator === "undefined"
+      ? ""
+      : `${navigator.userAgent} ${navigator.platform}`.toLowerCase();
+
+    return {
+      isTauriRuntime,
+      isWindows: platformFingerprint.includes("win"),
+      isMacOS: platformFingerprint.includes("mac"),
+    };
+  }, []);
   useBackendEventBridge();
   useVaultTreeSync();
   useThemeSync();
@@ -53,6 +71,14 @@ function App() {
   const vaultState = useVaultState();
   const focusedArticle = useFocusedArticle();
   const configState = useConfigState();
+  const isGlassEffectEnabled = runtimeInfo.isTauriRuntime && configState.featureSettings.glassEffectEnabled;
+  const [isWindowFocused, setIsWindowFocused] = useState<boolean>(() => {
+    if (typeof document === "undefined") {
+      return true;
+    }
+
+    return document.hasFocus();
+  });
   useConfigSync(vaultState.currentVaultPath, !vaultState.isLoadingTree && !vaultState.error);
 
   /* ── 注册内置组件（幂等，只执行一次） ── */
@@ -64,6 +90,131 @@ function App() {
     },
   }), []);
   ensureBuiltinComponentsRegistered(builtinRefs);
+
+  useEffect(() => {
+    const handleFocus = (): void => {
+      setIsWindowFocused(true);
+    };
+
+    const handleBlur = (): void => {
+      setIsWindowFocused(false);
+    };
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
+
+  useEffect(() => {
+    const runtimeGlassStyle = buildGlassRuntimeStyle({
+      glassTintOpacity: configState.featureSettings.glassTintOpacity,
+      glassSurfaceOpacity: configState.featureSettings.glassSurfaceOpacity,
+      glassInactiveSurfaceOpacity: configState.featureSettings.glassInactiveSurfaceOpacity,
+      glassBlurRadius: configState.featureSettings.glassBlurRadius,
+    });
+
+    document.documentElement.classList.toggle("app-runtime--tauri", runtimeInfo.isTauriRuntime);
+    document.documentElement.classList.toggle("app-platform--windows", runtimeInfo.isWindows);
+    document.documentElement.classList.toggle("app-platform--macos", runtimeInfo.isMacOS);
+    document.documentElement.classList.toggle("app-effect--glass", isGlassEffectEnabled);
+    document.documentElement.classList.toggle("app-window--inactive", !isWindowFocused);
+
+    Object.entries(runtimeGlassStyle.cssVariables).forEach(([name, value]) => {
+      document.documentElement.style.setProperty(name, value);
+    });
+
+    console.info("[window] runtime effect classes updated", {
+      ...runtimeInfo,
+      glassEffectEnabled: isGlassEffectEnabled,
+      isWindowFocused,
+      glassTintOpacity: configState.featureSettings.glassTintOpacity,
+      glassSurfaceOpacity: configState.featureSettings.glassSurfaceOpacity,
+      glassInactiveSurfaceOpacity: configState.featureSettings.glassInactiveSurfaceOpacity,
+      effectiveInactiveSurfaceOpacity: runtimeGlassStyle.effectiveInactiveSurfaceOpacity,
+      glassBlurRadius: configState.featureSettings.glassBlurRadius,
+    });
+
+    return () => {
+      document.documentElement.classList.remove("app-runtime--tauri");
+      document.documentElement.classList.remove("app-platform--windows");
+      document.documentElement.classList.remove("app-platform--macos");
+      document.documentElement.classList.remove("app-effect--glass");
+      document.documentElement.classList.remove("app-window--inactive");
+    };
+  }, [configState.featureSettings.glassBlurRadius, configState.featureSettings.glassInactiveSurfaceOpacity, configState.featureSettings.glassSurfaceOpacity, configState.featureSettings.glassTintOpacity, isGlassEffectEnabled, isWindowFocused, runtimeInfo]);
+
+  useEffect(() => {
+    if (!runtimeInfo.isTauriRuntime || !runtimeInfo.isWindows) {
+      return;
+    }
+
+    void updateMainWindowAcrylicEffect({
+      enabled: isGlassEffectEnabled,
+      disableSystemBackdrop: configState.featureSettings.windowsAcrylicDisableSystemBackdrop,
+      focusedColor: {
+        red: configState.featureSettings.windowsAcrylicFocusedRed,
+        green: configState.featureSettings.windowsAcrylicFocusedGreen,
+        blue: configState.featureSettings.windowsAcrylicFocusedBlue,
+        alpha: configState.featureSettings.windowsAcrylicFocusedAlpha,
+      },
+      focusedAccentFlags: configState.featureSettings.windowsAcrylicFocusedAccentFlags,
+      focusedAnimationId: configState.featureSettings.windowsAcrylicFocusedAnimationId,
+      inactiveColor: {
+        red: configState.featureSettings.windowsAcrylicInactiveRed,
+        green: configState.featureSettings.windowsAcrylicInactiveGreen,
+        blue: configState.featureSettings.windowsAcrylicInactiveBlue,
+        alpha: configState.featureSettings.windowsAcrylicInactiveAlpha,
+      },
+      inactiveAccentFlags: configState.featureSettings.windowsAcrylicInactiveAccentFlags,
+      inactiveAnimationId: configState.featureSettings.windowsAcrylicInactiveAnimationId,
+    }).then(() => {
+      console.info("[window] windows acrylic config applied", {
+        enabled: isGlassEffectEnabled,
+        disableSystemBackdrop: configState.featureSettings.windowsAcrylicDisableSystemBackdrop,
+        focusedColor: {
+          red: configState.featureSettings.windowsAcrylicFocusedRed,
+          green: configState.featureSettings.windowsAcrylicFocusedGreen,
+          blue: configState.featureSettings.windowsAcrylicFocusedBlue,
+          alpha: configState.featureSettings.windowsAcrylicFocusedAlpha,
+        },
+        focusedAccentFlags: configState.featureSettings.windowsAcrylicFocusedAccentFlags,
+        focusedAnimationId: configState.featureSettings.windowsAcrylicFocusedAnimationId,
+        inactiveColor: {
+          red: configState.featureSettings.windowsAcrylicInactiveRed,
+          green: configState.featureSettings.windowsAcrylicInactiveGreen,
+          blue: configState.featureSettings.windowsAcrylicInactiveBlue,
+          alpha: configState.featureSettings.windowsAcrylicInactiveAlpha,
+        },
+        inactiveAccentFlags: configState.featureSettings.windowsAcrylicInactiveAccentFlags,
+        inactiveAnimationId: configState.featureSettings.windowsAcrylicInactiveAnimationId,
+      });
+    }).catch((error) => {
+      console.warn("[window] failed to apply windows acrylic config", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }, [
+    configState.featureSettings.windowsAcrylicFocusedAlpha,
+    configState.featureSettings.windowsAcrylicFocusedAnimationId,
+    configState.featureSettings.windowsAcrylicFocusedAccentFlags,
+    configState.featureSettings.windowsAcrylicFocusedBlue,
+    configState.featureSettings.windowsAcrylicFocusedGreen,
+    configState.featureSettings.windowsAcrylicFocusedRed,
+    configState.featureSettings.windowsAcrylicInactiveAnimationId,
+    configState.featureSettings.windowsAcrylicInactiveAccentFlags,
+    configState.featureSettings.windowsAcrylicInactiveAlpha,
+    configState.featureSettings.windowsAcrylicInactiveBlue,
+    configState.featureSettings.windowsAcrylicInactiveGreen,
+    configState.featureSettings.windowsAcrylicInactiveRed,
+    configState.featureSettings.windowsAcrylicDisableSystemBackdrop,
+    isGlassEffectEnabled,
+    runtimeInfo.isTauriRuntime,
+    runtimeInfo.isWindows,
+  ]);
 
   useEffect(() => {
     const unlisten = subscribeVaultFsBusEvent(async (payload) => {

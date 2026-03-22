@@ -5,3 +5,4 @@
 pub(crate) mod ai_commands;
 pub(crate) mod capability_commands;
 pub(crate) mod vault_commands;
+pub(crate) mod window_commands;

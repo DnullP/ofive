@@ -2,6 +2,7 @@
 //!
 //! 定义后端共享运行时句柄与全局状态对象。
 
+use crate::host::window_effects::WindowsAcrylicEffectConfig;
 use notify::RecommendedWatcher;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -32,6 +33,7 @@ pub struct AiSidecarRuntime {
 /// - `vault_watcher`：当前仓库文件监听器实例
 /// - `pending_vault_write_trace_by_path`：待回填到 watcher 事件的写入 traceId（按相对路径索引，含过期时间）
 /// - `ai_sidecar_runtime`：AI sidecar 运行时状态
+/// - `windows_acrylic_effect_config`：Windows 主窗口 Acrylic 原生参数快照
 pub struct AppState {
     /// 当前生效仓库路径。
     pub current_vault: Mutex<Option<PathBuf>>,
@@ -41,4 +43,6 @@ pub struct AppState {
     pub pending_vault_write_trace_by_path: Mutex<HashMap<String, PendingVaultWriteTrace>>,
     /// AI sidecar 运行时状态。
     pub ai_sidecar_runtime: Mutex<Option<AiSidecarRuntime>>,
+    /// Windows 主窗口 Acrylic 原生参数快照。
+    pub windows_acrylic_effect_config: Mutex<WindowsAcrylicEffectConfig>,
 }

@@ -14,6 +14,7 @@ macro_rules! app_commands {
             crate::host::commands::ai_commands::start_ai_chat_stream,
             crate::host::commands::ai_commands::submit_ai_chat_confirmation,
             crate::host::commands::capability_commands::get_capability_catalog,
+            crate::host::commands::window_commands::update_main_window_acrylic_effect,
             crate::frontend_log::forward_frontend_log,
             crate::host::commands::vault_commands::set_current_vault,
             crate::host::commands::vault_commands::get_current_vault_tree,

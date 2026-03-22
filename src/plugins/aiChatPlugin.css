@@ -786,3 +786,37 @@
 .ai-chat-settings-feedback.error {
     color: var(--error-color);
 }
+
+/* 桌面毛玻璃 AI 面板根容器：不再用实底覆盖侧栏材质。 */
+.app-runtime--tauri.app-effect--glass .ai-chat-panel {
+    background:
+        radial-gradient(circle at top right, rgba(var(--window-glass-border-rgb), 0.08), transparent 34%),
+        linear-gradient(180deg, rgba(var(--window-glass-bg-rgb), 0.06), transparent 58%);
+}
+
+/* 桌面毛玻璃 AI 面板头部：作为真正承载玻璃的结构表面。 */
+.app-runtime--tauri.app-effect--glass .ai-chat-header {
+    background: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-soft));
+    backdrop-filter: blur(var(--glass-blur-radius)) saturate(1.04);
+}
+
+.app-runtime--tauri.app-effect--glass.app-window--dragging .ai-chat-header {
+    backdrop-filter: none;
+}
+
+/* 桌面毛玻璃 AI 面板卡片：控制在轻度半透明，避免右栏重新变黑。 */
+.app-runtime--tauri.app-effect--glass .ai-chat-welcome-card,
+.app-runtime--tauri.app-effect--glass .ai-chat-status,
+.app-runtime--tauri.app-effect--glass .ai-chat-settings-row,
+.app-runtime--tauri.app-effect--glass .ai-chat-settings-actions {
+    background: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-soft));
+}
+
+/* 桌面毛玻璃 AI 面板输入类控件：保持轻度表面，不用纯实底。 */
+.app-runtime--tauri.app-effect--glass .ai-chat-settings-input,
+.app-runtime--tauri.app-effect--glass .ai-chat-settings-refresh,
+.app-runtime--tauri.app-effect--glass .ai-chat-header-ghost-button,
+.app-runtime--tauri.app-effect--glass .ai-chat-vendor-badge,
+.app-runtime--tauri.app-effect--glass .ai-chat-header-meta-chip {
+    background: rgba(var(--window-glass-bg-rgb), 0.12);
+}

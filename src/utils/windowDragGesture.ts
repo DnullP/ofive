@@ -11,6 +11,9 @@ import { useEffect } from "react";
 type StartDragging = () => Promise<void>;
 
 let cachedStartDragging: StartDragging | null = null;
+const WINDOW_DRAGGING_CLASS = "app-window--dragging";
+const WINDOW_DRAG_IDLE_MS = 180;
+const WINDOW_DRAG_POLL_MS = 80;
 
 /**
  * @function isTauriRuntime
@@ -43,6 +46,19 @@ async function getStartDragging(): Promise<StartDragging> {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     cachedStartDragging = () => getCurrentWindow().startDragging();
     return cachedStartDragging;
+}
+
+/**
+ * @function setWindowDraggingClass
+ * @description 切换根节点窗口拖动状态 class。
+ * @param active 是否处于拖动中。
+ */
+function setWindowDraggingClass(active: boolean): void {
+    if (typeof document === "undefined") {
+        return;
+    }
+
+    document.documentElement.classList.toggle(WINDOW_DRAGGING_CLASS, active);
 }
 
 /**
@@ -82,6 +98,40 @@ export function useWindowDragGestureSupport(): void {
             return;
         }
 
+        let draggingIntervalId: number | null = null;
+
+        const stopDragTracking = (): void => {
+            if (draggingIntervalId !== null) {
+                window.clearInterval(draggingIntervalId);
+                draggingIntervalId = null;
+            }
+
+            setWindowDraggingClass(false);
+        };
+
+        const startDragTracking = (): void => {
+            stopDragTracking();
+            setWindowDraggingClass(true);
+
+            let lastScreenX = window.screenX;
+            let lastScreenY = window.screenY;
+            let lastMovedAt = Date.now();
+
+            draggingIntervalId = window.setInterval(() => {
+                const moved = window.screenX !== lastScreenX || window.screenY !== lastScreenY;
+                if (moved) {
+                    lastScreenX = window.screenX;
+                    lastScreenY = window.screenY;
+                    lastMovedAt = Date.now();
+                    return;
+                }
+
+                if (Date.now() - lastMovedAt >= WINDOW_DRAG_IDLE_MS) {
+                    stopDragTracking();
+                }
+            }, WINDOW_DRAG_POLL_MS);
+        };
+
         const handleMouseDown = (event: MouseEvent): void => {
             if (event.button !== 0) {
                 return;
@@ -104,16 +154,23 @@ export function useWindowDragGestureSupport(): void {
             }
 
             event.preventDefault();
+            startDragTracking();
             void getStartDragging()
                 .then((startDragging) => startDragging())
                 .catch((error) => {
+                    stopDragTracking();
                     console.warn("[window-drag] startDragging failed", error);
                 });
         };
 
         window.addEventListener("mousedown", handleMouseDown, { capture: true });
+        window.addEventListener("mouseup", stopDragTracking, { capture: true });
+        window.addEventListener("blur", stopDragTracking);
         return () => {
             window.removeEventListener("mousedown", handleMouseDown, { capture: true });
+            window.removeEventListener("mouseup", stopDragTracking, { capture: true });
+            window.removeEventListener("blur", stopDragTracking);
+            stopDragTracking();
         };
     }, []);
 }

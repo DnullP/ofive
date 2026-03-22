@@ -48,3 +48,8 @@
     font-size: 12px;
     color: var(--text-secondary);
 }
+
+/* 桌面毛玻璃仓库面板根容器：保持透明，让文件树沿用宿主侧栏材质。 */
+.app-runtime--tauri.app-effect--glass .vault-panel-root {
+    background: transparent;
+}

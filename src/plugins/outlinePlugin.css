@@ -67,3 +67,13 @@
     color: var(--error-color);
     font-size: 12px;
 }
+
+/* 桌面毛玻璃大纲面板：根容器保持透明，由侧栏容器承载玻璃。 */
+.app-runtime--tauri.app-effect--glass .outline-panel {
+    background: transparent;
+}
+
+/* 桌面毛玻璃大纲面板头部：仅头部承载轻度结构表面。 */
+.app-runtime--tauri.app-effect--glass .outline-panel-header {
+    background: rgba(var(--window-glass-elevated-rgb), 0.08);
+}

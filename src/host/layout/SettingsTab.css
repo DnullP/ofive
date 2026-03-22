@@ -16,6 +16,13 @@
     gap: 6px;
 }
 
+/* 桌面毛玻璃设置侧栏：比内容面板更实一些，方便做导航。 */
+.app-runtime--tauri.app-effect--glass .settings-tab-sidebar {
+    background: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-strong));
+    backdrop-filter: blur(var(--glass-blur-radius)) saturate(1.04);
+    box-shadow: inset -1px 0 0 rgba(var(--window-glass-border-rgb), 0.12);
+}
+
 /* 设置页分类按钮：默认态 */
 .settings-tab-sidebar-item {
     border: 0;
@@ -42,6 +49,11 @@
     padding: 16px;
 }
 
+/* 桌面毛玻璃设置内容区：保持透明，让中心区域不要整块发黑。 */
+.app-runtime--tauri.app-effect--glass .settings-tab-content {
+    background: transparent;
+}
+
 /* 设置页标题 */
 .settings-tab-content-header {
     font-size: 16px;
@@ -60,6 +72,18 @@
     overflow: hidden;
 }
 
+/* 桌面毛玻璃设置卡片：将玻璃感收敛到卡片层，而不是整页遮罩。 */
+.app-runtime--tauri.app-effect--glass .settings-item-group {
+    background: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-soft));
+    backdrop-filter: blur(var(--glass-blur-radius)) saturate(1.03);
+    box-shadow: inset 0 1px 0 rgba(var(--window-glass-border-rgb), 0.18);
+}
+
+.app-runtime--tauri.app-effect--glass.app-window--dragging .settings-tab-sidebar,
+.app-runtime--tauri.app-effect--glass.app-window--dragging .settings-item-group {
+    backdrop-filter: none;
+}
+
 /* ========== 紧凑行风格（新统一样式） ========== */
 
 /* 紧凑设置行：表格行风格，底部分隔线 */
@@ -72,6 +96,17 @@
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
     cursor: default;
+}
+
+/* 紧凑设置行堆叠布局：用于带滑块的双层配置项。 */
+.settings-compact-row--stacked {
+    align-items: stretch;
+    flex-direction: column;
+}
+
+/* 桌面毛玻璃设置行：跟随卡片透明，不再额外叠深色底。 */
+.app-runtime--tauri.app-effect--glass .settings-compact-row {
+    background: transparent;
 }
 
 /* 紧凑设置行最后一项去掉底部分隔线 */
@@ -93,6 +128,11 @@
     padding: 8px 12px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
+}
+
+/* 桌面毛玻璃纵向设置行：保持透明以体现卡片材质。 */
+.app-runtime--tauri.app-effect--glass .settings-compact-row-column {
+    background: transparent;
 }
 
 /* 纵向行最后一项去掉底部分隔线 */
@@ -133,6 +173,33 @@
     padding: 4px 6px;
     font-size: 13px;
     text-align: center;
+}
+
+/* 毛玻璃控制行：滑块和数值框并排显示。 */
+.settings-glass-control-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* 毛玻璃滑块：占据主体空间，便于快速调整效果。 */
+.settings-glass-range-input {
+    flex: 1;
+    margin: 0;
+}
+
+/* 毛玻璃数值组：承载数值输入和单位。 */
+.settings-glass-value-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* 毛玻璃数值单位：弱化显示，避免干扰主信息。 */
+.settings-glass-value-suffix {
+    min-width: 18px;
+    color: var(--text-secondary);
+    font-size: 12px;
 }
 
 /* 紧凑行下拉选择框 */

@@ -89,3 +89,18 @@
     color: var(--error-color);
     font-size: 12px;
 }
+
+/* 桌面毛玻璃反向链接面板：根容器保持透明，不盖住宿主侧栏玻璃。 */
+.app-runtime--tauri.app-effect--glass .backlinks-panel {
+    background: transparent;
+}
+
+/* 桌面毛玻璃反向链接头部：用轻度半透明表面表达层次。 */
+.app-runtime--tauri.app-effect--glass .backlinks-panel-header {
+    background: rgba(var(--window-glass-elevated-rgb), 0.08);
+}
+
+/* 桌面毛玻璃反向链接徽章：避免变成实心块。 */
+.app-runtime--tauri.app-effect--glass .backlinks-item-weight {
+    background: rgba(var(--window-glass-bg-rgb), 0.12);
+}

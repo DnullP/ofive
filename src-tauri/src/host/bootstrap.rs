@@ -2,6 +2,7 @@
 //!
 //! 提供主窗口初始化和 `AppState` 构建逻辑，供宿主入口层复用。
 
+use crate::host::window_effects;
 use crate::state::AppState;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -14,6 +15,9 @@ pub(crate) fn build_app_state() -> AppState {
         vault_watcher: Mutex::new(None),
         pending_vault_write_trace_by_path: Mutex::new(HashMap::new()),
         ai_sidecar_runtime: Mutex::new(None),
+        windows_acrylic_effect_config: Mutex::new(
+            window_effects::WindowsAcrylicEffectConfig::default(),
+        ),
     }
 }
 
@@ -25,6 +29,25 @@ pub(crate) fn setup_main_window(
         log::warn!("[window] setup warning: main window not found");
         return Ok(());
     };
+
+    let initial_window_effect_config = app
+        .state::<AppState>()
+        .windows_acrylic_effect_config
+        .lock()
+        .map(|guard| guard.clone())
+        .unwrap_or_else(|error| {
+            log::warn!(
+                "[window] setup warning: failed to read acrylic config from state: {}",
+                error
+            );
+            window_effects::WindowsAcrylicEffectConfig::default()
+        });
+
+    if let Err(error) =
+        window_effects::apply_main_window_effects(&main_window, &initial_window_effect_config)
+    {
+        log::warn!("[window] setup warning: failed to apply vibrancy effect: {error}");
+    }
 
     let monitor = match main_window.current_monitor() {
         Ok(Some(current)) => Some(current),

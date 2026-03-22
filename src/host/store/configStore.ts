@@ -64,6 +64,24 @@ const LAST_VAULT_PATH_STORAGE_KEY = "ofive:last-vault-path";
  * @description 功能开关与编辑器体验配置。
  * @field searchEnabled - 是否开启搜索功能
  * @field knowledgeGraphEnabled - 是否开启知识图谱功能
+ * @field glassEffectEnabled - 是否开启桌面毛玻璃效果
+ * @field glassTintOpacity - 毛玻璃基础底色透明度（0.02–0.24）
+ * @field glassSurfaceOpacity - 毛玻璃表面透明度（0.08–0.4）
+ * @field glassInactiveSurfaceOpacity - 失焦时毛玻璃表面透明度（0.04–0.4）
+ * @field glassBlurRadius - 毛玻璃模糊半径（4–24 px）
+ * @field windowsAcrylicFocusedRed - Windows 聚焦 Acrylic 红色通道（0–255）
+ * @field windowsAcrylicFocusedGreen - Windows 聚焦 Acrylic 绿色通道（0–255）
+ * @field windowsAcrylicFocusedBlue - Windows 聚焦 Acrylic 蓝色通道（0–255）
+ * @field windowsAcrylicFocusedAlpha - Windows 聚焦 Acrylic 透明度通道（0–255）
+ * @field windowsAcrylicInactiveRed - Windows 失焦 Acrylic 红色通道（0–255）
+ * @field windowsAcrylicInactiveGreen - Windows 失焦 Acrylic 绿色通道（0–255）
+ * @field windowsAcrylicInactiveBlue - Windows 失焦 Acrylic 蓝色通道（0–255）
+ * @field windowsAcrylicInactiveAlpha - Windows 失焦 Acrylic 透明度通道（0–255）
+ * @field windowsAcrylicDisableSystemBackdrop - Windows 应用自定义 Acrylic 前是否先关闭系统 backdrop
+ * @field windowsAcrylicFocusedAccentFlags - Windows 聚焦 Acrylic AccentFlags（u32）
+ * @field windowsAcrylicFocusedAnimationId - Windows 聚焦 Acrylic AnimationId（u32）
+ * @field windowsAcrylicInactiveAccentFlags - Windows 失焦 Acrylic AccentFlags（u32）
+ * @field windowsAcrylicInactiveAnimationId - Windows 失焦 Acrylic AnimationId（u32）
  * @field vimModeEnabled - 是否开启 Vim 编辑模式
  * @field editorFontSize - 编辑器字体大小（px），范围 10–32
  * @field editorTabSize - Tab 缩进宽度（空格数），范围 1–8
@@ -78,6 +96,42 @@ export interface FeatureSettings {
     searchEnabled: boolean;
     /** 是否开启知识图谱功能（后端配置） */
     knowledgeGraphEnabled: boolean;
+    /** 是否开启桌面毛玻璃效果（后端配置） */
+    glassEffectEnabled: boolean;
+    /** 毛玻璃基础底色透明度（0.02–0.24），默认 0.08 */
+    glassTintOpacity: number;
+    /** 毛玻璃表面透明度（0.08–0.40），默认 0.18 */
+    glassSurfaceOpacity: number;
+    /** 失焦时毛玻璃表面透明度（0.04–0.40），默认 0.14 */
+    glassInactiveSurfaceOpacity: number;
+    /** 毛玻璃模糊半径（4–24 px），默认 10 */
+    glassBlurRadius: number;
+    /** Windows 聚焦 Acrylic 红色通道（0–255），默认 56 */
+    windowsAcrylicFocusedRed: number;
+    /** Windows 聚焦 Acrylic 绿色通道（0–255），默认 64 */
+    windowsAcrylicFocusedGreen: number;
+    /** Windows 聚焦 Acrylic 蓝色通道（0–255），默认 76 */
+    windowsAcrylicFocusedBlue: number;
+    /** Windows 聚焦 Acrylic 透明度通道（0–255），默认 72 */
+    windowsAcrylicFocusedAlpha: number;
+    /** Windows 失焦 Acrylic 红色通道（0–255），默认 64 */
+    windowsAcrylicInactiveRed: number;
+    /** Windows 失焦 Acrylic 绿色通道（0–255），默认 72 */
+    windowsAcrylicInactiveGreen: number;
+    /** Windows 失焦 Acrylic 蓝色通道（0–255），默认 84 */
+    windowsAcrylicInactiveBlue: number;
+    /** Windows 失焦 Acrylic 透明度通道（0–255），默认 56 */
+    windowsAcrylicInactiveAlpha: number;
+    /** Windows 应用自定义 Acrylic 前是否先关闭系统 backdrop，默认 true */
+    windowsAcrylicDisableSystemBackdrop: boolean;
+    /** Windows 聚焦 Acrylic AccentFlags（u32），默认 0 */
+    windowsAcrylicFocusedAccentFlags: number;
+    /** Windows 聚焦 Acrylic AnimationId（u32），默认 0 */
+    windowsAcrylicFocusedAnimationId: number;
+    /** Windows 失焦 Acrylic AccentFlags（u32），默认 0 */
+    windowsAcrylicInactiveAccentFlags: number;
+    /** Windows 失焦 Acrylic AnimationId（u32），默认 0 */
+    windowsAcrylicInactiveAnimationId: number;
     /** 是否开启 Vim 编辑模式（后端配置） */
     vimModeEnabled: boolean;
     /** 编辑器字体大小（px），默认 16 */
@@ -182,6 +236,28 @@ export function isRememberLastVaultEnabled(): boolean {
     return readRememberLastVaultFromLocal();
 }
 
+function normalizeByteFeature(
+    value: unknown,
+    fallback: number,
+): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function normalizeUint32Feature(
+    value: unknown,
+    fallback: number,
+): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.max(0, Math.min(4294967295, Math.round(value)));
+}
+
 /**
  * @function normalizeBackendConfig
  * @description 规范化后端配置，确保 feature 开关结构完整。
@@ -203,6 +279,64 @@ function normalizeBackendConfig(config: VaultConfig): {
         typeof featuresObj.searchEnabled === "boolean" ? featuresObj.searchEnabled : true;
     const knowledgeGraphEnabled =
         typeof featuresObj.knowledgeGraphEnabled === "boolean" ? featuresObj.knowledgeGraphEnabled : true;
+    const glassEffectEnabled =
+        typeof featuresObj.glassEffectEnabled === "boolean" ? featuresObj.glassEffectEnabled : true;
+    const glassTintOpacity =
+        typeof featuresObj.glassTintOpacity === "number" &&
+            Number.isFinite(featuresObj.glassTintOpacity) &&
+            (featuresObj.glassTintOpacity as number) >= 0.02 &&
+            (featuresObj.glassTintOpacity as number) <= 0.24
+            ? (featuresObj.glassTintOpacity as number)
+            : 0.08;
+    const glassSurfaceOpacity =
+        typeof featuresObj.glassSurfaceOpacity === "number" &&
+            Number.isFinite(featuresObj.glassSurfaceOpacity) &&
+            (featuresObj.glassSurfaceOpacity as number) >= 0.08 &&
+            (featuresObj.glassSurfaceOpacity as number) <= 0.40
+            ? (featuresObj.glassSurfaceOpacity as number)
+            : 0.18;
+    const glassInactiveSurfaceOpacity =
+        typeof featuresObj.glassInactiveSurfaceOpacity === "number" &&
+            Number.isFinite(featuresObj.glassInactiveSurfaceOpacity) &&
+            (featuresObj.glassInactiveSurfaceOpacity as number) >= 0.04 &&
+            (featuresObj.glassInactiveSurfaceOpacity as number) <= 0.40
+            ? (featuresObj.glassInactiveSurfaceOpacity as number)
+            : 0.14;
+    const glassBlurRadius =
+        typeof featuresObj.glassBlurRadius === "number" &&
+            Number.isFinite(featuresObj.glassBlurRadius) &&
+            (featuresObj.glassBlurRadius as number) >= 4 &&
+            (featuresObj.glassBlurRadius as number) <= 24
+            ? (featuresObj.glassBlurRadius as number)
+            : 10;
+    const windowsAcrylicFocusedRed =
+        normalizeByteFeature(featuresObj.windowsAcrylicFocusedRed, 56);
+    const windowsAcrylicFocusedGreen =
+        normalizeByteFeature(featuresObj.windowsAcrylicFocusedGreen, 64);
+    const windowsAcrylicFocusedBlue =
+        normalizeByteFeature(featuresObj.windowsAcrylicFocusedBlue, 76);
+    const windowsAcrylicFocusedAlpha =
+        normalizeByteFeature(featuresObj.windowsAcrylicFocusedAlpha, 72);
+    const windowsAcrylicInactiveRed =
+        normalizeByteFeature(featuresObj.windowsAcrylicInactiveRed, 64);
+    const windowsAcrylicInactiveGreen =
+        normalizeByteFeature(featuresObj.windowsAcrylicInactiveGreen, 72);
+    const windowsAcrylicInactiveBlue =
+        normalizeByteFeature(featuresObj.windowsAcrylicInactiveBlue, 84);
+    const windowsAcrylicInactiveAlpha =
+        normalizeByteFeature(featuresObj.windowsAcrylicInactiveAlpha, 56);
+    const windowsAcrylicDisableSystemBackdrop =
+        typeof featuresObj.windowsAcrylicDisableSystemBackdrop === "boolean"
+            ? featuresObj.windowsAcrylicDisableSystemBackdrop
+            : true;
+    const windowsAcrylicFocusedAccentFlags =
+        normalizeUint32Feature(featuresObj.windowsAcrylicFocusedAccentFlags, 0);
+    const windowsAcrylicFocusedAnimationId =
+        normalizeUint32Feature(featuresObj.windowsAcrylicFocusedAnimationId, 0);
+    const windowsAcrylicInactiveAccentFlags =
+        normalizeUint32Feature(featuresObj.windowsAcrylicInactiveAccentFlags, 0);
+    const windowsAcrylicInactiveAnimationId =
+        normalizeUint32Feature(featuresObj.windowsAcrylicInactiveAnimationId, 0);
     const vimModeEnabled =
         typeof featuresObj.vimModeEnabled === "boolean" ? featuresObj.vimModeEnabled : false;
     const editorFontSize =
@@ -251,6 +385,24 @@ function normalizeBackendConfig(config: VaultConfig): {
         ...featuresObj,
         searchEnabled,
         knowledgeGraphEnabled,
+        glassEffectEnabled,
+        glassTintOpacity,
+        glassSurfaceOpacity,
+        glassInactiveSurfaceOpacity,
+        glassBlurRadius,
+        windowsAcrylicFocusedRed,
+        windowsAcrylicFocusedGreen,
+        windowsAcrylicFocusedBlue,
+        windowsAcrylicFocusedAlpha,
+        windowsAcrylicInactiveRed,
+        windowsAcrylicInactiveGreen,
+        windowsAcrylicInactiveBlue,
+        windowsAcrylicInactiveAlpha,
+        windowsAcrylicDisableSystemBackdrop,
+        windowsAcrylicFocusedAccentFlags,
+        windowsAcrylicFocusedAnimationId,
+        windowsAcrylicInactiveAccentFlags,
+        windowsAcrylicInactiveAnimationId,
         vimModeEnabled,
         editorFontSize,
         editorTabSize,
@@ -272,6 +424,24 @@ function normalizeBackendConfig(config: VaultConfig): {
     const changed =
         featuresObj.searchEnabled !== searchEnabled ||
         featuresObj.knowledgeGraphEnabled !== knowledgeGraphEnabled ||
+        featuresObj.glassEffectEnabled !== glassEffectEnabled ||
+        featuresObj.glassTintOpacity !== glassTintOpacity ||
+        featuresObj.glassSurfaceOpacity !== glassSurfaceOpacity ||
+        featuresObj.glassInactiveSurfaceOpacity !== glassInactiveSurfaceOpacity ||
+        featuresObj.glassBlurRadius !== glassBlurRadius ||
+        featuresObj.windowsAcrylicFocusedRed !== windowsAcrylicFocusedRed ||
+        featuresObj.windowsAcrylicFocusedGreen !== windowsAcrylicFocusedGreen ||
+        featuresObj.windowsAcrylicFocusedBlue !== windowsAcrylicFocusedBlue ||
+        featuresObj.windowsAcrylicFocusedAlpha !== windowsAcrylicFocusedAlpha ||
+        featuresObj.windowsAcrylicInactiveRed !== windowsAcrylicInactiveRed ||
+        featuresObj.windowsAcrylicInactiveGreen !== windowsAcrylicInactiveGreen ||
+        featuresObj.windowsAcrylicInactiveBlue !== windowsAcrylicInactiveBlue ||
+        featuresObj.windowsAcrylicInactiveAlpha !== windowsAcrylicInactiveAlpha ||
+        featuresObj.windowsAcrylicDisableSystemBackdrop !== windowsAcrylicDisableSystemBackdrop ||
+        featuresObj.windowsAcrylicFocusedAccentFlags !== windowsAcrylicFocusedAccentFlags ||
+        featuresObj.windowsAcrylicFocusedAnimationId !== windowsAcrylicFocusedAnimationId ||
+        featuresObj.windowsAcrylicInactiveAccentFlags !== windowsAcrylicInactiveAccentFlags ||
+        featuresObj.windowsAcrylicInactiveAnimationId !== windowsAcrylicInactiveAnimationId ||
         featuresObj.vimModeEnabled !== vimModeEnabled ||
         featuresObj.editorFontSize !== editorFontSize ||
         featuresObj.editorTabSize !== editorTabSize ||
@@ -286,6 +456,24 @@ function normalizeBackendConfig(config: VaultConfig): {
         featureSettings: {
             searchEnabled,
             knowledgeGraphEnabled,
+            glassEffectEnabled,
+            glassTintOpacity,
+            glassSurfaceOpacity,
+            glassInactiveSurfaceOpacity,
+            glassBlurRadius,
+            windowsAcrylicFocusedRed,
+            windowsAcrylicFocusedGreen,
+            windowsAcrylicFocusedBlue,
+            windowsAcrylicFocusedAlpha,
+            windowsAcrylicInactiveRed,
+            windowsAcrylicInactiveGreen,
+            windowsAcrylicInactiveBlue,
+            windowsAcrylicInactiveAlpha,
+            windowsAcrylicDisableSystemBackdrop,
+            windowsAcrylicFocusedAccentFlags,
+            windowsAcrylicFocusedAnimationId,
+            windowsAcrylicInactiveAccentFlags,
+            windowsAcrylicInactiveAnimationId,
             vimModeEnabled,
             editorFontSize,
             editorTabSize,
@@ -310,6 +498,24 @@ class ConfigStore {
         featureSettings: {
             searchEnabled: true,
             knowledgeGraphEnabled: true,
+            glassEffectEnabled: true,
+            glassTintOpacity: 0.08,
+            glassSurfaceOpacity: 0.18,
+            glassInactiveSurfaceOpacity: 0.14,
+            glassBlurRadius: 10,
+            windowsAcrylicFocusedRed: 56,
+            windowsAcrylicFocusedGreen: 64,
+            windowsAcrylicFocusedBlue: 76,
+            windowsAcrylicFocusedAlpha: 72,
+            windowsAcrylicInactiveRed: 64,
+            windowsAcrylicInactiveGreen: 72,
+            windowsAcrylicInactiveBlue: 84,
+            windowsAcrylicInactiveAlpha: 56,
+            windowsAcrylicDisableSystemBackdrop: true,
+            windowsAcrylicFocusedAccentFlags: 0,
+            windowsAcrylicFocusedAnimationId: 0,
+            windowsAcrylicInactiveAccentFlags: 0,
+            windowsAcrylicInactiveAnimationId: 0,
             vimModeEnabled: false,
             editorFontSize: 16,
             editorTabSize: 4,

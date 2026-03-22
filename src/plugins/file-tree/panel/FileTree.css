@@ -121,3 +121,18 @@
   color: var(--text-secondary);
   font-size: 12px;
 }
+
+/* 桌面毛玻璃文件树：根容器保持透明，避免把侧栏玻璃盖成实底。 */
+.app-runtime--tauri.app-effect--glass .file-tree {
+  background: transparent;
+}
+
+/* 桌面毛玻璃文件树头部：保留轻度表面层次。 */
+.app-runtime--tauri.app-effect--glass .file-tree-header {
+  background: rgba(var(--window-glass-elevated-rgb), 0.08);
+}
+
+/* 桌面毛玻璃文件树编辑输入：保持轻度透明输入底。 */
+.app-runtime--tauri.app-effect--glass .tree-rename-input {
+  background: rgba(var(--window-glass-bg-rgb), 0.12);
+}

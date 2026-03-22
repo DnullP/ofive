@@ -6,3 +6,4 @@
 pub(crate) mod bootstrap;
 pub(crate) mod command_registry;
 pub(crate) mod commands;
+pub(crate) mod window_effects;

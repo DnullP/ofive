@@ -12,6 +12,17 @@
     position: relative;
 }
 
+/* 桌面毛玻璃侧栏：只让边栏本身承载材质，避免整窗一起发灰。 */
+.app-runtime--tauri.app-effect--glass .sidebar {
+    background: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity));
+    backdrop-filter: blur(var(--glass-blur-radius)) saturate(1.04);
+    box-shadow: inset 0 1px 0 rgba(var(--window-glass-border-rgb), 0.18);
+}
+
+.app-runtime--tauri.app-effect--glass.app-window--inactive .sidebar {
+    background: rgba(var(--window-glass-elevated-rgb), var(--glass-inactive-surface-opacity));
+}
+
 /* 左侧栏：右侧边框 */
 .sidebar-left {
     border-right: 1px solid var(--border-color);
@@ -36,6 +47,15 @@
     border-bottom: 1px solid var(--border-color);
     color: var(--text-secondary);
     user-select: none;
+}
+
+/* 桌面毛玻璃侧栏标题：再加一层更轻的表面，增强结构层次。 */
+.app-runtime--tauri.app-effect--glass .sidebar-header {
+    background: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-soft));
+}
+
+.app-runtime--tauri.app-effect--glass.app-window--dragging .sidebar {
+    backdrop-filter: none;
 }
 
 /* 侧栏标题拖拽区：支持在标题空白处拖动窗口。 */

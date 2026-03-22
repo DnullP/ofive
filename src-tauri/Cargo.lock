@@ -3031,6 +3031,7 @@ dependencies = [
  "notify",
  "prost",
  "pulldown-cmark",
+ "raw-window-handle",
  "reqwest 0.12.28",
  "rmcp",
  "rusqlite",
@@ -3045,6 +3046,8 @@ dependencies = [
  "tokio",
  "tonic",
  "tonic-build",
+ "window-vibrancy",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
