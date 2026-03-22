@@ -528,6 +528,14 @@
 
 /* 桌面毛玻璃运行时变量：将基础表面色切换为半透明材质色，确保原生 Mica/Acrylic 能透出。 */
 :root.app-runtime--tauri.app-effect--glass {
+  --window-glass-border: rgba(255, 255, 255, 0.14);
+  --window-glass-border-rgb: 255, 255, 255;
+  --bg-primary: rgba(var(--window-glass-bg-rgb), var(--glass-surface-opacity));
+  --bg-secondary: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-soft));
+  --bg-hover: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-strong));
+  --border-color: rgba(var(--window-glass-border-rgb), 0.18);
+  --overlay-shadow-floating: 0 10px 28px rgba(0, 0, 0, 0.14);
+  --overlay-shadow-strong: 0 20px 44px rgba(0, 0, 0, 0.2);
   --editor-bg-color: rgba(var(--window-glass-bg-rgb), 0.18);
   --editor-gutter-bg-color: rgba(var(--window-glass-elevated-rgb), 0.24);
   --graph-label-bg: rgba(var(--window-glass-elevated-rgb), 0.26);
@@ -551,21 +559,35 @@
 
 /* macOS 毛玻璃运行时：保留更亮一些的材料感，贴合系统 sidebar vibrancy。 */
 :root[data-theme="dark"].app-runtime--tauri.app-effect--glass.app-platform--macos {
-  --window-glass-bg: rgba(34, 37, 41, 0.58);
-  --window-glass-elevated: rgba(42, 46, 51, 0.68);
-  --window-glass-bg-rgb: 34, 37, 41;
-  --window-glass-elevated-rgb: 42, 46, 51;
+  --window-glass-bg: rgba(28, 31, 35, 0.16);
+  --window-glass-elevated: rgba(37, 41, 47, 0.24);
+  --window-glass-border: rgba(255, 255, 255, 0.22);
+  --window-glass-bg-rgb: 28, 31, 35;
+  --window-glass-elevated-rgb: 37, 41, 47;
+  --window-glass-border-rgb: 255, 255, 255;
+  --bg-primary: rgba(28, 31, 35, 0.09);
+  --bg-secondary: rgba(37, 41, 47, 0.14);
+  --bg-hover: rgba(47, 53, 61, 0.2);
+  --border-color: rgba(255, 255, 255, 0.18);
+  --editor-bg-color: rgba(28, 31, 35, 0.08);
+  --editor-gutter-bg-color: rgba(37, 41, 47, 0.12);
 }
 
 /* macOS 亮色/牛皮纸毛玻璃：保持更高透光度，避免发灰发脏。 */
 :root[data-theme="light"].app-runtime--tauri.app-effect--glass.app-platform--macos,
 :root[data-theme="kraft"].app-runtime--tauri.app-effect--glass.app-platform--macos {
-  --window-glass-bg: rgba(248, 249, 251, 0.56);
-  --window-glass-elevated: rgba(255, 255, 255, 0.68);
-  --window-glass-border: rgba(15, 23, 42, 0.12);
+  --window-glass-bg: rgba(248, 249, 251, 0.18);
+  --window-glass-elevated: rgba(255, 255, 255, 0.28);
+  --window-glass-border: rgba(15, 23, 42, 0.16);
   --window-glass-bg-rgb: 248, 249, 251;
   --window-glass-elevated-rgb: 255, 255, 255;
   --window-glass-border-rgb: 15, 23, 42;
+  --bg-primary: rgba(248, 249, 251, 0.08);
+  --bg-secondary: rgba(255, 255, 255, 0.14);
+  --bg-hover: rgba(255, 255, 255, 0.22);
+  --border-color: rgba(15, 23, 42, 0.16);
+  --editor-bg-color: rgba(248, 249, 251, 0.06);
+  --editor-gutter-bg-color: rgba(255, 255, 255, 0.1);
 }
 
 * {
@@ -613,6 +635,11 @@ body {
   background: transparent;
 }
 
+.app-runtime--tauri.app-effect--glass html,
+.app-runtime--tauri.app-effect--glass #root {
+  background: transparent;
+}
+
 /* 内容区域恢复文本选择功能 */
 input,
 textarea,
@@ -647,6 +674,16 @@ textarea,
   background: transparent;
 }
 
+.app-runtime--tauri.app-effect--glass.app-platform--macos .app-shell {
+  background:
+    linear-gradient(180deg, rgba(var(--window-glass-bg-rgb), 0.04), rgba(var(--window-glass-bg-rgb), 0.015));
+  backdrop-filter: blur(calc(var(--glass-blur-radius) * 1.35)) saturate(1.18);
+}
+
+.app-runtime--tauri.app-effect--glass.app-platform--macos.app-window--dragging .app-shell {
+  backdrop-filter: none;
+}
+
 .app-content {
   flex: 1;
   min-height: 0;
@@ -670,14 +707,14 @@ textarea,
 }
 
 .app-runtime--tauri.app-effect--glass .app-titlebar {
-  background: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity));
-  border-bottom: 1px solid rgba(var(--window-glass-border-rgb), 0.24);
-  backdrop-filter: blur(var(--glass-blur-radius)) saturate(1.08);
-  box-shadow: inset 0 1px 0 rgba(var(--window-glass-border-rgb), 0.1);
+  background: rgba(var(--window-glass-elevated-rgb), 0.12);
+  border-bottom: 1px solid rgba(var(--window-glass-border-rgb), 0.28);
+  backdrop-filter: blur(calc(var(--glass-blur-radius) * 1.15)) saturate(1.14);
+  box-shadow: inset 0 1px 0 rgba(var(--window-glass-border-rgb), 0.14);
 }
 
 .app-runtime--tauri.app-effect--glass.app-window--inactive .app-titlebar {
-  background: rgba(var(--window-glass-elevated-rgb), var(--glass-inactive-surface-opacity));
+  background: rgba(var(--window-glass-elevated-rgb), 0.16);
 }
 
 .app-runtime--tauri.app-effect--glass.app-window--dragging .app-titlebar {

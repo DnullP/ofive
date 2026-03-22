@@ -26,6 +26,16 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sidecars/go/ofive-ai-agent/go.mod
+
+      - name: Setup Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: '31.1'
+
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -52,6 +62,12 @@ jobs:
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
+
+      - name: Run Go sidecar tests
+        run: bun run test:go
+
+      - name: Build Go sidecar binary
+        run: bun run build:sidecar
 
       - name: Install Playwright browser
         run: bun run test:playwright:install
@@ -110,6 +126,16 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sidecars/go/ofive-ai-agent/go.mod
+
+      - name: Setup Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: '31.1'
+
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -137,6 +163,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
+
+      - name: Build Go sidecar binary
+        run: bun run build:sidecar
 
       - name: Build Tauri bundle
         run: bun run tauri build

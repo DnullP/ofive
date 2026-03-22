@@ -10,6 +10,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
+use crate::app::vault::{query_app_service, vault_app_service};
 use crate::domain::ai::sidecar_contract::{
     SidecarCapabilityCallRequest, SidecarCapabilityCallResult,
 };
@@ -18,15 +19,6 @@ use crate::domain::capability::{
     CapabilityExecutionContext, CapabilityExecutionRequest, CapabilityExecutor,
 };
 use crate::state::{get_vault_root, AppState};
-use crate::vault_commands::backlinks::get_backlinks_for_file_in_root;
-use crate::vault_commands::graph::get_current_vault_markdown_graph_in_root;
-use crate::vault_commands::outline::get_vault_markdown_outline_in_root;
-use crate::vault_commands::search::search_vault_markdown_files_in_root;
-use crate::vault_commands::vault_ops::{
-    create_vault_directory_in_root, create_vault_markdown_file_in_root,
-    delete_vault_markdown_file_in_root, read_vault_markdown_file_in_root,
-    rename_vault_markdown_file_in_root, save_vault_markdown_file_in_root,
-};
 
 /// 在当前 app 上下文中执行一次 sidecar capability 调用。
 pub(crate) fn execute_sidecar_capability_call(
@@ -76,16 +68,10 @@ pub(crate) fn execute_capability_in_root(
             GetBacklinksForFileExecutor.execute(request.input, &context)
         }
         "vault.get_markdown_graph" => GetMarkdownGraphExecutor.execute(request.input, &context),
-        "vault.create_markdown_file" => {
-            CreateMarkdownFileExecutor.execute(request.input, &context)
-        }
+        "vault.create_markdown_file" => CreateMarkdownFileExecutor.execute(request.input, &context),
         "vault.save_markdown_file" => SaveMarkdownFileExecutor.execute(request.input, &context),
-        "vault.rename_markdown_file" => {
-            RenameMarkdownFileExecutor.execute(request.input, &context)
-        }
-        "vault.delete_markdown_file" => {
-            DeleteMarkdownFileExecutor.execute(request.input, &context)
-        }
+        "vault.rename_markdown_file" => RenameMarkdownFileExecutor.execute(request.input, &context),
+        "vault.delete_markdown_file" => DeleteMarkdownFileExecutor.execute(request.input, &context),
         "vault.create_directory" => CreateDirectoryExecutor.execute(request.input, &context),
         _ => Err(format!(
             "平台能力 {} 已注册，但当前执行器尚未实现",
@@ -152,7 +138,10 @@ impl CapabilityExecutor for ReadMarkdownFileExecutor {
         context: &CapabilityExecutionContext<'_>,
     ) -> Result<Value, String> {
         let input: RelativePathInput = parse_input(input, "vault.read_markdown_file")?;
-        let output = read_vault_markdown_file_in_root(input.relative_path, context.vault_root)?;
+        let output = vault_app_service::read_vault_markdown_file_in_root(
+            input.relative_path,
+            context.vault_root,
+        )?;
         serialize_output(output, "vault.read_markdown_file")
     }
 }
@@ -164,8 +153,11 @@ impl CapabilityExecutor for SearchMarkdownFilesExecutor {
         context: &CapabilityExecutionContext<'_>,
     ) -> Result<Value, String> {
         let input: SearchMarkdownFilesInput = parse_input(input, "vault.search_markdown_files")?;
-        let output =
-            search_vault_markdown_files_in_root(context.vault_root, input.query, input.limit)?;
+        let output = query_app_service::search_vault_markdown_files_in_root(
+            context.vault_root,
+            input.query,
+            input.limit,
+        )?;
         serialize_output(output, "vault.search_markdown_files")
     }
 }
@@ -177,7 +169,10 @@ impl CapabilityExecutor for GetMarkdownOutlineExecutor {
         context: &CapabilityExecutionContext<'_>,
     ) -> Result<Value, String> {
         let input: RelativePathInput = parse_input(input, "vault.get_markdown_outline")?;
-        let output = get_vault_markdown_outline_in_root(context.vault_root, input.relative_path)?;
+        let output = query_app_service::get_vault_markdown_outline_in_root(
+            context.vault_root,
+            input.relative_path,
+        )?;
         serialize_output(output, "vault.get_markdown_outline")
     }
 }
@@ -189,7 +184,10 @@ impl CapabilityExecutor for GetBacklinksForFileExecutor {
         context: &CapabilityExecutionContext<'_>,
     ) -> Result<Value, String> {
         let input: RelativePathInput = parse_input(input, "vault.get_backlinks_for_file")?;
-        let output = get_backlinks_for_file_in_root(context.vault_root, &input.relative_path)?;
+        let output = query_app_service::get_backlinks_for_file_in_root(
+            context.vault_root,
+            &input.relative_path,
+        )?;
         serialize_output(output, "vault.get_backlinks_for_file")
     }
 }
@@ -200,7 +198,8 @@ impl CapabilityExecutor for GetMarkdownGraphExecutor {
         _input: Value,
         context: &CapabilityExecutionContext<'_>,
     ) -> Result<Value, String> {
-        let output = get_current_vault_markdown_graph_in_root(context.vault_root)?;
+        let output =
+            query_app_service::get_current_vault_markdown_graph_in_root(context.vault_root)?;
         serialize_output(output, "vault.get_markdown_graph")
     }
 }
@@ -213,7 +212,7 @@ impl CapabilityExecutor for CreateMarkdownFileExecutor {
     ) -> Result<Value, String> {
         let input: RelativePathWithOptionalContentInput =
             parse_input(input, "vault.create_markdown_file")?;
-        let output = create_vault_markdown_file_in_root(
+        let output = vault_app_service::create_vault_markdown_file_in_root(
             input.relative_path,
             input.content,
             context.vault_root,
@@ -228,9 +227,8 @@ impl CapabilityExecutor for SaveMarkdownFileExecutor {
         input: Value,
         context: &CapabilityExecutionContext<'_>,
     ) -> Result<Value, String> {
-        let input: RelativePathWithContentInput =
-            parse_input(input, "vault.save_markdown_file")?;
-        let output = save_vault_markdown_file_in_root(
+        let input: RelativePathWithContentInput = parse_input(input, "vault.save_markdown_file")?;
+        let output = vault_app_service::save_vault_markdown_file_in_root(
             input.relative_path,
             input.content,
             context.vault_root,
@@ -245,9 +243,8 @@ impl CapabilityExecutor for RenameMarkdownFileExecutor {
         input: Value,
         context: &CapabilityExecutionContext<'_>,
     ) -> Result<Value, String> {
-        let input: RenameMarkdownFileInput =
-            parse_input(input, "vault.rename_markdown_file")?;
-        let output = rename_vault_markdown_file_in_root(
+        let input: RenameMarkdownFileInput = parse_input(input, "vault.rename_markdown_file")?;
+        let output = vault_app_service::rename_vault_markdown_file_in_root(
             input.from_relative_path,
             input.to_relative_path,
             context.vault_root,
@@ -263,7 +260,10 @@ impl CapabilityExecutor for DeleteMarkdownFileExecutor {
         context: &CapabilityExecutionContext<'_>,
     ) -> Result<Value, String> {
         let input: RelativePathInput = parse_input(input, "vault.delete_markdown_file")?;
-        delete_vault_markdown_file_in_root(input.relative_path, context.vault_root)?;
+        vault_app_service::delete_vault_markdown_file_in_root(
+            input.relative_path,
+            context.vault_root,
+        )?;
         Ok(serde_json::json!({"ok": true}))
     }
 }
@@ -275,7 +275,10 @@ impl CapabilityExecutor for CreateDirectoryExecutor {
         context: &CapabilityExecutionContext<'_>,
     ) -> Result<Value, String> {
         let input: RelativeDirectoryPathInput = parse_input(input, "vault.create_directory")?;
-        create_vault_directory_in_root(input.relative_directory_path, context.vault_root)?;
+        vault_app_service::create_vault_directory_in_root(
+            input.relative_directory_path,
+            context.vault_root,
+        )?;
         Ok(serde_json::json!({"ok": true}))
     }
 }

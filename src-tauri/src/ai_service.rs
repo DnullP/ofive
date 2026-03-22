@@ -1,43 +1,15 @@
-//! # AI 服务模块
+//! # AI 契约模块
 //!
-//! 负责启动并维护 Go sidecar，通过 gRPC 与 sidecar 通信，
-//! 并将流式聊天结果转发为前端可订阅的 Tauri 事件。
-//!
-//! 该模块当前目标是：
-//! - 保证 sidecar 可被 Tauri 正常拉起与打包；
-//! - 保证 Rust 可通过 gRPC 获取流式聊天结果；
-//! - 保证前端只依赖 Tauri `invoke + listen` 即可消费流式对话。
+//! 定义 AI 相关的共享数据结构与 protobuf 契约。
+//! 具体应用编排、基础设施连接和宿主事件桥接已分别迁移到
+//! `app/ai`、`infra/ai` 与 `host/events`。
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::AtomicU64;
-#[path = "ai_service/settings.rs"]
-mod settings;
-#[path = "ai_service/sidecar.rs"]
-mod sidecar;
-#[path = "ai_service/stream.rs"]
-mod stream;
-
-const AI_CHAT_STREAM_EVENT_NAME: &str = "ai://chat-stream";
-const AI_CHAT_SETTINGS_CONFIG_KEY: &str = "aiChatSettings";
-const DEFAULT_AI_VENDOR_ID: &str = "baidu-qianfan";
-const SIDECAR_HEALTH_RETRY_COUNT: usize = 30;
-const SIDECAR_HEALTH_RETRY_DELAY_MS: u64 = 100;
-
-static AI_STREAM_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 pub mod pb {
     tonic::include_proto!("ofive.ai.v1");
 }
-
-pub(crate) use settings::fetch_ai_vendor_models;
-pub(crate) use settings::load_ai_chat_settings;
-pub(crate) use settings::load_validated_ai_chat_settings;
-pub(crate) use settings::save_ai_chat_settings_in_state;
-pub(crate) use sidecar::connect_client as connect_ai_sidecar_client;
-pub(crate) use sidecar::ensure_sidecar_endpoint as ensure_ai_sidecar_endpoint;
-pub(crate) use stream::emit_stream_event as emit_ai_stream_event;
-pub(crate) use stream::next_stream_id as next_ai_stream_id;
 
 /// AI vendor 字段类型。
 #[derive(Debug, Clone, Serialize)]
@@ -82,6 +54,36 @@ pub struct AiChatSettings {
     pub field_values: HashMap<String, String>,
 }
 
+/// AI 对话消息记录。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatHistoryMessage {
+    pub id: String,
+    pub role: String,
+    pub text: String,
+    pub created_at_unix_ms: i64,
+}
+
+/// AI 对话会话记录。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatConversationRecord {
+    pub id: String,
+    pub session_id: String,
+    pub title: String,
+    pub created_at_unix_ms: i64,
+    pub updated_at_unix_ms: i64,
+    pub messages: Vec<AiChatHistoryMessage>,
+}
+
+/// AI 对话历史仓库级状态。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatHistoryState {
+    pub active_conversation_id: Option<String>,
+    pub conversations: Vec<AiChatConversationRecord>,
+}
+
 /// sidecar 健康检查响应。
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,9 +119,4 @@ pub struct AiChatStreamEventPayload {
     pub confirmation_tool_args_json: Option<String>,
     pub error: Option<String>,
     pub done: bool,
-}
-
-/// 获取可用 AI vendor 列表。
-pub(crate) fn load_ai_vendor_catalog() -> Vec<AiVendorDefinition> {
-    settings::ai_vendor_catalog()
 }

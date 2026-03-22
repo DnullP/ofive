@@ -1,21 +1,6 @@
 /**
  * @module plugins/aiChatPlugin
  * @description AI 聊天插件：注册右侧聊天面板和 AI 设置选栏。
- *
- *   该插件复用宿主已有的插件扩展点：
- *   - activityRegistry：注册独立图标入口
- *   - panelRegistry：注册右侧 panel 聊天面板
- *   - settingsRegistry：注册动态 AI 设置页
- *
- * @dependencies
- *   - react
- *   - lucide-react
- *   - ../api/aiApi
- *   - ../host/registry/activityRegistry
- *   - ../host/registry/panelRegistry
- *   - ../host/settings/settingsRegistry
- *   - ../host/store/vaultStore
- *   - i18next
  */
 
 import React, {
@@ -27,16 +12,20 @@ import React, {
     type KeyboardEvent,
     type ReactNode,
 } from "react";
-import { confirm } from "@tauri-apps/plugin-dialog";
-import { ArrowUp, Bot, SlidersHorizontal, Sparkles } from "lucide-react";
+import { ArrowUp, Bot, Check, Plus, Sparkles, X } from "lucide-react";
 import {
+    getAiChatHistory,
     getAiChatSettings,
     getAiVendorCatalog,
     getAiVendorModels,
+    saveAiChatHistory,
     saveAiChatSettings,
     startAiChatStream,
     submitAiChatConfirmation,
     subscribeAiChatStreamEvents,
+    type AiChatConversationRecord,
+    type AiChatHistoryMessage,
+    type AiChatHistoryState,
     type AiChatSettings,
     type AiChatStreamEventPayload,
     type AiVendorDefinition,
@@ -52,31 +41,24 @@ import "./aiChatPlugin.css";
 i18n.addResourceBundle("en", "translation", {
     aiChatPlugin: {
         title: "AI Chat",
-        subtitle: "A right-side copilot-style panel backed by the Go sidecar.",
-        empty: "Ask a question to start a streamed conversation. The backend will read the currently saved AI vendor configuration.",
-        draftPlaceholder: "Ask anything about your notes or workflow...",
+        draftPlaceholder: "Ask about this vault...",
         send: "Send",
-        sending: "Generating...",
-        emptyEyebrow: "Context-aware sidecar assistant",
-        emptyTitle: "Draft, inspect, and refine without leaving your notes.",
-        emptyBody: "Use the panel like a coding copilot: start from a quick prompt, then iterate in a focused thread on the right.",
-        quickPromptsLabel: "Start with a prompt",
-        quickPromptSummarize: "Summarize the current note into a compact outline.",
-        quickPromptRefine: "Rewrite selected content to be sharper and more concise.",
-        quickPromptPlan: "Turn this idea into an execution plan with clear next steps.",
+        sending: "Running...",
+        quickPromptsLabel: "Quick start",
+        quickPromptSummarize: "Summarize this note into a short outline.",
+        quickPromptRefine: "Rewrite this note to be clearer and tighter.",
+        quickPromptPlan: "Turn this into a step-by-step plan.",
         readyStatus: "Ready",
         missingConfigStatus: "Setup required",
-        streamingStatus: "Streaming response",
-        vaultStatus: "Vault connected",
-        notConfiguredShort: "Vendor configuration incomplete",
-        vendorMissing: "Open Settings and complete the AI vendor configuration before chatting.",
+        streamingStatus: "Running",
+        vendorMissing: "Complete AI settings before chatting.",
         settingsSection: "settings.aiSection",
         settingsTitle: "AI Chat Settings",
         settingsSubtitle: "Choose a vendor and fill only the fields required by that vendor.",
         vendorLabel: "Model Vendor",
         vendorDescription: "The vendor list and field schema are provided by the Rust backend.",
         modelLabel: "Model",
-        modelDescription: "Load the vendor-supported models from the backend, then choose one or keep a manual override.",
+        modelDescription: "Load vendor-supported models from the backend, then choose one or keep a manual override.",
         refreshModels: "Refresh models",
         refreshingModels: "Loading models...",
         modelLoadHint: "Available models are fetched from the backend using the current vendor credentials.",
@@ -89,19 +71,24 @@ i18n.addResourceBundle("en", "translation", {
         configuredVendor: "Configured vendor",
         assistant: "Assistant",
         user: "You",
-        composerHint: "Responses are streamed from Rust through Tauri events.",
-        composerHintMissing: "Complete the vendor fields in Settings before starting a chat.",
-        settingsHint: "Configure vendor",
-        settingsHintCompact: "Configure",
-        threadLabel: "Conversation",
+        composerHint: "Enter sends. Shift+Enter adds a new line.",
+        composerHintMissing: "AI settings are incomplete.",
         tabChat: "Chat",
-        tabDebug: "Debug Log",
-        debugEmptyTitle: "No model traces yet.",
-        debugEmptyBody: "Each raw model request and raw model response will appear here after you send a message.",
+        tabDebug: "Debug",
+        debugEmptyTitle: "No debug log yet.",
+        debugEmptyBody: "Raw model requests and responses for the active conversation will appear here.",
         debugEntryFallbackTitle: "Debug trace",
-        confirmationFallbackHint: "The assistant wants to run a tool that modifies your vault.",
+        confirmationFallbackHint: "This action will modify the vault.",
         confirmationToolLabel: "Tool",
-        confirmationArgsLabel: "Arguments",
+        confirmApprove: "Approve",
+        confirmReject: "Reject",
+        confirmSubmitting: "Submitting...",
+        historySection: "Conversations",
+        historyEmpty: "No conversation yet.",
+        newConversation: "New",
+        untitledConversation: "New conversation",
+        emptyTitle: "Start from a quick prompt.",
+        emptyBody: "You can switch conversations at any time.",
     },
     settings: {
         aiSection: "AI Chat",
@@ -111,24 +98,17 @@ i18n.addResourceBundle("en", "translation", {
 i18n.addResourceBundle("zh", "translation", {
     aiChatPlugin: {
         title: "AI 对话",
-        subtitle: "一个放在右侧的 Copilot 风格聊天面板，由 Go sidecar 驱动。",
-        empty: "输入问题即可开始流式对话。后端会读取当前仓库里保存的 AI vendor 配置。",
-        draftPlaceholder: "询问你的笔记、知识点或工作流问题...",
+        draftPlaceholder: "询问这个仓库里的内容...",
         send: "发送",
-        sending: "生成中...",
-        emptyEyebrow: "具备上下文感知的 sidecar 助手",
-        emptyTitle: "不用离开笔记区，就能起草、检查和迭代内容。",
-        emptyBody: "把它当成右侧常驻 Copilot：先点一个快捷提示，再围绕当前问题持续追问。",
-        quickPromptsLabel: "从一个快捷提示开始",
-        quickPromptSummarize: "把当前笔记压缩成一份清晰的大纲。",
-        quickPromptRefine: "把选中内容改写得更准确、更凝练。",
-        quickPromptPlan: "把这个想法拆成一份可执行计划。",
+        sending: "执行中...",
+        quickPromptsLabel: "快捷开始",
+        quickPromptSummarize: "把这篇笔记压缩成简短大纲。",
+        quickPromptRefine: "把这篇笔记改写得更清楚、更紧凑。",
+        quickPromptPlan: "把这个想法拆成一步步计划。",
         readyStatus: "就绪",
         missingConfigStatus: "需要配置",
-        streamingStatus: "正在流式生成",
-        vaultStatus: "仓库已连接",
-        notConfiguredShort: "Vendor 配置未完成",
-        vendorMissing: "请先打开设置页，完成 AI vendor 配置后再开始聊天。",
+        streamingStatus: "执行中",
+        vendorMissing: "先补全 AI 设置，再开始对话。",
         settingsSection: "settings.aiSection",
         settingsTitle: "AI 对话设置",
         settingsSubtitle: "先选择 vendor，再填写该 vendor 需要的动态字段。",
@@ -148,19 +128,24 @@ i18n.addResourceBundle("zh", "translation", {
         configuredVendor: "当前配置 vendor",
         assistant: "助手",
         user: "你",
-        composerHint: "响应通过 Rust 后端转发为 Tauri 流事件。",
-        composerHintMissing: "先到设置页补全 vendor 必填字段，再开始对话。",
-        settingsHint: "去配置 vendor",
-        settingsHintCompact: "配置",
-        threadLabel: "会话",
+        composerHint: "Enter 发送，Shift+Enter 换行。",
+        composerHintMissing: "AI 设置尚未完成。",
         tabChat: "对话",
-        tabDebug: "调试日志",
-        debugEmptyTitle: "还没有模型调试轨迹。",
-        debugEmptyBody: "发送消息后，这里会展示每次发给模型的原始请求和模型返回的原始内容。",
+        tabDebug: "调试",
+        debugEmptyTitle: "还没有调试日志。",
+        debugEmptyBody: "当前会话的原始模型请求和响应会显示在这里。",
         debugEntryFallbackTitle: "调试轨迹",
-        confirmationFallbackHint: "助手准备执行一个会修改仓库内容的工具。",
+        confirmationFallbackHint: "这个操作会修改仓库内容。",
         confirmationToolLabel: "工具",
-        confirmationArgsLabel: "参数",
+        confirmApprove: "批准",
+        confirmReject: "拒绝",
+        confirmSubmitting: "提交中...",
+        historySection: "会话",
+        historyEmpty: "还没有会话。",
+        newConversation: "新建",
+        untitledConversation: "新对话",
+        emptyTitle: "从一个快捷提示开始。",
+        emptyBody: "你可以随时切换会话继续聊。",
     },
     settings: {
         aiSection: "AI 对话",
@@ -170,22 +155,29 @@ i18n.addResourceBundle("zh", "translation", {
 const AI_CHAT_PANEL_ID = "ai-chat";
 const AI_CHAT_SETTINGS_UPDATED_EVENT = "ofive:ai-settings-updated";
 
-interface ChatMessage {
-    id: string;
-    role: "assistant" | "user";
-    text: string;
-}
-
-interface PendingStreamBinding {
-    streamId: string | null;
-    assistantMessageId: string | null;
-}
-
 interface ChatDebugEntry {
     id: string;
     streamId: string;
     title: string;
     text: string;
+}
+
+interface PendingStreamBinding {
+    streamId: string | null;
+    conversationId: string | null;
+    sessionId: string | null;
+    assistantMessageId: string | null;
+}
+
+interface PendingToolConfirmation {
+    confirmationId: string;
+    sessionId: string;
+    assistantMessageId: string;
+    conversationId: string;
+    hint: string;
+    toolName: string;
+    toolArgsJson: string;
+    isSubmitting: boolean;
 }
 
 interface QuickPromptDefinition {
@@ -198,17 +190,9 @@ interface AiPanelErrorDisplay {
     detail: string | null;
 }
 
-interface PendingToolConfirmation {
-    confirmationId: string;
-    sessionId: string;
-    assistantMessageId: string;
-    hint: string;
-    toolName: string;
-    toolArgsJson: string;
-}
-
 let chatMessageSequence = 1;
 let chatDebugSequence = 1;
+let chatConversationSequence = 1;
 
 const QUICK_PROMPTS: QuickPromptDefinition[] = [
     { id: "summarize", translationKey: "aiChatPlugin.quickPromptSummarize" },
@@ -229,12 +213,27 @@ function nextChatMessageId(): string {
 
 /**
  * @function nextChatDebugEntryId
- * @description 生成聊天调试日志唯一 ID。
+ * @description 生成调试日志唯一 ID。
  * @returns 调试日志 ID。
  */
 function nextChatDebugEntryId(): string {
     const nextId = `ai-chat-debug-${String(chatDebugSequence)}`;
     chatDebugSequence += 1;
+    return nextId;
+}
+
+/**
+ * @function nextConversationId
+ * @description 生成会话唯一 ID。
+ * @returns 会话 ID。
+ */
+function nextConversationId(): string {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+    }
+
+    const nextId = `ai-chat-conversation-${Date.now()}-${String(chatConversationSequence)}`;
+    chatConversationSequence += 1;
     return nextId;
 }
 
@@ -254,7 +253,7 @@ function resolveVendor(
 
 /**
  * @function mergeSettingsForVendor
- * @description 将当前设置与目标 vendor 的字段定义合并，补齐默认值并移除无关字段。
+ * @description 将当前设置与目标 vendor 的字段定义合并。
  * @param currentSettings 当前设置。
  * @param vendor 目标 vendor。
  * @returns 合并后的设置。
@@ -299,33 +298,125 @@ function formatAiPanelError(rawError: string): AiPanelErrorDisplay {
         };
     }
 
-    const summary = trimmed.slice(0, firstSeparatorIndex).trim();
-    const detail = trimmed.slice(firstSeparatorIndex + 2).trim();
-
     return {
-        summary: summary || trimmed,
-        detail: detail || null,
+        summary: trimmed.slice(0, firstSeparatorIndex).trim() || trimmed,
+        detail: trimmed.slice(firstSeparatorIndex + 2).trim() || null,
     };
 }
 
 /**
- * @function buildConfirmationMessage
- * @description 组合展示给用户的 tool 确认文本。
- * @param payload 当前确认请求。
- * @returns 用于原生确认弹窗的文本。
+ * @function createConversationRecord
+ * @description 创建空会话记录。
+ * @returns 新会话记录。
  */
-function buildConfirmationMessage(payload: PendingToolConfirmation): string {
-    const sections: string[] = [payload.hint.trim() || i18n.t("aiChatPlugin.confirmationFallbackHint")];
+function createConversationRecord(): AiChatConversationRecord {
+    const now = Date.now();
+    const id = nextConversationId();
+    return {
+        id,
+        sessionId: `ai-chat-session-${id}`,
+        title: i18n.t("aiChatPlugin.untitledConversation"),
+        createdAtUnixMs: now,
+        updatedAtUnixMs: now,
+        messages: [],
+    };
+}
 
-    if (payload.toolName.trim()) {
-        sections.push(`${i18n.t("aiChatPlugin.confirmationToolLabel")}: ${payload.toolName}`);
+/**
+ * @function sortConversations
+ * @description 按更新时间倒序排列会话。
+ * @param conversations 会话列表。
+ * @returns 排序结果。
+ */
+function sortConversations(conversations: AiChatConversationRecord[]): AiChatConversationRecord[] {
+    return [...conversations].sort((left, right) => {
+        if (left.updatedAtUnixMs === right.updatedAtUnixMs) {
+            return left.createdAtUnixMs - right.createdAtUnixMs;
+        }
+        return right.updatedAtUnixMs - left.updatedAtUnixMs;
+    });
+}
+
+/**
+ * @function deriveConversationTitle
+ * @description 根据首条用户消息生成会话标题。
+ * @param messages 会话消息。
+ * @returns 标题文本。
+ */
+function deriveConversationTitle(messages: AiChatHistoryMessage[]): string {
+    const firstUserMessage = messages.find((message) => message.role === "user" && message.text.trim().length > 0);
+    if (!firstUserMessage) {
+        return i18n.t("aiChatPlugin.untitledConversation");
     }
 
-    if (payload.toolArgsJson.trim() && payload.toolArgsJson.trim() !== "{}") {
-        sections.push(`${i18n.t("aiChatPlugin.confirmationArgsLabel")}:\n${payload.toolArgsJson}`);
+    const normalized = firstUserMessage.text.replace(/\s+/g, " ").trim();
+    if (normalized.length <= 26) {
+        return normalized;
+    }
+    return `${normalized.slice(0, 26)}...`;
+}
+
+/**
+ * @function ensureHistoryState
+ * @description 保证历史状态始终有一个可用会话。
+ * @param history 历史状态。
+ * @returns 修正后的历史状态。
+ */
+function ensureHistoryState(history: AiChatHistoryState): AiChatHistoryState {
+    if (history.conversations.length === 0) {
+        const conversation = createConversationRecord();
+        return {
+            activeConversationId: conversation.id,
+            conversations: [conversation],
+        };
     }
 
-    return sections.join("\n\n");
+    const activeConversationId = history.activeConversationId
+        && history.conversations.some((conversation) => conversation.id === history.activeConversationId)
+        ? history.activeConversationId
+        : history.conversations[0]?.id ?? null;
+
+    return {
+        activeConversationId,
+        conversations: sortConversations(history.conversations),
+    };
+}
+
+/**
+ * @function buildPersistableHistory
+ * @description 生成可持久化的历史状态。
+ * @param historyState 当前历史状态。
+ * @returns 过滤后的历史状态。
+ */
+function buildPersistableHistory(historyState: AiChatHistoryState): AiChatHistoryState {
+    return {
+        activeConversationId: historyState.activeConversationId,
+        conversations: sortConversations(historyState.conversations).map((conversation) => ({
+            ...conversation,
+            title: deriveConversationTitle(conversation.messages),
+            messages: conversation.messages.filter((message) => message.text.trim().length > 0),
+        })),
+    };
+}
+
+/**
+ * @function formatConversationTime
+ * @description 格式化会话更新时间。
+ * @param timestamp 时间戳。
+ * @returns 格式化结果。
+ */
+function formatConversationTime(timestamp: number): string {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const isSameDay = date.toDateString() === now.toDateString();
+
+    return new Intl.DateTimeFormat(i18n.language === "zh" ? "zh-CN" : "en-US", {
+        month: isSameDay ? undefined : "2-digit",
+        day: isSameDay ? undefined : "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+    }).format(date);
 }
 
 /**
@@ -335,8 +426,9 @@ function buildConfirmationMessage(payload: PendingToolConfirmation): string {
  */
 function ChatPanel(): ReactNode {
     const { currentVaultPath } = useVaultState();
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [debugEntries, setDebugEntries] = useState<ChatDebugEntry[]>([]);
+    const [historyState, setHistoryState] = useState<AiChatHistoryState | null>(null);
+    const [debugEntriesByConversation, setDebugEntriesByConversation] = useState<Record<string, ChatDebugEntry[]>>({});
+    const [pendingConfirmations, setPendingConfirmations] = useState<Record<string, PendingToolConfirmation>>({});
     const [activeTab, setActiveTab] = useState<"chat" | "debug">("chat");
     const [draft, setDraft] = useState("");
     const [isStreaming, setIsStreaming] = useState(false);
@@ -345,50 +437,84 @@ function ChatPanel(): ReactNode {
     const [vendorCatalog, setVendorCatalog] = useState<AiVendorDefinition[]>([]);
     const streamBindingRef = useRef<PendingStreamBinding>({
         streamId: null,
+        conversationId: null,
+        sessionId: null,
         assistantMessageId: null,
     });
+    const historyLoadedRef = useRef(false);
+    const historySaveTimerRef = useRef<number | null>(null);
     const threadViewportRef = useRef<HTMLDivElement | null>(null);
     const debugViewportRef = useRef<HTMLDivElement | null>(null);
 
     /**
-     * @function handleToolConfirmation
-     * @description 弹出原生确认框，并将用户决定回传到后端继续当前 AI 会话。
-     * @param request 待确认的工具调用。
+     * @function updateConversation
+     * @description 更新指定会话。
+     * @param conversationId 会话 ID。
+     * @param updater 更新函数。
      */
-    const handleToolConfirmation = async (request: PendingToolConfirmation): Promise<void> => {
-        const approved = await confirm(buildConfirmationMessage(request), {
-            title: i18n.t("common.confirm"),
-            kind: "warning",
-        });
+    const updateConversation = (
+        conversationId: string,
+        updater: (conversation: AiChatConversationRecord) => AiChatConversationRecord,
+    ): void => {
+        setHistoryState((currentState) => {
+            if (!currentState) {
+                return currentState;
+            }
 
-        setError(null);
-        setIsStreaming(true);
-        streamBindingRef.current = {
-            streamId: null,
-            assistantMessageId: request.assistantMessageId,
-        };
-
-        try {
-            const response = await submitAiChatConfirmation({
-                confirmationId: request.confirmationId,
-                confirmed: approved,
-                sessionId: request.sessionId,
+            const nextConversations = currentState.conversations.map((conversation) => {
+                if (conversation.id !== conversationId) {
+                    return conversation;
+                }
+                const updatedConversation = updater(conversation);
+                return {
+                    ...updatedConversation,
+                    title: deriveConversationTitle(updatedConversation.messages),
+                };
             });
-            streamBindingRef.current = {
-                streamId: response.streamId,
-                assistantMessageId: request.assistantMessageId,
+
+            return {
+                ...currentState,
+                conversations: sortConversations(nextConversations),
             };
-        } catch (confirmationError) {
-            const message = confirmationError instanceof Error
-                ? confirmationError.message
-                : String(confirmationError);
-            setError(message);
-            setIsStreaming(false);
-            streamBindingRef.current = {
-                streamId: null,
-                assistantMessageId: null,
-            };
-        }
+        });
+    };
+
+    /**
+     * @function setPendingConfirmationState
+     * @description 设置一条确认请求的当前状态。
+     * @param confirmation 确认请求。
+     */
+    const setPendingConfirmationState = (confirmation: PendingToolConfirmation): void => {
+        setPendingConfirmations((current) => ({
+            ...current,
+            [confirmation.assistantMessageId]: confirmation,
+        }));
+    };
+
+    /**
+     * @function clearPendingConfirmationState
+     * @description 清理一条确认请求状态。
+     * @param assistantMessageId 助手消息 ID。
+     */
+    const clearPendingConfirmationState = (assistantMessageId: string): void => {
+        setPendingConfirmations((current) => {
+            const next = { ...current };
+            delete next[assistantMessageId];
+            return next;
+        });
+    };
+
+    /**
+     * @function appendDebugEntry
+     * @description 向指定会话追加调试日志。
+     * @param conversationId 会话 ID。
+     * @param entry 调试日志条目。
+     */
+    const appendDebugEntry = (conversationId: string, entry: ChatDebugEntry): void => {
+        setDebugEntriesByConversation((current) => ({
+            ...current,
+            [conversationId]: [...(current[conversationId] ?? []), entry],
+        }));
     };
 
     const selectedVendor = useMemo(() => {
@@ -408,21 +534,21 @@ function ChatPanel(): ReactNode {
             .every((field) => (settings.fieldValues[field.key] ?? "").trim().length > 0);
     }, [selectedVendor, settings]);
 
-    const panelStatusLabel = useMemo(() => {
-        if (!currentVaultPath) {
-            return i18n.t("aiChatPlugin.noVault");
+    const activeConversation = useMemo(() => {
+        if (!historyState?.activeConversationId) {
+            return null;
         }
+        return historyState.conversations.find((conversation) => {
+            return conversation.id === historyState.activeConversationId;
+        }) ?? null;
+    }, [historyState]);
 
-        if (!isVendorConfigured) {
-            return i18n.t("aiChatPlugin.missingConfigStatus");
+    const currentDebugEntries = useMemo(() => {
+        if (!activeConversation) {
+            return [];
         }
-
-        if (isStreaming) {
-            return i18n.t("aiChatPlugin.streamingStatus");
-        }
-
-        return i18n.t("aiChatPlugin.readyStatus");
-    }, [currentVaultPath, isStreaming, isVendorConfigured]);
+        return debugEntriesByConversation[activeConversation.id] ?? [];
+    }, [activeConversation, debugEntriesByConversation]);
 
     const formattedError = useMemo(() => {
         if (!error) {
@@ -431,38 +557,56 @@ function ChatPanel(): ReactNode {
         return formatAiPanelError(error);
     }, [error]);
 
-    const canSend = Boolean(currentVaultPath && draft.trim() && !isStreaming && isVendorConfigured);
+    const panelStatusLabel = useMemo(() => {
+        if (!currentVaultPath) {
+            return i18n.t("aiChatPlugin.noVault");
+        }
+        if (!isVendorConfigured) {
+            return i18n.t("aiChatPlugin.missingConfigStatus");
+        }
+        if (isStreaming) {
+            return i18n.t("aiChatPlugin.streamingStatus");
+        }
+        return i18n.t("aiChatPlugin.readyStatus");
+    }, [currentVaultPath, isStreaming, isVendorConfigured]);
+
+    const canSend = Boolean(currentVaultPath && activeConversation && draft.trim() && !isStreaming && isVendorConfigured);
 
     useEffect(() => {
         let disposed = false;
 
-        const loadPanelSettings = (): void => {
-            Promise.all([getAiVendorCatalog(), getAiChatSettings()])
-                .then(([catalog, nextSettings]) => {
-                    if (disposed) {
-                        return;
-                    }
-                    setVendorCatalog(catalog);
-                    setSettings(nextSettings);
-                })
-                .catch((loadError) => {
-                    if (disposed) {
-                        return;
-                    }
-                    const message = loadError instanceof Error ? loadError.message : String(loadError);
-                    setError(message);
-                });
-        };
-
         if (!currentVaultPath) {
+            setHistoryState(null);
             setSettings(null);
+            historyLoadedRef.current = false;
             return;
         }
 
-        loadPanelSettings();
+        Promise.all([getAiVendorCatalog(), getAiChatSettings(), getAiChatHistory()])
+            .then(([catalog, nextSettings, history]) => {
+                if (disposed) {
+                    return;
+                }
+                setVendorCatalog(catalog);
+                setSettings(nextSettings);
+                setHistoryState(ensureHistoryState(history));
+                setDebugEntriesByConversation({});
+                setPendingConfirmations({});
+                historyLoadedRef.current = true;
+            })
+            .catch((loadError) => {
+                if (disposed) {
+                    return;
+                }
+                setError(loadError instanceof Error ? loadError.message : String(loadError));
+            });
 
         const handleSettingsUpdated = (): void => {
-            loadPanelSettings();
+            void getAiChatSettings().then((nextSettings) => {
+                if (!disposed) {
+                    setSettings(nextSettings);
+                }
+            });
         };
 
         window.addEventListener(AI_CHAT_SETTINGS_UPDATED_EVENT, handleSettingsUpdated);
@@ -474,6 +618,29 @@ function ChatPanel(): ReactNode {
     }, [currentVaultPath]);
 
     useEffect(() => {
+        if (!historyLoadedRef.current || !historyState || !currentVaultPath) {
+            return;
+        }
+
+        if (historySaveTimerRef.current !== null) {
+            window.clearTimeout(historySaveTimerRef.current);
+        }
+
+        historySaveTimerRef.current = window.setTimeout(() => {
+            void saveAiChatHistory(buildPersistableHistory(historyState)).catch((saveError) => {
+                setError(saveError instanceof Error ? saveError.message : String(saveError));
+            });
+        }, 400);
+
+        return () => {
+            if (historySaveTimerRef.current !== null) {
+                window.clearTimeout(historySaveTimerRef.current);
+                historySaveTimerRef.current = null;
+            }
+        };
+    }, [historyState, currentVaultPath]);
+
+    useEffect(() => {
         let disposed = false;
         let cleanup: (() => void) | undefined;
 
@@ -483,85 +650,93 @@ function ChatPanel(): ReactNode {
             }
 
             const binding = streamBindingRef.current;
-            if (!binding.assistantMessageId) {
+            if (!binding.assistantMessageId || !binding.conversationId) {
                 return;
             }
 
             if (!binding.streamId) {
                 binding.streamId = payload.streamId;
             }
-
             if (binding.streamId !== payload.streamId) {
                 return;
             }
 
             if (payload.eventType === "debug") {
-                setDebugEntries((currentEntries) => [
-                    ...currentEntries,
-                    {
-                        id: nextChatDebugEntryId(),
-                        streamId: payload.streamId,
-                        title: payload.debugTitle ?? i18n.t("aiChatPlugin.debugEntryFallbackTitle"),
-                        text: payload.debugText ?? "",
-                    },
-                ]);
-                return;
-            }
-
-            if (payload.eventType === "confirmation") {
-                const assistantMessageId = binding.assistantMessageId;
-                const confirmationText = payload.confirmationHint
-                    ?? i18n.t("aiChatPlugin.confirmationFallbackHint");
-
-                setMessages((currentMessages) => currentMessages.map((message) => {
-                    if (message.id !== assistantMessageId) {
-                        return message;
-                    }
-                    return {
-                        ...message,
-                        text: confirmationText,
-                    };
-                }));
-
-                setIsStreaming(false);
-                streamBindingRef.current = {
-                    streamId: null,
-                    assistantMessageId: null,
-                };
-
-                if (!assistantMessageId || !payload.confirmationId || !payload.sessionId) {
-                    setError("AI confirmation payload is incomplete");
-                    return;
-                }
-
-                void handleToolConfirmation({
-                    confirmationId: payload.confirmationId,
-                    sessionId: payload.sessionId,
-                    assistantMessageId,
-                    hint: payload.confirmationHint ?? "",
-                    toolName: payload.confirmationToolName ?? "",
-                    toolArgsJson: payload.confirmationToolArgsJson ?? "{}",
+                appendDebugEntry(binding.conversationId, {
+                    id: nextChatDebugEntryId(),
+                    streamId: payload.streamId,
+                    title: payload.debugTitle ?? i18n.t("aiChatPlugin.debugEntryFallbackTitle"),
+                    text: payload.debugText ?? "",
                 });
                 return;
             }
 
+            if (payload.eventType === "confirmation") {
+                const confirmationText = payload.confirmationHint ?? i18n.t("aiChatPlugin.confirmationFallbackHint");
+                updateConversation(binding.conversationId, (conversation) => ({
+                    ...conversation,
+                    updatedAtUnixMs: Date.now(),
+                    messages: conversation.messages.map((message) => {
+                        if (message.id !== binding.assistantMessageId) {
+                            return message;
+                        }
+                        return {
+                            ...message,
+                            text: confirmationText,
+                        };
+                    }),
+                }));
+
+                setIsStreaming(false);
+
+                if (payload.confirmationId && payload.sessionId) {
+                    setPendingConfirmationState({
+                        confirmationId: payload.confirmationId,
+                        sessionId: payload.sessionId,
+                        assistantMessageId: binding.assistantMessageId,
+                        conversationId: binding.conversationId,
+                        hint: payload.confirmationHint ?? "",
+                        toolName: payload.confirmationToolName ?? "",
+                        toolArgsJson: payload.confirmationToolArgsJson ?? "{}",
+                        isSubmitting: false,
+                    });
+                } else {
+                    setError("AI confirmation payload is incomplete");
+                }
+
+                streamBindingRef.current = {
+                    streamId: null,
+                    conversationId: null,
+                    sessionId: null,
+                    assistantMessageId: null,
+                };
+                return;
+            }
+
             if (payload.eventType === "delta" || payload.eventType === "done") {
-                setMessages((currentMessages) => currentMessages.map((message) => {
-                    if (message.id !== binding.assistantMessageId) {
-                        return message;
-                    }
-                    return {
-                        ...message,
-                        text: payload.accumulatedText ?? message.text,
-                    };
+                updateConversation(binding.conversationId, (conversation) => ({
+                    ...conversation,
+                    updatedAtUnixMs: Date.now(),
+                    messages: conversation.messages.map((message) => {
+                        if (message.id !== binding.assistantMessageId) {
+                            return message;
+                        }
+                        return {
+                            ...message,
+                            text: payload.accumulatedText ?? message.text,
+                        };
+                    }),
                 }));
             }
 
             if (payload.eventType === "error") {
                 setError(payload.error ?? "AI stream failed");
                 setIsStreaming(false);
+                clearPendingConfirmationState(binding.assistantMessageId);
                 streamBindingRef.current = {
                     streamId: null,
+                    conversationId: null,
+                    sessionId: null,
                     assistantMessageId: null,
                 };
                 return;
@@ -569,8 +744,11 @@ function ChatPanel(): ReactNode {
 
             if (payload.eventType === "done") {
                 setIsStreaming(false);
+                clearPendingConfirmationState(binding.assistantMessageId);
                 streamBindingRef.current = {
                     streamId: null,
+                    conversationId: null,
+                    sessionId: null,
                     assistantMessageId: null,
                 };
             }
@@ -586,64 +764,177 @@ function ChatPanel(): ReactNode {
 
     useEffect(() => {
         const viewport = threadViewportRef.current;
-        if (!viewport) {
-            return;
+        if (viewport) {
+            viewport.scrollTop = viewport.scrollHeight;
         }
-
-        viewport.scrollTop = viewport.scrollHeight;
-    }, [isStreaming, messages]);
+    }, [activeConversation?.messages, pendingConfirmations]);
 
     useEffect(() => {
         const viewport = debugViewportRef.current;
-        if (!viewport) {
+        if (viewport) {
+            viewport.scrollTop = viewport.scrollHeight;
+        }
+    }, [currentDebugEntries]);
+
+    /**
+     * @function handleCreateConversation
+     * @description 创建并切换到新会话。
+     */
+    const handleCreateConversation = (): void => {
+        if (isStreaming) {
             return;
         }
+        const conversation = createConversationRecord();
+        setHistoryState((currentState) => {
+            if (!currentState) {
+                return {
+                    activeConversationId: conversation.id,
+                    conversations: [conversation],
+                };
+            }
+            return {
+                activeConversationId: conversation.id,
+                conversations: sortConversations([conversation, ...currentState.conversations]),
+            };
+        });
+        setActiveTab("chat");
+        setDraft("");
+        setError(null);
+    };
 
-        viewport.scrollTop = viewport.scrollHeight;
-    }, [debugEntries]);
+    /**
+     * @function handleSelectConversation
+     * @description 切换活动会话。
+     * @param conversationId 会话 ID。
+     */
+    const handleSelectConversation = (conversationId: string): void => {
+        if (isStreaming) {
+            return;
+        }
+        setHistoryState((currentState) => currentState ? {
+            ...currentState,
+            activeConversationId: conversationId,
+        } : currentState);
+        setActiveTab("chat");
+        setError(null);
+    };
+
+    /**
+     * @function handleToolDecision
+     * @description 在对话中批准或拒绝工具调用。
+     * @param confirmation 确认请求。
+     * @param approved 是否批准。
+     */
+    const handleToolDecision = async (
+        confirmation: PendingToolConfirmation,
+        approved: boolean,
+    ): Promise<void> => {
+        setError(null);
+        setPendingConfirmationState({
+            ...confirmation,
+            isSubmitting: true,
+        });
+        setIsStreaming(true);
+        streamBindingRef.current = {
+            streamId: null,
+            conversationId: confirmation.conversationId,
+            sessionId: confirmation.sessionId,
+            assistantMessageId: confirmation.assistantMessageId,
+        };
+
+        try {
+            const response = await submitAiChatConfirmation({
+                confirmationId: confirmation.confirmationId,
+                confirmed: approved,
+                sessionId: confirmation.sessionId,
+            });
+            streamBindingRef.current = {
+                streamId: response.streamId,
+                conversationId: confirmation.conversationId,
+                sessionId: confirmation.sessionId,
+                assistantMessageId: confirmation.assistantMessageId,
+            };
+            clearPendingConfirmationState(confirmation.assistantMessageId);
+        } catch (submitError) {
+            setError(submitError instanceof Error ? submitError.message : String(submitError));
+            setIsStreaming(false);
+            setPendingConfirmationState({
+                ...confirmation,
+                isSubmitting: false,
+            });
+            streamBindingRef.current = {
+                streamId: null,
+                conversationId: null,
+                sessionId: null,
+                assistantMessageId: null,
+            };
+        }
+    };
 
     /**
      * @function handleSubmit
      * @description 提交当前输入并启动流式聊天。
      */
     const handleSubmit = async (): Promise<void> => {
+        if (!activeConversation) {
+            return;
+        }
+
         const trimmed = draft.trim();
         if (!trimmed || isStreaming) {
             return;
         }
 
-        const userMessageId = nextChatMessageId();
-        const assistantMessageId = nextChatMessageId();
+        const userMessage: AiChatHistoryMessage = {
+            id: nextChatMessageId(),
+            role: "user",
+            text: trimmed,
+            createdAtUnixMs: Date.now(),
+        };
+        const assistantMessage: AiChatHistoryMessage = {
+            id: nextChatMessageId(),
+            role: "assistant",
+            text: "",
+            createdAtUnixMs: Date.now(),
+        };
+        const history = activeConversation.messages;
 
-        setError(null);
         setDraft("");
+        setError(null);
         setIsStreaming(true);
         setActiveTab("chat");
+        updateConversation(activeConversation.id, (conversation) => ({
+            ...conversation,
+            updatedAtUnixMs: Date.now(),
+            messages: [...conversation.messages, userMessage, assistantMessage],
+        }));
+
         streamBindingRef.current = {
             streamId: null,
-            assistantMessageId,
+            conversationId: activeConversation.id,
+            sessionId: activeConversation.sessionId,
+            assistantMessageId: assistantMessage.id,
         };
 
-        setMessages((currentMessages) => [
-            ...currentMessages,
-            { id: userMessageId, role: "user", text: trimmed },
-            { id: assistantMessageId, role: "assistant", text: "" },
-        ]);
-
         try {
-            const response = await startAiChatStream({ message: trimmed });
-            if (streamBindingRef.current.assistantMessageId === assistantMessageId) {
-                streamBindingRef.current = {
-                    streamId: response.streamId,
-                    assistantMessageId,
-                };
-            }
+            const response = await startAiChatStream({
+                message: trimmed,
+                sessionId: activeConversation.sessionId,
+                history,
+            });
+            streamBindingRef.current = {
+                streamId: response.streamId,
+                conversationId: activeConversation.id,
+                sessionId: activeConversation.sessionId,
+                assistantMessageId: assistantMessage.id,
+            };
         } catch (submitError) {
-            const message = submitError instanceof Error ? submitError.message : String(submitError);
-            setError(message);
+            setError(submitError instanceof Error ? submitError.message : String(submitError));
             setIsStreaming(false);
             streamBindingRef.current = {
                 streamId: null,
+                conversationId: null,
+                sessionId: null,
                 assistantMessageId: null,
             };
         }
@@ -677,36 +968,49 @@ function ChatPanel(): ReactNode {
     return (
         <div className="ai-chat-panel">
             <div className="ai-chat-header">
-                <div className="ai-chat-header-topline">
-                    <div className="ai-chat-header-pill">
-                        <Sparkles size={12} strokeWidth={2} />
-                        <span>{i18n.t("aiChatPlugin.emptyEyebrow")}</span>
-                    </div>
-                    <div className={`ai-chat-header-status ${!isVendorConfigured ? "warning" : ""}`}>
-                        <span className="ai-chat-header-status-dot" />
-                        <span>{panelStatusLabel}</span>
+                <div className="ai-chat-header-main">
+                    <div className="ai-chat-title">{i18n.t("aiChatPlugin.title")}</div>
+                    <div className="ai-chat-header-badges">
+                        <span className="ai-chat-vendor-badge">
+                            {selectedVendor?.title ?? "-"}
+                            <strong>{settings?.model ?? "-"}</strong>
+                        </span>
+                        <span className={`ai-chat-status-chip ${!isVendorConfigured ? "warning" : ""}`}>
+                            {panelStatusLabel}
+                        </span>
                     </div>
                 </div>
 
-                <div className="ai-chat-title-row">
-                    <div>
-                        <div className="ai-chat-title">{i18n.t("aiChatPlugin.title")}</div>
-                        <div className="ai-chat-subtitle">{i18n.t("aiChatPlugin.subtitle")}</div>
+                <div className="ai-chat-conversation-bar">
+                    <div className="ai-chat-conversation-bar-header">
+                        <span className="ai-chat-section-label">{i18n.t("aiChatPlugin.historySection")}</span>
+                        <button
+                            type="button"
+                            className="ai-chat-conversation-create"
+                            disabled={isStreaming}
+                            onClick={handleCreateConversation}
+                        >
+                            <Plus size={13} strokeWidth={2} />
+                            <span>{i18n.t("aiChatPlugin.newConversation")}</span>
+                        </button>
                     </div>
-                    <button type="button" className="ai-chat-header-ghost-button">
-                        <SlidersHorizontal size={14} strokeWidth={1.8} />
-                        <span className="ai-chat-header-ghost-button-text">{i18n.t("aiChatPlugin.settingsHint")}</span>
-                        <span className="ai-chat-header-ghost-button-text-compact">{i18n.t("aiChatPlugin.settingsHintCompact")}</span>
-                    </button>
-                </div>
-
-                <div className="ai-chat-header-metadata">
-                    <div className="ai-chat-vendor-badge">
-                        <span>{selectedVendor?.title ?? i18n.t("aiChatPlugin.notConfiguredShort")}</span>
-                        <strong>{settings?.model ?? "-"}</strong>
-                    </div>
-                    <div className="ai-chat-header-meta-chip">
-                        {currentVaultPath ? i18n.t("aiChatPlugin.vaultStatus") : i18n.t("aiChatPlugin.noVault")}
+                    <div className="ai-chat-conversation-list">
+                        {historyState?.conversations.length ? historyState.conversations.map((conversation) => (
+                            <button
+                                key={conversation.id}
+                                type="button"
+                                className={`ai-chat-conversation-item ${historyState.activeConversationId === conversation.id ? "active" : ""}`}
+                                disabled={isStreaming}
+                                onClick={() => {
+                                    handleSelectConversation(conversation.id);
+                                }}
+                            >
+                                <span className="ai-chat-conversation-title">{conversation.title}</span>
+                                <span className="ai-chat-conversation-time">{formatConversationTime(conversation.updatedAtUnixMs)}</span>
+                            </button>
+                        )) : (
+                            <div className="ai-chat-conversation-empty">{i18n.t("aiChatPlugin.historyEmpty")}</div>
+                        )}
                     </div>
                 </div>
 
@@ -717,10 +1021,6 @@ function ChatPanel(): ReactNode {
                             <div className="ai-chat-status-detail">{formattedError.detail}</div>
                         ) : null}
                     </div>
-                ) : null}
-
-                {!currentVaultPath ? (
-                    <div className="ai-chat-status">{i18n.t("aiChatPlugin.noVault")}</div>
                 ) : null}
             </div>
 
@@ -751,14 +1051,10 @@ function ChatPanel(): ReactNode {
 
             {activeTab === "chat" ? (
                 <div className="ai-chat-thread-shell" role="tabpanel">
-                    {messages.length === 0 ? (
+                    {!activeConversation?.messages.length ? (
                         <div className="ai-chat-welcome-card">
-                            <div className="ai-chat-welcome-icon">
-                                <Bot size={18} strokeWidth={1.8} />
-                            </div>
                             <div className="ai-chat-welcome-title">{i18n.t("aiChatPlugin.emptyTitle")}</div>
                             <div className="ai-chat-welcome-body">{i18n.t("aiChatPlugin.emptyBody")}</div>
-
                             <div className="ai-chat-quick-prompts-label">{i18n.t("aiChatPlugin.quickPromptsLabel")}</div>
                             <div className="ai-chat-quick-prompts-grid">
                                 {QUICK_PROMPTS.map((prompt) => {
@@ -772,7 +1068,7 @@ function ChatPanel(): ReactNode {
                                                 handleQuickPromptClick(promptText);
                                             }}
                                         >
-                                            <Sparkles size={14} strokeWidth={1.8} />
+                                            <Sparkles size={13} strokeWidth={1.8} />
                                             <span>{promptText}</span>
                                         </button>
                                     );
@@ -781,37 +1077,81 @@ function ChatPanel(): ReactNode {
                         </div>
                     ) : null}
 
-                    <div className="ai-chat-thread-label">{i18n.t("aiChatPlugin.threadLabel")}</div>
                     <div ref={threadViewportRef} className="ai-chat-messages">
-                        {messages.map((message) => (
-                            <div key={message.id} className={`ai-chat-message ${message.role}`}>
-                                <div className="ai-chat-message-avatar">
-                                    {message.role === "assistant"
-                                        ? <Bot size={14} strokeWidth={1.8} />
-                                        : <ArrowUp size={14} strokeWidth={1.8} />}
-                                </div>
-                                <div className="ai-chat-message-content">
-                                    <div className="ai-chat-message-role">
+                        {activeConversation?.messages.map((message) => {
+                            const confirmation = pendingConfirmations[message.id];
+
+                            return (
+                                <div key={message.id} className={`ai-chat-message ${message.role}`}>
+                                    <div className="ai-chat-message-avatar">
                                         {message.role === "assistant"
-                                            ? i18n.t("aiChatPlugin.assistant")
-                                            : i18n.t("aiChatPlugin.user")}
+                                            ? <Bot size={14} strokeWidth={1.8} />
+                                            : <ArrowUp size={14} strokeWidth={1.8} />}
                                     </div>
-                                    <div className="ai-chat-message-bubble">{message.text || "..."}</div>
+                                    <div className="ai-chat-message-content">
+                                        <div className="ai-chat-message-role">
+                                            {message.role === "assistant"
+                                                ? i18n.t("aiChatPlugin.assistant")
+                                                : i18n.t("aiChatPlugin.user")}
+                                        </div>
+                                        <div className="ai-chat-message-bubble">{message.text || "..."}</div>
+                                        {confirmation ? (
+                                            <div className="ai-chat-confirmation-card">
+                                                <div className="ai-chat-confirmation-meta">
+                                                    <span>{confirmation.hint || i18n.t("aiChatPlugin.confirmationFallbackHint")}</span>
+                                                    {confirmation.toolName ? (
+                                                        <span>{i18n.t("aiChatPlugin.confirmationToolLabel")}: {confirmation.toolName}</span>
+                                                    ) : null}
+                                                </div>
+                                                {confirmation.toolArgsJson && confirmation.toolArgsJson !== "{}" ? (
+                                                    <pre className="ai-chat-confirmation-args">{confirmation.toolArgsJson}</pre>
+                                                ) : null}
+                                                <div className="ai-chat-confirmation-actions">
+                                                    <button
+                                                        type="button"
+                                                        className="ai-chat-confirm-button reject"
+                                                        disabled={confirmation.isSubmitting}
+                                                        onClick={() => {
+                                                            void handleToolDecision(confirmation, false);
+                                                        }}
+                                                    >
+                                                        <X size={13} strokeWidth={2} />
+                                                        <span>{confirmation.isSubmitting
+                                                            ? i18n.t("aiChatPlugin.confirmSubmitting")
+                                                            : i18n.t("aiChatPlugin.confirmReject")}</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="ai-chat-confirm-button approve"
+                                                        disabled={confirmation.isSubmitting}
+                                                        onClick={() => {
+                                                            void handleToolDecision(confirmation, true);
+                                                        }}
+                                                    >
+                                                        <Check size={13} strokeWidth={2} />
+                                                        <span>{confirmation.isSubmitting
+                                                            ? i18n.t("aiChatPlugin.confirmSubmitting")
+                                                            : i18n.t("aiChatPlugin.confirmApprove")}</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : null}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             ) : (
                 <div className="ai-chat-debug-shell" role="tabpanel">
-                    {debugEntries.length === 0 ? (
+                    {currentDebugEntries.length === 0 ? (
                         <div className="ai-chat-debug-empty">
                             <div className="ai-chat-debug-empty-title">{i18n.t("aiChatPlugin.debugEmptyTitle")}</div>
                             <div className="ai-chat-debug-empty-body">{i18n.t("aiChatPlugin.debugEmptyBody")}</div>
                         </div>
                     ) : null}
                     <div ref={debugViewportRef} className="ai-chat-debug-list">
-                        {debugEntries.map((entry) => (
+                        {currentDebugEntries.map((entry) => (
                             <div key={entry.id} className="ai-chat-debug-entry">
                                 <div className="ai-chat-debug-entry-header">
                                     <span className="ai-chat-debug-entry-title">{entry.title}</span>
@@ -833,7 +1173,7 @@ function ChatPanel(): ReactNode {
                     className="ai-chat-input"
                     value={draft}
                     placeholder={i18n.t("aiChatPlugin.draftPlaceholder")}
-                    disabled={!currentVaultPath || isStreaming}
+                    disabled={!currentVaultPath || isStreaming || !activeConversation}
                     onKeyDown={handleInputKeyDown}
                     onChange={(event) => {
                         setDraft(event.target.value);
@@ -926,8 +1266,8 @@ function AiChatSettingsSection(): ReactNode {
 
     /**
      * @function loadVendorModels
-     * @description 使用当前设置草稿从后端刷新 vendor 模型列表。
-     * @param targetSettings 需要用于鉴权的设置草稿。
+     * @description 使用当前设置草稿刷新 vendor 模型列表。
+     * @param targetSettings 设置草稿。
      */
     const loadVendorModels = async (targetSettings: AiChatSettings): Promise<void> => {
         setIsLoadingModels(true);
@@ -992,7 +1332,7 @@ function AiChatSettingsSection(): ReactNode {
 
     /**
      * @function handleVendorChange
-     * @description 切换 vendor 并重建动态字段表单。
+     * @description 切换 vendor 并重建表单字段。
      * @param event 选择事件。
      */
     const handleVendorChange = (event: ChangeEvent<HTMLSelectElement>): void => {

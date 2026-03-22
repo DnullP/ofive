@@ -88,6 +88,20 @@ function stripInlineCssComments(line) {
 }
 
 /**
+ * @function isTokenizedCssColorCall
+ * @description 判断匹配到的颜色函数是否实际基于主题 token。
+ *   允许 `rgb(var(--token) / ...)`、`rgba(var(--token), ...)`、
+ *   `hsl(var(--token) / ...)`、`hsla(var(--token), ...)` 形式通过守卫。
+ * @param {string} line 当前扫描行。
+ * @param {number} offset 当前匹配在行内的起始偏移。
+ * @returns {boolean} 是否属于允许的 token 化颜色函数。
+ */
+function isTokenizedCssColorCall(line, offset) {
+    const candidate = line.slice(offset);
+    return /^(?:rgba?|hsla?)\(\s*var\(--/.test(candidate);
+}
+
+/**
  * @function offsetToLineNumber
  * @description 将字符偏移转换为 1-based 行号。
  * @param content 文件内容。
@@ -125,6 +139,10 @@ function checkFile(filePath) {
         colorPattern.lastIndex = 0;
         const matched = colorPattern.exec(scannedLine);
         if (!matched) {
+            continue;
+        }
+
+        if (typeof matched.index === "number" && isTokenizedCssColorCall(scannedLine, matched.index)) {
             continue;
         }
 

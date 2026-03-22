@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use axum::extract::State as AxumState;
@@ -24,6 +25,20 @@ pub mod pb {
 struct CallbackState {
     expected_token: String,
     call_count: Arc<AtomicUsize>,
+}
+
+#[derive(Clone)]
+struct PersistenceCallbackState {
+    expected_token: String,
+    call_count: Arc<AtomicUsize>,
+    entries: Arc<Mutex<HashMap<String, PersistenceEntry>>>,
+}
+
+#[derive(Clone)]
+struct PersistenceEntry {
+    schema_version: u32,
+    revision: String,
+    payload: serde_json::Value,
 }
 
 async fn spawn_mock_callback_server(
@@ -85,6 +100,163 @@ async fn handle_mock_callback(
     })))
 }
 
+async fn spawn_mock_persistence_callback_server(
+    expected_token: String,
+) -> Result<(String, tokio::sync::oneshot::Sender<()>, Arc<AtomicUsize>), String> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|error| format!("启动 mock persistence callback server 失败: {error}"))?;
+    let address = listener
+        .local_addr()
+        .map_err(|error| format!("读取 mock persistence callback server 地址失败: {error}"))?;
+    let (shutdown_sender, shutdown_receiver) = tokio::sync::oneshot::channel();
+
+    let call_count = Arc::new(AtomicUsize::new(0));
+    let router = Router::new()
+        .route("/persistence/state", post(handle_mock_persistence_callback))
+        .with_state(PersistenceCallbackState {
+            expected_token,
+            call_count: call_count.clone(),
+            entries: Arc::new(Mutex::new(HashMap::new())),
+        });
+
+    tokio::spawn(async move {
+        let server = axum::serve(listener, router).with_graceful_shutdown(async move {
+            let _ = shutdown_receiver.await;
+        });
+        let _ = server.await;
+    });
+
+    Ok((
+        format!("http://{address}/persistence/state"),
+        shutdown_sender,
+        call_count,
+    ))
+}
+
+async fn handle_mock_persistence_callback(
+    headers: HeaderMap,
+    AxumState(state): AxumState<PersistenceCallbackState>,
+    Json(request): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    state.call_count.fetch_add(1, Ordering::SeqCst);
+
+    let token = headers
+        .get("x-ofive-sidecar-token")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    if token != state.expected_token {
+        return Err((StatusCode::UNAUTHORIZED, "unexpected token".to_string()));
+    }
+
+    let action = request
+        .get("action")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    let owner = request
+        .get("owner")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("ai-chat");
+    let state_key = request
+        .get("stateKey")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let schema_version = request
+        .get("schemaVersion")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(1) as u32;
+
+    let mut entries = state.entries.lock().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "lock poisoned".to_string(),
+        )
+    })?;
+
+    let response = match action {
+        "save" => {
+            let revision = format!("rev-{}", state.call_count.load(Ordering::SeqCst));
+            let payload = request
+                .get("payload")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            entries.insert(
+                state_key.clone(),
+                PersistenceEntry {
+                    schema_version,
+                    revision: revision.clone(),
+                    payload: payload.clone(),
+                },
+            );
+            serde_json::json!({
+                "status": "ok",
+                "owner": owner,
+                "stateKey": state_key,
+                "schemaVersion": schema_version,
+                "revision": revision,
+                "payload": payload,
+                "items": []
+            })
+        }
+        "load" => match entries.get(&state_key) {
+            Some(entry) => serde_json::json!({
+                "status": "ok",
+                "owner": owner,
+                "stateKey": state_key,
+                "schemaVersion": entry.schema_version,
+                "revision": entry.revision,
+                "payload": entry.payload,
+                "items": []
+            }),
+            None => serde_json::json!({
+                "status": "not_found",
+                "owner": owner,
+                "stateKey": state_key,
+                "items": [],
+                "errorCode": "state_not_found",
+                "errorMessage": "state not found"
+            }),
+        },
+        "list" => {
+            let items: Vec<serde_json::Value> = entries
+                .iter()
+                .map(|(key, entry)| {
+                    serde_json::json!({
+                        "owner": owner,
+                        "stateKey": key,
+                        "schemaVersion": entry.schema_version,
+                        "revision": entry.revision,
+                    })
+                })
+                .collect();
+            serde_json::json!({
+                "status": "ok",
+                "owner": owner,
+                "items": items
+            })
+        }
+        "delete" => {
+            entries.remove(&state_key);
+            serde_json::json!({
+                "status": "ok",
+                "owner": owner,
+                "stateKey": state_key,
+                "items": []
+            })
+        }
+        _ => serde_json::json!({
+            "status": "error",
+            "owner": owner,
+            "items": [],
+            "errorCode": "unsupported_scope",
+            "errorMessage": format!("unsupported action: {action}")
+        }),
+    };
+
+    Ok(Json(response))
+}
+
 fn allocate_port() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("应成功分配测试端口");
     let port = listener.local_addr().expect("应成功读取测试端口").port();
@@ -115,7 +287,7 @@ fn spawn_sidecar(port: u16) -> Child {
 async fn wait_for_health(
     endpoint: &str,
 ) -> pb::ai_agent_service_client::AiAgentServiceClient<tonic::transport::Channel> {
-    for _ in 0..30 {
+    for _ in 0..100 {
         if let Ok(mut client) =
             pb::ai_agent_service_client::AiAgentServiceClient::connect(endpoint.to_string()).await
         {
@@ -155,6 +327,9 @@ async fn ai_sidecar_streams_chat_chunks() {
                 capability_callback_token: String::new(),
                 mcp_server_url: String::new(),
                 mcp_auth_token: String::new(),
+                history: Vec::new(),
+                persistence_callback_url: String::new(),
+                persistence_callback_token: String::new(),
             }))
             .await
             .expect("应成功建立聊天流");
@@ -218,6 +393,9 @@ async fn ai_sidecar_can_execute_explicit_capability_callback() {
                 capability_callback_token: callback_token,
                 mcp_server_url: String::new(),
                 mcp_auth_token: String::new(),
+                history: Vec::new(),
+                persistence_callback_url: String::new(),
+                persistence_callback_token: String::new(),
             }))
             .await
             .expect("应成功建立带 callback 的聊天流");
@@ -275,6 +453,9 @@ async fn ai_sidecar_can_execute_planned_capability_callback_from_natural_languag
                 capability_callback_token: callback_token,
                 mcp_server_url: String::new(),
                 mcp_auth_token: String::new(),
+                history: Vec::new(),
+                persistence_callback_url: String::new(),
+                persistence_callback_token: String::new(),
             }))
             .await
             .expect("应成功建立带规划 callback 的聊天流");
@@ -287,6 +468,177 @@ async fn ai_sidecar_can_execute_planned_capability_callback_from_natural_languag
 
         assert!(final_text.contains("我已经读取到目标 Markdown 文件"));
         assert_eq!(call_count.load(Ordering::SeqCst), 1);
+    }
+    .await;
+
+    let _ = shutdown_sender.send(());
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[tokio::test]
+async fn ai_sidecar_can_execute_explicit_persistence_callback() {
+    let port = allocate_port();
+    let endpoint = format!("http://127.0.0.1:{port}");
+    let mut child = spawn_sidecar(port);
+    let callback_token = "integration-persistence-token".to_string();
+    let (callback_url, shutdown_sender, call_count) =
+        spawn_mock_persistence_callback_server(callback_token.clone())
+            .await
+            .expect("应成功启动 mock persistence callback server");
+
+    async {
+        let mut client = wait_for_health(&endpoint).await;
+
+        let save_response = client
+            .chat(Request::new(pb::ChatRequest {
+                session_id: "integration-session".to_string(),
+                user_id: "integration-user".to_string(),
+                message: r#"persist save {"stateKey":"history","schemaVersion":1,"payload":{"messages":["hello persistence"]}}"#
+                    .to_string(),
+                vendor_config: HashMap::new(),
+                vendor_id: "mock-echo".to_string(),
+                model: String::new(),
+                tools: Vec::new(),
+                capability_callback_url: String::new(),
+                capability_callback_token: String::new(),
+                mcp_server_url: String::new(),
+                mcp_auth_token: String::new(),
+                history: Vec::new(),
+                persistence_callback_url: callback_url.clone(),
+                persistence_callback_token: callback_token.clone(),
+            }))
+            .await
+            .expect("应成功建立 persistence save 聊天流");
+
+        let mut save_stream = save_response.into_inner();
+        let mut save_text = String::new();
+        while let Some(chunk) = save_stream.message().await.expect("应成功读取 save 聊天流") {
+            save_text = chunk.accumulated_text;
+        }
+
+        assert!(save_text.contains("[persistence:save]"));
+        assert!(save_text.contains("hello persistence"));
+        assert!(save_text.contains("\"status\": \"ok\""));
+
+        let load_response = client
+            .chat(Request::new(pb::ChatRequest {
+                session_id: "integration-session".to_string(),
+                user_id: "integration-user".to_string(),
+                message: r#"persist load {"stateKey":"history","schemaVersion":1}"#
+                    .to_string(),
+                vendor_config: HashMap::new(),
+                vendor_id: "mock-echo".to_string(),
+                model: String::new(),
+                tools: Vec::new(),
+                capability_callback_url: String::new(),
+                capability_callback_token: String::new(),
+                mcp_server_url: String::new(),
+                mcp_auth_token: String::new(),
+                history: Vec::new(),
+                persistence_callback_url: callback_url,
+                persistence_callback_token: callback_token,
+            }))
+            .await
+            .expect("应成功建立 persistence load 聊天流");
+
+        let mut load_stream = load_response.into_inner();
+        let mut load_text = String::new();
+        while let Some(chunk) = load_stream.message().await.expect("应成功读取 load 聊天流") {
+            load_text = chunk.accumulated_text;
+        }
+
+        assert!(load_text.contains("[persistence:load]"));
+        assert!(load_text.contains("hello persistence"));
+        assert_eq!(call_count.load(Ordering::SeqCst), 2);
+    }
+    .await;
+
+    let _ = shutdown_sender.send(());
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[tokio::test]
+async fn ai_sidecar_can_resume_confirmation_via_host_persistence() {
+    let port = allocate_port();
+    let endpoint = format!("http://127.0.0.1:{port}");
+    let mut child = spawn_sidecar(port);
+    let callback_token = "integration-confirmation-token".to_string();
+    let (callback_url, shutdown_sender, call_count) =
+        spawn_mock_persistence_callback_server(callback_token.clone())
+            .await
+            .expect("应成功启动 confirmation persistence callback server");
+
+    async {
+        let mut client = wait_for_health(&endpoint).await;
+        let response = client
+            .chat(Request::new(pb::ChatRequest {
+                session_id: "confirmation-session".to_string(),
+                user_id: "integration-user".to_string(),
+                message: r##"confirmtool {"confirmationId":"confirm-1","toolName":"vault.create_markdown_file","toolArgs":{"relativePath":"Notes/New.md","content":"# New"},"hint":"Please confirm this write.","responseText":"Pending create file"}"##
+                    .to_string(),
+                vendor_config: HashMap::new(),
+                vendor_id: "mock-echo".to_string(),
+                model: String::new(),
+                tools: Vec::new(),
+                capability_callback_url: String::new(),
+                capability_callback_token: String::new(),
+                mcp_server_url: String::new(),
+                mcp_auth_token: String::new(),
+                history: Vec::new(),
+                persistence_callback_url: callback_url.clone(),
+                persistence_callback_token: callback_token.clone(),
+            }))
+            .await
+            .expect("应成功建立 confirmation 聊天流");
+
+        let mut stream = response.into_inner();
+        let confirmation_chunk = stream
+            .message()
+            .await
+            .expect("应成功读取 confirmation 聊天流")
+            .expect("应返回 confirmation chunk");
+
+        assert_eq!(confirmation_chunk.event_type, "confirmation");
+        assert_eq!(confirmation_chunk.confirmation_id, "confirm-1");
+        assert_eq!(confirmation_chunk.confirmation_tool_name, "vault.create_markdown_file");
+        assert!(confirmation_chunk.accumulated_text.contains("Pending create file"));
+
+        let confirmation_response = client
+            .submit_confirmation(Request::new(pb::ConfirmationRequest {
+                session_id: "confirmation-session".to_string(),
+                user_id: "integration-user".to_string(),
+                confirmation_id: confirmation_chunk.confirmation_id,
+                confirmed: true,
+                vendor_config: HashMap::new(),
+                vendor_id: "mock-echo".to_string(),
+                model: String::new(),
+                tools: Vec::new(),
+                mcp_server_url: String::new(),
+                mcp_auth_token: String::new(),
+                capability_callback_url: String::new(),
+                capability_callback_token: String::new(),
+                persistence_callback_url: callback_url,
+                persistence_callback_token: callback_token,
+            }))
+            .await
+            .expect("应成功提交 confirmation");
+
+        let mut confirmation_stream = confirmation_response.into_inner();
+        let mut final_text = String::new();
+        while let Some(chunk) = confirmation_stream
+            .message()
+            .await
+            .expect("应成功读取 confirmation 结果流")
+        {
+            final_text = chunk.accumulated_text;
+        }
+
+        assert!(final_text.contains("[confirmation:approved]"));
+        assert!(final_text.contains("vault.create_markdown_file"));
+        assert!(final_text.contains("Notes/New.md"));
+        assert_eq!(call_count.load(Ordering::SeqCst), 3);
     }
     .await;
 

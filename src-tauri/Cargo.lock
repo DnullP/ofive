@@ -3029,6 +3029,7 @@ dependencies = [
  "jieba-rs",
  "log",
  "notify",
+ "objc2",
  "prost",
  "pulldown-cmark",
  "raw-window-handle",

@@ -1,0 +1,23 @@
+{
+    "app": {
+        "macOSPrivateApi": true,
+        "windows": [
+            {
+                "label": "main",
+                "title": "ofive",
+                "width": 800,
+                "height": 600,
+                "center": true,
+                "transparent": true,
+                "backgroundColor": [
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "decorations": false,
+                "dragDropEnabled": false
+            }
+        ]
+    }
+}

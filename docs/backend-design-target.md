@@ -21,7 +21,7 @@
 
 - AI agent 调用前后端更多能力
 - 新增更多 sidecar / agent / tool runtime
-- 后端形成插件能力的稳定承载面
+- 后端形成宿主模块能力的稳定承载面
 - 会话、工具调用、审计日志、用户确认等 AI 基础设施逐渐增加
 - 单元测试、集成测试、性能基准需要基于稳定模块边界扩展
 
@@ -500,7 +500,7 @@ Go 持有：
 
 ### 9.1 需要稳定化的契约面
 
-建议至少稳定以下五类契约：
+建议至少稳定以下六类契约：
 
 1. **Command Contract**
 	- 前端调用 Rust 的命令输入输出协议
@@ -516,6 +516,9 @@ Go 持有：
 
 5. **Extension Contract**
 	- 后端扩展单元的 manifest、激活条件、权限声明、依赖声明
+
+6. **Persistence Contract**
+	- sidecar / runtime 请求宿主持久化能力时的命名空间、版本、并发控制与返回语义
 
 ### 9.2 推荐的扩展声明模型
 
@@ -547,6 +550,7 @@ Go 持有：
 3. tool schema 版本化
 4. extension manifest 版本化
 5. capability descriptor 版本化
+6. persistence contract 版本化
 
 建议遵循以下规则：
 
@@ -559,7 +563,7 @@ Go 持有：
 
 即使暂时还没有第三方扩展，也建议现在就做两件事：
 
-1. 为 command / event / tool payload 建立明确的结构体边界
+1. 为 command / event / tool / persistence payload 建立明确的结构体边界
 2. 在文档层开始引入 `apiVersion` 和 schema 兼容意识
 
 这样后续从“内建模块”演化到“平台扩展”时不会返工。
@@ -758,7 +762,247 @@ Go 持有：
 
 ## 13. 会话与数据存储建议
 
-### 9.1 对话主数据
+### 补充：AI 作为扩展功能时的持久化归属
+
+这里需要明确区分两个概念：
+
+1. **谁拥有持久化基础设施**
+2. **谁拥有这份数据的产品语义与命名空间**
+
+如果 AI 被视为 ofive 的一个扩展能力，而不是宿主的唯一中心，那么合理边界不是“把持久化交给 Go sidecar”，而是：
+
+- **持久化基础设施由 Rust 宿主提供**
+- **AI 数据以扩展命名空间或能力命名空间的方式挂载在宿主持久层之下**
+- **Go sidecar 只保留短期运行时状态，不拥有长期权威数据**
+
+也就是说，**“由 Rust 持久化”并不等于“AI 占据了宿主持久化主权”**。真正的主权在于：
+
+- 存储介质由谁控制
+- schema 迁移由谁裁决
+- 权限、审计、备份、清理由谁统一治理
+
+在这三个问题上，答案都应当是 Rust 宿主，而不是 Go sidecar。
+
+### 方案比较
+
+#### 方案 A：由 Go sidecar 持久化 AI 会话与历史
+
+优点：
+
+- AI runtime 内部实现简单，session 与持久化模型贴近
+- Go 可以直接复用 ADK/agent runtime 的内部会话结构
+
+问题：
+
+- sidecar 从“运行时执行器”膨胀为“长期状态拥有者”
+- Rust 无法天然成为 conversation、tool history、approval record 的权威边界
+- 后续替换 Go runtime、引入第二个 runtime、或者做跨 runtime 会话恢复时迁移成本高
+- 权限、审计、备份、清理、schema migration 会分裂到 sidecar 内部
+- 宿主很难保证 AI 数据与 vault、capability、user approval 的一致性
+
+结论：
+
+- **不推荐作为长期方案**
+
+#### 方案 B：由 Rust 直接把 AI 数据作为 Core Store 持久化
+
+优点：
+
+- Rust 作为宿主主边界，便于统一权限、审计、trace、备份与迁移
+- 可以天然与 capability execution、approval、vault write trace 串联
+- sidecar 可替换，长期数据不依赖某个 agent runtime
+
+问题：
+
+- 如果 AI 仍只是“扩展功能”，一上来就放进 Core Store，容易过早把 AI 提升为平台主数据
+- 会让宿主核心数据模型过早耦合 AI 专属字段与演进节奏
+
+结论：
+
+- **适合 AI 已被确认是平台核心能力后的终态**
+- **不适合作为当前阶段的唯一落点**
+
+#### 方案 C：由 Rust 宿主持久化，但放在 AI 扩展私有命名空间下
+
+优点：
+
+- 宿主仍掌握存储、迁移、权限、审计与备份能力
+- AI 仍被视为扩展能力，不直接挤占 Core Store 边界
+- 后续如果 AI 从扩展能力升级为平台核心能力，可以从 Extension Private Store 平滑迁移到 Core Store
+- Go sidecar 仍可保持“可替换 runtime”的角色定位
+
+问题：
+
+- 需要宿主先建立扩展私有存储命名空间与迁移约束
+- 需要明确哪些数据属于 AI 私有状态，哪些已经升级为平台级主数据
+
+结论：
+
+- **这是当前阶段最合理的方案**
+
+### 推荐决策
+
+当前建议采用：
+
+- **Rust 宿主提供持久化能力**
+- **AI 对话、草稿历史、调试轨迹索引、会话元数据先落在 AI 扩展私有存储中**
+- **Go sidecar 仅保留 ADK session、短期 memory、当前推理上下文、未落盘的瞬时运行时状态**
+
+当以下数据开始具有平台级一致性要求时，再从 AI 扩展私有存储提升为 Core Store：
+
+- tool call history
+- tool result summary
+- user approval records
+- execution trace id
+- 跨 runtime / 跨 sidecar 可恢复的 conversation 主数据
+
+换句话说：
+
+- **短期运行时在 Go**
+- **长期权威数据在 Rust**
+- **当前阶段 AI 的长期数据应先作为“宿主托管的扩展私有数据”，而不是一开始就变成宿主核心数据**
+
+### 当前实现的落地含义
+
+从当前代码状态看，`aiChatHistory` 已经由 Rust 持久化到 vault config 中。这个方向在归属上是对的，但在存储分层上仍然只是过渡态。
+
+截至 2026-03-22，第一步实现已经开始落地：
+
+- Rust 宿主已新增 `extension private store` 基础设施。
+- AI 设置与对话历史开始迁移到宿主托管的 `owner = ai-chat` 私有命名空间。
+- 旧版 `vault config` 字段保留兼容读取，但新权威落点已经切换为扩展私有存储。
+- 前端命令接口保持不变，AI 作为宿主后端模块接入，不要求宿主核心数据模型先为 AI 扩张字段。
+
+后续建议将其从“塞在统一 vault config 里的一个字段”演进为更明确的宿主托管扩展存储，例如：
+
+- `extensions/ai-chat/conversations.json`
+- `extensions/ai-chat/history/`
+- 或统一 extension private store 抽象下的 `owner = ai-chat`
+
+这样可以同时满足两点：
+
+- AI 不直接占据宿主 Core Store
+- Go sidecar 也不成为长期状态中心
+
+### 规划约束
+
+后续规划中应明确以下约束：
+
+1. Go sidecar 不允许拥有 AI 会话长期权威存储。
+2. 宿主必须为扩展提供命名空间隔离的持久化能力。
+3. AI 的持久化数据先进入 Extension Private Store，只有在出现平台级一致性诉求后才提升到 Core Store。
+4. 任一 AI 持久化结构都必须具备 `schema_version`、`owner`、迁移路径与导出能力。
+5. 与权限、审计、确认、工具调用强相关的数据，最终都应回到 Rust 宿主统一治理。
+
+### 补充：sidecar 接入宿主持久化时必须有稳定协议
+
+如果 sidecar 不再拥有自己的长期权威存储，而是依赖 Rust 宿主提供持久化，那么这件事不能只靠“当前 AI 模块内部约定”完成，必须上升为平台级稳定契约。
+
+原因是：
+
+- 后续不止一个 sidecar 会接入 Rust 宿主持久层
+- 不同 sidecar 不应直接知道 Rust 内部文件布局、表结构、目录组织方式
+- Rust 宿主需要保留替换存储介质、调整 schema、加入审计/权限/迁移的自由度
+- sidecar 面对的应是稳定协议，而不是 Rust 内部实现细节
+
+因此，正确边界不是：
+
+- sidecar 直接读写 `extensions/<owner>/...` 文件
+
+而是：
+
+- sidecar 通过 Rust 暴露的 **Persistence Contract** 请求自己的宿主持久化能力
+- Rust 在协议后面决定真实存储介质、schema 迁移、权限校验与审计记录
+
+推荐把这层协议视为：
+
+- sidecar 看见的是“命名空间化存储服务”
+- Rust 内部实现的可以是 JSON 文件、SQLite、cache store、未来对象存储或其他 backend
+
+### 推荐的持久化协议边界
+
+建议每个 sidecar / runtime 只能在自己的 `module_id` 或 `owner` 命名空间下请求持久化能力，禁止直接跨模块读写。
+
+协议至少需要回答以下问题：
+
+1. **谁在请求**
+	- `module_id`
+	- `runtime_id`
+	- `session_id` / `task_id`
+
+2. **要访问哪份数据**
+	- `store_scope`：`core` / `module_private` / `cache`
+	- `owner`
+	- `state_key`
+	- `schema_version`
+
+3. **要执行什么动作**
+	- `load`
+	- `save`
+	- `delete`
+	- `list`
+	- `migrate`
+
+4. **宿主如何返回结果**
+	- `status`
+	- `revision` / `etag`
+	- `data`
+	- `error_code`
+	- `error_message`
+
+其中最关键的是：
+
+- `owner + state_key` 用于命名空间隔离
+- `schema_version` 用于数据演进
+- `revision/etag` 用于并发保护与乐观更新
+- `runtime_id/session_id/task_id` 用于审计和 trace 关联
+
+### 推荐的最小 Persistence Contract
+
+宿主可以统一定义一组不带 AI 语义的持久化能力，例如：
+
+- `persistence.state.load`
+- `persistence.state.save`
+- `persistence.state.delete`
+- `persistence.state.list`
+
+最小请求结构建议类似：
+
+```json
+{
+  "apiVersion": 1,
+  "moduleId": "ai-chat",
+  "runtimeId": "go-sidecar",
+  "sessionId": "session-123",
+  "scope": "module_private",
+  "owner": "ai-chat",
+  "stateKey": "history",
+  "schemaVersion": 1,
+  "expectedRevision": "rev-42",
+  "payload": {}
+}
+```
+
+对应响应结构建议类似：
+
+```json
+{
+  "status": "ok",
+  "owner": "ai-chat",
+  "stateKey": "history",
+  "schemaVersion": 1,
+  "revision": "rev-43",
+  "payload": {}
+}
+```
+
+这层协议的重点不是“让 sidecar 看见文件”，而是：
+
+- 让 sidecar 只看见稳定的状态读写语义
+- 让 Rust 可以在不破坏 sidecar 的前提下替换底层存储实现
+- 让其他 future sidecar 复用同一套宿主持久化接入方式
+
+### 13.1 对话主数据
 
 建议由 Rust 持久化：
 
@@ -775,7 +1019,7 @@ Go 持有：
 - Rust 掌握 vault 存储
 - Rust 更适合做跨 sidecar 的稳定持久层
 
-### 9.2 Go 会话数据
+### 13.2 Go 会话数据
 
 Go 只保留：
 
@@ -903,6 +1147,7 @@ Tauri command 层负责将其映射为前端可消费的错误响应。
 
 目标：建立完整 AI 运行主数据。
 
+- 先建立 Rust 宿主托管的 AI extension private store
 - conversation store
 - message store
 - tool history store
@@ -910,14 +1155,21 @@ Tauri command 层负责将其映射为前端可消费的错误响应。
 - trace / replay 基础设施
 - task id / trace id / progress model
 
-### 阶段 5：后端插件化能力
+补充原则：
 
-目标：让前端插件架构与后端能力注册机制形成对齐。
+- 此阶段不将 Go sidecar 设计为长期状态主中心
+- AI 扩展私有数据与平台 core store 要有清晰提升路径
+- 只有需要平台级一致性治理的数据才进入 Core Store
 
-- 前端插件注册 UI 能力
-- 后端注册对应 capability / tool / command
-- 建立稳定的插件-后端协作协议
-- 引入 extension manifest / activationEvents / permissions / apiVersion
+### 阶段 5：后端模块化能力
+
+目标：让后端形成宿主内聚、自主演进的模块体系，而不是与前端插件模型做一一对齐。
+
+- 前端插件继续负责 UI 能力注册与展示编排
+- 后端以宿主模块方式注册 capability / tool / command / job
+- 模块边界由宿主定义生命周期、配置、权限、审计与存储归属
+- sidecar / in-process / remote service 只是模块内部的 runtime adapter，不等于模块本身
+- 如需对外暴露扩展协作协议，应单独定义模块协作契约，而不是直接复用前端 plugin manifest 语义
 
 ### 阶段 6：扩展存储与运行时平台化
 

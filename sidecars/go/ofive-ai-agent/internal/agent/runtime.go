@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"sync/atomic"
 	"strings"
+	"sync/atomic"
 
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/agent/llmagent"
@@ -48,13 +48,21 @@ type ToolDescriptor struct {
 	APIVersion           string
 }
 
+// HistoryEntry contains one persisted user/assistant text message used to restore context.
+type HistoryEntry struct {
+	Role string
+	Text string
+}
+
 // CapabilityBridgeConfig contains callback settings for Rust capability execution.
 type CapabilityBridgeConfig struct {
-	CallbackURL   string
-	CallbackToken string
-	MCPServerURL  string
-	MCPAuthToken  string
-	Tools         []ToolDescriptor
+	CallbackURL              string
+	CallbackToken            string
+	PersistenceCallbackURL   string
+	PersistenceCallbackToken string
+	MCPServerURL             string
+	MCPAuthToken             string
+	Tools                    []ToolDescriptor
 }
 
 // Runtime wraps shared ADK session state for requests handled by the sidecar.
@@ -64,18 +72,18 @@ type Runtime struct {
 
 // StreamChunk represents one streaming chunk emitted by the sidecar.
 type StreamChunk struct {
-	EventType       string
-	AgentName       string
-	DeltaText       string
-	AccumulatedText string
-	DebugTitle      string
-	DebugText       string
-	ConfirmationID  string
-	ConfirmationHint string
-	ConfirmationToolName string
+	EventType                string
+	AgentName                string
+	DeltaText                string
+	AccumulatedText          string
+	DebugTitle               string
+	DebugText                string
+	ConfirmationID           string
+	ConfirmationHint         string
+	ConfirmationToolName     string
 	ConfirmationToolArgsJSON string
-	ErrorText       string
-	Done            bool
+	ErrorText                string
+	Done                     bool
 }
 
 type pendingToolConfirmation struct {
@@ -140,6 +148,15 @@ func (r *Runtime) Chat(
 ) (string, string, error) {
 	if err := r.EnsureSession(ctx, userID, sessionID); err != nil {
 		return "", "", err
+	}
+
+	if responseText, agentDisplayName, handled, err := tryHandleExplicitPersistenceCommand(
+		ctx,
+		sessionID,
+		message,
+		bridgeConfig,
+	); handled {
+		return responseText, agentDisplayName, err
 	}
 
 	if responseText, agentDisplayName, handled, err := tryHandleExplicitCapabilityCommand(
@@ -224,6 +241,7 @@ func (r *Runtime) StreamChat(
 	userID string,
 	sessionID string,
 	message string,
+	history []HistoryEntry,
 	vendorConfig VendorConfig,
 	bridgeConfig CapabilityBridgeConfig,
 	emit func(StreamChunk) error,
@@ -239,6 +257,21 @@ func (r *Runtime) StreamChat(
 	if err := r.EnsureSession(ctx, userID, sessionID); err != nil {
 		return err
 	}
+	if err := r.seedSessionHistory(ctx, userID, sessionID, history); err != nil {
+		return err
+	}
+
+	if responseText, agentDisplayName, handled, err := tryHandleExplicitPersistenceCommand(
+		ctx,
+		sessionID,
+		message,
+		bridgeConfig,
+	); handled {
+		if err != nil {
+			return err
+		}
+		return emitChunkedTextResponse(responseText, agentDisplayName, emit)
+	}
 
 	if responseText, agentDisplayName, handled, err := tryHandleExplicitCapabilityCommand(
 		ctx,
@@ -249,6 +282,27 @@ func (r *Runtime) StreamChat(
 			return err
 		}
 		return emitChunkedTextResponse(responseText, agentDisplayName, emit)
+	}
+
+	if confirmation, responseText, handled, err := tryHandleExplicitMockConfirmationCommand(
+		ctx,
+		sessionID,
+		message,
+		bridgeConfig,
+	); handled {
+		if err != nil {
+			return err
+		}
+		return emit(StreamChunk{
+			EventType:                "confirmation",
+			AgentName:                mockConfirmationAgentName,
+			AccumulatedText:          responseText,
+			ConfirmationID:           confirmation.ID,
+			ConfirmationHint:         confirmation.Hint,
+			ConfirmationToolName:     confirmation.ToolName,
+			ConfirmationToolArgsJSON: confirmation.ToolArgsJSON,
+			Done:                     true,
+		})
 	}
 
 	if strings.TrimSpace(vendorConfig.VendorID) == "" || vendorConfig.VendorID == "mock-echo" {
@@ -288,9 +342,60 @@ func (r *Runtime) StreamChat(
 		agentDisplayName,
 		userID,
 		sessionID,
+		bridgeConfig,
 		genai.NewContentFromText(message, genai.RoleUser),
 		emit,
 	)
+}
+
+func (r *Runtime) seedSessionHistory(
+	ctx context.Context,
+	userID string,
+	sessionID string,
+	history []HistoryEntry,
+) error {
+	if len(history) == 0 {
+		return nil
+	}
+
+	response, err := r.sessionService.Get(ctx, &session.GetRequest{
+		AppName:   appName,
+		UserID:    userID,
+		SessionID: sessionID,
+	})
+	if err != nil {
+		return fmt.Errorf("load session %s for history seed: %w", sessionID, err)
+	}
+	if response.Session.Events().Len() > 0 {
+		return nil
+	}
+
+	for index, item := range history {
+		text := strings.TrimSpace(item.Text)
+		if text == "" {
+			continue
+		}
+
+		contentRole := genai.Role(genai.RoleUser)
+		author := "user"
+		if strings.TrimSpace(item.Role) == "assistant" {
+			contentRole = genai.Role(genai.RoleModel)
+			author = agentName
+		}
+
+		event := session.NewEvent(fmt.Sprintf("history-seed-%d", index+1))
+		event.Author = author
+		event.LLMResponse = model.LLMResponse{
+			Content:      genai.NewContentFromText(text, contentRole),
+			TurnComplete: true,
+		}
+
+		if err := r.sessionService.AppendEvent(ctx, response.Session, event); err != nil {
+			return fmt.Errorf("append seeded history event %d: %w", index+1, err)
+		}
+	}
+
+	return nil
 }
 
 // StreamConfirmation resumes one ADK session by submitting a tool confirmation response.
@@ -306,14 +411,60 @@ func (r *Runtime) StreamConfirmation(
 ) error {
 	trace := func(event DebugTraceEvent) error {
 		return emit(StreamChunk{
-			EventType: "debug",
+			EventType:  "debug",
 			DebugTitle: event.Title,
-			DebugText: event.Text,
+			DebugText:  event.Text,
 		})
 	}
 
 	if err := r.EnsureSession(ctx, userID, sessionID); err != nil {
 		return err
+	}
+
+	persistedConfirmation, persistenceEnabled, err := loadPersistedPendingConfirmation(
+		ctx,
+		sessionID,
+		confirmationID,
+		bridgeConfig,
+	)
+	if err != nil {
+		return err
+	}
+	if persistenceEnabled && persistedConfirmation == nil {
+		return fmt.Errorf(
+			"pending confirmation %s not found in host persistence",
+			strings.TrimSpace(confirmationID),
+		)
+	}
+	if persistedConfirmation != nil {
+		if err := emitDebugTrace(trace, DebugTraceEvent{
+			Title: "Restored pending confirmation",
+			Text: fmt.Sprintf(
+				"confirmationId=%s tool=%s",
+				persistedConfirmation.ConfirmationID,
+				persistedConfirmation.ToolName,
+			),
+		}); err != nil {
+			return err
+		}
+	}
+
+	if strings.TrimSpace(vendorConfig.VendorID) == "" ||
+		strings.TrimSpace(vendorConfig.VendorID) == "mock-echo" {
+		if err := streamMockConfirmationResponse(
+			confirmed,
+			persistedConfirmation,
+			emit,
+		); err != nil {
+			return err
+		}
+
+		return deletePersistedPendingConfirmation(
+			ctx,
+			sessionID,
+			confirmationID,
+			bridgeConfig,
+		)
 	}
 
 	adkAgent, agentDisplayName, err := r.buildAgent(ctx, vendorConfig, bridgeConfig, trace)
@@ -341,15 +492,25 @@ func (r *Runtime) StreamConfirmation(
 		}},
 	}
 
-	return streamADKContent(
+	if err := streamADKContent(
 		ctx,
 		runnerInstance,
 		adkAgent,
 		agentDisplayName,
 		userID,
 		sessionID,
+		bridgeConfig,
 		content,
 		emit,
+	); err != nil {
+		return err
+	}
+
+	return deletePersistedPendingConfirmation(
+		ctx,
+		sessionID,
+		confirmationID,
+		bridgeConfig,
 	)
 }
 
@@ -389,6 +550,7 @@ func streamADKContent(
 	agentDisplayName string,
 	userID string,
 	sessionID string,
+	bridgeConfig CapabilityBridgeConfig,
 	content *genai.Content,
 	emit func(StreamChunk) error,
 ) error {
@@ -419,15 +581,19 @@ func streamADKContent(
 	}
 
 	if confirmation != nil {
+		if err := savePendingConfirmation(ctx, sessionID, *confirmation, bridgeConfig); err != nil {
+			return err
+		}
+
 		return emit(StreamChunk{
-			EventType: "confirmation",
-			AgentName: agentDisplayName,
-			AccumulatedText: responseText,
-			ConfirmationID: confirmation.ID,
-			ConfirmationHint: confirmation.Hint,
-			ConfirmationToolName: confirmation.ToolName,
+			EventType:                "confirmation",
+			AgentName:                agentDisplayName,
+			AccumulatedText:          responseText,
+			ConfirmationID:           confirmation.ID,
+			ConfirmationHint:         confirmation.Hint,
+			ConfirmationToolName:     confirmation.ToolName,
 			ConfirmationToolArgsJSON: confirmation.ToolArgsJSON,
-			Done: true,
+			Done:                     true,
 		})
 	}
 
@@ -437,7 +603,6 @@ func streamADKContent(
 
 	return emitChunkedTextResponse(responseText, agentDisplayName, emit)
 }
-
 
 func extractPendingToolConfirmation(content *genai.Content) *pendingToolConfirmation {
 	if content == nil {
@@ -455,15 +620,15 @@ func extractPendingToolConfirmation(content *genai.Content) *pendingToolConfirma
 		originalCall, err := toolconfirmation.OriginalCallFrom(part.FunctionCall)
 		if err != nil || originalCall == nil {
 			return &pendingToolConfirmation{
-				ID: strings.TrimSpace(part.FunctionCall.ID),
+				ID:   strings.TrimSpace(part.FunctionCall.ID),
 				Hint: extractToolConfirmationHint(part.FunctionCall),
 			}
 		}
 
 		return &pendingToolConfirmation{
-			ID: strings.TrimSpace(part.FunctionCall.ID),
-			Hint: extractToolConfirmationHint(part.FunctionCall),
-			ToolName: strings.TrimSpace(originalCall.Name),
+			ID:           strings.TrimSpace(part.FunctionCall.ID),
+			Hint:         extractToolConfirmationHint(part.FunctionCall),
+			ToolName:     strings.TrimSpace(originalCall.Name),
 			ToolArgsJSON: marshalConfirmationArgs(originalCall.Args),
 		}
 	}
@@ -741,9 +906,9 @@ func formatModelRequest(request *model.LLMRequest) string {
 	if request.Config != nil {
 		payload["config"] = map[string]any{
 			"systemInstruction": formatGenAIContent(request.Config.SystemInstruction),
-			"maxOutputTokens":  request.Config.MaxOutputTokens,
-			"stopSequences":    request.Config.StopSequences,
-			"responseMimeType": request.Config.ResponseMIMEType,
+			"maxOutputTokens":   request.Config.MaxOutputTokens,
+			"stopSequences":     request.Config.StopSequences,
+			"responseMimeType":  request.Config.ResponseMIMEType,
 		}
 	}
 
@@ -783,7 +948,6 @@ func formatGenAIContent(content *genai.Content) map[string]any {
 		"parts": parts,
 	}
 }
-
 
 func capabilityClientFromBridge(config CapabilityBridgeConfig) (closableCapabilityCaller, bool) {
 	if strings.TrimSpace(config.MCPServerURL) != "" {

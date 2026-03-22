@@ -100,14 +100,14 @@
 .app-runtime--tauri.app-effect--glass .dv-paneview,
 .app-runtime--tauri.app-effect--glass .sidebar-paneview-container {
   --dv-group-view-background-color: transparent;
-  --dv-tabs-and-actions-container-background-color: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-soft));
-  --dv-activegroup-visiblepanel-tab-background-color: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-soft));
+  --dv-tabs-and-actions-container-background-color: rgba(var(--window-glass-elevated-rgb), 0.12);
+  --dv-activegroup-visiblepanel-tab-background-color: rgba(var(--window-glass-elevated-rgb), 0.1);
   --dv-activegroup-hiddenpanel-tab-background-color: transparent;
-  --dv-inactivegroup-visiblepanel-tab-background-color: rgba(var(--window-glass-elevated-rgb), 0.08);
+  --dv-inactivegroup-visiblepanel-tab-background-color: rgba(var(--window-glass-elevated-rgb), 0.05);
   --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
-  --dv-tab-divider-color: rgba(var(--window-glass-border-rgb), 0.18);
-  --dv-separator-border: rgba(var(--window-glass-border-rgb), 0.16);
-  --dv-paneview-header-border-color: rgba(var(--window-glass-border-rgb), 0.16);
+  --dv-tab-divider-color: rgba(var(--window-glass-border-rgb), 0.24);
+  --dv-separator-border: rgba(var(--window-glass-border-rgb), 0.18);
+  --dv-paneview-header-border-color: rgba(var(--window-glass-border-rgb), 0.2);
 }
 
 /* 桌面毛玻璃 Dockview 容器：为 tab 区和 pane 区补充轻度背景模糊。 */
@@ -115,6 +115,12 @@
 .app-runtime--tauri.app-effect--glass .dv-paneview,
 .app-runtime--tauri.app-effect--glass .sidebar-paneview-container {
   backdrop-filter: none;
+}
+
+.app-runtime--tauri.app-effect--glass.app-platform--macos .dv-dockview,
+.app-runtime--tauri.app-effect--glass.app-platform--macos .dv-paneview,
+.app-runtime--tauri.app-effect--glass.app-platform--macos .sidebar-paneview-container {
+  backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.75)) saturate(1.08);
 }
 
 /* 桌面毛玻璃主区域：不再给欢迎页和空白工作区额外铺底。 */

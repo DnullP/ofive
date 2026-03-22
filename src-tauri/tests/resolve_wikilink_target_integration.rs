@@ -7,14 +7,18 @@
 use ofive_lib::resolve_wikilink_target_path_in_vault;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(1);
+
 fn create_test_root() -> PathBuf {
+    let sequence = TEST_ROOT_SEQ.fetch_add(1, Ordering::Relaxed);
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
-    let root = std::env::temp_dir().join(format!("ofive-wikilink-int-{unique}"));
+    let root = std::env::temp_dir().join(format!("ofive-wikilink-int-{unique}-{sequence}"));
     fs::create_dir_all(&root).expect("应成功创建测试根目录");
     root
 }

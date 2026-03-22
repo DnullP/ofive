@@ -5,10 +5,9 @@
 
 use crate::app::vault::query_app_service;
 use crate::app::vault::vault_app_service;
+use crate::infra::persistence::vault_config_store::VaultConfig;
+use crate::shared::vault_contracts::*;
 use crate::state::AppState;
-use crate::vault_commands::outline;
-use crate::vault_commands::types::*;
-use crate::vault_config::VaultConfig;
 use std::time::Instant;
 use tauri::{AppHandle, State};
 
@@ -397,7 +396,7 @@ pub fn get_backlinks_for_file(
 pub fn get_vault_markdown_outline(
     relative_path: String,
     state: State<'_, AppState>,
-) -> Result<outline::OutlineResponse, String> {
+) -> Result<OutlineResponse, String> {
     timed_command!(
         "get_vault_markdown_outline",
         query_app_service::get_vault_markdown_outline(relative_path, state)

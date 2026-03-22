@@ -961,17 +961,56 @@ export function DockviewLayout({
         [mergedActivityItems],
     );
 
+    const preferredRightActivityId = useMemo(() => {
+        const panelRightItems = rightBarItems.filter((item) => {
+            const activityDescriptor = activityDescriptorById.get(item.id);
+            if (activityDescriptor?.type === "callback") {
+                return false;
+            }
+            if (item.isSettings) {
+                return false;
+            }
+            return activityIdsWithSidebarContainer.has(item.id);
+        });
+
+        if (panelRightItems.length === 0) {
+            return null;
+        }
+
+        const panelCountByActivityId = new Map<string, number>();
+        rightPanels.forEach((panel) => {
+            const activityId = activityIdOf(panel);
+            panelCountByActivityId.set(activityId, (panelCountByActivityId.get(activityId) ?? 0) + 1);
+        });
+
+        return panelRightItems.reduce<string | null>((bestId, item) => {
+            if (bestId === null) {
+                return item.id;
+            }
+
+            const bestCount = panelCountByActivityId.get(bestId) ?? 0;
+            const currentCount = panelCountByActivityId.get(item.id) ?? 0;
+            if (currentCount > bestCount) {
+                return item.id;
+            }
+
+            return bestId;
+        }, null);
+    }, [activityDescriptorById, activityIdsWithSidebarContainer, rightBarItems, rightPanels]);
+
     /**
      * 右侧栏根据 activeRightActivityId 过滤可见面板，
      * 与左侧栏的 visibleLeftPanels 逻辑对称。
-     * 如果没有选中的活动项，显示全部右侧面板。
+     * 如果状态尚未完成活动项选择，则回退到首个右侧面板容器活动，
+     * 避免初始化或拖拽瞬间把其他 activity 分组的面板一并渲染出来。
      */
     const visibleRightPanels = useMemo(() => {
-        if (!activeRightActivityId) {
+        const resolvedActivityId = activeRightActivityId ?? preferredRightActivityId;
+        if (!resolvedActivityId) {
             return rightPanels;
         }
-        return rightPanels.filter((panel) => activityIdOf(panel) === activeRightActivityId);
-    }, [activeRightActivityId, rightPanels]);
+        return rightPanels.filter((panel) => activityIdOf(panel) === resolvedActivityId);
+    }, [activeRightActivityId, preferredRightActivityId, rightPanels]);
 
     /* ────────── 左侧活动项自动选中 ────────── */
 
@@ -1000,22 +1039,15 @@ export function DockviewLayout({
             return;
         }
         /* 排除 settings 与 callback-only 项，它们没有右侧 panel 容器 */
-        const panelRightItems = rightBarItems.filter((i) => {
-            const activityDescriptor = activityDescriptorById.get(i.id);
-            if (activityDescriptor?.type === "callback") {
-                return false;
-            }
-            if (i.isSettings) return false;
-            return activityIdsWithSidebarContainer.has(i.id);
-        });
-        if (panelRightItems.length === 0) {
+        if (!preferredRightActivityId) {
             setActiveRightActivityId(null);
             return;
         }
-        if (!activeRightActivityId || !panelRightItems.some((i) => i.id === activeRightActivityId)) {
-            setActiveRightActivityId(panelRightItems[0]?.id ?? null);
+        const hasActiveRightItem = rightBarItems.some((item) => item.id === activeRightActivityId);
+        if (!activeRightActivityId || !hasActiveRightItem) {
+            setActiveRightActivityId(preferredRightActivityId);
         }
-    }, [activeRightActivityId, activityBarConfigState.isLoaded, activityDescriptorById, activityIdsWithSidebarContainer, rightBarItems]);
+    }, [activeRightActivityId, activityBarConfigState.isLoaded, preferredRightActivityId, rightBarItems]);
 
     const visibleLeftPanels = useMemo(() => {
         if (!activeActivityId) {

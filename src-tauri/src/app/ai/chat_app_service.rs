@@ -6,18 +6,26 @@ use tauri::{AppHandle, State};
 use tonic::Request;
 
 use crate::ai_service::{
-    self, pb, AiChatStreamEventPayload, AiChatStreamStartResponse, AiSidecarHealthResponse,
+    pb, AiChatHistoryMessage, AiChatStreamEventPayload, AiChatStreamStartResponse,
+    AiSidecarHealthResponse,
 };
-use crate::app::ai::{mcp_server_app_service, tool_app_service};
-use crate::state::AppState;
+use crate::app::ai::{
+    mcp_server_app_service, persistence_callback_app_service, plugin_app_service, tool_app_service,
+    tool_callback_app_service,
+};
+use crate::host::events::ai_events;
+use crate::infra::ai::{grpc_client, sidecar_manager};
+use crate::infra::persistence::ai_chat_store;
+use crate::state::{get_vault_root, AppState};
 
 /// 获取 AI sidecar 健康状态。
 pub(crate) async fn get_ai_sidecar_health(
     app_handle: &AppHandle,
     state: &State<'_, AppState>,
 ) -> Result<AiSidecarHealthResponse, String> {
-    let endpoint = ai_service::ensure_ai_sidecar_endpoint(app_handle, state).await?;
-    let mut client = ai_service::connect_ai_sidecar_client(endpoint).await?;
+    plugin_app_service::ensure_ai_backend_plugin_enabled(state)?;
+    let endpoint = sidecar_manager::ensure_ai_sidecar_endpoint(app_handle, state).await?;
+    let mut client = grpc_client::connect_ai_sidecar_client(endpoint).await?;
     let response = client
         .health(Request::new(pb::HealthRequest {}))
         .await
@@ -37,15 +45,17 @@ pub(crate) async fn start_ai_chat_stream(
     message: String,
     session_id: Option<String>,
     user_id: Option<String>,
+    history: Option<Vec<AiChatHistoryMessage>>,
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AiChatStreamStartResponse, String> {
+    plugin_app_service::ensure_ai_backend_plugin_enabled(&state)?;
     let trimmed_message = message.trim().to_string();
     if trimmed_message.is_empty() {
         return Err("message 不能为空".to_string());
     }
 
-    let stream_id = ai_service::next_ai_stream_id();
+    let stream_id = ai_events::next_ai_stream_id();
     let resolved_session_id = session_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
@@ -54,13 +64,22 @@ pub(crate) async fn start_ai_chat_stream(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "desktop-user".to_string());
-    let ai_settings = ai_service::load_validated_ai_chat_settings(&state)?;
+    let ai_settings = ai_chat_store::validate_ai_chat_settings_for_chat(
+        ai_chat_store::load_ai_chat_settings(&state)?,
+    )?;
+    let vault_root = get_vault_root(&state)?;
     let sidecar_tools = tool_app_service::get_ai_sidecar_tool_catalog()?;
     let mcp_server_handle =
         mcp_server_app_service::start_ofive_mcp_server(app_handle.clone()).await?;
-    let endpoint = ai_service::ensure_ai_sidecar_endpoint(&app_handle, &state).await?;
+    let capability_callback_handle =
+        tool_callback_app_service::start_sidecar_capability_callback_server(app_handle.clone())
+            .await?;
+    let persistence_callback_handle =
+        persistence_callback_app_service::start_sidecar_persistence_callback_server(vault_root)
+            .await?;
+    let endpoint = sidecar_manager::ensure_ai_sidecar_endpoint(&app_handle, &state).await?;
 
-    ai_service::emit_ai_stream_event(
+    ai_events::emit_ai_stream_event(
         &app_handle,
         AiChatStreamEventPayload {
             stream_id: stream_id.clone(),
@@ -91,14 +110,25 @@ pub(crate) async fn start_ai_chat_stream(
             vendor_id: ai_settings.vendor_id.clone(),
             model: ai_settings.model.clone(),
             tools: sidecar_tools,
-            capability_callback_url: String::new(),
-            capability_callback_token: String::new(),
+            capability_callback_url: capability_callback_handle.callback_url.clone(),
+            capability_callback_token: capability_callback_handle.callback_token.clone(),
             mcp_server_url: mcp_server_handle.server_url.clone(),
             mcp_auth_token: mcp_server_handle.auth_token.clone(),
+            persistence_callback_url: persistence_callback_handle.callback_url.clone(),
+            persistence_callback_token: persistence_callback_handle.callback_token.clone(),
+            history: history
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|item| pb::ChatHistoryEntry {
+                    role: item.role,
+                    text: item.text,
+                })
+                .collect(),
         };
 
         let stream_result = async {
-            let mut client = ai_service::connect_ai_sidecar_client(endpoint).await?;
+            let mut client = grpc_client::connect_ai_sidecar_client(endpoint).await?;
             let mut response_stream = client
                 .chat(Request::new(request))
                 .await
@@ -110,7 +140,7 @@ pub(crate) async fn start_ai_chat_stream(
                 .await
                 .map_err(|error| format!("读取 AI sidecar chat stream 失败: {error}"))?
             {
-                ai_service::emit_ai_stream_event(
+                ai_events::emit_ai_stream_event(
                     &event_app_handle,
                     AiChatStreamEventPayload {
                         stream_id: stream_id_for_task.clone(),
@@ -152,7 +182,8 @@ pub(crate) async fn start_ai_chat_stream(
                         } else {
                             Some(chunk.confirmation_tool_name)
                         },
-                        confirmation_tool_args_json: if chunk.confirmation_tool_args_json.is_empty() {
+                        confirmation_tool_args_json: if chunk.confirmation_tool_args_json.is_empty()
+                        {
                             None
                         } else {
                             Some(chunk.confirmation_tool_args_json)
@@ -172,9 +203,11 @@ pub(crate) async fn start_ai_chat_stream(
         .await;
 
         mcp_server_handle.shutdown();
+        capability_callback_handle.shutdown();
+        persistence_callback_handle.shutdown();
 
         if let Err(error) = stream_result {
-            ai_service::emit_ai_stream_event(
+            ai_events::emit_ai_stream_event(
                 &event_app_handle,
                 AiChatStreamEventPayload {
                     stream_id: stream_id_for_task,
@@ -208,12 +241,13 @@ pub(crate) async fn submit_ai_chat_confirmation(
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AiChatStreamStartResponse, String> {
+    plugin_app_service::ensure_ai_backend_plugin_enabled(&state)?;
     let trimmed_confirmation_id = confirmation_id.trim().to_string();
     if trimmed_confirmation_id.is_empty() {
         return Err("confirmation_id 不能为空".to_string());
     }
 
-    let stream_id = ai_service::next_ai_stream_id();
+    let stream_id = ai_events::next_ai_stream_id();
     let resolved_session_id = session_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
@@ -222,13 +256,22 @@ pub(crate) async fn submit_ai_chat_confirmation(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "desktop-user".to_string());
-    let ai_settings = ai_service::load_validated_ai_chat_settings(&state)?;
+    let ai_settings = ai_chat_store::validate_ai_chat_settings_for_chat(
+        ai_chat_store::load_ai_chat_settings(&state)?,
+    )?;
+    let vault_root = get_vault_root(&state)?;
     let sidecar_tools = tool_app_service::get_ai_sidecar_tool_catalog()?;
     let mcp_server_handle =
         mcp_server_app_service::start_ofive_mcp_server(app_handle.clone()).await?;
-    let endpoint = ai_service::ensure_ai_sidecar_endpoint(&app_handle, &state).await?;
+    let capability_callback_handle =
+        tool_callback_app_service::start_sidecar_capability_callback_server(app_handle.clone())
+            .await?;
+    let persistence_callback_handle =
+        persistence_callback_app_service::start_sidecar_persistence_callback_server(vault_root)
+            .await?;
+    let endpoint = sidecar_manager::ensure_ai_sidecar_endpoint(&app_handle, &state).await?;
 
-    ai_service::emit_ai_stream_event(
+    ai_events::emit_ai_stream_event(
         &app_handle,
         AiChatStreamEventPayload {
             stream_id: stream_id.clone(),
@@ -262,10 +305,14 @@ pub(crate) async fn submit_ai_chat_confirmation(
             tools: sidecar_tools,
             mcp_server_url: mcp_server_handle.server_url.clone(),
             mcp_auth_token: mcp_server_handle.auth_token.clone(),
+            capability_callback_url: capability_callback_handle.callback_url.clone(),
+            capability_callback_token: capability_callback_handle.callback_token.clone(),
+            persistence_callback_url: persistence_callback_handle.callback_url.clone(),
+            persistence_callback_token: persistence_callback_handle.callback_token.clone(),
         };
 
         let stream_result = async {
-            let mut client = ai_service::connect_ai_sidecar_client(endpoint).await?;
+            let mut client = grpc_client::connect_ai_sidecar_client(endpoint).await?;
             let mut response_stream = client
                 .submit_confirmation(Request::new(request))
                 .await
@@ -277,7 +324,7 @@ pub(crate) async fn submit_ai_chat_confirmation(
                 .await
                 .map_err(|error| format!("读取 AI sidecar confirmation stream 失败: {error}"))?
             {
-                ai_service::emit_ai_stream_event(
+                ai_events::emit_ai_stream_event(
                     &event_app_handle,
                     AiChatStreamEventPayload {
                         stream_id: stream_id_for_task.clone(),
@@ -319,7 +366,8 @@ pub(crate) async fn submit_ai_chat_confirmation(
                         } else {
                             Some(chunk.confirmation_tool_name)
                         },
-                        confirmation_tool_args_json: if chunk.confirmation_tool_args_json.is_empty() {
+                        confirmation_tool_args_json: if chunk.confirmation_tool_args_json.is_empty()
+                        {
                             None
                         } else {
                             Some(chunk.confirmation_tool_args_json)
@@ -339,9 +387,11 @@ pub(crate) async fn submit_ai_chat_confirmation(
         .await;
 
         mcp_server_handle.shutdown();
+        capability_callback_handle.shutdown();
+        persistence_callback_handle.shutdown();
 
         if let Err(error) = stream_result {
-            ai_service::emit_ai_stream_event(
+            ai_events::emit_ai_stream_event(
                 &event_app_handle,
                 AiChatStreamEventPayload {
                     stream_id: stream_id_for_task,

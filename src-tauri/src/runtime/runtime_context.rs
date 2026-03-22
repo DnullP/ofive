@@ -19,3 +19,13 @@ pub fn get_vault_root(state: &State<'_, AppState>) -> Result<PathBuf, String> {
         .clone()
         .ok_or_else(|| "当前未设置 vault，请先调用 set_current_vault".to_string())
 }
+
+/// 将当前 vault 根目录写入全局状态。
+pub fn set_vault_root(state: &State<'_, AppState>, vault_root: PathBuf) -> Result<(), String> {
+    let mut guard = state
+        .current_vault
+        .lock()
+        .map_err(|error| format!("写入 vault 状态失败: {error}"))?;
+    *guard = Some(vault_root);
+    Ok(())
+}

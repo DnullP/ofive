@@ -4,7 +4,7 @@
  *
  *   该模块不维护手工架构清单，而是通过以下方式构建图谱：
  *   - 扫描 `src/` 下的 TS/TSX 源码，识别插件、模块、Store、事件与前端 API。
- *   - 扫描 `src-tauri/src/vault_commands.rs` 中的 Tauri 命令，识别后端接口。
+ *   - 扫描 `src-tauri/src/` 下的 Rust 源文件中的 Tauri 命令，识别后端接口。
  *   - 通过 import 关系、事件函数命名、`invoke()` 调用等文本特征推断依赖边。
  *
  * @dependencies
@@ -122,18 +122,14 @@ export function createAutoDiscoveredArchitectureSlice(input?: DiscoveryInput): A
     const sourceFileMap = new Map(sourceFiles.map((file) => [file.path, file]));
     const importersByPath = buildImportersMap(sourceFiles);
     const moduleLayerCache = new Map<string, ArchitectureModuleLayer>();
-    const backendSourceFile = Object.entries(backendModules).find(([rawPath]) => {
-        return normalizeSourcePath(rawPath) === "src-tauri/src/vault_commands.rs";
+    const backendCommands = Object.entries(backendModules).flatMap(([rawPath, content]) => {
+        return parseBackendCommands(content, normalizeSourcePath(rawPath));
     });
 
     const pluginFiles = sourceFiles.filter((file) => isPluginFile(file.path));
     const storeFiles = sourceFiles.filter((file) => isStoreFile(file.path));
     const busFile = sourceFileMap.get("src/host/events/appEventBus.ts") ?? sourceFileMap.get("src/events/appEventBus.ts") ?? null;
     const apiFiles = sourceFiles.filter((file) => isFrontendApiSourceFile(file));
-    const backendCommands = parseBackendCommands(
-        backendSourceFile?.[1] ?? "",
-        "src-tauri/src/vault_commands.rs",
-    );
     const apiFunctions = apiFiles.flatMap((file) => parseFrontendApiFunctions(file));
     const busEvents = busFile ? parseBusEvents(busFile.content) : [];
 
@@ -709,7 +705,7 @@ function parseBusEvents(content: string): ParsedBusEvent[] {
  */
 function parseBackendCommands(content: string, location: string): ParsedBackendCommand[] {
     const commands: ParsedBackendCommand[] = [];
-    const regex = /#\[tauri::command\]\s+pub\s+fn\s+([a-zA-Z0-9_]+)\s*\(/g;
+    const regex = /#\[tauri::command\]\s+pub\s+(?:async\s+)?fn\s+([a-zA-Z0-9_]+)\s*\(/g;
 
     for (const match of content.matchAll(regex)) {
         const name = match[1] ?? "";

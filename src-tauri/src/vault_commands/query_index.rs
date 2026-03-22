@@ -24,16 +24,16 @@
 //! 避免多线程（后台 reindex / Tauri 命令线程）同时写入 SQLite 导致
 //! "database is locked" 超时错误。读操作不加锁，可并发执行。
 
+use crate::infra::query::wikilink::{
+    extract_markdown_inline_link_targets, extract_wikilink_targets, path_tree_distance,
+    resolve_wikilink_target_path_in_vault_without_index,
+};
 use crate::vault_commands::fs_helpers::{
     collect_markdown_relative_paths, is_markdown_file, relative_path_from_vault_root,
     with_markdown_extension_candidates,
 };
 use crate::vault_commands::types::{
     BacklinkItem, VaultMarkdownGraphEdge, VaultMarkdownGraphNode, VaultMarkdownGraphResponse,
-};
-use crate::vault_commands::wikilink::{
-    extract_markdown_inline_link_targets, extract_wikilink_targets, path_tree_distance,
-    resolve_wikilink_target_path_in_vault_without_index,
 };
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use std::collections::{BTreeMap, HashMap};

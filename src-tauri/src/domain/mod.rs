@@ -4,3 +4,4 @@
 
 pub(crate) mod ai;
 pub(crate) mod capability;
+pub(crate) mod persistence;

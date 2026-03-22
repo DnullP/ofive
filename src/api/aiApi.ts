@@ -94,6 +94,39 @@ export interface AiChatSettings {
 }
 
 /**
+ * @interface AiChatHistoryMessage
+ * @description 一条持久化的 AI 对话消息。
+ */
+export interface AiChatHistoryMessage {
+    id: string;
+    role: "assistant" | "user";
+    text: string;
+    createdAtUnixMs: number;
+}
+
+/**
+ * @interface AiChatConversationRecord
+ * @description 一条持久化的 AI 会话记录。
+ */
+export interface AiChatConversationRecord {
+    id: string;
+    sessionId: string;
+    title: string;
+    createdAtUnixMs: number;
+    updatedAtUnixMs: number;
+    messages: AiChatHistoryMessage[];
+}
+
+/**
+ * @interface AiChatHistoryState
+ * @description 当前仓库的 AI 会话历史。
+ */
+export interface AiChatHistoryState {
+    activeConversationId: string | null;
+    conversations: AiChatConversationRecord[];
+}
+
+/**
  * @interface AiChatStreamEventPayload
  * @description Rust 后端转发给前端的流式 AI 事件。
  */
@@ -133,6 +166,7 @@ export interface StartAiChatStreamOptions {
     message: string;
     sessionId?: string;
     userId?: string;
+    history?: AiChatHistoryMessage[];
 }
 
 /**
@@ -193,6 +227,19 @@ export async function getAiChatSettings(): Promise<AiChatSettings> {
 }
 
 /**
+ * @function getAiChatHistory
+ * @description 获取当前仓库的 AI 对话历史。
+ * @returns 对话历史状态。
+ */
+export async function getAiChatHistory(): Promise<AiChatHistoryState> {
+    if (!isTauriRuntime()) {
+        throw new Error("AI chat history is only available in Tauri runtime");
+    }
+
+    return invoke<AiChatHistoryState>("get_ai_chat_history");
+}
+
+/**
  * @function getAiVendorModels
  * @description 使用当前 vendor 配置向后端请求可用模型列表。
  * @param settings 当前设置或未保存草稿。
@@ -221,6 +268,20 @@ export async function saveAiChatSettings(settings: AiChatSettings): Promise<AiCh
 }
 
 /**
+ * @function saveAiChatHistory
+ * @description 保存当前仓库的 AI 对话历史。
+ * @param history 待保存历史。
+ * @returns 保存后的历史。
+ */
+export async function saveAiChatHistory(history: AiChatHistoryState): Promise<AiChatHistoryState> {
+    if (!isTauriRuntime()) {
+        throw new Error("AI chat history is only available in Tauri runtime");
+    }
+
+    return invoke<AiChatHistoryState>("save_ai_chat_history", { history });
+}
+
+/**
  * @function startAiChatStream
  * @description 启动一次后端 AI 流式聊天。
  * @param options 启动参数。
@@ -243,6 +304,7 @@ export async function startAiChatStream(
         message: options.message,
         sessionId: options.sessionId ?? null,
         userId: options.userId ?? null,
+        history: options.history ?? null,
     });
 
     console.info("[ai-api] startAiChatStream invoke success", {

@@ -64,33 +64,49 @@ func (s *AIService) Chat(req *aiv1.ChatRequest, stream aiv1.AiAgentService_ChatS
 		vendorID = "mock-echo"
 	}
 
-	return s.runtime.StreamChat(ctx, userID, sessionID, message, agentruntime.VendorConfig{
+	return s.runtime.StreamChat(ctx, userID, sessionID, message, mapHistoryEntries(req.GetHistory()), agentruntime.VendorConfig{
 		VendorID:    vendorID,
 		Model:       strings.TrimSpace(req.GetModel()),
 		FieldValues: req.GetVendorConfig(),
 	}, agentruntime.CapabilityBridgeConfig{
-		CallbackURL:   strings.TrimSpace(req.GetCapabilityCallbackUrl()),
-		CallbackToken: strings.TrimSpace(req.GetCapabilityCallbackToken()),
-		MCPServerURL:  strings.TrimSpace(req.GetMcpServerUrl()),
-		MCPAuthToken:  strings.TrimSpace(req.GetMcpAuthToken()),
-		Tools:         mapToolDescriptors(req.GetTools()),
+		CallbackURL:              strings.TrimSpace(req.GetCapabilityCallbackUrl()),
+		CallbackToken:            strings.TrimSpace(req.GetCapabilityCallbackToken()),
+		PersistenceCallbackURL:   strings.TrimSpace(req.GetPersistenceCallbackUrl()),
+		PersistenceCallbackToken: strings.TrimSpace(req.GetPersistenceCallbackToken()),
+		MCPServerURL:             strings.TrimSpace(req.GetMcpServerUrl()),
+		MCPAuthToken:             strings.TrimSpace(req.GetMcpAuthToken()),
+		Tools:                    mapToolDescriptors(req.GetTools()),
 	}, func(chunk agentruntime.StreamChunk) error {
 		return stream.Send(&aiv1.ChatChunk{
-			SessionId:       sessionID,
-			DeltaText:       chunk.DeltaText,
-			AgentName:       chunk.AgentName,
-			AccumulatedText: chunk.AccumulatedText,
-			Done:            chunk.Done,
-			EventType:       chunk.EventType,
-			Error:           chunk.ErrorText,
-			DebugTitle:      chunk.DebugTitle,
-			DebugText:       chunk.DebugText,
-			ConfirmationId: chunk.ConfirmationID,
-			ConfirmationHint: chunk.ConfirmationHint,
-			ConfirmationToolName: chunk.ConfirmationToolName,
+			SessionId:                sessionID,
+			DeltaText:                chunk.DeltaText,
+			AgentName:                chunk.AgentName,
+			AccumulatedText:          chunk.AccumulatedText,
+			Done:                     chunk.Done,
+			EventType:                chunk.EventType,
+			Error:                    chunk.ErrorText,
+			DebugTitle:               chunk.DebugTitle,
+			DebugText:                chunk.DebugText,
+			ConfirmationId:           chunk.ConfirmationID,
+			ConfirmationHint:         chunk.ConfirmationHint,
+			ConfirmationToolName:     chunk.ConfirmationToolName,
 			ConfirmationToolArgsJson: chunk.ConfirmationToolArgsJSON,
 		})
 	})
+}
+
+func mapHistoryEntries(items []*aiv1.ChatHistoryEntry) []agentruntime.HistoryEntry {
+	history := make([]agentruntime.HistoryEntry, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		history = append(history, agentruntime.HistoryEntry{
+			Role: strings.TrimSpace(item.GetRole()),
+			Text: item.GetText(),
+		})
+	}
+	return history
 }
 
 // SubmitConfirmation resumes one chat session after the user approves or rejects one tool call.
@@ -121,23 +137,27 @@ func (s *AIService) SubmitConfirmation(req *aiv1.ConfirmationRequest, stream aiv
 		Model:       strings.TrimSpace(req.GetModel()),
 		FieldValues: req.GetVendorConfig(),
 	}, agentruntime.CapabilityBridgeConfig{
-		MCPServerURL: strings.TrimSpace(req.GetMcpServerUrl()),
-		MCPAuthToken: strings.TrimSpace(req.GetMcpAuthToken()),
-		Tools:        mapToolDescriptors(req.GetTools()),
+		CallbackURL:              strings.TrimSpace(req.GetCapabilityCallbackUrl()),
+		CallbackToken:            strings.TrimSpace(req.GetCapabilityCallbackToken()),
+		PersistenceCallbackURL:   strings.TrimSpace(req.GetPersistenceCallbackUrl()),
+		PersistenceCallbackToken: strings.TrimSpace(req.GetPersistenceCallbackToken()),
+		MCPServerURL:             strings.TrimSpace(req.GetMcpServerUrl()),
+		MCPAuthToken:             strings.TrimSpace(req.GetMcpAuthToken()),
+		Tools:                    mapToolDescriptors(req.GetTools()),
 	}, func(chunk agentruntime.StreamChunk) error {
 		return stream.Send(&aiv1.ChatChunk{
-			SessionId:       sessionID,
-			DeltaText:       chunk.DeltaText,
-			AgentName:       chunk.AgentName,
-			AccumulatedText: chunk.AccumulatedText,
-			Done:            chunk.Done,
-			EventType:       chunk.EventType,
-			Error:           chunk.ErrorText,
-			DebugTitle:      chunk.DebugTitle,
-			DebugText:       chunk.DebugText,
-			ConfirmationId:  chunk.ConfirmationID,
-			ConfirmationHint: chunk.ConfirmationHint,
-			ConfirmationToolName: chunk.ConfirmationToolName,
+			SessionId:                sessionID,
+			DeltaText:                chunk.DeltaText,
+			AgentName:                chunk.AgentName,
+			AccumulatedText:          chunk.AccumulatedText,
+			Done:                     chunk.Done,
+			EventType:                chunk.EventType,
+			Error:                    chunk.ErrorText,
+			DebugTitle:               chunk.DebugTitle,
+			DebugText:                chunk.DebugText,
+			ConfirmationId:           chunk.ConfirmationID,
+			ConfirmationHint:         chunk.ConfirmationHint,
+			ConfirmationToolName:     chunk.ConfirmationToolName,
 			ConfirmationToolArgsJson: chunk.ConfirmationToolArgsJSON,
 		})
 	})

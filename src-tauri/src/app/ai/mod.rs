@@ -5,6 +5,8 @@
 
 pub(crate) mod chat_app_service;
 pub(crate) mod mcp_server_app_service;
+pub(crate) mod persistence_callback_app_service;
+pub(crate) mod plugin_app_service;
 pub(crate) mod settings_app_service;
 pub(crate) mod tool_app_service;
 pub(crate) mod tool_callback_app_service;

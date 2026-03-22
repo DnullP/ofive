@@ -13,8 +13,14 @@ use tauri::WebviewWindow;
 #[cfg(target_os = "windows")]
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
+#[cfg(target_os = "macos")]
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
 #[cfg(target_os = "windows")]
 use std::ffi::c_void;
+
+#[cfg(target_os = "macos")]
+use objc2::{msg_send, runtime::AnyObject};
 
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::{
@@ -39,11 +45,13 @@ pub struct WindowsAcrylicColor {
 }
 
 impl WindowsAcrylicColor {
+    #[cfg(target_os = "windows")]
     fn to_rgba_tuple(&self) -> (u8, u8, u8, u8) {
         (self.red, self.green, self.blue, self.alpha)
     }
 }
 
+#[cfg(target_os = "windows")]
 fn normalize_windows_acrylic_rgba(color: (u8, u8, u8, u8)) -> (u8, u8, u8, u8) {
     if color.3 == 0 {
         (color.0, color.1, color.2, 1)
@@ -52,6 +60,7 @@ fn normalize_windows_acrylic_rgba(color: (u8, u8, u8, u8)) -> (u8, u8, u8, u8) {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn pack_windows_acrylic_gradient_color(color: (u8, u8, u8, u8)) -> u32 {
     let normalized = normalize_windows_acrylic_rgba(color);
 
@@ -109,6 +118,9 @@ impl Default for WindowsAcrylicEffectConfig {
     }
 }
 
+#[cfg(target_os = "macos")]
+const MACOS_MAIN_WINDOW_CORNER_RADIUS: f64 = 18.0;
+
 /// 为主窗口应用平台原生材质效果。
 ///
 /// - `window`：Tauri 主 Webview 窗口
@@ -119,24 +131,45 @@ pub(crate) fn apply_main_window_effects(
     window: &WebviewWindow,
     windows_acrylic_config: &WindowsAcrylicEffectConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let is_focused = window.is_focused().unwrap_or(true);
+    apply_runtime_window_effect_config(window, windows_acrylic_config, is_focused)?;
+
     #[cfg(target_os = "windows")]
     {
-        apply_windows_effect_config(window, windows_acrylic_config, true)?;
         register_windows_focus_effect_handler(window);
+    }
+
+    Ok(())
+}
+
+/// 按当前平台将运行时窗口效果参数下发到主窗口。
+///
+/// - Windows：应用或清除自定义 Acrylic 效果
+/// - macOS：启用或清除 vibrancy
+/// - 其他平台：保持无操作
+pub(crate) fn apply_runtime_window_effect_config(
+    window: &WebviewWindow,
+    windows_acrylic_config: &WindowsAcrylicEffectConfig,
+    is_focused: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(target_os = "windows")]
+    {
+        return apply_windows_effect_config(window, windows_acrylic_config, is_focused);
     }
 
     #[cfg(target_os = "macos")]
     {
-        apply_macos_effect(window)?;
+        let _ = is_focused;
+        return apply_macos_effect(window, windows_acrylic_config.enabled);
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         let _ = window;
         let _ = windows_acrylic_config;
+        let _ = is_focused;
+        Ok(())
     }
-
-    Ok(())
 }
 
 /// 为 Windows 主窗口应用系统毛玻璃效果。
@@ -184,15 +217,6 @@ pub(crate) fn apply_windows_effect_config(
     } else {
         log::info!("[window] applied inactive acrylic effect");
     }
-    Ok(())
-}
-
-#[cfg(not(target_os = "windows"))]
-pub(crate) fn apply_windows_effect_config(
-    _window: &WebviewWindow,
-    _config: &WindowsAcrylicEffectConfig,
-    _is_focused: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
@@ -393,25 +417,77 @@ fn set_window_composition_attribute(
 }
 
 #[cfg(target_os = "macos")]
-/// 为 macOS 主窗口应用 vibrancy 材质效果。
-fn apply_macos_effect(window: &WebviewWindow) -> Result<(), Box<dyn std::error::Error>> {
-    use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
+/// 为 macOS 主窗口应用或清除 vibrancy 材质效果，并统一原生圆角裁剪。
+fn apply_macos_effect(
+    window: &WebviewWindow,
+    enabled: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri::utils::config::WindowEffectsConfig;
+    use tauri::window::{Effect, EffectState, EffectsBuilder};
+    use window_vibrancy::clear_vibrancy;
 
-    apply_vibrancy(
-        window,
-        NSVisualEffectMaterial::Sidebar,
-        Some(NSVisualEffectState::Active),
-        None,
-    )
-    .map_err(|error| format!("macOS vibrancy failed: {error}"))?;
+    apply_macos_window_corner_radius(window, MACOS_MAIN_WINDOW_CORNER_RADIUS)?;
 
-    log::info!("[window] applied macOS vibrancy effect");
+    if enabled {
+        window
+            .set_effects(
+                EffectsBuilder::new()
+                    .effect(Effect::Sidebar)
+                    .state(EffectState::Active)
+                    .radius(MACOS_MAIN_WINDOW_CORNER_RADIUS)
+                    .build(),
+            )
+            .map_err(|error| format!("macOS vibrancy failed: {error}"))?;
+
+        log::info!("[window] applied macOS vibrancy effect");
+        return Ok(());
+    }
+
+    window
+        .set_effects(None::<WindowEffectsConfig>)
+        .map_err(|error| format!("macOS clear vibrancy failed: {error}"))?;
+    clear_vibrancy(window).map_err(|error| format!("macOS clear vibrancy failed: {error}"))?;
+    log::info!("[window] cleared macOS vibrancy effect");
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+/// 为 macOS 主窗口 WebView 容器应用原生圆角裁剪。
+fn apply_macos_window_corner_radius(
+    window: &WebviewWindow,
+    radius: f64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let window_handle = window.window_handle()?;
+    let RawWindowHandle::AppKit(handle) = window_handle.as_raw() else {
+        return Err("unsupported raw window handle for macOS corner radius".into());
+    };
+
+    let view = handle.ns_view.as_ptr() as *mut AnyObject;
+    if view.is_null() {
+        return Err("macOS ns_view unavailable for corner radius".into());
+    }
+
+    unsafe {
+        let () = msg_send![view, setWantsLayer: true];
+        let layer: *mut AnyObject = msg_send![view, layer];
+        if layer.is_null() {
+            return Err("macOS layer unavailable for corner radius".into());
+        }
+
+        let () = msg_send![layer, setCornerRadius: radius];
+        let () = msg_send![layer, setMasksToBounds: true];
+    }
+
+    log::info!("[window] applied macOS native corner radius: {}", radius);
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{pack_windows_acrylic_gradient_color, WindowsAcrylicEffectConfig};
+    use super::WindowsAcrylicEffectConfig;
+
+    #[cfg(target_os = "windows")]
+    use super::pack_windows_acrylic_gradient_color;
 
     #[test]
     fn default_windows_acrylic_effect_config_uses_expected_colors() {
@@ -433,6 +509,7 @@ mod tests {
         assert_eq!(config.inactive_animation_id, 0);
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn acrylic_gradient_color_keeps_rgba_order_and_non_zero_alpha() {
         assert_eq!(

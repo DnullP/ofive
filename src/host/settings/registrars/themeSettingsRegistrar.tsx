@@ -7,7 +7,7 @@
  *  - ../settingsRegistry
  */
 
-import type { ChangeEvent, ReactNode } from "react";
+import { useMemo, type ChangeEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { updateFeatureSetting, useConfigState } from "../../store/configStore";
 import { updateThemeMode, useThemeState, type ThemeMode } from "../../store/themeStore";
@@ -115,6 +115,13 @@ function ThemeSettingsSection(): ReactNode {
     const themeState = useThemeState();
     const configState = useConfigState();
     const { featureSettings } = configState;
+    const isWindowsRuntime = useMemo(() => {
+        if (typeof navigator === "undefined") {
+            return false;
+        }
+
+        return `${navigator.userAgent} ${navigator.platform}`.toLowerCase().includes("win");
+    }, []);
 
     return (
         <div className="settings-item-group">
@@ -214,182 +221,186 @@ function ThemeSettingsSection(): ReactNode {
                             void updateFeatureSetting("glassBlurRadius", nextValue);
                         }}
                     />
-                    <GlassSettingNumberRow
-                        id="windows-acrylic-focused-red"
-                        title={t("settings.windowsAcrylicFocusedRed")}
-                        description={t("settings.windowsAcrylicFocusedRedDesc")}
-                        value={featureSettings.windowsAcrylicFocusedRed}
-                        min={0}
-                        max={255}
-                        step={1}
-                        suffix={t("settings.glassChannelUnit")}
-                        onChange={(nextValue) => {
-                            void updateFeatureSetting("windowsAcrylicFocusedRed", nextValue);
-                        }}
-                    />
-                    <GlassSettingNumberRow
-                        id="windows-acrylic-focused-green"
-                        title={t("settings.windowsAcrylicFocusedGreen")}
-                        description={t("settings.windowsAcrylicFocusedGreenDesc")}
-                        value={featureSettings.windowsAcrylicFocusedGreen}
-                        min={0}
-                        max={255}
-                        step={1}
-                        suffix={t("settings.glassChannelUnit")}
-                        onChange={(nextValue) => {
-                            void updateFeatureSetting("windowsAcrylicFocusedGreen", nextValue);
-                        }}
-                    />
-                    <GlassSettingNumberRow
-                        id="windows-acrylic-focused-blue"
-                        title={t("settings.windowsAcrylicFocusedBlue")}
-                        description={t("settings.windowsAcrylicFocusedBlueDesc")}
-                        value={featureSettings.windowsAcrylicFocusedBlue}
-                        min={0}
-                        max={255}
-                        step={1}
-                        suffix={t("settings.glassChannelUnit")}
-                        onChange={(nextValue) => {
-                            void updateFeatureSetting("windowsAcrylicFocusedBlue", nextValue);
-                        }}
-                    />
-                    <GlassSettingNumberRow
-                        id="windows-acrylic-focused-alpha"
-                        title={t("settings.windowsAcrylicFocusedAlpha")}
-                        description={t("settings.windowsAcrylicFocusedAlphaDesc")}
-                        value={featureSettings.windowsAcrylicFocusedAlpha}
-                        min={0}
-                        max={255}
-                        step={1}
-                        suffix={t("settings.glassChannelUnit")}
-                        onChange={(nextValue) => {
-                            void updateFeatureSetting("windowsAcrylicFocusedAlpha", nextValue);
-                        }}
-                    />
-                    <GlassSettingNumberRow
-                        id="windows-acrylic-inactive-red"
-                        title={t("settings.windowsAcrylicInactiveRed")}
-                        description={t("settings.windowsAcrylicInactiveRedDesc")}
-                        value={featureSettings.windowsAcrylicInactiveRed}
-                        min={0}
-                        max={255}
-                        step={1}
-                        suffix={t("settings.glassChannelUnit")}
-                        onChange={(nextValue) => {
-                            void updateFeatureSetting("windowsAcrylicInactiveRed", nextValue);
-                        }}
-                    />
-                    <GlassSettingNumberRow
-                        id="windows-acrylic-inactive-green"
-                        title={t("settings.windowsAcrylicInactiveGreen")}
-                        description={t("settings.windowsAcrylicInactiveGreenDesc")}
-                        value={featureSettings.windowsAcrylicInactiveGreen}
-                        min={0}
-                        max={255}
-                        step={1}
-                        suffix={t("settings.glassChannelUnit")}
-                        onChange={(nextValue) => {
-                            void updateFeatureSetting("windowsAcrylicInactiveGreen", nextValue);
-                        }}
-                    />
-                    <GlassSettingNumberRow
-                        id="windows-acrylic-inactive-blue"
-                        title={t("settings.windowsAcrylicInactiveBlue")}
-                        description={t("settings.windowsAcrylicInactiveBlueDesc")}
-                        value={featureSettings.windowsAcrylicInactiveBlue}
-                        min={0}
-                        max={255}
-                        step={1}
-                        suffix={t("settings.glassChannelUnit")}
-                        onChange={(nextValue) => {
-                            void updateFeatureSetting("windowsAcrylicInactiveBlue", nextValue);
-                        }}
-                    />
-                    <GlassSettingNumberRow
-                        id="windows-acrylic-inactive-alpha"
-                        title={t("settings.windowsAcrylicInactiveAlpha")}
-                        description={t("settings.windowsAcrylicInactiveAlphaDesc")}
-                        value={featureSettings.windowsAcrylicInactiveAlpha}
-                        min={0}
-                        max={255}
-                        step={1}
-                        suffix={t("settings.glassChannelUnit")}
-                        onChange={(nextValue) => {
-                            void updateFeatureSetting("windowsAcrylicInactiveAlpha", nextValue);
-                        }}
-                    />
+                    {isWindowsRuntime ? (
+                        <>
+                            <GlassSettingNumberRow
+                                id="windows-acrylic-focused-red"
+                                title={t("settings.windowsAcrylicFocusedRed")}
+                                description={t("settings.windowsAcrylicFocusedRedDesc")}
+                                value={featureSettings.windowsAcrylicFocusedRed}
+                                min={0}
+                                max={255}
+                                step={1}
+                                suffix={t("settings.glassChannelUnit")}
+                                onChange={(nextValue) => {
+                                    void updateFeatureSetting("windowsAcrylicFocusedRed", nextValue);
+                                }}
+                            />
+                            <GlassSettingNumberRow
+                                id="windows-acrylic-focused-green"
+                                title={t("settings.windowsAcrylicFocusedGreen")}
+                                description={t("settings.windowsAcrylicFocusedGreenDesc")}
+                                value={featureSettings.windowsAcrylicFocusedGreen}
+                                min={0}
+                                max={255}
+                                step={1}
+                                suffix={t("settings.glassChannelUnit")}
+                                onChange={(nextValue) => {
+                                    void updateFeatureSetting("windowsAcrylicFocusedGreen", nextValue);
+                                }}
+                            />
+                            <GlassSettingNumberRow
+                                id="windows-acrylic-focused-blue"
+                                title={t("settings.windowsAcrylicFocusedBlue")}
+                                description={t("settings.windowsAcrylicFocusedBlueDesc")}
+                                value={featureSettings.windowsAcrylicFocusedBlue}
+                                min={0}
+                                max={255}
+                                step={1}
+                                suffix={t("settings.glassChannelUnit")}
+                                onChange={(nextValue) => {
+                                    void updateFeatureSetting("windowsAcrylicFocusedBlue", nextValue);
+                                }}
+                            />
+                            <GlassSettingNumberRow
+                                id="windows-acrylic-focused-alpha"
+                                title={t("settings.windowsAcrylicFocusedAlpha")}
+                                description={t("settings.windowsAcrylicFocusedAlphaDesc")}
+                                value={featureSettings.windowsAcrylicFocusedAlpha}
+                                min={0}
+                                max={255}
+                                step={1}
+                                suffix={t("settings.glassChannelUnit")}
+                                onChange={(nextValue) => {
+                                    void updateFeatureSetting("windowsAcrylicFocusedAlpha", nextValue);
+                                }}
+                            />
+                            <GlassSettingNumberRow
+                                id="windows-acrylic-inactive-red"
+                                title={t("settings.windowsAcrylicInactiveRed")}
+                                description={t("settings.windowsAcrylicInactiveRedDesc")}
+                                value={featureSettings.windowsAcrylicInactiveRed}
+                                min={0}
+                                max={255}
+                                step={1}
+                                suffix={t("settings.glassChannelUnit")}
+                                onChange={(nextValue) => {
+                                    void updateFeatureSetting("windowsAcrylicInactiveRed", nextValue);
+                                }}
+                            />
+                            <GlassSettingNumberRow
+                                id="windows-acrylic-inactive-green"
+                                title={t("settings.windowsAcrylicInactiveGreen")}
+                                description={t("settings.windowsAcrylicInactiveGreenDesc")}
+                                value={featureSettings.windowsAcrylicInactiveGreen}
+                                min={0}
+                                max={255}
+                                step={1}
+                                suffix={t("settings.glassChannelUnit")}
+                                onChange={(nextValue) => {
+                                    void updateFeatureSetting("windowsAcrylicInactiveGreen", nextValue);
+                                }}
+                            />
+                            <GlassSettingNumberRow
+                                id="windows-acrylic-inactive-blue"
+                                title={t("settings.windowsAcrylicInactiveBlue")}
+                                description={t("settings.windowsAcrylicInactiveBlueDesc")}
+                                value={featureSettings.windowsAcrylicInactiveBlue}
+                                min={0}
+                                max={255}
+                                step={1}
+                                suffix={t("settings.glassChannelUnit")}
+                                onChange={(nextValue) => {
+                                    void updateFeatureSetting("windowsAcrylicInactiveBlue", nextValue);
+                                }}
+                            />
+                            <GlassSettingNumberRow
+                                id="windows-acrylic-inactive-alpha"
+                                title={t("settings.windowsAcrylicInactiveAlpha")}
+                                description={t("settings.windowsAcrylicInactiveAlphaDesc")}
+                                value={featureSettings.windowsAcrylicInactiveAlpha}
+                                min={0}
+                                max={255}
+                                step={1}
+                                suffix={t("settings.glassChannelUnit")}
+                                onChange={(nextValue) => {
+                                    void updateFeatureSetting("windowsAcrylicInactiveAlpha", nextValue);
+                                }}
+                            />
 
-                    <label className="settings-compact-row" htmlFor="windows-acrylic-disable-system-backdrop">
-                        <div className="settings-compact-info">
-                            <span className="settings-compact-title">{t("settings.windowsAcrylicDisableSystemBackdrop")}</span>
-                            <span className="settings-compact-desc">{t("settings.windowsAcrylicDisableSystemBackdropDesc")}</span>
-                        </div>
-                        <input
-                            id="windows-acrylic-disable-system-backdrop"
-                            type="checkbox"
-                            checked={featureSettings.windowsAcrylicDisableSystemBackdrop}
-                            onChange={(event) => {
-                                void updateFeatureSetting("windowsAcrylicDisableSystemBackdrop", event.target.checked);
-                            }}
-                        />
-                    </label>
+                            <label className="settings-compact-row" htmlFor="windows-acrylic-disable-system-backdrop">
+                                <div className="settings-compact-info">
+                                    <span className="settings-compact-title">{t("settings.windowsAcrylicDisableSystemBackdrop")}</span>
+                                    <span className="settings-compact-desc">{t("settings.windowsAcrylicDisableSystemBackdropDesc")}</span>
+                                </div>
+                                <input
+                                    id="windows-acrylic-disable-system-backdrop"
+                                    type="checkbox"
+                                    checked={featureSettings.windowsAcrylicDisableSystemBackdrop}
+                                    onChange={(event) => {
+                                        void updateFeatureSetting("windowsAcrylicDisableSystemBackdrop", event.target.checked);
+                                    }}
+                                />
+                            </label>
 
-                    <GlassSettingNumberRow
-                        id="windows-acrylic-focused-accent-flags"
-                        title={t("settings.windowsAcrylicFocusedAccentFlags")}
-                        description={t("settings.windowsAcrylicFocusedAccentFlagsDesc")}
-                        value={featureSettings.windowsAcrylicFocusedAccentFlags}
-                        min={0}
-                        max={4294967295}
-                        step={1}
-                        suffix={t("settings.glassRawUnit")}
-                        showRange={false}
-                        onChange={(nextValue) => {
-                            void updateFeatureSetting("windowsAcrylicFocusedAccentFlags", nextValue);
-                        }}
-                    />
-                    <GlassSettingNumberRow
-                        id="windows-acrylic-focused-animation-id"
-                        title={t("settings.windowsAcrylicFocusedAnimationId")}
-                        description={t("settings.windowsAcrylicFocusedAnimationIdDesc")}
-                        value={featureSettings.windowsAcrylicFocusedAnimationId}
-                        min={0}
-                        max={4294967295}
-                        step={1}
-                        suffix={t("settings.glassRawUnit")}
-                        showRange={false}
-                        onChange={(nextValue) => {
-                            void updateFeatureSetting("windowsAcrylicFocusedAnimationId", nextValue);
-                        }}
-                    />
-                    <GlassSettingNumberRow
-                        id="windows-acrylic-inactive-accent-flags"
-                        title={t("settings.windowsAcrylicInactiveAccentFlags")}
-                        description={t("settings.windowsAcrylicInactiveAccentFlagsDesc")}
-                        value={featureSettings.windowsAcrylicInactiveAccentFlags}
-                        min={0}
-                        max={4294967295}
-                        step={1}
-                        suffix={t("settings.glassRawUnit")}
-                        showRange={false}
-                        onChange={(nextValue) => {
-                            void updateFeatureSetting("windowsAcrylicInactiveAccentFlags", nextValue);
-                        }}
-                    />
-                    <GlassSettingNumberRow
-                        id="windows-acrylic-inactive-animation-id"
-                        title={t("settings.windowsAcrylicInactiveAnimationId")}
-                        description={t("settings.windowsAcrylicInactiveAnimationIdDesc")}
-                        value={featureSettings.windowsAcrylicInactiveAnimationId}
-                        min={0}
-                        max={4294967295}
-                        step={1}
-                        suffix={t("settings.glassRawUnit")}
-                        showRange={false}
-                        onChange={(nextValue) => {
-                            void updateFeatureSetting("windowsAcrylicInactiveAnimationId", nextValue);
-                        }}
-                    />
+                            <GlassSettingNumberRow
+                                id="windows-acrylic-focused-accent-flags"
+                                title={t("settings.windowsAcrylicFocusedAccentFlags")}
+                                description={t("settings.windowsAcrylicFocusedAccentFlagsDesc")}
+                                value={featureSettings.windowsAcrylicFocusedAccentFlags}
+                                min={0}
+                                max={4294967295}
+                                step={1}
+                                suffix={t("settings.glassRawUnit")}
+                                showRange={false}
+                                onChange={(nextValue) => {
+                                    void updateFeatureSetting("windowsAcrylicFocusedAccentFlags", nextValue);
+                                }}
+                            />
+                            <GlassSettingNumberRow
+                                id="windows-acrylic-focused-animation-id"
+                                title={t("settings.windowsAcrylicFocusedAnimationId")}
+                                description={t("settings.windowsAcrylicFocusedAnimationIdDesc")}
+                                value={featureSettings.windowsAcrylicFocusedAnimationId}
+                                min={0}
+                                max={4294967295}
+                                step={1}
+                                suffix={t("settings.glassRawUnit")}
+                                showRange={false}
+                                onChange={(nextValue) => {
+                                    void updateFeatureSetting("windowsAcrylicFocusedAnimationId", nextValue);
+                                }}
+                            />
+                            <GlassSettingNumberRow
+                                id="windows-acrylic-inactive-accent-flags"
+                                title={t("settings.windowsAcrylicInactiveAccentFlags")}
+                                description={t("settings.windowsAcrylicInactiveAccentFlagsDesc")}
+                                value={featureSettings.windowsAcrylicInactiveAccentFlags}
+                                min={0}
+                                max={4294967295}
+                                step={1}
+                                suffix={t("settings.glassRawUnit")}
+                                showRange={false}
+                                onChange={(nextValue) => {
+                                    void updateFeatureSetting("windowsAcrylicInactiveAccentFlags", nextValue);
+                                }}
+                            />
+                            <GlassSettingNumberRow
+                                id="windows-acrylic-inactive-animation-id"
+                                title={t("settings.windowsAcrylicInactiveAnimationId")}
+                                description={t("settings.windowsAcrylicInactiveAnimationIdDesc")}
+                                value={featureSettings.windowsAcrylicInactiveAnimationId}
+                                min={0}
+                                max={4294967295}
+                                step={1}
+                                suffix={t("settings.glassRawUnit")}
+                                showRange={false}
+                                onChange={(nextValue) => {
+                                    void updateFeatureSetting("windowsAcrylicInactiveAnimationId", nextValue);
+                                }}
+                            />
+                        </>
+                    ) : null}
                 </>
             ) : null}
 

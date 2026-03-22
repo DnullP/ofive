@@ -1,8 +1,10 @@
 package agentruntime
 
 import (
+	"context"
 	"testing"
 
+	"google.golang.org/adk/session"
 	"google.golang.org/adk/tool/toolconfirmation"
 	"google.golang.org/genai"
 )
@@ -52,7 +54,7 @@ func TestExtractPendingToolConfirmationReturnsOriginalToolDetails(t *testing.T) 
 						"name": "vault.create_markdown_file",
 						"args": map[string]any{
 							"relativePath": "Notes/New.md",
-							"content": "# New",
+							"content":      "# New",
 						},
 					},
 				},
@@ -74,5 +76,48 @@ func TestExtractPendingToolConfirmationReturnsOriginalToolDetails(t *testing.T) 
 	}
 	if confirmation.ToolArgsJSON == "" || confirmation.ToolArgsJSON == "{}" {
 		t.Fatalf("expected marshaled tool args, got %q", confirmation.ToolArgsJSON)
+	}
+}
+
+func TestSeedSessionHistoryAppendsUserAndAssistantEventsOnce(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := New()
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := runtime.EnsureSession(ctx, "user-1", "session-1"); err != nil {
+		t.Fatalf("EnsureSession returned error: %v", err)
+	}
+
+	history := []HistoryEntry{
+		{Role: "user", Text: "第一句"},
+		{Role: "assistant", Text: "第一句回答"},
+	}
+	if err := runtime.seedSessionHistory(ctx, "user-1", "session-1", history); err != nil {
+		t.Fatalf("seedSessionHistory returned error: %v", err)
+	}
+	if err := runtime.seedSessionHistory(ctx, "user-1", "session-1", history); err != nil {
+		t.Fatalf("second seedSessionHistory returned error: %v", err)
+	}
+
+	response, err := runtime.sessionService.Get(ctx, &session.GetRequest{
+		AppName:   appName,
+		UserID:    "user-1",
+		SessionID: "session-1",
+	})
+	if err != nil {
+		t.Fatalf("sessionService.Get returned error: %v", err)
+	}
+	if response.Session.Events().Len() != 2 {
+		t.Fatalf("expected exactly two seeded events, got %d", response.Session.Events().Len())
+	}
+	if response.Session.Events().At(0).Author != "user" {
+		t.Fatalf("unexpected first author: %s", response.Session.Events().At(0).Author)
+	}
+	if response.Session.Events().At(1).Author != agentName {
+		t.Fatalf("unexpected second author: %s", response.Session.Events().At(1).Author)
 	}
 }

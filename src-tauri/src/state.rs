@@ -8,4 +8,4 @@ mod app_state;
 mod runtime_context;
 
 pub use app_state::{AiSidecarRuntime, AppState, PendingVaultWriteTrace};
-pub use runtime_context::get_vault_root;
+pub use runtime_context::{get_vault_root, set_vault_root};

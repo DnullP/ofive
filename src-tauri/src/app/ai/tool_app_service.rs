@@ -3,15 +3,27 @@
 //! 负责从平台注册中心构建 AI runtime 可见的 tool 目录，
 //! 作为后续 Go sidecar tool-call 协议的稳定输入边界。
 
+use tauri::State;
+
 use crate::ai_service::pb;
+use crate::app::ai::plugin_app_service;
 use crate::domain::ai::tool::AiToolDescriptor;
 use crate::domain::ai::tool_registry::build_ai_tool_catalog;
 use crate::domain::capability::{build_builtin_capability_registry, CapabilityRiskLevel};
+use crate::state::AppState;
 
 /// 获取当前 AI runtime 可见的 tool 目录。
 pub(crate) fn get_ai_tool_catalog() -> Vec<AiToolDescriptor> {
     let registry = build_builtin_capability_registry();
     build_ai_tool_catalog(&registry)
+}
+
+/// 获取当前 AI runtime 可见的 tool 目录，并要求 AI 插件已启用。
+pub(crate) fn get_enabled_ai_tool_catalog(
+    state: &State<'_, AppState>,
+) -> Result<Vec<AiToolDescriptor>, String> {
+    plugin_app_service::ensure_ai_backend_plugin_enabled(state)?;
+    Ok(get_ai_tool_catalog())
 }
 
 /// 获取提供给 Go sidecar 的 protobuf tool 目录。

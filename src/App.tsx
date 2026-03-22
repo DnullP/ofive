@@ -148,7 +148,7 @@ function App() {
   }, [configState.featureSettings.glassBlurRadius, configState.featureSettings.glassInactiveSurfaceOpacity, configState.featureSettings.glassSurfaceOpacity, configState.featureSettings.glassTintOpacity, isGlassEffectEnabled, isWindowFocused, runtimeInfo]);
 
   useEffect(() => {
-    if (!runtimeInfo.isTauriRuntime || !runtimeInfo.isWindows) {
+    if (!runtimeInfo.isTauriRuntime || (!runtimeInfo.isWindows && !runtimeInfo.isMacOS)) {
       return;
     }
 
@@ -213,6 +213,7 @@ function App() {
     configState.featureSettings.windowsAcrylicDisableSystemBackdrop,
     isGlassEffectEnabled,
     runtimeInfo.isTauriRuntime,
+    runtimeInfo.isMacOS,
     runtimeInfo.isWindows,
   ]);
 
