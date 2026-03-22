@@ -5,7 +5,7 @@
   "identifier": "com.kaiqiu.ofive",
   "build": {
     "beforeDevCommand": "bun run build:sidecar && bun run tauri:web:dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://127.0.0.1:1420",
     "beforeBuildCommand": "bun run build:sidecar && bun run build",
     "frontendDist": "../dist"
   },

@@ -16,6 +16,20 @@ const PROTOC_GEN_GO_VERSION = "v1.36.11";
 const PROTOC_GEN_GO_GRPC_VERSION = "v1.5.1";
 
 /**
+ * @function resolveLocalExecutable
+ * @description 返回本地工具在当前平台上的可执行文件路径。
+ * @param {string} toolDir 工具目录。
+ * @param {string} fileName 工具基础文件名。
+ * @returns {string} 当前平台可执行文件完整路径。
+ */
+function resolveLocalExecutable(toolDir, fileName) {
+    const executableName = process.platform === "win32"
+        ? `${fileName}.exe`
+        : fileName;
+    return path.join(toolDir, executableName);
+}
+
+/**
  * @constant SIDECAR_TARGETS
  * @description 当前项目需要构建的 sidecar 清单。
  */
@@ -93,12 +107,14 @@ function generateGoStubs(target) {
     }
 
     const toolDir = path.join(target.sourceDir, ".bin");
+    const protocGenGoPath = resolveLocalExecutable(toolDir, "protoc-gen-go");
+    const protocGenGoGrpcPath = resolveLocalExecutable(toolDir, "protoc-gen-go-grpc");
     execFileSync(
         "protoc",
         [
             `-I${protoDir}`,
-            `--plugin=protoc-gen-go=${path.join(toolDir, "protoc-gen-go")}`,
-            `--plugin=protoc-gen-go-grpc=${path.join(toolDir, "protoc-gen-go-grpc")}`,
+            `--plugin=protoc-gen-go=${protocGenGoPath}`,
+            `--plugin=protoc-gen-go-grpc=${protocGenGoGrpcPath}`,
             `--go_out=${target.generatedDir}`,
             "--go_opt=paths=source_relative",
             `--go-grpc_out=${target.generatedDir}`,

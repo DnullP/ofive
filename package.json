@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
     "web:dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
-    "tauri:web:dev": "vite --port 1420 --strictPort",
+    "tauri:web:dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "check:backend-logs": "node scripts/check-backend-logs.mjs",
     "fix:backend-logs": "node scripts/check-backend-logs.mjs --fix",
@@ -34,6 +34,7 @@
     "@tauri-apps/plugin-opener": "^2",
     "codemirror": "^6.0.2",
     "dockview": "^4.9.0",
+    "highlight.js": "^11.11.1",
     "i18next": "^25.8.13",
     "katex": "^0.16.33",
     "lucide-react": "^0.564.0",

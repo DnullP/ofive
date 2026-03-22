@@ -36,6 +36,7 @@ import {
     shiftCalendarMonth,
     toCalendarDayKey,
 } from "./calendarDateUtils";
+import { deriveCalendarViewRenderState } from "./calendarViewRenderState";
 import { getCalendarViewState, setCalendarViewState } from "./calendarViewState";
 import "./CalendarTab.css";
 
@@ -174,6 +175,12 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
     const calendarGrid = useMemo(() => buildCalendarMonthGrid(anchorDate), [anchorDate]);
     const selectedNotes = notesByDay.get(selectedDayKey) ?? [];
     const isPanelMode = mode === "panel";
+    const renderState = useMemo(() => deriveCalendarViewRenderState({
+        loading: loadState.loading,
+        error: loadState.error,
+        currentVaultPath,
+        matchCount: loadState.matches.length,
+    }), [currentVaultPath, loadState.error, loadState.loading, loadState.matches.length]);
     const monthLabel = useMemo(() => {
         return new Intl.DateTimeFormat(i18n.language, {
             year: "numeric",
@@ -405,21 +412,21 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                 </div>
             </header>
 
-            {loadState.loading ? <div className="calendar-tab__status">{t("calendar.loading")}</div> : null}
+            {renderState.showLoadingStatus ? <div className="calendar-tab__status">{t("calendar.loading")}</div> : null}
 
-            {!loadState.loading && loadState.error ? (
+            {renderState.showErrorStatus ? (
                 <div className="calendar-tab__status">{t("calendar.loadFailed", { message: loadState.error })}</div>
             ) : null}
 
-            {!loadState.loading && !loadState.error && !currentVaultPath ? (
+            {renderState.showNoVaultStatus ? (
                 <div className="calendar-tab__status">{t("calendar.noVault")}</div>
             ) : null}
 
-            {!loadState.loading && !loadState.error && currentVaultPath && loadState.matches.length === 0 ? (
+            {renderState.showNoDateNotesStatus ? (
                 <div className="calendar-tab__status">{t("calendar.noDateNotes")}</div>
             ) : null}
 
-            {!loadState.loading && !loadState.error && currentVaultPath && loadState.matches.length > 0 ? (
+            {renderState.showCalendarBody ? (
                 <div className="calendar-tab__body">
                     <section ref={calendarSurfaceRef} className="calendar-tab__calendar-surface">
                         <div className="calendar-tab__weekdays">
