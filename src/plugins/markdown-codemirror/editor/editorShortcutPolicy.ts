@@ -29,6 +29,7 @@ export const EDITOR_MANAGED_NATIVE_COMMAND_IDS: EditorNativeCommandId[] = [
     "editor.toggleInlineCode",
     "editor.toggleHighlight",
     "editor.insertLink",
+    "editor.insertTask",
 ];
 
 /**
@@ -49,6 +50,7 @@ export const EDITOR_NATIVE_FALLBACK_SHORTCUTS: Record<EditorNativeCommandId, str
     "editor.toggleInlineCode": ["Cmd+E", "Ctrl+E"],
     "editor.toggleHighlight": ["Cmd+Shift+H", "Ctrl+Shift+H"],
     "editor.insertLink": ["Cmd+K", "Ctrl+K"],
+    "editor.insertTask": [],
 };
 
 /**

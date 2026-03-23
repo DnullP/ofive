@@ -342,6 +342,7 @@ const en = {
         toggleInlineCode: "Toggle Inline Code",
         toggleHighlight: "Toggle Highlight",
         insertLink: "Insert Link",
+        insertTask: "Quick Insert Task",
         copySelectedFile: "Copy Selected File",
         pasteFileToDir: "Paste File to Current Directory",
         deleteSelectedFile: "Delete Selected File",

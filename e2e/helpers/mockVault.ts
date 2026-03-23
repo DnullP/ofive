@@ -30,8 +30,9 @@ export async function gotoMockVaultPage(
     path = "/",
 ): Promise<string> {
     const mockVaultPath = `/mock/notes/${testName}-${Date.now()}`;
+    await page.goto(path);
 
-    await page.addInitScript(
+    await page.evaluate(
         ({ lastVaultPathStorageKey, rememberLastVaultStorageKey, nextVaultPath }) => {
             window.localStorage.setItem(rememberLastVaultStorageKey, "true");
             window.localStorage.setItem(lastVaultPathStorageKey, nextVaultPath);
@@ -43,6 +44,35 @@ export async function gotoMockVaultPage(
         },
     );
 
-    await page.goto(path);
+    await page.reload();
+    return mockVaultPath;
+}
+
+/**
+ * @function switchMockVaultAndReload
+ * @description 在当前页面中切换到新的 mock vault 路径，并通过 reload 触发应用重新初始化。
+ * @param page - Playwright 页面对象。
+ * @param testName - 当前切换场景名称，用于生成隔离的 mock vault 路径。
+ * @returns reload 后生效的 mock vault 绝对路径。
+ */
+export async function switchMockVaultAndReload(
+    page: Page,
+    testName: string,
+): Promise<string> {
+    const mockVaultPath = `/mock/notes/${testName}-${Date.now()}`;
+
+    await page.evaluate(
+        ({ lastVaultPathStorageKey, rememberLastVaultStorageKey, nextVaultPath }) => {
+            window.localStorage.setItem(rememberLastVaultStorageKey, "true");
+            window.localStorage.setItem(lastVaultPathStorageKey, nextVaultPath);
+        },
+        {
+            lastVaultPathStorageKey: LAST_VAULT_PATH_STORAGE_KEY,
+            rememberLastVaultStorageKey: REMEMBER_LAST_VAULT_STORAGE_KEY,
+            nextVaultPath: mockVaultPath,
+        },
+    );
+
+    await page.reload();
     return mockVaultPath;
 }

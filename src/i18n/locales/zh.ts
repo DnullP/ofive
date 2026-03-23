@@ -352,6 +352,7 @@ const zh = {
         toggleInlineCode: "切换行内代码",
         toggleHighlight: "切换高亮",
         insertLink: "插入链接",
+        insertTask: "快速创建任务",
         copySelectedFile: "复制选中文件",
         pasteFileToDir: "粘贴文件到当前目录",
         deleteSelectedFile: "删除选中文件",

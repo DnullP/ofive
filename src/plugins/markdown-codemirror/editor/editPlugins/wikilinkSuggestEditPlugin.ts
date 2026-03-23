@@ -127,11 +127,13 @@ const suggestStateField = StateField.define<SuggestState>({
  * 构建弹窗内部 DOM 内容。
  * @param popup 弹窗根节点，函数会清空并重新填充。
  * @param items 候选列表。
+ * @param query 当前查询关键字。
  * @param selectedIndex 当前选中索引。
  */
 function renderPopupContent(
     popup: HTMLElement,
     items: WikiLinkSuggestionItem[],
+    query: string,
     selectedIndex: number,
 ): void {
     popup.innerHTML = "";
@@ -158,13 +160,13 @@ function renderPopupContent(
         /* 标题文本 — 样式 .cm-wikilink-suggest-title */
         const titleSpan = document.createElement("span");
         titleSpan.className = "cm-wikilink-suggest-title";
-        titleSpan.textContent = item.title;
+        titleSpan.appendChild(buildSuggestHighlightedFragment(item.title, query));
         row.appendChild(titleSpan);
 
         /* 路径文本 — 样式 .cm-wikilink-suggest-path */
         const pathSpan = document.createElement("span");
         pathSpan.className = "cm-wikilink-suggest-path";
-        pathSpan.textContent = item.relativePath;
+        pathSpan.appendChild(buildSuggestHighlightedFragment(item.relativePath, query));
         row.appendChild(pathSpan);
 
         /* 引用次数 — 样式 .cm-wikilink-suggest-ref-count（仅 >0 时显示） */
@@ -177,6 +179,74 @@ function renderPopupContent(
 
         popup.appendChild(row);
     }
+}
+
+/**
+ * 将候选文本拆成普通片段与高亮片段。
+ * @param text 原始文本。
+ * @param query 当前查询关键字。
+ * @returns 可直接插入 DOM 的片段。
+ */
+function buildSuggestHighlightedFragment(text: string, query: string): DocumentFragment {
+    const fragment = document.createDocumentFragment();
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) {
+        fragment.append(text);
+        return fragment;
+    }
+
+    const terms = Array.from(new Set(
+        normalizedQuery
+            .split(/\s+/)
+            .map((term) => term.trim())
+            .filter((term) => term.length > 0),
+    )).sort((left, right) => right.length - left.length);
+
+    if (terms.length === 0) {
+        fragment.append(text);
+        return fragment;
+    }
+
+    const expression = new RegExp(`(${terms.map(escapeSuggestHighlightTerm).join("|")})`, "giu");
+    let lastIndex = 0;
+
+    for (const match of text.matchAll(expression)) {
+        const matchText = match[0] ?? "";
+        const matchIndex = match.index ?? -1;
+        if (!matchText || matchIndex < 0) {
+            continue;
+        }
+
+        if (matchIndex > lastIndex) {
+            fragment.append(text.slice(lastIndex, matchIndex));
+        }
+
+        const mark = document.createElement("mark");
+        mark.className = "cm-wikilink-suggest-match";
+        mark.textContent = matchText;
+        fragment.appendChild(mark);
+
+        lastIndex = matchIndex + matchText.length;
+    }
+
+    if (lastIndex < text.length) {
+        fragment.append(text.slice(lastIndex));
+    }
+
+    if (!fragment.hasChildNodes()) {
+        fragment.append(text);
+    }
+
+    return fragment;
+}
+
+/**
+ * 转义正则特殊字符，避免查询文本破坏匹配表达式。
+ * @param term 待转义关键字。
+ * @returns 可安全拼入正则的关键字。
+ */
+function escapeSuggestHighlightTerm(term: string): string {
+    return term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /* ================================================================== */
@@ -317,6 +387,7 @@ function createWikiLinkSuggestExtensions(): Extension[] {
                 // 创建弹窗 DOM，挂载到编辑器根容器下
                 this.popup = document.createElement("div");
                 this.popup.className = "cm-wikilink-suggest-popup";
+                this.popup.dataset.floatingSurface = "true";
                 this.popup.style.display = "none";
                 // 点击弹窗项时处理选中逻辑
                 this.popup.addEventListener("mousedown", (event) => {
@@ -443,6 +514,7 @@ function createWikiLinkSuggestExtensions(): Extension[] {
                     renderPopupContent(
                         this.popup,
                         state.items,
+                        state.query,
                         state.selectedIndex,
                     );
                 }

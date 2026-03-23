@@ -12,4 +12,5 @@ pub(crate) mod outline;
 pub(crate) mod query_index;
 pub(crate) mod search;
 pub(crate) mod segment;
+pub(crate) mod task_query;
 pub(crate) mod wikilink;

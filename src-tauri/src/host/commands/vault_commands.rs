@@ -30,6 +30,8 @@ pub(crate) const VAULT_COMMAND_IDS: &[&str] = &[
     "resolve_wikilink_target",
     "resolve_media_embed_target",
     "search_vault_markdown_files",
+    "search_vault_markdown",
+    "query_vault_tasks",
     "get_current_vault_markdown_graph",
     "get_vault_markdown_ast",
     "segment_chinese_text",
@@ -339,6 +341,30 @@ pub fn search_vault_markdown_files(
     timed_command!(
         "search_vault_markdown_files",
         query_app_service::search_vault_markdown_files(query, limit, state)
+    )
+}
+
+/// 搜索仓库 Markdown 内容。
+#[tauri::command]
+pub fn search_vault_markdown(
+    query: String,
+    tag: Option<String>,
+    scope: VaultSearchScope,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<VaultSearchMatchItem>, String> {
+    timed_command!(
+        "search_vault_markdown",
+        query_app_service::search_vault_markdown(query, tag, scope, limit, state)
+    )
+}
+
+/// 查询仓库任务条目。
+#[tauri::command]
+pub fn query_vault_tasks(state: State<'_, AppState>) -> Result<Vec<VaultTaskItem>, String> {
+    timed_command!(
+        "query_vault_tasks",
+        query_app_service::query_vault_tasks(state)
     )
 }
 

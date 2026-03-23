@@ -486,6 +486,7 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                             <div
                                 ref={panelNotesPopoverRef}
                                 className={`calendar-tab__panel-popover${panelPopoverPosition ? " is-positioned" : ""}`}
+                                data-floating-surface="true"
                                 style={panelPopoverPosition ? {
                                     left: `${panelPopoverPosition.left}px`,
                                     top: `${panelPopoverPosition.top}px`,

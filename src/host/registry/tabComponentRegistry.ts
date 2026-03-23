@@ -29,16 +29,27 @@ import { useSyncExternalStore, type ReactNode } from "react";
 import type { IDockviewPanelProps } from "dockview";
 
 /**
+ * @type TabLifecycleScope
+ * @description Tab 组件的生命周期作用域。
+ *   - global: 仓库切换后继续保留
+ *   - vault: 仓库切换后应被销毁并等待重新打开
+ */
+export type TabLifecycleScope = "global" | "vault";
+
+/**
  * @interface TabComponentDescriptor
  * @description Tab 组件的注册描述，将组件 key 映射到一个 React 组件。
  * @field id        - 组件唯一标识（即 component key，如 "codemirror"）
  * @field component - React 组件，接收 dockview 的 IDockviewPanelProps
+ * @field lifecycleScope - 仓库切换时的生命周期作用域
  */
 export interface TabComponentDescriptor {
     /** 组件唯一标识（component key） */
     id: string;
     /** Tab 渲染组件 */
     component: (props: IDockviewPanelProps<Record<string, unknown>>) => ReactNode;
+    /** 仓库切换时的生命周期作用域，未声明时默认视为 global */
+    lifecycleScope?: TabLifecycleScope;
 }
 
 /* ────────────────── 内部状态 ────────────────── */

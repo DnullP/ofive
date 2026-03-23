@@ -64,6 +64,14 @@ export const hiddenBlockLineDecoration: Decoration = Decoration.line({
     class: "cm-hidden-block-line",
 });
 
+/**
+ * frontmatter 等块级 widget 的锚点行装饰：
+ * 保留行盒以承载 widget，但将源码文本本身收敛为不可见。
+ */
+export const hiddenBlockAnchorLineDecoration: Decoration = Decoration.line({
+    class: "cm-hidden-block-anchor-line",
+});
+
 /** 原子范围标记：仅用于 RangeSet 占位，值本身不被使用。 */
 const atomicRangeMarker = Decoration.mark({});
 

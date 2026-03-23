@@ -12,9 +12,11 @@
 import { describe, expect, it } from "bun:test";
 import {
     getArticleSnapshotById,
+    getFocusedArticleSnapshot,
     reportArticleContent,
     reportArticleContentByPath,
     reportArticleFocus,
+    resetEditorContext,
 } from "./editorContextStore";
 
 describe("editorContextStore content snapshot boundary", () => {
@@ -23,6 +25,8 @@ describe("editorContextStore content snapshot boundary", () => {
      * @description 首次仅上报 focus（无 content）时，不应标记为可靠内容快照。
      */
     it("should keep focus-only article untrusted until content arrives", () => {
+        resetEditorContext();
+
         const articleId = "test-focus-only-untrusted";
         const path = "notes/focus-only.md";
 
@@ -42,6 +46,8 @@ describe("editorContextStore content snapshot boundary", () => {
      * @description 已有内容快照时，后续无 content 的 focus 不应覆盖内容。
      */
     it("should preserve existing content on follow-up focus without content", () => {
+        resetEditorContext();
+
         const articleId = "test-preserve-content-after-focus";
         const path = "notes/preserve.md";
         const content = "# keep me\n\ncontent should stay";
@@ -68,6 +74,8 @@ describe("editorContextStore content snapshot boundary", () => {
      * @description focus 事件携带 content 时，应直接成为可靠快照。
      */
     it("should mark focus with content as authoritative", () => {
+        resetEditorContext();
+
         const articleId = "test-focus-with-content";
         const path = "notes/focus-with-content.md";
         const content = "# title\n\nfrom focus payload";
@@ -89,6 +97,8 @@ describe("editorContextStore content snapshot boundary", () => {
      * @description 按路径批量回写后，命中文章应全部具备可靠快照。
      */
     it("should sync all articles by path with authoritative snapshot", () => {
+        resetEditorContext();
+
         const path = "notes/shared-path.md";
         const content = "# shared\n\nupdated by path";
 
@@ -109,5 +119,24 @@ describe("editorContextStore content snapshot boundary", () => {
         expect(snapshot2?.content).toBe(content);
         expect(snapshot1?.hasContentSnapshot).toBe(true);
         expect(snapshot2?.hasContentSnapshot).toBe(true);
+    });
+
+    /**
+     * @function should_reset_all_cached_articles_after_vault_change
+     * @description 仓库切换触发 reset 后，应清空焦点文章和缓存快照。
+     */
+    it("should reset all cached articles after vault change", () => {
+        resetEditorContext();
+
+        reportArticleFocus({
+            articleId: "test-reset",
+            path: "notes/reset.md",
+            content: "# reset",
+        });
+
+        resetEditorContext();
+
+        expect(getFocusedArticleSnapshot()).toBeNull();
+        expect(getArticleSnapshotById("test-reset")).toBeNull();
     });
 });

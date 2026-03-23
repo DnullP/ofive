@@ -16,7 +16,7 @@
  *  - createLatexSyntaxExtension: 创建 LaTeX 语法渲染扩展
  */
 
-import { RangeSetBuilder } from "@codemirror/state";
+import { RangeSetBuilder, type Text } from "@codemirror/state";
 import {
     Decoration,
     type DecorationSet,
@@ -29,6 +29,7 @@ import katex from "katex";
 import { rangeIntersectsSelection } from "../syntaxRenderRegistry";
 import {
     hiddenBlockLineDecoration,
+    hiddenBlockAnchorLineDecoration,
     createBlockAtomicRangesExtension,
     type BlockRange,
 } from "./blockWidgetReplace";
@@ -257,6 +258,49 @@ interface BlockLatexRange {
 /** 通过 WeakMap 在 ViewPlugin 实例间共享块级公式范围 */
 const blockLatexRangesMap = new WeakMap<EditorView, BlockLatexRange[]>();
 
+/**
+ * @interface BlockLatexWidgetPlacement
+ * @description 块级公式源码隐藏与 widget 挂载策略。
+ */
+interface BlockLatexWidgetPlacement {
+    /** 需要完全压缩隐藏的源码行号。 */
+    hiddenLineNumbers: number[];
+    /** 承载 widget 的锚点行号。 */
+    anchorLineNumber: number;
+    /** widget 挂载偏移。 */
+    widgetPos: number;
+    /** widget 在锚点位置的 side。 */
+    widgetSide: -1 | 1;
+}
+
+/**
+ * @function resolveLatexBlockWidgetPlacement
+ * @description 为块级公式计算源码隐藏范围与 widget 挂载锚点。
+ *   closing delimiter 所在行会保留为 anchor line，避免在文末场景下因为整行被压成
+ *   `height: 0` 而吞掉 widget。
+ * @param doc 编辑器文档。
+ * @param startLineNumber 块级公式起始行号。
+ * @param endLineNumber 块级公式结束行号。
+ * @returns widget 挂载与源码隐藏策略。
+ */
+export function resolveLatexBlockWidgetPlacement(
+    doc: Text,
+    startLineNumber: number,
+    endLineNumber: number,
+): BlockLatexWidgetPlacement {
+    const hiddenLineNumbers: number[] = [];
+    for (let lineNumber = startLineNumber; lineNumber < endLineNumber; lineNumber += 1) {
+        hiddenLineNumbers.push(lineNumber);
+    }
+
+    return {
+        hiddenLineNumbers,
+        anchorLineNumber: endLineNumber,
+        widgetPos: doc.line(endLineNumber).to,
+        widgetSide: -1,
+    };
+}
+
 /* ─────────────────── 装饰构建 ─────────────────── */
 
 /**
@@ -318,28 +362,20 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
             if (!isEditing && latex.length > 0) {
                 const rendered = renderLatexToHtml(latex, true);
                 const widget = new BlockLatexWidget(latex, rendered.html, rendered.isError);
+                const placement = resolveLatexBlockWidgetPlacement(doc, lineIndex, lineIndex);
 
-                /* 隐藏源码行 */
+                const anchorLine = doc.line(placement.anchorLineNumber);
                 pendingDecorations.push({
-                    from: line.from,
-                    to: line.from,
-                    decoration: hiddenBlockLineDecoration,
+                    from: anchorLine.from,
+                    to: anchorLine.from,
+                    decoration: hiddenBlockAnchorLineDecoration,
                     priority: 0,
                 });
 
-                /*
-                 * 在隐藏行之后插入 widget：
-                 * 若后方有换行符，widgetPos 为 line.to + 1（下一行起始），side: -1 使 widget 渲染在该行之前。
-                 * 若已到文档末尾（无换行符），widgetPos 保留在 line.to，side: 1 使 widget 渲染在行尾之后，
-                 * 避免被隐藏行的 height:0 样式吞掉。
-                 */
-                const hasTrailingNewline = doc.sliceString(line.to, line.to + 1) === "\n";
-                const widgetPos = hasTrailingNewline ? line.to + 1 : line.to;
-                const widgetSide = hasTrailingNewline ? -1 : 1;
                 pendingDecorations.push({
-                    from: widgetPos,
-                    to: widgetPos,
-                    decoration: Decoration.widget({ widget, block: false, side: widgetSide }),
+                    from: placement.widgetPos,
+                    to: placement.widgetPos,
+                    decoration: Decoration.widget({ widget, block: false, side: placement.widgetSide }),
                     priority: 1,
                 });
 
@@ -385,9 +421,14 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
                 if (!isEditing && latex.length > 0) {
                     const rendered = renderLatexToHtml(latex, true);
                     const widget = new BlockLatexWidget(latex, rendered.html, rendered.isError);
+                    const placement = resolveLatexBlockWidgetPlacement(
+                        doc,
+                        openLineNumber,
+                        closeLineNumber,
+                    );
 
-                    /* 隐藏所有源码行 */
-                    for (let ln = openLineNumber; ln <= closeLineNumber; ln++) {
+                    /* 隐藏 closing delimiter 之前的源码行，closing line 保留为 anchor。 */
+                    for (const ln of placement.hiddenLineNumbers) {
                         const targetLine = doc.line(ln);
                         pendingDecorations.push({
                             from: targetLine.from,
@@ -398,19 +439,19 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
                         blockCoveredLines.add(ln);
                     }
 
-                    /*
-                     * 在最后一个隐藏行之后插入 widget：
-                     * 若后方有换行符，widgetPos 为 closeLine.to + 1（下一行起始），side: -1。
-                     * 若已到文档末尾（无换行符），widgetPos 保留在 closeLine.to，side: 1，
-                     * 避免被隐藏行的 height:0 样式吞掉。
-                     */
-                    const hasTrailingNewline = doc.sliceString(closeLine.to, closeLine.to + 1) === "\n";
-                    const widgetPos = hasTrailingNewline ? closeLine.to + 1 : closeLine.to;
-                    const widgetSide = hasTrailingNewline ? -1 : 1;
+                    const anchorLine = doc.line(placement.anchorLineNumber);
                     pendingDecorations.push({
-                        from: widgetPos,
-                        to: widgetPos,
-                        decoration: Decoration.widget({ widget, block: false, side: widgetSide }),
+                        from: anchorLine.from,
+                        to: anchorLine.from,
+                        decoration: hiddenBlockAnchorLineDecoration,
+                        priority: 0,
+                    });
+                    blockCoveredLines.add(placement.anchorLineNumber);
+
+                    pendingDecorations.push({
+                        from: placement.widgetPos,
+                        to: placement.widgetPos,
+                        decoration: Decoration.widget({ widget, block: false, side: placement.widgetSide }),
                         priority: 1,
                     });
 

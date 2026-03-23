@@ -1,12 +1,15 @@
 /**
  * @module plugins/searchPlugin
- * @description 搜索插件入口：负责根据配置状态注册/注销搜索 activity 与 panel。
- *   该插件将搜索功能的宿主协调逻辑从 App 与内置注册表中移出，降低中心文件冲突。
+ * @description 搜索插件入口：负责注册搜索 activity 与 panel，并在面板内提供
+ *   文件名搜索、全文本搜索和 tag 过滤能力。
  *
  * @dependencies
+ *   - react
+ *   - ../api/vaultApi
  *   - ../host/store/configStore
  *   - ../host/registry/activityRegistry
  *   - ../host/registry/panelRegistry
+ *   - ../host/layout/DockviewLayout
  *   - ../i18n
  *   - lucide-react
  *
@@ -21,7 +24,14 @@
  *   - activatePlugin
  */
 
-import { Search } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { FileText, Hash, Search } from "lucide-react";
+import {
+    searchVaultMarkdown,
+    type VaultSearchMatchItem,
+    type VaultSearchScope,
+} from "../api/vaultApi";
+import type { PanelRenderContext } from "../host/layout/DockviewLayout";
 import i18n from "../i18n";
 import {
     getConfigSnapshot,
@@ -37,8 +47,190 @@ import {
     unregisterPanel,
     type PanelDescriptor,
 } from "../host/registry/panelRegistry";
+import "./searchPlugin.css";
 
 const SEARCH_SURFACE_ID = "search";
+const SEARCH_RESULT_LIMIT = 80;
+const SEARCH_DEBOUNCE_MS = 220;
+
+i18n.addResourceBundle("en", "translation", {
+    searchPlugin: {
+        title: "Search",
+        queryPlaceholder: "Search notes or content",
+        tagPlaceholder: "Filter by tag",
+        emptyStateTitle: "Start searching",
+        emptyStateHint: "Use keywords, file names, or a tag filter to search the vault.",
+        noResults: "No results found.",
+        loading: "Searching...",
+        failed: "Search failed: {{message}}",
+        resultCount: "{{count}} result(s)",
+        tagCount: "{{count}} tag(s)",
+        snippetLine: "Line {{line}}",
+        openFailed: "Failed to open note: {{message}}",
+        scopeAll: "All",
+        scopeContent: "Content",
+        scopeFileName: "File Name",
+        matchedFileName: "File",
+        matchedContent: "Content",
+        matchedTag: "Tag",
+    },
+}, true, true);
+
+i18n.addResourceBundle("zh", "translation", {
+    searchPlugin: {
+        title: "搜索",
+        queryPlaceholder: "搜索笔记标题、路径或正文",
+        tagPlaceholder: "按标签过滤",
+        emptyStateTitle: "开始搜索",
+        emptyStateHint: "输入关键字、文件名或标签过滤条件，在当前 vault 中检索。",
+        noResults: "未找到匹配结果。",
+        loading: "搜索中...",
+        failed: "搜索失败：{{message}}",
+        resultCount: "共 {{count}} 条结果",
+        tagCount: "{{count}} 个标签",
+        snippetLine: "第 {{line}} 行",
+        openFailed: "打开笔记失败：{{message}}",
+        scopeAll: "全部",
+        scopeContent: "正文",
+        scopeFileName: "文件名",
+        matchedFileName: "文件名",
+        matchedContent: "正文",
+        matchedTag: "标签",
+    },
+}, true, true);
+
+const SEARCH_SCOPE_OPTIONS: Array<{
+    scope: VaultSearchScope;
+    translationKey: string;
+}> = [
+    {
+        scope: "all",
+        translationKey: "searchPlugin.scopeAll",
+    },
+    {
+        scope: "content",
+        translationKey: "searchPlugin.scopeContent",
+    },
+    {
+        scope: "fileName",
+        translationKey: "searchPlugin.scopeFileName",
+    },
+];
+
+/**
+ * @interface SearchHighlightSegment
+ * @description 搜索结果高亮片段，供渲染层将命中词与普通文本拆分显示。
+ * @field text 片段文本。
+ * @field matched 是否为命中片段。
+ */
+export interface SearchHighlightSegment {
+    text: string;
+    matched: boolean;
+}
+
+/**
+ * @function escapeHighlightTerm
+ * @description 转义正则特殊字符，避免用户输入破坏高亮匹配表达式。
+ * @param term 用户输入的高亮关键字。
+ * @returns 可安全用于正则的关键字文本。
+ */
+function escapeHighlightTerm(term: string): string {
+    return term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * @function normalizeHighlightTerms
+ * @description 归一化搜索与 tag 输入，得到去重后的高亮词列表。
+ * @param query 搜索关键字。
+ * @param tag 标签过滤关键字。
+ * @returns 高亮词列表。
+ */
+function normalizeHighlightTerms(query: string, tag: string): string[] {
+    const queryTerms = query.trim().split(/\s+/).filter(Boolean);
+    const normalizedTag = tag.trim().replace(/^#+/, "").trim();
+
+    return Array.from(new Set([
+        ...queryTerms,
+        ...(normalizedTag ? [normalizedTag] : []),
+    ])).sort((left, right) => right.length - left.length);
+}
+
+/**
+ * @function buildSearchHighlightSegments
+ * @description 按关键字将文本拆分为普通片段与高亮片段。
+ * @param text 原始文本。
+ * @param terms 高亮关键字列表。
+ * @returns 按显示顺序排列的片段数组。
+ */
+export function buildSearchHighlightSegments(
+    text: string,
+    terms: string[],
+): SearchHighlightSegment[] {
+    if (!text) {
+        return [];
+    }
+
+    const normalizedTerms = Array.from(new Set(terms.map((term) => term.trim()).filter(Boolean)));
+    if (normalizedTerms.length === 0) {
+        return [{ text, matched: false }];
+    }
+
+    const expression = new RegExp(`(${normalizedTerms.map(escapeHighlightTerm).join("|")})`, "giu");
+    const segments: SearchHighlightSegment[] = [];
+    let lastIndex = 0;
+
+    for (const match of text.matchAll(expression)) {
+        const matchText = match[0] ?? "";
+        const matchIndex = match.index ?? -1;
+        if (!matchText || matchIndex < 0) {
+            continue;
+        }
+
+        if (matchIndex > lastIndex) {
+            segments.push({
+                text: text.slice(lastIndex, matchIndex),
+                matched: false,
+            });
+        }
+
+        segments.push({
+            text: matchText,
+            matched: true,
+        });
+        lastIndex = matchIndex + matchText.length;
+    }
+
+    if (lastIndex < text.length) {
+        segments.push({
+            text: text.slice(lastIndex),
+            matched: false,
+        });
+    }
+
+    return segments.length > 0 ? segments : [{ text, matched: false }];
+}
+
+/**
+ * @function renderHighlightedText
+ * @description 将高亮片段转换为 React 节点数组。
+ * @param text 原始文本。
+ * @param terms 高亮关键字列表。
+ * @returns 可直接插入 JSX 的节点数组。
+ */
+function renderHighlightedText(text: string, terms: string[]): ReactNode {
+    return buildSearchHighlightSegments(text, terms).map((segment, index) => {
+        if (!segment.matched) {
+            return <span key={`${text}-${String(index)}`}>{segment.text}</span>;
+        }
+
+        return (
+            /* search-highlight: 命中词高亮标记，用于强调搜索匹配内容 */
+            <mark key={`${text}-${String(index)}`} className="search-highlight">
+                {segment.text}
+            </mark>
+        );
+    });
+}
 
 /**
  * @interface SearchPluginConfigState
@@ -82,6 +274,280 @@ const defaultDependencies: SearchPluginDependencies = {
 };
 
 /**
+ * @function SearchPanel
+ * @description 搜索面板组件：提供关键词、tag 和 scope 输入，并展示命中结果列表。
+ * @param props.context 面板上下文，用于打开结果文件。
+ * @returns 搜索面板 React 节点。
+ */
+function SearchPanel({ context }: { context: PanelRenderContext }): ReactNode {
+    const [query, setQuery] = useState("");
+    const [tag, setTag] = useState("");
+    const [scope, setScope] = useState<VaultSearchScope>("all");
+    const [results, setResults] = useState<VaultSearchMatchItem[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [hasSearched, setHasSearched] = useState(false);
+    const requestIdRef = useRef(0);
+    const highlightTerms = normalizeHighlightTerms(query, tag);
+
+    /**
+     * 翻译辅助函数。
+     */
+    const t = useCallback((key: string, options?: Record<string, unknown>) => {
+        return i18n.t(key, options);
+    }, []);
+
+    /**
+     * 打开单条搜索结果对应文件。
+     * @param item 搜索命中项。
+     */
+    const handleOpenResult = useCallback(async (item: VaultSearchMatchItem) => {
+        console.info("[searchPlugin] open search result start", {
+            relativePath: item.relativePath,
+        });
+
+        try {
+            await context.openFile({
+                relativePath: item.relativePath,
+            });
+            console.info("[searchPlugin] open search result success", {
+                relativePath: item.relativePath,
+            });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error("[searchPlugin] open search result failed", {
+                relativePath: item.relativePath,
+                error: message,
+            });
+            setError(t("searchPlugin.openFailed", { message }));
+        }
+    }, [context, t]);
+
+    useEffect(() => {
+        const trimmedQuery = query.trim();
+        const trimmedTag = tag.trim();
+
+        if (!trimmedQuery && !trimmedTag) {
+            setResults([]);
+            setLoading(false);
+            setError(null);
+            setHasSearched(false);
+            console.info("[searchPlugin] search state reset: empty filters");
+            return;
+        }
+
+        const nextRequestId = requestIdRef.current + 1;
+        requestIdRef.current = nextRequestId;
+        const timer = window.setTimeout(() => {
+            setLoading(true);
+            setError(null);
+
+            console.info("[searchPlugin] search request start", {
+                query: trimmedQuery,
+                tag: trimmedTag || null,
+                scope,
+            });
+
+            void searchVaultMarkdown(trimmedQuery, {
+                tag: trimmedTag || undefined,
+                scope,
+                limit: SEARCH_RESULT_LIMIT,
+            }).then((items) => {
+                if (requestIdRef.current !== nextRequestId) {
+                    return;
+                }
+
+                setResults(items);
+                setHasSearched(true);
+                setLoading(false);
+                console.info("[searchPlugin] search state updated", {
+                    query: trimmedQuery,
+                    tag: trimmedTag || null,
+                    scope,
+                    resultCount: items.length,
+                });
+            }).catch((err) => {
+                if (requestIdRef.current !== nextRequestId) {
+                    return;
+                }
+
+                const message = err instanceof Error ? err.message : String(err);
+                setResults([]);
+                setHasSearched(true);
+                setLoading(false);
+                setError(t("searchPlugin.failed", { message }));
+                console.error("[searchPlugin] search request failed", {
+                    query: trimmedQuery,
+                    tag: trimmedTag || null,
+                    scope,
+                    error: message,
+                });
+            });
+        }, SEARCH_DEBOUNCE_MS);
+
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [query, tag, scope, t]);
+
+    return (
+        /* search-panel: 搜索面板根容器，承担整体纵向布局 */
+        <div className="search-panel">
+            {/* search-toolbar: 顶部搜索控制区，承载 query/tag/scope 输入 */}
+            <div className="search-toolbar">
+                {/* search-query-field: 主搜索框，负责文件名与全文关键词输入 */}
+                <label className="search-query-field">
+                    <Search size={14} strokeWidth={1.8} />
+                    <input
+                        type="search"
+                        value={query}
+                        placeholder={t("searchPlugin.queryPlaceholder")}
+                        onChange={(event) => {
+                            setQuery(event.target.value);
+                        }}
+                    />
+                </label>
+
+                {/* search-tag-field: 标签过滤输入框，仅负责 tag 条件输入 */}
+                <label className="search-tag-field">
+                    <Hash size={14} strokeWidth={1.8} />
+                    <input
+                        type="search"
+                        value={tag}
+                        placeholder={t("searchPlugin.tagPlaceholder")}
+                        onChange={(event) => {
+                            setTag(event.target.value);
+                        }}
+                    />
+                </label>
+
+                {/* search-scope-switch: 搜索范围切换按钮组 */}
+                <div className="search-scope-switch">
+                    {SEARCH_SCOPE_OPTIONS.map((option) => (
+                        <button
+                            key={option.scope}
+                            type="button"
+                            className={scope === option.scope
+                                ? "search-scope-button search-scope-button--active"
+                                : "search-scope-button"}
+                            onClick={() => {
+                                setScope(option.scope);
+                            }}
+                        >
+                            {t(option.translationKey)}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* search-meta: 结果统计与状态信息栏 */}
+            <div className="search-meta">
+                <span>{t("searchPlugin.resultCount", { count: results.length })}</span>
+                {loading ? (
+                    <span>{t("searchPlugin.loading")}</span>
+                ) : null}
+            </div>
+
+            {error ? (
+                /* search-error: 搜索或打开文件失败时的错误提示 */
+                <div className="search-error">{error}</div>
+            ) : null}
+
+            {!hasSearched && !loading ? (
+                /* search-empty: 初始空状态提示 */
+                <div className="search-empty">
+                    <div className="search-empty-title">{t("searchPlugin.emptyStateTitle")}</div>
+                    <div>{t("searchPlugin.emptyStateHint")}</div>
+                </div>
+            ) : null}
+
+            {hasSearched && !loading && results.length === 0 && !error ? (
+                <div className="search-empty">{t("searchPlugin.noResults")}</div>
+            ) : null}
+
+            {/* search-results: 命中结果滚动列表 */}
+            <ul className="search-results">
+                {results.map((item) => (
+                    <li key={`${item.relativePath}-${String(item.snippetLine ?? 0)}`}>
+                        {/* search-result: 单条搜索结果按钮，负责打开对应文件 */}
+                        <button
+                            type="button"
+                            className="search-result"
+                            onClick={() => {
+                                void handleOpenResult(item);
+                            }}
+                        >
+                            {/* search-result-header: 结果头部，显示标题与匹配徽章 */}
+                            <div className="search-result-header">
+                                <div className="search-result-title-wrap">
+                                    <FileText size={14} strokeWidth={1.8} />
+                                    <span className="search-result-title">
+                                        {renderHighlightedText(item.title, highlightTerms)}
+                                    </span>
+                                </div>
+
+                                {/* search-badges: 匹配来源徽章区域 */}
+                                <div className="search-badges">
+                                    {item.matchedFileName ? (
+                                        <span className="search-badge">
+                                            {t("searchPlugin.matchedFileName")}
+                                        </span>
+                                    ) : null}
+                                    {item.matchedContent ? (
+                                        <span className="search-badge">
+                                            {t("searchPlugin.matchedContent")}
+                                        </span>
+                                    ) : null}
+                                    {item.matchedTag ? (
+                                        <span className="search-badge">
+                                            {t("searchPlugin.matchedTag")}
+                                        </span>
+                                    ) : null}
+                                </div>
+                            </div>
+
+                            {/* search-result-path: 结果文件相对路径 */}
+                            <div className="search-result-path">
+                                {renderHighlightedText(item.relativePath, highlightTerms)}
+                            </div>
+
+                            {item.snippet ? (
+                                /* search-result-snippet: 正文命中摘要 */
+                                <div className="search-result-snippet">
+                                    {renderHighlightedText(item.snippet, highlightTerms)}
+                                </div>
+                            ) : null}
+
+                            {/* search-result-footer: 行号与标签列表 */}
+                            <div className="search-result-footer">
+                                <span>
+                                    {item.snippetLine
+                                        ? t("searchPlugin.snippetLine", { line: item.snippetLine })
+                                        : ""}
+                                </span>
+
+                                {(item.tags ?? []).length > 0 ? (
+                                    /* search-tag-list: 当前命中项的标签摘要 */
+                                    <span className="search-tag-list">
+                                        {(item.tags ?? []).slice(0, 4).map((entry, index) => (
+                                            <span key={`${item.relativePath}-tag-${entry}`}>
+                                                {index > 0 ? " " : ""}
+                                                {renderHighlightedText(`#${entry}`, highlightTerms)}
+                                            </span>
+                                        ))}
+                                        {(item.tags ?? []).length > 4 ? ` +${String((item.tags ?? []).length - 4)}` : ""}
+                                    </span>
+                                ) : null}
+                            </div>
+                        </button>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
+/**
  * @function buildSearchActivityDescriptor
  * @description 构造搜索 activity 的注册描述。
  * @returns 搜索 activity 描述对象。
@@ -90,7 +556,7 @@ function buildSearchActivityDescriptor(): ActivityDescriptor {
     return {
         type: "panel-container",
         id: SEARCH_SURFACE_ID,
-        title: () => i18n.t("app.searchPanel"),
+        title: () => i18n.t("searchPlugin.title"),
         icon: <Search size={18} strokeWidth={1.8} />,
         defaultSection: "top",
         defaultBar: "left",
@@ -106,16 +572,11 @@ function buildSearchActivityDescriptor(): ActivityDescriptor {
 function buildSearchPanelDescriptor(): PanelDescriptor {
     return {
         id: SEARCH_SURFACE_ID,
-        title: () => i18n.t("app.searchPanel"),
+        title: () => i18n.t("searchPlugin.title"),
         activityId: SEARCH_SURFACE_ID,
         defaultPosition: "left",
         defaultOrder: 2,
-        render: () => (
-            <div className="panel-placeholder">
-                <h3>{i18n.t("app.searchPanelTitle")}</h3>
-                <p>{i18n.t("app.searchPanelHint")}</p>
-            </div>
-        ),
+        render: (context) => <SearchPanel context={context} />,
     };
 }
 

@@ -8,6 +8,7 @@
     justify-content: center;
     padding-top: 12vh;
     background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+    backdrop-filter: blur(10px);
 }
 
 /* 创建项浮窗主体：承载标题、路径提示、输入框和动作按钮。 */

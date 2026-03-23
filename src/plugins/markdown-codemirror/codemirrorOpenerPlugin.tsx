@@ -44,6 +44,7 @@ export function activatePlugin(): () => void {
     const unregisterTabComponent = registerTabComponent({
         id: "codemirror",
         component: CodeMirrorEditorTab as any,
+        lifecycleScope: "vault",
     });
 
     const unregisterFileOpener = registerFileOpener({

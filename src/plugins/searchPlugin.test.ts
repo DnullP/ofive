@@ -24,6 +24,7 @@ import {
 } from "../host/registry/panelRegistry";
 import {
     activateSearchPluginRuntime,
+    buildSearchHighlightSegments,
     type SearchPluginConfigState,
 } from "./searchPlugin";
 
@@ -126,5 +127,18 @@ describe("searchPlugin", () => {
         expect(getPanelsSnapshot().filter((item) => item.id === "search")).toHaveLength(1);
 
         dispose();
+    });
+
+    it("应按 query 与 tag 拆分高亮片段，且忽略大小写", () => {
+        const segments = buildSearchHighlightSegments(
+            "Topic roadmap #Project",
+            ["topic", "project"],
+        );
+
+        expect(segments).toEqual([
+            { text: "Topic", matched: true },
+            { text: " roadmap #", matched: false },
+            { text: "Project", matched: true },
+        ]);
     });
 });

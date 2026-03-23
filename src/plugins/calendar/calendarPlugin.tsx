@@ -79,6 +79,7 @@ export function activatePlugin(): () => void {
     const unregisterTabComponent = registerTabComponent({
         id: CALENDAR_TAB_COMPONENT_ID,
         component: CalendarTab,
+        lifecycleScope: "vault",
     });
 
     const unregisterPanel = registerPanel({

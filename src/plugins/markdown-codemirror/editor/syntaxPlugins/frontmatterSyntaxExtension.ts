@@ -29,6 +29,7 @@ import YAML from "yaml";
 import { FrontmatterYamlVisualEditor } from "../components/FrontmatterYamlVisualEditor";
 import {
     createBlockAtomicRangesExtension,
+    hiddenBlockAnchorLineDecoration,
     hiddenBlockLineDecoration,
 } from "./blockWidgetReplace";
 import { setExclusionZones } from "../syntaxExclusionZones";
@@ -77,11 +78,13 @@ function isViewAlive(view: EditorView): boolean {
 /**
  * @function parseFrontmatterBlock
  * @description 从编辑器状态中解析文档顶部 frontmatter 区块。
+ *   区块结束位置停在 closing delimiter 末尾，不吞掉其后的换行；
+ *   这样可确保 widget 挂载在 frontmatter 本体之后，而不是错误占据下一行的起始位置。
  * @param state 编辑器状态。
  * @returns frontmatter 区块；若不存在则返回 null。
  * @throws 无显式异常；异常场景返回 null 并记录日志。
  */
-function parseFrontmatterBlock(state: EditorView["state"]): FrontmatterBlock | null {
+export function parseFrontmatterBlock(state: EditorView["state"]): FrontmatterBlock | null {
     try {
         if (state.doc.lines < 2) {
             return null;
@@ -108,8 +111,7 @@ function parseFrontmatterBlock(state: EditorView["state"]): FrontmatterBlock | n
 
         const blockFrom = firstLine.from;
         const endLine = state.doc.line(endLineNumber);
-        const trailing = state.doc.sliceString(endLine.to, endLine.to + 1);
-        const blockTo = trailing === "\n" ? endLine.to + 1 : endLine.to;
+        const blockTo = endLine.to;
 
         const yamlLines: string[] = [];
         for (let lineNumber = 2; lineNumber < endLineNumber; lineNumber += 1) {
@@ -182,7 +184,7 @@ function saveFrontmatterYaml(view: EditorView, rawYamlText: string): SaveFrontma
 
     try {
         const normalizedYamlText = normalizeYamlText(rawYamlText);
-        const nextFrontmatterText = `---\n${normalizedYamlText}\n---\n`;
+        const nextFrontmatterText = `---\n${normalizedYamlText}\n---`;
 
         console.info("[editor-frontmatter] save start", {
             from: liveBlock.from,
@@ -344,10 +346,13 @@ export function createFrontmatterSyntaxExtension(): Extension {
 
                 // 通过 Decoration.line 为每行添加隐藏类，CSS 将行高设为 0。
                 // 对应的 gutter 元素通过 CSS overflow:hidden 自动裁剪溢出行号。
-                for (let lineNumber = block.startLineNumber; lineNumber <= block.endLineNumber; lineNumber += 1) {
+                for (let lineNumber = block.startLineNumber; lineNumber < block.endLineNumber; lineNumber += 1) {
                     const line = view.state.doc.line(lineNumber);
                     builder.add(line.from, line.from, hiddenBlockLineDecoration);
                 }
+
+                const anchorLine = view.state.doc.line(block.endLineNumber);
+                builder.add(anchorLine.from, anchorLine.from, hiddenBlockAnchorLineDecoration);
 
                 // 在隐藏行之后插入 Widget（行内模式，避免 block widget 引发 measure 异常）。
                 builder.add(

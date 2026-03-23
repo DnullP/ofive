@@ -160,6 +160,14 @@ define_app_commands![
         crate::host::commands::vault_commands::search_vault_markdown_files
     ),
     (
+        "search_vault_markdown",
+        crate::host::commands::vault_commands::search_vault_markdown
+    ),
+    (
+        "query_vault_tasks",
+        crate::host::commands::vault_commands::query_vault_tasks
+    ),
+    (
         "get_current_vault_markdown_graph",
         crate::host::commands::vault_commands::get_current_vault_markdown_graph
     ),

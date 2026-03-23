@@ -26,6 +26,7 @@ function createTestTabComponent(overrides: Partial<TabComponentDescriptor> = {})
     return {
         id: overrides.id ?? "test-tab",
         component: overrides.component ?? (() => null),
+        lifecycleScope: overrides.lifecycleScope,
     };
 }
 
@@ -47,6 +48,16 @@ describe("tabComponentRegistry", () => {
             const snapshot = getTabComponentsSnapshot();
             expect(snapshot).toHaveLength(1);
             expect(snapshot[0].id).toBe("editor");
+        });
+
+        it("应保留生命周期作用域元数据", () => {
+            cleanupFns.push(registerTabComponent(createTestTabComponent({
+                id: "vault-editor",
+                lifecycleScope: "vault",
+            })));
+
+            const snapshot = getTabComponentsSnapshot();
+            expect(snapshot[0]?.lifecycleScope).toBe("vault");
         });
 
         it("应支持注册多个 Tab 组件", () => {

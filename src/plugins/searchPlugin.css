@@ -1,0 +1,277 @@
+/* 搜索面板根容器：提供纵向布局和结果区滚动空间。 */
+.search-panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* 搜索工具栏：承载 query、tag 与 scope 控件。 */
+.search-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* 主搜索框：横向对齐图标与输入元素。 */
+.search-query-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0 10px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+/* 标签过滤输入框：与主搜索框保持一致的视觉层级。 */
+.search-tag-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0 10px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+/* 搜索输入元素：保持透明背景并填满容器。 */
+.search-query-field input,
+.search-tag-field input {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 34px;
+    outline: none;
+}
+
+/* 搜索范围切换容器：承载分段按钮。 */
+.search-scope-switch {
+    display: flex;
+    gap: 6px;
+}
+
+/* 搜索范围按钮：未激活态为弱化描边按钮。 */
+.search-scope-button {
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+/* 搜索范围按钮激活态：强调当前搜索范围。 */
+.search-scope-button--active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary-foreground);
+}
+
+/* 元信息栏：显示结果计数与加载状态。 */
+.search-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+/* 错误提示：展示 API 或打开文件失败信息。 */
+.search-error {
+    padding: 0 12px 12px;
+    color: var(--error-color);
+    font-size: 12px;
+}
+
+/* 空状态容器：展示搜索前或无结果时的提示。 */
+.search-empty {
+    padding: 18px 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+/* 空状态标题：强化初始引导文本。 */
+.search-empty-title {
+    font-size: 13px;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+/* 搜索结果列表：滚动承载所有命中项。 */
+.search-results {
+    list-style: none;
+    margin: 0;
+    padding: 0 8px 8px;
+    overflow: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+/* 单条搜索结果按钮：纵向展示标题、路径、摘要和标签。 */
+.search-result {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+/* 搜索结果悬浮态：给予轻量背景反馈。 */
+.search-result:hover {
+    background: var(--bg-hover);
+}
+
+/* 搜索结果头部：左右布局标题与徽章。 */
+.search-result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+/* 标题包裹区：图标与标题文字并排。 */
+.search-result-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+/* 搜索结果标题：命中项主文本。 */
+.search-result-title {
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 匹配徽章容器：显示 file/content/tag 命中来源。 */
+.search-badges {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+/* 匹配徽章：弱化显示匹配来源信息。 */
+.search-badge {
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+/* 搜索结果路径：显示相对路径辅助定位。 */
+.search-result-path {
+    color: var(--text-secondary);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 搜索摘要：展示正文命中的上下文片段。 */
+.search-result-snippet {
+    color: var(--text-primary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+/* 搜索高亮：强调标题、路径、摘要与标签中的命中词。 */
+.search-highlight {
+    color: inherit;
+    background: color-mix(in srgb, var(--editor-highlight-bg) 78%, transparent);
+    border-radius: 4px;
+    padding: 0 2px;
+    font-weight: 600;
+}
+
+/* 搜索结果尾部：显示行号与标签摘要。 */
+.search-result-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+/* 标签摘要：弱化展示当前文件的标签集合。 */
+.search-tag-list {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 毛玻璃模式下的搜索工具栏：避免盖住宿主玻璃。 */
+.app-runtime--tauri.app-effect--glass .search-toolbar {
+    background: rgba(var(--window-glass-elevated-rgb), 0.08);
+}
+
+/* 毛玻璃模式下的输入框：保持半透明表面层次。 */
+.app-runtime--tauri.app-effect--glass .search-query-field,
+.app-runtime--tauri.app-effect--glass .search-tag-field {
+    background: rgba(var(--window-glass-bg-rgb), 0.12);
+}
+
+/* 毛玻璃模式下的徽章：使用更轻的背景强调。 */
+.app-runtime--tauri.app-effect--glass .search-badge {
+    background: rgba(var(--window-glass-bg-rgb), 0.16);
+}
+
+/* 毛玻璃模式下的高亮：降低实色覆盖，保持内容可读性。 */
+.app-runtime--tauri.app-effect--glass .search-highlight {
+    color: var(--text-primary);
+    background:
+        linear-gradient(180deg,
+            color-mix(in srgb, var(--accent-primary) 34%, rgba(var(--window-glass-elevated-rgb), 0.22)),
+            color-mix(in srgb, var(--editor-highlight-bg) 74%, rgba(var(--window-glass-bg-rgb), 0.18)));
+    box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 28%, rgba(var(--window-glass-border-rgb), 0.2)),
+        0 0 0 1px rgba(var(--window-glass-border-rgb), 0.08),
+        0 1px 6px color-mix(in srgb, var(--accent-primary) 22%, transparent);
+}
+
+/* macOS 暗色毛玻璃高亮：进一步提高对比度，避免深色玻璃背景下淹没。 */
+:root[data-theme="dark"].app-runtime--tauri.app-effect--glass.app-platform--macos .search-highlight {
+    background:
+        linear-gradient(180deg,
+            color-mix(in srgb, var(--accent-primary) 42%, rgba(var(--window-glass-elevated-rgb), 0.28)),
+            color-mix(in srgb, var(--editor-highlight-bg) 88%, rgba(var(--window-glass-bg-rgb), 0.26)));
+    box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 34%, rgba(var(--window-glass-border-rgb), 0.24)),
+        0 0 0 1px rgba(var(--window-glass-border-rgb), 0.12),
+        0 2px 8px color-mix(in srgb, var(--accent-primary) 28%, transparent);
+}
+
+@media (max-width: 720px) {
+
+    /* 窄屏下结果头部：允许标题与徽章换行避免挤压。 */
+    .search-result-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    /* 窄屏下结果尾部：改为纵向布局避免内容冲突。 */
+    .search-result-footer {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

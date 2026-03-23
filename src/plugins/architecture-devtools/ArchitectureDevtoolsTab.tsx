@@ -1935,6 +1935,7 @@ export function ArchitectureDevtoolsTab(
             {isInspectorOpen ? (
                 <div
                     className="architecture-inspector-modal-backdrop"
+                    data-floating-backdrop="true"
                     onClick={closeInspectorModal}
                     role="presentation"
                 >
@@ -1942,6 +1943,7 @@ export function ArchitectureDevtoolsTab(
                         aria-label={t("architectureDevtools.inspector")}
                         aria-modal="true"
                         className="architecture-inspector-modal"
+                        data-floating-surface="true"
                         onClick={(event) => event.stopPropagation()}
                         role="dialog"
                     >

@@ -253,6 +253,7 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
         /* quick-switcher-overlay: 页面级遮罩层，用于聚焦当前快速切换交互 */
         <div
             className="quick-switcher-overlay"
+            data-floating-backdrop="true"
             role="presentation"
             onMouseDown={(event) => {
                 if (event.target === event.currentTarget) {
@@ -262,7 +263,11 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
             onKeyDown={handleKeyboard}
         >
             {/* quick-switcher-panel: 浮窗主体容器，承载输入与候选列表 */}
-            <section className="quick-switcher-panel" aria-label={t("quickSwitcher.ariaLabel")}>
+            <section
+                className="quick-switcher-panel"
+                data-floating-surface="true"
+                aria-label={t("quickSwitcher.ariaLabel")}
+            >
                 {/* quick-switcher-input: 搜索输入框，输入即触发后端检索 */}
                 <input
                     ref={inputRef}

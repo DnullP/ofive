@@ -15,6 +15,7 @@
  * @exports
  *  - reportArticleFocus: 上报当前被聚焦文章
  *  - reportArticleContent: 上报文章内容变更
+ *  - resetEditorContext: 重置当前仓库相关的文章上下文缓存
  *  - useFocusedArticle: 订阅当前聚焦文章
  */
 
@@ -212,6 +213,27 @@ class EditorContextStore {
         }
         return this.state.articles.get(this.state.focusedArticleId) ?? null;
     }
+
+    /**
+     * @function reset
+     * @description 重置全部编辑上下文缓存，用于仓库切换后的失效处理。
+     */
+    reset(): void {
+        if (this.state.focusedArticleId === null && this.state.articles.size === 0) {
+            return;
+        }
+
+        console.info("[editorContextStore] reset all article snapshots", {
+            focusedArticleId: this.state.focusedArticleId,
+            articleCount: this.state.articles.size,
+        });
+
+        this.state = {
+            focusedArticleId: null,
+            articles: new Map<string, ArticleState>(),
+        };
+        this.emit();
+    }
 }
 
 const editorContextStore = new EditorContextStore();
@@ -232,6 +254,14 @@ export function reportArticleFocus(payload: ArticleFocusPayload): void {
  */
 export function reportArticleContent(payload: ArticleContentPayload): void {
     editorContextStore.reportArticleContent(payload);
+}
+
+/**
+ * @function resetEditorContext
+ * @description 对外暴露：清空当前缓存的文章快照与焦点状态。
+ */
+export function resetEditorContext(): void {
+    editorContextStore.reset();
 }
 
 /**

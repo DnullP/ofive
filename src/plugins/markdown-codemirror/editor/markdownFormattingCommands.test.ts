@@ -16,6 +16,7 @@ import {
     toggleInlineCode,
     toggleHighlight,
     insertLink,
+    insertTask,
 } from "./markdownFormattingCommands";
 
 /**
@@ -216,5 +217,35 @@ describe("insertLink", () => {
         expect(dispatches[0]!.changes).toEqual({ from: 0, to: 5, insert: "[hello](url)" });
         /* 光标选中 url */
         expect(dispatches[0]!.selection).toEqual({ anchor: 8, head: 11 });
+    });
+});
+
+/* ================================================================== */
+/*  insertTask 测试                                                    */
+/* ================================================================== */
+
+describe("insertTask", () => {
+    test("空白行时插入任务模板并选中占位正文", () => {
+        const { view, dispatches } = createMockView("", 0, 0);
+        insertTask(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({ from: 0, to: 0, insert: "- [ ] task" });
+        expect(dispatches[0]!.selection).toEqual({ anchor: 6, head: 10 });
+    });
+
+    test("有选区时将选中文本转换为任务正文", () => {
+        const { view, dispatches } = createMockView("finish report", 0, 13);
+        insertTask(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({ from: 0, to: 13, insert: "- [ ] finish report" });
+        expect(dispatches[0]!.selection).toEqual({ anchor: 19 });
+    });
+
+    test("空选区且当前行有内容时将整行转换为任务", () => {
+        const { view, dispatches } = createMockView("  review draft", 4, 4);
+        insertTask(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({ from: 0, to: 14, insert: "  - [ ] review draft" });
+        expect(dispatches[0]!.selection).toEqual({ anchor: 20 });
     });
 });

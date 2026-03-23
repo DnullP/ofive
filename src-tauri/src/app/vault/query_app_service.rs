@@ -8,12 +8,14 @@ use std::path::Path;
 use tauri::State;
 
 use crate::infra::query::{
-    backlinks, frontmatter_query, graph, markdown_ast, outline, search, segment, wikilink,
+    backlinks, frontmatter_query, graph, markdown_ast, outline, search, segment, task_query,
+    wikilink,
 };
 use crate::shared::vault_contracts::{
     BacklinkItem, ChineseSegmentToken, FrontmatterQueryResponse, MarkdownAstNode, OutlineResponse,
     ReadMarkdownAstResponse, ResolveMediaEmbedTargetResponse, ResolveWikiLinkTargetResponse,
-    VaultMarkdownGraphResponse, VaultQuickSwitchItem, WikiLinkSuggestionItem,
+    VaultMarkdownGraphResponse, VaultQuickSwitchItem, VaultSearchMatchItem, VaultSearchScope,
+    VaultTaskItem, WikiLinkSuggestionItem,
 };
 use crate::state::AppState;
 
@@ -45,6 +47,24 @@ pub(crate) fn search_vault_markdown_files(
 ) -> Result<Vec<VaultQuickSwitchItem>, String> {
     let vault_root = crate::state::get_vault_root(&state)?;
     search::search_vault_markdown_files_in_root(&vault_root, query, limit)
+}
+
+/// 搜索仓库 Markdown 内容。
+pub(crate) fn search_vault_markdown(
+    query: String,
+    tag: Option<String>,
+    scope: VaultSearchScope,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<VaultSearchMatchItem>, String> {
+    let vault_root = crate::state::get_vault_root(&state)?;
+    search::search_vault_markdown_in_root(&vault_root, query, tag, scope, limit)
+}
+
+/// 查询仓库中的任务条目。
+pub(crate) fn query_vault_tasks(state: State<'_, AppState>) -> Result<Vec<VaultTaskItem>, String> {
+    let vault_root = crate::state::get_vault_root(&state)?;
+    task_query::query_vault_tasks_in_root(&vault_root)
 }
 
 /// 获取当前仓库 Markdown 图谱。
@@ -136,6 +156,22 @@ pub fn search_vault_markdown_files_in_root(
     limit: Option<usize>,
 ) -> Result<Vec<VaultQuickSwitchItem>, String> {
     search::search_vault_markdown_files_in_root(vault_root, query, limit)
+}
+
+/// 在指定仓库根目录下搜索 Markdown 内容。
+pub fn search_vault_markdown_in_root(
+    vault_root: &Path,
+    query: String,
+    tag: Option<String>,
+    scope: VaultSearchScope,
+    limit: Option<usize>,
+) -> Result<Vec<VaultSearchMatchItem>, String> {
+    search::search_vault_markdown_in_root(vault_root, query, tag, scope, limit)
+}
+
+/// 在指定仓库根目录下查询任务条目。
+pub fn query_vault_tasks_in_root(vault_root: &Path) -> Result<Vec<VaultTaskItem>, String> {
+    task_query::query_vault_tasks_in_root(vault_root)
 }
 
 /// 在指定仓库根目录下获取 Markdown 图谱。

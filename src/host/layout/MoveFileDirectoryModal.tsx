@@ -204,6 +204,7 @@ export function MoveFileDirectoryModal(props: MoveFileDirectoryModalProps): Reac
     return (
         <div
             className="move-file-overlay"
+            data-floating-backdrop="true"
             role="presentation"
             onMouseDown={(event) => {
                 if (event.target === event.currentTarget) {
@@ -212,7 +213,11 @@ export function MoveFileDirectoryModal(props: MoveFileDirectoryModalProps): Reac
             }}
             onKeyDown={handleKeyboard}
         >
-            <section className="move-file-panel" aria-label={props.ariaLabel ?? t("moveFileModal.ariaLabel")}>
+            <section
+                className="move-file-panel"
+                data-floating-surface="true"
+                aria-label={props.ariaLabel ?? t("moveFileModal.ariaLabel")}
+            >
                 <header className="move-file-header">
                     <div className="move-file-title">{props.title ?? t("moveFileModal.title")}</div>
                     <div className="move-file-source-path" title={props.sourceFilePath}>

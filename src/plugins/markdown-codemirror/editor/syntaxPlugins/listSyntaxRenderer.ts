@@ -14,7 +14,8 @@
  *   - registerListSyntaxRenderer 注册列表渲染器
  */
 
-import { Decoration, WidgetType } from "@codemirror/view";
+import { type EditorSelection, type EditorState } from "@codemirror/state";
+import { Decoration, EditorView, WidgetType } from "@codemirror/view";
 import {
     pushSyntaxDecorationRange,
     rangeIntersectsSelection,
@@ -50,6 +51,23 @@ export interface MarkdownListLineMatch {
     contentStart: number;
     /** task list 勾选状态；非 task list 为 null。 */
     taskState: MarkdownTaskState | null;
+    /** task state 字符（空格或 x）在行内的起始位置；非 task list 为 null。 */
+    taskStateMarkerStart: number | null;
+}
+
+/**
+ * @interface TaskCheckboxToggleSpec
+ * @description task checkbox 切换所需的最小事务描述。
+ */
+export interface TaskCheckboxToggleSpec {
+    /** 需要替换的状态字符起始偏移。 */
+    from: number;
+    /** 需要替换的状态字符结束偏移。 */
+    to: number;
+    /** 切换后的状态字符。 */
+    insert: " " | "x";
+    /** 切换后应恢复的原 selection。 */
+    selection: EditorSelection;
 }
 
 const LIST_LINE_PATTERN = /^(\s*)(\d{1,9}[.)]|[*+-])(\s+)(?:\[([ xX])\](\s+))?(.*)$/;
@@ -145,6 +163,9 @@ export function detectMarkdownListLine(lineText: string): MarkdownListLineMatch 
             ? "checked"
             : "unchecked";
     const markerStart = indentText.length;
+    const taskStateMarkerStart = taskMarkerState === null
+        ? null
+        : markerStart + markerText.length + spaceAfterMarker.length + 1;
     const contentStart = markerStart
         + markerText.length
         + spaceAfterMarker.length
@@ -161,7 +182,101 @@ export function detectMarkdownListLine(lineText: string): MarkdownListLineMatch 
         markerStart,
         contentStart,
         taskState,
+        taskStateMarkerStart,
     };
+}
+
+/**
+ * @function buildTaskCheckboxToggleSpec
+ * @description 根据点击位置所在行构造 task checkbox 切换事务。
+ * @param state 编辑器状态。
+ * @param position 点击所在的文档偏移。
+ * @returns 若当前位置命中 task list，则返回切换事务；否则返回 null。
+ */
+export function buildTaskCheckboxToggleSpec(
+    state: EditorState,
+    position: number,
+): TaskCheckboxToggleSpec | null {
+    const line = state.doc.lineAt(position);
+    const listMatch = detectMarkdownListLine(line.text);
+    if (!listMatch || listMatch.kind !== "task" || listMatch.taskStateMarkerStart === null) {
+        return null;
+    }
+
+    const markerOffset = line.from + listMatch.taskStateMarkerStart;
+    return {
+        from: markerOffset,
+        to: markerOffset + 1,
+        insert: listMatch.taskState === "checked" ? " " : "x",
+        selection: state.selection,
+    };
+}
+
+/**
+ * @function toggleTaskCheckboxAtPosition
+ * @description 切换指定位置所在 task list 的勾选状态，并保留当前 selection。
+ * @param view 编辑器视图。
+ * @param position 点击所在的文档偏移。
+ * @returns 若成功切换返回 true，否则返回 false。
+ */
+export function toggleTaskCheckboxAtPosition(
+    view: EditorView,
+    position: number,
+): boolean {
+    const toggleSpec = buildTaskCheckboxToggleSpec(view.state, position);
+    if (!toggleSpec) {
+        return false;
+    }
+
+    view.dispatch({
+        changes: {
+            from: toggleSpec.from,
+            to: toggleSpec.to,
+            insert: toggleSpec.insert,
+        },
+        selection: toggleSpec.selection,
+        userEvent: "input.toggleTaskCheckbox",
+    });
+    return true;
+}
+
+/**
+ * @function createTaskCheckboxToggleExtension
+ * @description 创建 task checkbox 点击切换扩展。
+ *   通过拦截 mousedown 避免浏览器默认选区更新，从而保持当前光标位置不变。
+ * @returns CodeMirror DOM 事件扩展。
+ */
+export function createTaskCheckboxToggleExtension(): ReturnType<typeof EditorView.domEventHandlers> {
+    return EditorView.domEventHandlers({
+        mousedown(event, view) {
+            if (event.button !== 0) {
+                return false;
+            }
+
+            const eventTarget = event.target;
+            if (!(eventTarget instanceof Element)) {
+                return false;
+            }
+
+            const checkboxElement = eventTarget.closest(".cm-rendered-task-checkbox");
+            if (!checkboxElement) {
+                return false;
+            }
+
+            const position = view.posAtCoords({ x: event.clientX, y: event.clientY });
+            if (position === null) {
+                return false;
+            }
+
+            const toggled = toggleTaskCheckboxAtPosition(view, position);
+            if (!toggled) {
+                return false;
+            }
+
+            event.preventDefault();
+            return true;
+        },
+    });
 }
 
 /**

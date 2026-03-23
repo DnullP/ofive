@@ -19,6 +19,7 @@
     border: 1px solid var(--border-color);
     border-radius: 10px;
     background: var(--bg-secondary);
+    box-shadow: var(--overlay-shadow-strong);
     overflow: hidden;
 }
 

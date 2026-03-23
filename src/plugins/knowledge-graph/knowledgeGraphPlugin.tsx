@@ -70,6 +70,7 @@ function registerKnowledgeGraphPlugin(): () => void {
     const unregisterTabComponent = registerTabComponent({
         id: KNOWLEDGE_GRAPH_TAB_COMPONENT_ID,
         component: KnowledgeGraphTab,
+        lifecycleScope: "vault",
     });
 
     const unregisterActivity = registerActivity({

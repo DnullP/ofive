@@ -21,11 +21,14 @@
  *  - subscribeEditorFocusBusEvent: 订阅前端编辑焦点变化事件
  *  - emitEditorRevealRequestedEvent: 发布编辑器定位请求事件
  *  - subscribeEditorRevealRequestedEvent: 订阅编辑器定位请求事件
+ *  - emitEditorCommandRequestedEvent: 发布编辑器原生命令执行请求事件
+ *  - subscribeEditorCommandRequestedEvent: 订阅编辑器原生命令执行请求事件
  *  - emitPersistedContentUpdatedEvent: 发布持久态内容更新事件
  *  - subscribePersistedContentUpdatedEvent: 订阅持久态内容更新事件
  */
 
 import { useEffect } from "react";
+import type { EditorNativeCommandId } from "../commands/commandSystem";
 import {
     subscribeVaultConfigEvents,
     subscribeVaultFsEvents,
@@ -86,6 +89,16 @@ export interface EditorRevealRequestedBusEvent {
 }
 
 /**
+ * @interface EditorCommandRequestedBusEvent
+ * @description 请求指定编辑器执行原生命令的事件。
+ */
+export interface EditorCommandRequestedBusEvent {
+    eventId: string;
+    articleId: string;
+    commandId: EditorNativeCommandId;
+}
+
+/**
  * @interface PersistedContentUpdatedBusEvent
  * @description 持久态内容更新事件：表示某个文件的持久化内容已变更。
  *   来源可能是：前端保存成功（source = "save"）或外部文件系统修改（source = "external"）。
@@ -106,6 +119,7 @@ type AppBusEventMap = {
     "editor.focus.changed": EditorFocusChangedBusEvent;
     "editor.rename.requested": EditorRenameRequestedBusEvent;
     "editor.reveal.requested": EditorRevealRequestedBusEvent;
+    "editor.command.requested": EditorCommandRequestedBusEvent;
     "persisted.content.updated": PersistedContentUpdatedBusEvent;
 };
 
@@ -380,6 +394,33 @@ export function subscribeEditorRevealRequestedEvent(
     listener: (payload: EditorRevealRequestedBusEvent) => void,
 ): () => void {
     return subscribeBusEvent("editor.reveal.requested", listener);
+}
+
+/**
+ * @function emitEditorCommandRequestedEvent
+ * @description 发布编辑器原生命令执行请求事件。
+ * @param payload 事件负载，包含目标文章与命令 ID。
+ */
+export function emitEditorCommandRequestedEvent(payload: {
+    articleId: string;
+    commandId: EditorNativeCommandId;
+}): void {
+    dispatchBusEvent("editor.command.requested", {
+        eventId: nextFrontendEventId(),
+        ...payload,
+    });
+}
+
+/**
+ * @function subscribeEditorCommandRequestedEvent
+ * @description 订阅编辑器原生命令执行请求事件。
+ * @param listener 监听器。
+ * @returns 取消订阅函数。
+ */
+export function subscribeEditorCommandRequestedEvent(
+    listener: (payload: EditorCommandRequestedBusEvent) => void,
+): () => void {
+    return subscribeBusEvent("editor.command.requested", listener);
 }
 
 /**

@@ -85,6 +85,7 @@ export function CreateEntryModal(props: CreateEntryModalProps): ReactNode {
     return (
         <div
             className="create-entry-overlay"
+            data-floating-backdrop="true"
             role="presentation"
             onMouseDown={(event) => {
                 if (event.target === event.currentTarget) {
@@ -94,7 +95,11 @@ export function CreateEntryModal(props: CreateEntryModalProps): ReactNode {
             onKeyDown={handleKeyDown}
         >
             {/* create-entry-panel: 创建输入浮窗主体 */}
-            <section className="create-entry-panel" aria-label={props.title}>
+            <section
+                className="create-entry-panel"
+                data-floating-surface="true"
+                aria-label={props.title}
+            >
                 {/* create-entry-title: 创建类型标题 */}
                 <div className="create-entry-title">{props.title}</div>
                 {/* create-entry-directory: 目标目录提示 */}

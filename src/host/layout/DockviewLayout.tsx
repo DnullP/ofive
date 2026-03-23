@@ -38,9 +38,11 @@ import {
     getArticleSnapshotById,
     getFocusedArticleSnapshot,
     reportArticleFocus,
+    resetEditorContext,
 } from "../store/editorContextStore";
 import {
     clearActiveEditor,
+    getActiveEditorSnapshot,
     reportActiveEditor,
 } from "../store/activeEditorStore";
 import {
@@ -49,7 +51,10 @@ import {
     readVaultMarkdownFile,
     saveVaultMarkdownFile,
 } from "../../api/vaultApi";
-import { subscribeVaultFsBusEvent } from "../events/appEventBus";
+import {
+    emitEditorCommandRequestedEvent,
+    subscribeVaultFsBusEvent,
+} from "../events/appEventBus";
 import { useVaultState } from "../store/vaultStore";
 import {
     executeCommand,
@@ -114,6 +119,7 @@ import {
     buildConvertibleViewTabParams,
     readConvertibleViewTabState,
 } from "../registry";
+import { getTabComponentById } from "../registry/tabComponentRegistry";
 import {
     buildInitialPanelStates,
     computeCrossContainerDrop,
@@ -135,6 +141,10 @@ import {
     setRightSidebarVisibilitySnapshot,
     subscribeRightSidebarToggleRequest,
 } from "./rightSidebarVisibilityBridge";
+import {
+    decorateTabParamsWithLifecycle,
+    shouldCloseTabOnVaultChange,
+} from "./vaultTabScope";
 
 const CUSTOM_ACTIVITY_CREATE_COMMAND_ID = "customActivity.create";
 const CUSTOM_ACTIVITY_REGISTRATION_PREFIX = "custom-activity:";
@@ -403,6 +413,19 @@ function syncActiveEditorFromPanel(
     });
 }
 
+function decorateTabInstanceWithLifecycle(tab: TabInstanceDefinition): TabInstanceDefinition {
+    const lifecycleScope = getTabComponentById(tab.component)?.lifecycleScope ?? "global";
+
+    return {
+        ...tab,
+        params: decorateTabParamsWithLifecycle({
+            componentId: tab.component,
+            lifecycleScope,
+            params: tab.params,
+        }),
+    };
+}
+
 function WelcomeTabComponent(): ReactNode {
     const { t } = useTranslation();
     return (
@@ -535,6 +558,7 @@ export function DockviewLayout({
     const sidebarLayoutPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const restoredLeftPaneSnapshotVaultPathRef = useRef<string | null>(null);
     const restoredRightPaneSnapshotVaultPathRef = useRef<string | null>(null);
+    const previousVaultPathRef = useRef<string | null>(null);
 
     useEffect(() => {
         dockviewApiRef.current = dockviewApi;
@@ -556,6 +580,76 @@ export function DockviewLayout({
             });
         });
     }, []);
+
+    useEffect(() => {
+        const nextVaultPath = currentVaultPath.trim().length > 0 ? currentVaultPath : null;
+        const previousVaultPath = previousVaultPathRef.current;
+        previousVaultPathRef.current = nextVaultPath;
+
+        if (!previousVaultPath || !nextVaultPath || previousVaultPath === nextVaultPath) {
+            return;
+        }
+
+        console.info("[layout] vault changed, resetting vault-scoped UI", {
+            from: previousVaultPath,
+            to: nextVaultPath,
+        });
+
+        clearActiveEditor();
+        resetEditorContext();
+        setIsMoveFileDirectoryModalOpen(false);
+        setMoveSourceSnapshot(null);
+        setCreateEntryDraftRequest((currentRequest) => {
+            if (!currentRequest) {
+                return null;
+            }
+
+            window.setTimeout(() => {
+                currentRequest.resolve(null);
+            }, 0);
+            return null;
+        });
+
+        const api = dockviewApiRef.current;
+        if (!api) {
+            return;
+        }
+
+        const panelsToClose = api.panels.filter((panel) =>
+            shouldCloseTabOnVaultChange({
+                panelId: panel.id,
+                panelParams: panel.params as Record<string, unknown> | undefined,
+            })
+        );
+
+        panelsToClose.forEach((panel) => {
+            panel.api.close();
+        });
+
+        if (panelsToClose.length > 0) {
+            console.info("[layout] closed vault-scoped tabs after vault change", {
+                count: panelsToClose.length,
+                closedTabIds: panelsToClose.map((panel) => panel.id),
+            });
+        }
+
+        if (api.panels.length === 0 && initialTabs.length > 0) {
+            const fallbackTab = decorateTabInstanceWithLifecycle(initialTabs[0]);
+
+            api.addPanel({
+                id: fallbackTab.id,
+                title: fallbackTab.title,
+                component: fallbackTab.component,
+                params: fallbackTab.params,
+            });
+            api.getPanel(fallbackTab.id)?.api.setActive();
+        }
+
+        const nextPanel = api.panels[0] ?? null;
+        const nextParams = nextPanel?.params as Record<string, unknown> | undefined;
+        setActiveTabId(nextPanel?.id ?? null);
+        syncActiveEditorFromPanel(nextPanel?.id ?? null, nextParams);
+    }, [currentVaultPath, initialTabs]);
 
     /* 仓库就绪后加载活动栏定制配置 */
     useEffect(() => {
@@ -2091,6 +2185,7 @@ export function DockviewLayout({
                 params: buildConvertibleViewTabParams(tabConvertibleState, tab.params),
             }
             : tab;
+        const lifecycleAwareTab = decorateTabInstanceWithLifecycle(normalizedTab);
 
         if (descriptor && tabConvertibleState) {
             setConvertibleViewRuntime((previous) => ({
@@ -2106,7 +2201,7 @@ export function DockviewLayout({
             }));
         }
 
-        const existing = api.getPanel(normalizedTab.id);
+        const existing = api.getPanel(lifecycleAwareTab.id);
         if (existing) {
             existing.api.setActive();
             return;
@@ -2153,6 +2248,7 @@ export function DockviewLayout({
                 params: buildConvertibleViewTabParams(tabConvertibleState, tab.params),
             }
             : tab;
+        const lifecycleAwareTab = decorateTabInstanceWithLifecycle(normalizedTab);
 
         if (descriptor && tabConvertibleState) {
             setConvertibleViewRuntime((previous) => ({
@@ -2182,10 +2278,10 @@ export function DockviewLayout({
         };
 
         const addPanelOptions = {
-            id: normalizedTab.id,
-            title: normalizedTab.title,
-            component: normalizedTab.component,
-            params: normalizedTab.params,
+            id: lifecycleAwareTab.id,
+            title: lifecycleAwareTab.title,
+            component: lifecycleAwareTab.component,
+            params: lifecycleAwareTab.params,
         };
 
         if (options?.referencePanel && options.position && options.position !== "center") {
@@ -2208,8 +2304,8 @@ export function DockviewLayout({
             api.addPanel(addPanelOptions);
         }
 
-        api.getPanel(normalizedTab.id)?.api.setActive();
-        setActiveTabId(normalizedTab.id);
+        api.getPanel(lifecycleAwareTab.id)?.api.setActive();
+        setActiveTabId(lifecycleAwareTab.id);
     };
 
     const closeTab = (tabId: string): void => {
@@ -2448,6 +2544,26 @@ export function DockviewLayout({
         activeTabId,
         closeTab,
         openTab,
+        executeEditorNativeCommand: (commandId) => {
+            const activeEditor = getActiveEditorSnapshot();
+            if (!activeEditor) {
+                console.warn("[layout] editor command skipped: no active editor", {
+                    commandId,
+                });
+                return false;
+            }
+
+            emitEditorCommandRequestedEvent({
+                articleId: activeEditor.articleId,
+                commandId,
+            });
+            console.info("[layout] forwarded editor command to active editor", {
+                articleId: activeEditor.articleId,
+                commandId,
+                path: activeEditor.path,
+            });
+            return true;
+        },
         openMoveFocusedFileToDirectory: () => {
             openMoveFocusedFileDirectoryModal();
         },
@@ -3733,7 +3849,9 @@ export function DockviewLayout({
             return;
         }
 
-        initialTabs.forEach((tab) => {
+        const normalizedInitialTabs = initialTabs.map((tab) => decorateTabInstanceWithLifecycle(tab));
+
+        normalizedInitialTabs.forEach((tab) => {
             api.addPanel({
                 id: tab.id,
                 title: tab.title,
@@ -3742,8 +3860,8 @@ export function DockviewLayout({
             });
         });
 
-        setActiveTabId(initialTabs[0]?.id ?? null);
-        syncActiveEditorFromPanel(initialTabs[0]?.id ?? null, initialTabs[0]?.params);
+        setActiveTabId(normalizedInitialTabs[0]?.id ?? null);
+        syncActiveEditorFromPanel(normalizedInitialTabs[0]?.id ?? null, normalizedInitialTabs[0]?.params);
     };
 
     const activeLeftPanel = visibleLeftPanels.find((panel) => panel.id === activePanelId) ?? visibleLeftPanels[0];

@@ -50,6 +50,7 @@ type BuiltinCommandId =
     | "editor.toggleInlineCode"
     | "editor.toggleHighlight"
     | "editor.insertLink"
+    | "editor.insertTask"
     ;
 
 /**
@@ -76,7 +77,8 @@ export type EditorNativeCommandId =
     | "editor.toggleStrikethrough"
     | "editor.toggleInlineCode"
     | "editor.toggleHighlight"
-    | "editor.insertLink";
+    | "editor.insertLink"
+    | "editor.insertTask";
 
 /**
  * @interface CreateEntryDraftRequest
@@ -644,6 +646,19 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         },
         execute(context) {
             context.executeEditorNativeCommand?.("editor.insertLink");
+        },
+    },
+    "editor.insertTask": {
+        id: "editor.insertTask",
+        title: "commands.insertTask",
+        scope: "editor",
+        condition: "editorFocused",
+        shortcut: {
+            defaultBinding: "",
+            editableInSettings: true,
+        },
+        execute(context) {
+            context.executeEditorNativeCommand?.("editor.insertTask");
         },
     },
     "file.moveFocusedToDirectory": {

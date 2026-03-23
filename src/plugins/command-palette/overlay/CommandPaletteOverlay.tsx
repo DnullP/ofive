@@ -151,7 +151,9 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
             title: command.title,
         });
         closeOverlay();
-        props.context.executeCommand(command.id);
+        window.setTimeout(() => {
+            props.context.executeCommand(command.id);
+        }, 0);
     };
 
     const handleKeyboard = (event: KeyboardEvent<HTMLDivElement>): void => {
@@ -199,6 +201,7 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
     return (
         <div
             className="command-palette-overlay"
+            data-floating-backdrop="true"
             role="presentation"
             onMouseDown={(event) => {
                 if (event.target === event.currentTarget) {
@@ -208,7 +211,11 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
             onKeyDown={handleKeyboard}
         >
             {/* command-palette-panel: 浮窗主体容器，承载输入与候选列表 */}
-            <section className="command-palette-panel" aria-label={t("commandPalette.ariaLabel")}>
+            <section
+                className="command-palette-panel"
+                data-floating-surface="true"
+                aria-label={t("commandPalette.ariaLabel")}
+            >
                 {/* command-palette-input: 搜索输入框，用于实时过滤指令 */}
                 <input
                     ref={inputRef}

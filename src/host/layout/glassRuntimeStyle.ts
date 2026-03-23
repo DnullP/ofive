@@ -6,10 +6,10 @@
  * @example
  * ```ts
  * const runtimeStyle = buildGlassRuntimeStyle({
- *   glassTintOpacity: 0.08,
- *   glassSurfaceOpacity: 0.18,
- *   glassInactiveSurfaceOpacity: 0.14,
- *   glassBlurRadius: 12,
+ *   glassTintOpacity: 0.05,
+ *   glassSurfaceOpacity: 0.12,
+ *   glassInactiveSurfaceOpacity: 0.09,
+ *   glassBlurRadius: 8,
  * });
  * document.documentElement.style.setProperty("--glass-blur-radius", runtimeStyle.cssVariables["--glass-blur-radius"]);
  * ```

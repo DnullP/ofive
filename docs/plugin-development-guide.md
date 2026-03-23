@@ -424,6 +424,14 @@ console.error("[outlinePlugin] failed to load outline", { relativePath, error: m
 1. [src/plugins/outlinePlugin.css](../src/plugins/outlinePlugin.css)
 2. [src/devtools/architecture/architectureDevtools.css](../src/devtools/architecture/architectureDevtools.css)
 
+如果插件会新增 modal、popover、command palette、context bubble 这类浮层，并且需要在桌面毛玻璃模式下保持可读性，请遵循当前全局浮层契约：
+
+1. 遮罩层根节点加 `data-floating-backdrop="true"`
+2. 浮层主体根节点加 `data-floating-surface="true"`
+3. 不要直接依赖 `--bg-primary` / `--bg-secondary` 能在 glass 模式下自动变得足够不透明
+
+这样新增浮层可以直接复用 `src/App.css` 中统一的 glass overlay token，不会再次出现内容和桌面背景混叠的问题。
+
 ## 9. 推荐的插件开发流程
 
 ### 9.1 做一个侧边栏插件

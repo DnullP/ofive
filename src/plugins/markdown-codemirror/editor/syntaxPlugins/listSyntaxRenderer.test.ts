@@ -4,7 +4,11 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { detectMarkdownListLine } from "./listSyntaxRenderer";
+import { EditorState } from "@codemirror/state";
+import {
+    buildTaskCheckboxToggleSpec,
+    detectMarkdownListLine,
+} from "./listSyntaxRenderer";
 
 describe("detectMarkdownListLine", () => {
     test("识别无序列表并返回 marker 与内容区边界", () => {
@@ -17,6 +21,7 @@ describe("detectMarkdownListLine", () => {
             markerStart: 2,
             contentStart: 4,
             taskState: null,
+            taskStateMarkerStart: null,
         });
     });
 
@@ -30,6 +35,7 @@ describe("detectMarkdownListLine", () => {
             markerStart: 3,
             contentStart: 7,
             taskState: null,
+            taskStateMarkerStart: null,
         });
     });
 
@@ -43,6 +49,7 @@ describe("detectMarkdownListLine", () => {
             markerStart: 4,
             contentStart: 10,
             taskState: "checked",
+            taskStateMarkerStart: 7,
         });
     });
 
@@ -56,6 +63,7 @@ describe("detectMarkdownListLine", () => {
             markerStart: 0,
             contentStart: 7,
             taskState: "unchecked",
+            taskStateMarkerStart: 4,
         });
     });
 
@@ -64,5 +72,48 @@ describe("detectMarkdownListLine", () => {
         expect(detectMarkdownListLine("---")).toBeNull();
         expect(detectMarkdownListLine("plain paragraph")).toBeNull();
         expect(detectMarkdownListLine("- ")).toBeNull();
+    });
+});
+
+describe("buildTaskCheckboxToggleSpec", () => {
+    test("为未勾选 task 返回切换事务并保留原 selection", () => {
+        const state = EditorState.create({
+            doc: ["- [ ] pending", "plain paragraph"].join("\n"),
+            selection: { anchor: 15 },
+        });
+
+        const spec = buildTaskCheckboxToggleSpec(state, 2);
+
+        expect(spec).toEqual({
+            from: 3,
+            to: 4,
+            insert: "x",
+            selection: state.selection,
+        });
+    });
+
+    test("为已勾选 task 返回取消勾选事务", () => {
+        const state = EditorState.create({
+            doc: "- [x] done",
+            selection: { anchor: 9 },
+        });
+
+        const spec = buildTaskCheckboxToggleSpec(state, 1);
+
+        expect(spec).toEqual({
+            from: 3,
+            to: 4,
+            insert: " ",
+            selection: state.selection,
+        });
+    });
+
+    test("非 task 行返回 null", () => {
+        const state = EditorState.create({
+            doc: "- bullet item",
+            selection: { anchor: 2 },
+        });
+
+        expect(buildTaskCheckboxToggleSpec(state, 1)).toBeNull();
     });
 });

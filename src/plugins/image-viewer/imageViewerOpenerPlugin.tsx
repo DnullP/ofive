@@ -38,6 +38,7 @@ export function activatePlugin(): () => void {
     const unregisterTabComponent = registerTabComponent({
         id: "imageviewer",
         component: ImageViewerTab as any,
+        lifecycleScope: "vault",
     });
 
     const unregisterFileOpener = registerFileOpener({

@@ -48,6 +48,7 @@ import {
 } from "../../../api/vaultApi";
 import { useConfigState, DEFAULT_EDITOR_FONT_FAMILY } from "../../../host/store/configStore";
 import {
+    subscribeEditorCommandRequestedEvent,
     subscribeEditorRenameRequestedEvent,
     subscribeEditorRevealRequestedEvent,
 } from "../../../host/events/appEventBus";
@@ -62,6 +63,7 @@ import { createImageEmbedSyntaxExtension } from "./syntaxPlugins/imageEmbedSynta
 import { createFrontmatterSyntaxExtension } from "./syntaxPlugins/frontmatterSyntaxExtension.ts";
 import { createCodeBlockHighlightExtension } from "./syntaxPlugins/codeBlockHighlightExtension";
 import { createLatexSyntaxExtension } from "./syntaxPlugins/latexSyntaxExtension";
+import { createTaskCheckboxToggleExtension } from "./syntaxPlugins/listSyntaxRenderer";
 import { resolveParentDirectory } from "./pathUtils";
 import { createCodeMirrorThemeExtension } from "./codemirrorTheme";
 import { collectManagedEditorShortcutCandidates } from "./editorShortcutPolicy";
@@ -74,6 +76,7 @@ import {
     toggleInlineCode,
     toggleHighlight,
     insertLink,
+    insertTask,
 } from "./markdownFormattingCommands";
 import {
     containsChineseCharacter,
@@ -300,6 +303,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         "editor.toggleInlineCode": "Cmd+E",
         "editor.toggleHighlight": "Cmd+Shift+H",
         "editor.insertLink": "Cmd+K",
+        "editor.insertTask": "",
         "fileTree.copySelected": "Cmd+C",
         "fileTree.pasteInDirectory": "Cmd+V",
         "fileTree.deleteSelected": "Cmd+Backspace",
@@ -496,6 +500,10 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
             return insertLink(view);
         }
 
+        if (commandId === "editor.insertTask") {
+            return insertTask(view);
+        }
+
         return false;
     };
 
@@ -521,6 +529,34 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
             executeEditorNativeCommand,
         });
     };
+
+    useEffect(() => {
+        const unlisten = subscribeEditorCommandRequestedEvent((payload) => {
+            if (payload.articleId !== articleId) {
+                return;
+            }
+
+            const view = viewRef.current;
+            if (!view) {
+                return;
+            }
+
+            const handled = executeEditorNativeCommand(payload.commandId);
+            if (handled) {
+                window.requestAnimationFrame(() => {
+                    viewRef.current?.focus();
+                });
+            }
+
+            console.info("[editor] editor command requested event handled", {
+                articleId,
+                commandId: payload.commandId,
+                handled,
+            });
+        });
+
+        return unlisten;
+    }, [articleId, executeEditorNativeCommand]);
 
     useEffect(() => {
         executeEditorCommandRef.current = executeEditorCommand;
@@ -721,6 +757,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 ...createLatexSyntaxExtension(),
                 /* 行级语法渲染：依赖排斥区域跳过块级结构内的行 */
                 registeredLineSyntaxRenderExtension,
+                createTaskCheckboxToggleExtension(),
                 createImageEmbedSyntaxExtension(() => currentFilePathRef.current),
                 createWikiLinkNavigationExtension(
                     props.containerApi,

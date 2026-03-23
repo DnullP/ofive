@@ -170,6 +170,7 @@ export function CustomActivityModal(props: OverlayRenderContext): ReactNode {
     return (
         <div
             className="custom-activity-overlay"
+            data-floating-backdrop="true"
             role="presentation"
             onMouseDown={(event) => {
                 if (event.target === event.currentTarget) {
@@ -178,7 +179,11 @@ export function CustomActivityModal(props: OverlayRenderContext): ReactNode {
             }}
             onKeyDown={handleKeyDown}
         >
-            <section className="custom-activity-modal" aria-label={t("customActivity.modalTitle")}>
+            <section
+                className="custom-activity-modal"
+                data-floating-surface="true"
+                aria-label={t("customActivity.modalTitle")}
+            >
                 <header className="custom-activity-modal__header">
                     <div>
                         <h2 className="custom-activity-modal__title">{t("customActivity.modalTitle")}</h2>

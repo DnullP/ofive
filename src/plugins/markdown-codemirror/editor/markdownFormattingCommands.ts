@@ -18,6 +18,7 @@
  *  - toggleInlineCode   — 切换行内代码 `` `text` ``
  *  - toggleHighlight    — 切换高亮 `==text==`
  *  - insertLink         — 插入/包裹链接 `[text](url)`
+ *  - insertTask         — 在当前光标或选区快速创建任务 `- [ ] content`
  */
 
 import type { EditorView } from "codemirror";
@@ -58,6 +59,68 @@ function resolveWordRange(view: EditorView): [number, number] {
     }
 
     return [line.from + wordStart, line.from + wordEnd];
+}
+
+/**
+ * @function resolveLineIndent
+ * @description 提取当前行的前导缩进，供任务模板复用。
+ * @param text 当前行文本。
+ * @returns 前导空白字符串。
+ */
+function resolveLineIndent(text: string): string {
+    const match = text.match(/^(\s*)/);
+    return match?.[1] ?? "";
+}
+
+/**
+ * @function resolveTaskContentInsertRange
+ * @description 计算快速创建任务时应替换的文本范围与初始正文。
+ *   - 有选区：使用选区文本作为任务正文
+ *   - 空选区且当前行非空：使用整行文本作为任务正文
+ *   - 空选区且当前行为空：插入占位正文 `task`
+ * @param view 编辑器视图。
+ * @returns 任务替换范围、缩进与正文。
+ */
+function resolveTaskContentInsertRange(view: EditorView): {
+    from: number;
+    to: number;
+    indent: string;
+    content: string;
+    shouldSelectPlaceholder: boolean;
+} {
+    const selection = view.state.selection.main;
+
+    if (!selection.empty) {
+        const selectedText = view.state.doc.sliceString(selection.from, selection.to).trim();
+        return {
+            from: selection.from,
+            to: selection.to,
+            indent: "",
+            content: selectedText || "task",
+            shouldSelectPlaceholder: selectedText.length === 0,
+        };
+    }
+
+    const line = view.state.doc.lineAt(selection.head);
+    const indent = resolveLineIndent(line.text);
+    const trimmedLine = line.text.trim();
+    if (trimmedLine.length > 0) {
+        return {
+            from: line.from,
+            to: line.to,
+            indent,
+            content: trimmedLine,
+            shouldSelectPlaceholder: false,
+        };
+    }
+
+    return {
+        from: line.from,
+        to: line.to,
+        indent,
+        content: "task",
+        shouldSelectPlaceholder: true,
+    };
 }
 
 /**
@@ -217,6 +280,39 @@ export function insertLink(view: EditorView): boolean {
             selection: { anchor: urlStart, head: urlStart + 3 }, // select "url"
         });
     }
+
+    return true;
+}
+
+/**
+ * @function insertTask
+ * @description 在当前光标位置快速创建任务看板语法。
+ *   有选区时使用选中文本作为任务正文；当前行已有内容时将整行转换为任务；
+ *   否则插入 `task` 占位符并选中，便于立即改写。
+ * @param view 编辑器视图。
+ * @returns 是否执行成功。
+ */
+export function insertTask(view: EditorView): boolean {
+    const resolved = resolveTaskContentInsertRange(view);
+    const insertText = `${resolved.indent}- [ ] ${resolved.content}`;
+    const contentStart = resolved.indent.length + "- [ ] ".length;
+    const contentEnd = contentStart + resolved.content.length;
+
+    view.dispatch({
+        changes: {
+            from: resolved.from,
+            to: resolved.to,
+            insert: insertText,
+        },
+        selection: resolved.shouldSelectPlaceholder
+            ? {
+                anchor: resolved.from + contentStart,
+                head: resolved.from + contentEnd,
+            }
+            : {
+                anchor: resolved.from + insertText.length,
+            },
+    });
 
     return true;
 }

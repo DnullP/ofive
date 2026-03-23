@@ -130,6 +130,31 @@ pub struct VaultQuickSwitchItem {
     pub score: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum VaultSearchScope {
+    All,
+    Content,
+    FileName,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultSearchMatchItem {
+    pub relative_path: String,
+    pub title: String,
+    pub score: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet_line: Option<usize>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    pub matched_file_name: bool,
+    pub matched_content: bool,
+    pub matched_tag: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiLinkSuggestionItem {
@@ -196,4 +221,19 @@ pub struct OutlineHeading {
 pub struct OutlineResponse {
     pub relative_path: String,
     pub headings: Vec<OutlineHeading>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultTaskItem {
+    pub relative_path: String,
+    pub title: String,
+    pub line: usize,
+    pub raw_line: String,
+    pub checked: bool,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub due: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<String>,
 }

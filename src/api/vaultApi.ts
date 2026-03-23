@@ -15,6 +15,13 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import YAML from "yaml";
 import i18n from "../i18n";
 import { detectExcludedLineRanges, isLineExcluded } from "../utils/markdownBlockDetector";
+import { parseTaskBoardLine } from "../utils/taskSyntax";
+import browserMockCodeBlockTest from "/test-resources/notes/code-block-test.md?raw";
+import browserMockGuide from "/test-resources/notes/guide.md?raw";
+import browserMockNetworkSegment from "/test-resources/notes/network-segment.md?raw";
+import browserMockNote1 from "/test-resources/notes/note1.md?raw";
+import browserMockNote2 from "/test-resources/notes/note2.md?raw";
+import browserMockTaskBoardE2E from "/test-resources/notes/task-board-e2e.md?raw";
 
 /**
  * @constant VAULT_FS_EVENT_NAME
@@ -203,6 +210,61 @@ export interface VaultQuickSwitchItem {
 }
 
 /**
+ * @type VaultSearchScope
+ * @description 搜索范围类型。
+ */
+export type VaultSearchScope = "all" | "content" | "fileName";
+
+/**
+ * @interface VaultSearchMatchItem
+ * @description Markdown 搜索命中项。
+ */
+export interface VaultSearchMatchItem {
+    /** 命中文件相对路径 */
+    relativePath: string;
+    /** 展示标题 */
+    title: string;
+    /** 综合评分 */
+    score: number;
+    /** 内容摘要 */
+    snippet?: string;
+    /** 摘要所在行号 */
+    snippetLine?: number;
+    /** 当前文件提取出的标签 */
+    tags: string[];
+    /** 是否命中文件名 */
+    matchedFileName: boolean;
+    /** 是否命中正文 */
+    matchedContent: boolean;
+    /** 是否命中标签过滤器 */
+    matchedTag: boolean;
+}
+
+/**
+ * @function normalizeVaultSearchMatchItem
+ * @description 将后端或回退模式返回的搜索命中项归一化为稳定前端结构。
+ * @param item 原始搜索命中项。
+ * @returns 归一化后的搜索命中项。
+ */
+function normalizeVaultSearchMatchItem(item: Partial<VaultSearchMatchItem> & {
+    relativePath: string;
+    title: string;
+    score: number;
+}): VaultSearchMatchItem {
+    return {
+        relativePath: item.relativePath,
+        title: item.title,
+        score: item.score,
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        matchedFileName: Boolean(item.matchedFileName),
+        matchedContent: Boolean(item.matchedContent),
+        matchedTag: Boolean(item.matchedTag),
+        ...(item.snippet ? { snippet: item.snippet } : {}),
+        ...(typeof item.snippetLine === "number" ? { snippetLine: item.snippetLine } : {}),
+    };
+}
+
+/**
  * @interface WikiLinkSuggestionItem
  * @description WikiLink 自动补全建议条目。
  */
@@ -252,6 +314,29 @@ export interface OutlineResponse {
     relativePath: string;
     /** 标题列表 */
     headings: OutlineHeading[];
+}
+
+/**
+ * @interface VaultTaskItem
+ * @description 任务看板查询返回的单条任务结构。
+ */
+export interface VaultTaskItem {
+    /** 任务所在文件相对路径 */
+    relativePath: string;
+    /** 文件标题 */
+    title: string;
+    /** 任务所在行号（1-based） */
+    line: number;
+    /** 原始任务行文本 */
+    rawLine: string;
+    /** 是否已完成 */
+    checked: boolean;
+    /** 去除元数据后的任务内容 */
+    content: string;
+    /** 截止时间元数据 */
+    due?: string | null;
+    /** 优先级元数据 */
+    priority?: string | null;
 }
 
 /**
@@ -411,6 +496,15 @@ export function isSelfTriggeredVaultConfigEvent(payload: VaultConfigEventPayload
  * @description 浏览器回退模式下，通过 Vite glob 从测试 notes 目录收集 Markdown 原文。
  */
 const BROWSER_MOCK_NOTES_RAW_MODULES: Record<string, string> = (() => {
+    const staticFallbackModules: Record<string, string> = {
+        "/test-resources/notes/code-block-test.md": browserMockCodeBlockTest,
+        "/test-resources/notes/guide.md": browserMockGuide,
+        "/test-resources/notes/network-segment.md": browserMockNetworkSegment,
+        "/test-resources/notes/note1.md": browserMockNote1,
+        "/test-resources/notes/note2.md": browserMockNote2,
+        "/test-resources/notes/task-board-e2e.md": browserMockTaskBoardE2E,
+    };
+
     const viteImportMeta = import.meta as ImportMeta & {
         glob?: (
             pattern: string,
@@ -423,14 +517,16 @@ const BROWSER_MOCK_NOTES_RAW_MODULES: Record<string, string> = (() => {
     };
 
     if (typeof viteImportMeta.glob !== "function") {
-        return {};
+        return staticFallbackModules;
     }
 
-    return viteImportMeta.glob("../../test-resources/notes/**/*.{md,markdown}", {
+    const globbedModules = viteImportMeta.glob("/test-resources/notes/**/*.{md,markdown}", {
         query: "?raw",
         import: "default",
         eager: true,
     }) as Record<string, string>;
+
+    return Object.keys(globbedModules).length > 0 ? globbedModules : staticFallbackModules;
 })();
 
 /**
@@ -903,6 +999,289 @@ function scoreBrowserFallbackQuickSwitch(relativePath: string, query: string): n
 }
 
 /**
+ * @function buildBrowserFallbackTaskItems
+ * @description 浏览器 mock 环境下，从内置 Markdown 内容提取任务条目。
+ * @returns mock 任务列表。
+ */
+function buildBrowserFallbackTaskItems(): VaultTaskItem[] {
+    const items: VaultTaskItem[] = [];
+
+    Object.entries(BROWSER_MOCK_MARKDOWN_CONTENTS).forEach(([relativePath, content]) => {
+        const excludedRanges = detectExcludedLineRanges(content);
+        const lines = content.split(/\r?\n/);
+        const title = relativePath.split("/").pop()?.replace(/\.(md|markdown)$/i, "") ?? relativePath;
+
+        lines.forEach((line, index) => {
+            const lineNumber = index + 1;
+            if (isLineExcluded(lineNumber, excludedRanges)) {
+                return;
+            }
+
+            const parsed = parseTaskBoardLine(line);
+            if (!parsed) {
+                return;
+            }
+
+            items.push({
+                relativePath,
+                title,
+                line: lineNumber,
+                rawLine: line,
+                checked: parsed.checked,
+                content: parsed.content,
+                ...(parsed.due ? { due: parsed.due } : {}),
+                ...(parsed.priority ? { priority: parsed.priority } : {}),
+            });
+        });
+    });
+
+    return items.sort((left, right) => {
+        return left.relativePath.localeCompare(right.relativePath)
+            || left.line - right.line;
+    });
+}
+
+/**
+ * @function normalizeBrowserFallbackTag
+ * @description 规范化标签输入，统一移除 # 前缀并转为小写。
+ * @param raw 原始标签文本。
+ * @returns 规范化后的标签；为空时返回 null。
+ */
+function normalizeBrowserFallbackTag(raw: string): string | null {
+    const normalized = raw.trim().replace(/^#+/, "").trim().toLowerCase();
+    return normalized ? normalized : null;
+}
+
+/**
+ * @function extractBrowserFallbackFrontmatterYaml
+ * @description 从 Markdown 文本开头提取 frontmatter YAML。
+ * @param content Markdown 原文。
+ * @returns frontmatter YAML 文本；不存在时返回 null。
+ */
+function extractBrowserFallbackFrontmatterYaml(content: string): string | null {
+    const ranges = detectExcludedLineRanges(content);
+    const firstRange = ranges[0];
+    if (!firstRange || firstRange.type !== "frontmatter" || firstRange.fromLine !== 1) {
+        return null;
+    }
+
+    const lines = content.split("\n").slice(firstRange.fromLine - 1, firstRange.toLine);
+    if (lines.length < 2) {
+        return null;
+    }
+
+    return lines.slice(1, -1).join("\n");
+}
+
+/**
+ * @function collectBrowserFallbackTagsFromYaml
+ * @description 从 frontmatter tags 字段提取标签列表。
+ * @param value YAML 节点值。
+ * @returns 规范化后的标签数组。
+ */
+function collectBrowserFallbackTagsFromYaml(value: unknown): string[] {
+    if (typeof value === "string") {
+        const normalized = normalizeBrowserFallbackTag(value);
+        return normalized ? [normalized] : [];
+    }
+
+    if (Array.isArray(value)) {
+        return value.flatMap((item) => collectBrowserFallbackTagsFromYaml(item));
+    }
+
+    if (value === null || value === undefined) {
+        return [];
+    }
+
+    return [];
+}
+
+/**
+ * @function isBrowserFallbackTagBoundary
+ * @description 判断字符是否可作为标签边界。
+ * @param value 待判断字符。
+ * @returns 是边界时返回 true。
+ */
+function isBrowserFallbackTagBoundary(value: string | undefined): boolean {
+    return !value || !/[\p{L}\p{N}_\-/]/u.test(value);
+}
+
+/**
+ * @function isBrowserFallbackTagCharacter
+ * @description 判断字符是否可以出现在标签内部。
+ * @param value 待判断字符。
+ * @returns 可作为标签字符时返回 true。
+ */
+function isBrowserFallbackTagCharacter(value: string): boolean {
+    return /[\p{L}\p{N}_\-/]/u.test(value);
+}
+
+/**
+ * @function extractBrowserFallbackInlineTags
+ * @description 从 Markdown 正文提取 inline hashtag，并跳过块级排斥区域。
+ * @param content Markdown 原文。
+ * @returns 标签数组。
+ */
+function extractBrowserFallbackInlineTags(content: string): string[] {
+    const lines = content.split("\n");
+    const excludedRanges = detectExcludedLineRanges(content);
+    const tags: string[] = [];
+
+    lines.forEach((line, index) => {
+        const lineNumber = index + 1;
+        if (isLineExcluded(lineNumber, excludedRanges)) {
+            return;
+        }
+
+        for (let cursor = 0; cursor < line.length; cursor += 1) {
+            if (line[cursor] !== "#") {
+                continue;
+            }
+
+            const previous = cursor > 0 ? line[cursor - 1] : undefined;
+            if (!isBrowserFallbackTagBoundary(previous)) {
+                continue;
+            }
+
+            let lookahead = cursor + 1;
+            let rawTag = "";
+            while (lookahead < line.length && isBrowserFallbackTagCharacter(line[lookahead] ?? "")) {
+                rawTag += line[lookahead] ?? "";
+                lookahead += 1;
+            }
+
+            const normalized = normalizeBrowserFallbackTag(rawTag);
+            if (normalized) {
+                tags.push(normalized);
+            }
+
+            cursor = Math.max(cursor, lookahead - 1);
+        }
+    });
+
+    return tags;
+}
+
+/**
+ * @function extractBrowserFallbackSearchTags
+ * @description 合并 frontmatter 与 inline hashtag，得到文件标签集合。
+ * @param content Markdown 原文。
+ * @returns 去重后的标签列表。
+ */
+function extractBrowserFallbackSearchTags(content: string): string[] {
+    const tags = new Set<string>();
+    const frontmatterYaml = extractBrowserFallbackFrontmatterYaml(content);
+    if (frontmatterYaml) {
+        try {
+            const parsed = YAML.parse(frontmatterYaml) as Record<string, unknown> | null;
+            const frontmatterTags = collectBrowserFallbackTagsFromYaml(parsed?.tags);
+            frontmatterTags.forEach((tag) => {
+                tags.add(tag);
+            });
+        } catch (error) {
+            console.warn("[vault-api] browser fallback tag parse failed", { error });
+        }
+    }
+
+    extractBrowserFallbackInlineTags(content).forEach((tag) => {
+        tags.add(tag);
+    });
+
+    return Array.from(tags).sort((left, right) => left.localeCompare(right));
+}
+
+/**
+ * @function clipBrowserFallbackSnippet
+ * @description 将文本行裁剪为摘要片段。
+ * @param line 原始文本行。
+ * @returns 摘要文本。
+ */
+function clipBrowserFallbackSnippet(line: string): string {
+    const collapsed = line.trim().replace(/\s+/g, " ");
+    if (collapsed.length <= 140) {
+        return collapsed;
+    }
+
+    return `${collapsed.slice(0, 140)}…`;
+}
+
+/**
+ * @function scoreBrowserFallbackContentMatch
+ * @description 浏览器回退模式下计算正文匹配分值与摘要。
+ * @param content Markdown 原文。
+ * @param query 搜索关键字。
+ * @returns 匹配分值与摘要；未命中返回 null。
+ */
+function scoreBrowserFallbackContentMatch(
+    content: string,
+    query: string,
+): { score: number; snippet?: string; snippetLine?: number } | null {
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) {
+        return null;
+    }
+
+    const excludedRanges = detectExcludedLineRanges(content);
+    const searchableLines = content
+        .split("\n")
+        .map((line, index) => ({
+            line,
+            lineNumber: index + 1,
+        }))
+        .filter(({ lineNumber }) => !isLineExcluded(lineNumber, excludedRanges));
+
+    const normalizedLines = searchableLines.map(({ line }) => line.toLowerCase());
+    let score = 0;
+    for (const token of tokens) {
+        const matched = normalizedLines.some((line) => line.includes(token));
+        if (!matched) {
+            return null;
+        }
+        score += 36 + token.length;
+    }
+
+    let bestSnippet:
+        | { snippet: string; snippetLine: number; matchedTokenCount: number }
+        | null = null;
+    for (const [index, { line, lineNumber }] of searchableLines.entries()) {
+        const normalizedLine = normalizedLines[index] ?? "";
+        const matchedTokenCount = tokens.filter((token) => normalizedLine.includes(token)).length;
+        if (matchedTokenCount <= 0) {
+            continue;
+        }
+
+        const snippet = clipBrowserFallbackSnippet(line);
+        if (!snippet) {
+            continue;
+        }
+
+        if (!bestSnippet
+            || matchedTokenCount > bestSnippet.matchedTokenCount
+            || (matchedTokenCount === bestSnippet.matchedTokenCount && lineNumber < bestSnippet.snippetLine)) {
+            bestSnippet = {
+                snippet,
+                snippetLine: lineNumber,
+                matchedTokenCount,
+            };
+        }
+    }
+
+    let snippet: string | undefined;
+    let snippetLine: number | undefined;
+    if (bestSnippet) {
+        score += bestSnippet.matchedTokenCount * 24;
+        snippet = bestSnippet.snippet;
+        snippetLine = bestSnippet.snippetLine;
+    }
+
+    return {
+        score,
+        snippet,
+        snippetLine,
+    };
+}
+
+/**
  * @function isTauriRuntime
  * @description 判断当前是否在 Tauri runtime 中。
  * @returns 在 Tauri 中返回 true。
@@ -1149,6 +1528,112 @@ export async function searchVaultMarkdownFiles(
 }
 
 /**
+ * @function searchVaultMarkdown
+ * @description 在当前 vault 中执行文件名、正文与标签联合搜索。
+ * @param query 搜索关键字。
+ * @param options 搜索配置。
+ * @returns 搜索命中列表。
+ */
+export async function searchVaultMarkdown(
+    query: string,
+    options?: {
+        tag?: string;
+        scope?: VaultSearchScope;
+        limit?: number;
+    },
+): Promise<VaultSearchMatchItem[]> {
+    const normalizedScope = options?.scope ?? "all";
+    const normalizedLimit = Math.max(1, Math.min(200, Number.isFinite(options?.limit) ? Math.floor(options?.limit ?? 80) : 80));
+    const normalizedTag = options?.tag?.trim() ? options.tag.trim() : undefined;
+
+    if (!isTauriRuntime()) {
+        const fallbackItems: VaultSearchMatchItem[] = [];
+        const expectedTag = normalizedTag ? normalizeBrowserFallbackTag(normalizedTag) : null;
+
+        Object.entries(BROWSER_MOCK_MARKDOWN_CONTENTS).forEach(([relativePath, content]) => {
+            const tags = extractBrowserFallbackSearchTags(content);
+            const matchedTag = expectedTag ? tags.includes(expectedTag) : false;
+            if (expectedTag && !matchedTag) {
+                return;
+            }
+
+            const matchedFileName = query.trim().length > 0
+                && normalizedScope !== "content"
+                && scoreBrowserFallbackQuickSwitch(relativePath, query) !== null;
+            const contentMatch = query.trim().length > 0 && normalizedScope !== "fileName"
+                ? scoreBrowserFallbackContentMatch(content, query)
+                : null;
+            const matchedContent = Boolean(contentMatch);
+
+            const include = query.trim().length === 0
+                ? Boolean(expectedTag)
+                : normalizedScope === "all"
+                    ? matchedFileName || matchedContent
+                    : normalizedScope === "content"
+                        ? matchedContent
+                        : matchedFileName;
+
+            if (!include) {
+                return;
+            }
+
+            const fileScore = matchedFileName
+                ? scoreBrowserFallbackQuickSwitch(relativePath, query) ?? 0
+                : 0;
+            const item = normalizeVaultSearchMatchItem({
+                relativePath,
+                title: relativePath.split("/").pop()?.replace(/\.(md|markdown)$/i, "") ?? relativePath,
+                score: fileScore + (contentMatch?.score ?? 0) + (expectedTag ? 12 : 0),
+                tags,
+                matchedFileName,
+                matchedContent,
+                matchedTag: Boolean(expectedTag),
+            });
+
+            if (contentMatch?.snippet) {
+                item.snippet = contentMatch.snippet;
+            }
+            if (contentMatch?.snippetLine) {
+                item.snippetLine = contentMatch.snippetLine;
+            }
+
+            fallbackItems.push(item);
+        });
+
+        return fallbackItems
+            .sort((left, right) => right.score - left.score || left.relativePath.localeCompare(right.relativePath))
+            .slice(0, normalizedLimit);
+    }
+
+    console.info("[vault-api] searchVaultMarkdown invoke start", {
+        query,
+        tag: normalizedTag ?? null,
+        scope: normalizedScope,
+        limit: normalizedLimit,
+    });
+
+    const response = await invoke<Array<Partial<VaultSearchMatchItem> & {
+        relativePath: string;
+        title: string;
+        score: number;
+    }>>("search_vault_markdown", {
+        query,
+        tag: normalizedTag ?? null,
+        scope: normalizedScope,
+        limit: normalizedLimit,
+    });
+
+    console.info("[vault-api] searchVaultMarkdown invoke success", {
+        query,
+        tag: normalizedTag ?? null,
+        scope: normalizedScope,
+        resultCount: response.length,
+    });
+
+    return response.map((item) => normalizeVaultSearchMatchItem(item));
+}
+
+/**
  * @function suggestWikiLinkTargets
  * @description 为 WikiLink 自动补全提供建议列表。
  *   排序同时考虑关键字匹配度与笔记被引用次数（热度）。
@@ -1270,6 +1755,24 @@ export async function queryVaultMarkdownFrontmatter(
 }
 
 /**
+ * @function queryVaultTasks
+ * @description 查询当前 vault 中所有符合任务看板语法的任务条目。
+ * @returns 任务列表。
+ */
+export async function queryVaultTasks(): Promise<VaultTaskItem[]> {
+    if (!isTauriRuntime()) {
+        return buildBrowserFallbackTaskItems();
+    }
+
+    console.info("[vault-api] queryVaultTasks invoke start");
+    const response = await invoke<VaultTaskItem[]>("query_vault_tasks");
+    console.info("[vault-api] queryVaultTasks invoke success", {
+        taskCount: response.length,
+    });
+    return response;
+}
+
+/**
  * @function createVaultMarkdownFile
  * @description 在当前仓库创建 Markdown 文件。
  * @param relativePath 目标文件相对路径。
@@ -1281,6 +1784,7 @@ export async function createVaultMarkdownFile(
     content?: string,
 ): Promise<WriteMarkdownResponse> {
     if (!isTauriRuntime()) {
+        BROWSER_MOCK_MARKDOWN_CONTENTS[normalizeSlashPath(relativePath)] = content ?? "";
         return {
             relativePath,
             created: true,
@@ -1366,6 +1870,7 @@ export async function saveVaultMarkdownFile(
     content: string,
 ): Promise<WriteMarkdownResponse> {
     if (!isTauriRuntime()) {
+        BROWSER_MOCK_MARKDOWN_CONTENTS[normalizeSlashPath(relativePath)] = content;
         return {
             relativePath,
             created: false,

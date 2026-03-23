@@ -262,6 +262,7 @@
     background: var(--bg-primary);
     box-sizing: border-box;
     position: relative;
+    cursor: pointer;
 }
 
 /* 未勾选 task checkbox：保持空盒子外观 */
@@ -691,6 +692,17 @@
     font-size: 0;
 }
 
+/* 多行块级 Widget 锚点行：隐藏 closing delimiter 源码文本，但保留行盒承载 widget。 */
+.cm-tab-editor .cm-line.cm-hidden-block-anchor-line {
+    height: auto;
+    overflow: visible;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    line-height: normal;
+    font-size: 0;
+}
+
 /* Frontmatter YAML 编辑器：提供原始 YAML 文本输入区域 */
 .cm-tab-editor .cm-frontmatter-yaml-editor {
     width: 100%;
@@ -766,16 +778,22 @@
     cursor: pointer;
     user-select: none;
     overflow: hidden;
+    border-left: 2px solid transparent;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 /* 候选项行悬浮态 */
 .cm-wikilink-suggest-item:hover {
-    background: var(--bg-hover);
+    background: color-mix(in srgb, var(--accent-primary-soft-weak) 72%, var(--bg-hover));
+    border-left-color: color-mix(in srgb, var(--accent-primary) 55%, transparent);
 }
 
 /* 候选项选中态：键盘选中时高亮背景 */
 .cm-wikilink-suggest-item-selected {
-    background: var(--bg-hover);
+    background:
+        linear-gradient(90deg, color-mix(in srgb, var(--accent-primary) 14%, transparent), transparent 22%),
+        color-mix(in srgb, var(--accent-primary-soft) 92%, var(--bg-hover));
+    border-left-color: var(--accent-primary);
 }
 
 /* 候选项标题文本：主展示内容 */
@@ -786,6 +804,11 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* 选中项标题文本：提高选中行的主文本对比度。 */
+.cm-wikilink-suggest-item-selected .cm-wikilink-suggest-title {
+    color: var(--accent-primary);
 }
 
 /* 候选项路径文本：次级展示内容 */
@@ -799,6 +822,26 @@
     text-overflow: ellipsis;
 }
 
+/* 选中项路径文本：略微抬高次级文本亮度，保持层次但避免发灰。 */
+.cm-wikilink-suggest-item-selected .cm-wikilink-suggest-path {
+    color: color-mix(in srgb, var(--accent-primary) 46%, var(--text-primary));
+}
+
+/* 命中文本高亮：直接强调 query 对应片段，避免只靠整行背景辨认。 */
+.cm-wikilink-suggest-match {
+    padding: 0 2px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--editor-highlight-bg) 92%, transparent);
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+/* 选中项命中文本高亮：在已选中行里进一步抬高对比，避免蓝底上发糊。 */
+.cm-wikilink-suggest-item-selected .cm-wikilink-suggest-match {
+    background: color-mix(in srgb, var(--accent-primary) 24%, var(--editor-highlight-bg));
+    color: var(--accent-primary);
+}
+
 /* 候选项引用次数：仅当 referenceCount > 0 时渲染 */
 .cm-wikilink-suggest-ref-count {
     flex: 0 0 auto;
@@ -808,6 +851,12 @@
     color: var(--text-secondary);
     font-size: 10px;
     line-height: 1.4;
+}
+
+/* 选中项引用次数：与选中态主色联动，避免次级徽标被背景吞掉。 */
+.cm-wikilink-suggest-item-selected .cm-wikilink-suggest-ref-count {
+    background: color-mix(in srgb, var(--accent-primary) 16%, transparent);
+    color: var(--accent-primary);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -836,6 +885,8 @@
     border-radius: 6px;
     background: var(--editor-code-block-bg, transparent);
     color: var(--text-primary);
+    font-size: 1rem;
+    line-height: normal;
     overflow-x: auto;
 }
 

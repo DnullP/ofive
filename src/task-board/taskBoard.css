@@ -1,0 +1,536 @@
+/* task-board：任务看板根容器，负责整体纵向布局。 */
+.task-board {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background:
+        radial-gradient(circle at top left, color-mix(in srgb, var(--accent-primary) 10%, transparent), transparent 38%),
+        linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 96%, transparent), var(--bg-primary));
+}
+
+/* task-board__header：看板头部，容纳标题、统计和操作区。 */
+.task-board__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* task-board__header-copy：标题文本组，堆叠标题和描述。 */
+.task-board__header-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+/* task-board__eyebrow：弱强调前导标签，用于说明任务来源。 */
+.task-board__eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+/* task-board__title：看板标题。 */
+.task-board__title {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.1;
+}
+
+/* task-board__description：看板说明文字。 */
+.task-board__description {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* task-board__toolbar：右上角操作区，容纳过滤和刷新按钮。 */
+.task-board__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* task-board__filters：状态过滤器组。 */
+.task-board__filters {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+}
+
+/* task-board__filter：单个过滤按钮。 */
+.task-board__filter {
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 7px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* task-board__filter.is-active：当前启用的过滤按钮。 */
+.task-board__filter.is-active {
+    background: var(--accent-primary);
+    color: var(--accent-primary-foreground);
+}
+
+/* task-board__refresh：刷新按钮，提供显式重新查询入口。 */
+.task-board__refresh {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* task-board__status：加载/错误/空仓库状态条。 */
+.task-board__status {
+    margin: 16px 20px 0;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* task-board__grid：看板列容器，支持横向滚动。 */
+.task-board__grid {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(240px, 1fr));
+    align-items: stretch;
+    gap: 14px;
+    padding: 18px 20px 20px;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+/* task-board__column：单列容器，承载同优先级任务。 */
+.task-board__column {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+    box-shadow: var(--overlay-shadow-floating);
+    overflow: hidden;
+}
+
+/* task-board__column-header：列标题区，展示名称与数量。 */
+.task-board__column-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+/* task-board__column-title：列标题。 */
+.task-board__column-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+/* task-board__column-count：列内任务数量徽标。 */
+.task-board__column-count {
+    min-width: 28px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-primary));
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-align: center;
+}
+
+/* task-board__column-empty：列空状态提示。 */
+.task-board__column-empty {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+/* task-board__task-list：列内任务列表。 */
+.task-board__task-list {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 2px;
+}
+
+/* task-board__task-card：任务卡片。 */
+.task-board__task-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--bg-primary) 95%, transparent);
+}
+
+/* task-board__task-card.is-checked：已完成任务卡片，降低视觉强调。 */
+.task-board__task-card.is-checked {
+    opacity: 0.78;
+}
+
+/* task-board__task-meta：任务顶部元信息，展示状态与路径。 */
+.task-board__task-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+/* task-board__task-status：任务状态标签。 */
+.task-board__task-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* task-board__task-path：任务文件路径。 */
+.task-board__task-path {
+    color: var(--text-tertiary, var(--text-secondary));
+    font-size: 11px;
+    text-align: right;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* task-board__task-content：任务正文。 */
+.task-board__task-content {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+/* task-board__task-footer：任务底部信息和操作区。 */
+.task-board__task-footer {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* task-board__task-tags：任务 due 与行号信息组。 */
+.task-board__task-tags {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex: 1 1 180px;
+    min-width: 0;
+}
+
+/* task-board__task-tag：任务信息标签。 */
+.task-board__task-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-secondary));
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+/* task-board__task-actions：任务卡片操作按钮组。 */
+.task-board__task-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}
+
+/* task-board__task-button：任务操作按钮。 */
+.task-board__task-button {
+    border: 1px solid color-mix(in srgb, var(--border-color) 85%, transparent);
+    background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+    color: var(--text-primary);
+    padding: 8px 10px;
+    min-height: 32px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* task-board__task-button:hover：任务操作按钮悬浮态。 */
+.task-board__task-button:hover {
+    background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-secondary));
+    color: var(--text-primary);
+}
+
+/* task-board__popover：编辑任务元数据的浮动气泡。 */
+.task-board__popover {
+    position: absolute;
+    z-index: 5;
+    width: min(320px, calc(100% - 24px));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 18%, var(--border-color));
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--bg-primary) 95%, transparent);
+    box-shadow: var(--overlay-shadow-strong);
+    backdrop-filter: blur(10px);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(6px) scale(0.98);
+    transform-origin: top left;
+    transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+/* task-board__popover.is-positioned：定位完成后显示编辑气泡。 */
+.task-board__popover.is-positioned {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+
+/* task-board__popover[data-placement="above"]：向上弹出时调整动画原点。 */
+.task-board__popover[data-placement="above"] {
+    transform-origin: bottom left;
+}
+
+/* task-board__popover-header：编辑气泡头部。 */
+.task-board__popover-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+/* task-board__popover-title-group：头部标题组。 */
+.task-board__popover-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+/* task-board__popover-title：编辑气泡标题。 */
+.task-board__popover-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+/* task-board__popover-subtitle：编辑气泡副标题。 */
+.task-board__popover-subtitle {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/* task-board__hint：简化语法提示文本。 */
+.task-board__hint {
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-secondary));
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+/* task-board__popover-close：关闭编辑气泡按钮。 */
+.task-board__popover-close {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+/* task-board__popover-close:hover：关闭按钮悬浮态。 */
+.task-board__popover-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* task-board__form：编辑表单。 */
+.task-board__form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* task-board__field：单个表单字段容器。 */
+.task-board__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* task-board__field-row：字段标题行，容纳标签和辅助动作。 */
+.task-board__field-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+/* task-board__label：字段标签。 */
+.task-board__label {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* task-board__field-action：字段级轻操作按钮。 */
+.task-board__field-action {
+    border: 0;
+    background: transparent;
+    color: var(--accent-primary);
+    cursor: pointer;
+    padding: 0;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* task-board__input：datetime-local 输入框。 */
+.task-board__input {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    padding: 10px 12px;
+    font: inherit;
+}
+
+/* task-board__choice-group：优先级快捷选项组。 */
+.task-board__choice-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* task-board__choice：单个优先级快捷按钮。 */
+.task-board__choice {
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+    color: var(--text-secondary);
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* task-board__choice.is-active：当前选中的优先级按钮。 */
+.task-board__choice.is-active {
+    border-color: color-mix(in srgb, var(--accent-primary) 50%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary) 18%, var(--bg-secondary));
+    color: var(--text-primary);
+}
+
+/* task-board__popover-actions：编辑气泡底部操作区。 */
+.task-board__popover-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* task-board__secondary-button：编辑气泡次按钮。 */
+.task-board__secondary-button {
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* task-board__primary-button：编辑气泡主按钮。 */
+.task-board__primary-button {
+    border: 0;
+    border-radius: 999px;
+    background: var(--accent-primary);
+    color: var(--accent-primary-foreground);
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* 小屏看板：列布局退化为双列，避免横向挤压。 */
+@media (max-width: 1200px) {
+    .task-board__grid {
+        grid-template-columns: repeat(2, minmax(240px, 1fr));
+    }
+}
+
+/* 移动端看板：头部与列布局切换为单列。 */
+@media (max-width: 768px) {
+    .task-board__header {
+        flex-direction: column;
+    }
+
+    .task-board__toolbar {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .task-board__grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

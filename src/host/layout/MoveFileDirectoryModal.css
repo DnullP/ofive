@@ -8,6 +8,7 @@
     justify-content: center;
     padding-top: 10vh;
     background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+    backdrop-filter: blur(10px);
 }
 
 /* 浮窗主体容器：承载标题、输入框与目录候选列表。 */
@@ -19,6 +20,7 @@
     border: 1px solid var(--border-color);
     border-radius: 10px;
     background: var(--bg-secondary);
+    box-shadow: var(--overlay-shadow-strong);
     overflow: hidden;
 }
 
