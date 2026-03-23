@@ -7,6 +7,8 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
+export type WindowThemeMode = "dark" | "light" | "kraft";
+
 /**
  * @interface WindowsAcrylicColorConfig
  * @description 单组 Windows Acrylic RGBA 参数。
@@ -24,6 +26,7 @@ export interface WindowsAcrylicColorConfig {
  */
 export interface WindowsAcrylicEffectConfig {
     enabled: boolean;
+    appThemeMode: WindowThemeMode;
     disableSystemBackdrop: boolean;
     focusedColor: WindowsAcrylicColorConfig;
     focusedAccentFlags: number;
@@ -48,7 +51,7 @@ function isTauriRuntime(): boolean {
 
 /**
  * @function updateMainWindowAcrylicEffect
- * @description 将当前 Windows Acrylic 参数下发给 Tauri 主窗口。
+ * @description 将当前窗口材质参数和应用主题模式下发给 Tauri 主窗口。
  * @param config 当前 Acrylic 参数快照。
  * @returns Promise<void>
  */

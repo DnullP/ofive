@@ -7,10 +7,9 @@ use std::path::Path;
 use tauri::{AppHandle, State};
 
 use crate::infra::fs::{vault_runtime, write_runtime};
-use crate::infra::persistence::vault_config_store::VaultConfig;
 use crate::shared::vault_contracts::{
     CopyEntryResponse, ReadBinaryFileResponse, ReadMarkdownResponse, SetVaultResponse,
-    VaultTreeResponse, WriteBinaryFileResponse, WriteMarkdownResponse,
+    VaultConfig, VaultTreeResponse, WriteBinaryFileResponse, WriteMarkdownResponse,
 };
 use crate::state::AppState;
 

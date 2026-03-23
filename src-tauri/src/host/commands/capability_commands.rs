@@ -5,6 +5,8 @@
 use crate::app::capability::capability_app_service;
 use crate::domain::capability::CapabilityDescriptor;
 
+pub(crate) const CAPABILITY_COMMAND_IDS: &[&str] = &["get_capability_catalog"];
+
 /// 获取平台能力目录。
 #[tauri::command]
 pub fn get_capability_catalog() -> Result<Vec<CapabilityDescriptor>, String> {

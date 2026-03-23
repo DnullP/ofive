@@ -12,7 +12,7 @@
 //! | large  | 50  | 1000 | 8  |
 //!
 //! ## 依赖模块
-//! - `ofive_lib::ensure_query_index_current`：全量索引重建入口
+//! - `ofive_lib::test_support::ensure_query_index_current`：全量索引重建入口
 //!
 //! ## 测试目录
 //! 使用 `std::env::temp_dir()` 下的唯一子目录，测试后自动清除。
@@ -34,7 +34,9 @@
 //! ```
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use ofive_lib::ensure_query_index_current;
+use ofive_lib::test_support::{
+    ensure_query_index_current, list_markdown_files, load_markdown_graph,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -216,7 +218,7 @@ fn bench_rebuild_index(c: &mut Criterion) {
         // 运行完一次完整 benchmark 后验证索引正确性
         remove_index_db(&root);
         ensure_query_index_current(&root).expect("验证：索引重建应成功");
-        let files = ofive_lib::list_markdown_files(&root).expect("验证：读取文件索引应成功");
+        let files = list_markdown_files(&root).expect("验证：读取文件索引应成功");
         assert_eq!(
             files.len(),
             file_paths.len(),
@@ -225,7 +227,7 @@ fn bench_rebuild_index(c: &mut Criterion) {
             files.len()
         );
 
-        let graph = ofive_lib::load_markdown_graph(&root).expect("验证：读取图谱应成功");
+        let graph = load_markdown_graph(&root).expect("验证：读取图谱应成功");
         assert!(
             !graph.edges.is_empty(),
             "图谱边不应为空（{}组）",

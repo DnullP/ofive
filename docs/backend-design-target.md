@@ -1,4 +1,10 @@
-# ofive 后端目标架构设计
+# [已废弃] ofive 后端目标架构设计
+
+> 废弃说明
+>
+> 本文档反映的是上一阶段以后端分层、能力治理和宿主边界为核心的规划目标。
+> 当前后端规划已切换为以“多个 Agent 并行开发扩展功能时尽量降低公共模块冲突”为首要评估标准。
+> 请以 [docs/backend-parallel-agent-target.md](docs/backend-parallel-agent-target.md) 作为新的规划依据。
 
 ## 1. 设计背景
 

@@ -5,11 +5,41 @@
 
 use crate::app::vault::query_app_service;
 use crate::app::vault::vault_app_service;
-use crate::infra::persistence::vault_config_store::VaultConfig;
 use crate::shared::vault_contracts::*;
 use crate::state::AppState;
 use std::time::Instant;
 use tauri::{AppHandle, State};
+
+pub(crate) const VAULT_COMMAND_IDS: &[&str] = &[
+    "set_current_vault",
+    "get_current_vault_tree",
+    "read_vault_markdown_file",
+    "read_vault_binary_file",
+    "create_vault_markdown_file",
+    "create_vault_directory",
+    "create_vault_binary_file",
+    "save_vault_markdown_file",
+    "rename_vault_markdown_file",
+    "move_vault_markdown_file_to_directory",
+    "rename_vault_directory",
+    "move_vault_directory_to_directory",
+    "delete_vault_directory",
+    "delete_vault_markdown_file",
+    "delete_vault_binary_file",
+    "copy_vault_entry",
+    "resolve_wikilink_target",
+    "resolve_media_embed_target",
+    "search_vault_markdown_files",
+    "get_current_vault_markdown_graph",
+    "get_vault_markdown_ast",
+    "segment_chinese_text",
+    "suggest_wikilink_targets",
+    "get_current_vault_config",
+    "save_current_vault_config",
+    "get_backlinks_for_file",
+    "get_vault_markdown_outline",
+    "query_vault_markdown_frontmatter",
+];
 
 /// 包装命令执行并记录耗时。
 macro_rules! timed_command {

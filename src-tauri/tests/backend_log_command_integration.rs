@@ -2,7 +2,7 @@
 //!
 //! 覆盖后端暴露接口：`forward_frontend_log`。
 
-use ofive_lib::forward_frontend_log;
+use ofive_lib::test_support::forward_frontend_log;
 
 #[test]
 fn forward_frontend_log_should_not_panic_for_all_levels() {

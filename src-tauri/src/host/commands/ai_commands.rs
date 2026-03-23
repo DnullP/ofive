@@ -13,6 +13,21 @@ use crate::domain::ai::tool::AiToolDescriptor;
 use crate::shared::backend_plugin_contracts::BackendPluginConfig;
 use crate::state::AppState;
 
+pub(crate) const AI_COMMAND_IDS: &[&str] = &[
+    "get_ai_vendor_catalog",
+    "get_ai_backend_plugin_config",
+    "save_ai_backend_plugin_config",
+    "get_ai_vendor_models",
+    "get_ai_chat_settings",
+    "get_ai_chat_history",
+    "save_ai_chat_settings",
+    "save_ai_chat_history",
+    "get_ai_tool_catalog",
+    "get_ai_sidecar_health",
+    "start_ai_chat_stream",
+    "submit_ai_chat_confirmation",
+];
+
 /// 获取可用 AI vendor 列表。
 #[tauri::command]
 pub fn get_ai_vendor_catalog() -> Result<Vec<AiVendorDefinition>, String> {

@@ -8,9 +8,11 @@ use crate::state::AppState;
 use std::time::Instant;
 use tauri::{State, WebviewWindow};
 
+pub(crate) const WINDOW_COMMAND_IDS: &[&str] = &["update_main_window_acrylic_effect"];
+
 /// 更新主窗口原生材质效果参数。
 ///
-/// - `config`：前端下发的窗口效果参数快照
+/// - `config`：前端下发的窗口效果参数快照，包含应用主题模式
 /// - `window`：当前调用窗口
 /// - `state`：后端共享运行时状态
 /// - 返回：成功或错误信息

@@ -57,8 +57,12 @@ pub enum PersistenceErrorCode {
     UnsupportedApiVersion,
     /// 请求的 scope 当前未实现。
     UnsupportedScope,
+    /// 请求的 module_id 未注册为宿主后端模块。
+    UnknownModuleId,
     /// module_id 与 owner 不匹配。
     OwnerModuleMismatch,
+    /// 请求的 owner 未在模块贡献中声明。
+    UndeclaredPersistenceOwner,
     /// 缺少必须的 state_key。
     StateKeyRequired,
     /// 缺少必须的 payload。

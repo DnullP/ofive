@@ -1,11 +1,11 @@
 //! # 分词接口集成测试
 //!
 //! 本模块用于验证后端 `segment_chinese_text` 对前端暴露接口的可用性。
-//! - 依赖：`ofive_lib::segment_chinese_text`
+//! - 依赖：`ofive_lib::test_support::segment_chinese_text`
 //! - 目标：覆盖空输入、长中文文本、UTF-16 偏移有效性
 //! - 使用示例：`cargo test --test segment_chinese_text_integration`
 
-use ofive_lib::segment_chinese_text;
+use ofive_lib::test_support::segment_chinese_text;
 use serde_json::Value;
 
 /// 计算字符串在 UTF-16 语义下的长度。

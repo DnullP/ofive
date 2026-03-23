@@ -9,6 +9,9 @@ use tauri::State;
 
 use crate::domain::persistence::{evaluate_persistence_access, PersistenceAuditRecord};
 use crate::infra::persistence::extension_private_store::{self, ExtensionPrivateStateRecord};
+use crate::module_contribution::{
+    find_builtin_backend_module_contribution, module_declares_persistence_owner,
+};
 use crate::shared::persistence_contracts::{
     PersistenceAction, PersistenceErrorCode, PersistenceRequest, PersistenceResponse,
     PersistenceResponseStatus, PersistenceScope, PersistenceStateDescriptor,
@@ -61,6 +64,19 @@ pub(crate) fn execute_persistence_request_in_root(
         return Ok(response);
     }
 
+    if find_builtin_backend_module_contribution(&request.module_id).is_none() {
+        let response = error_response(
+            &request,
+            PersistenceErrorCode::UnknownModuleId,
+            format!(
+                "module_private scope requires a registered backend module: module_id={}",
+                request.module_id
+            ),
+        );
+        log_persistence_request_finish(&audit_record, &response);
+        return Ok(response);
+    }
+
     if request.owner != request.module_id {
         let response = error_response(
             &request,
@@ -68,6 +84,19 @@ pub(crate) fn execute_persistence_request_in_root(
             format!(
                 "module_private scope requires owner to match module_id: owner={} module_id={}",
                 request.owner, request.module_id
+            ),
+        );
+        log_persistence_request_finish(&audit_record, &response);
+        return Ok(response);
+    }
+
+    if !module_declares_persistence_owner(&request.module_id, &request.owner) {
+        let response = error_response(
+            &request,
+            PersistenceErrorCode::UndeclaredPersistenceOwner,
+            format!(
+                "module_private scope requires owner to be declared by the module contribution: module_id={} owner={}",
+                request.module_id, request.owner
             ),
         );
         log_persistence_request_finish(&audit_record, &response);
@@ -480,6 +509,44 @@ mod tests {
         assert_eq!(
             response.error_code,
             Some(PersistenceErrorCode::OwnerModuleMismatch)
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn persistence_contract_should_reject_unknown_module_id() {
+        let root = create_test_root();
+        let mut request = base_request(PersistenceAction::Load);
+        request.module_id = "unknown-module".to_string();
+        request.owner = "unknown-module".to_string();
+
+        let response = execute_persistence_request_in_root(&root, request)
+            .expect("未知模块应返回协议错误");
+
+        assert_eq!(response.status, PersistenceResponseStatus::Error);
+        assert_eq!(
+            response.error_code,
+            Some(PersistenceErrorCode::UnknownModuleId)
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn persistence_contract_should_reject_undeclared_persistence_owner() {
+        let root = create_test_root();
+        let mut request = base_request(PersistenceAction::Load);
+        request.module_id = "vault".to_string();
+        request.owner = "vault".to_string();
+
+        let response = execute_persistence_request_in_root(&root, request)
+            .expect("未声明的 persistence owner 应返回协议错误");
+
+        assert_eq!(response.status, PersistenceResponseStatus::Error);
+        assert_eq!(
+            response.error_code,
+            Some(PersistenceErrorCode::UndeclaredPersistenceOwner)
         );
 
         let _ = fs::remove_dir_all(root);

@@ -6,7 +6,7 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use ofive_lib::{
+use ofive_lib::test_support::{
     create_vault_markdown_file_in_root, delete_vault_markdown_file_in_root,
     get_current_vault_markdown_graph_in_root, get_current_vault_tree_in_root,
     move_vault_markdown_file_to_directory_in_root, rename_vault_markdown_file_in_root,

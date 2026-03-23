@@ -5,18 +5,16 @@
 
 use std::path::Path;
 
-use serde::Deserialize;
-use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
-use crate::app::vault::{query_app_service, vault_app_service};
+use crate::app::capability::contribution::builtin_capability_execution_contributions;
 use crate::domain::ai::sidecar_contract::{
     SidecarCapabilityCallRequest, SidecarCapabilityCallResult,
 };
 use crate::domain::capability::{
     build_builtin_capability_registry, evaluate_capability_access, CapabilityConsumer,
-    CapabilityExecutionContext, CapabilityExecutionRequest, CapabilityExecutor,
+    CapabilityExecutionContext, CapabilityExecutionRequest,
 };
 use crate::state::{get_vault_root, AppState};
 
@@ -58,245 +56,31 @@ pub(crate) fn execute_capability_in_root(
     evaluate_capability_access(&descriptor, &request.consumer)?;
 
     let context = CapabilityExecutionContext { vault_root };
-    match request.capability_id.as_str() {
-        "vault.read_markdown_file" => ReadMarkdownFileExecutor.execute(request.input, &context),
-        "vault.search_markdown_files" => {
-            SearchMarkdownFilesExecutor.execute(request.input, &context)
-        }
-        "vault.get_markdown_outline" => GetMarkdownOutlineExecutor.execute(request.input, &context),
-        "vault.get_backlinks_for_file" => {
-            GetBacklinksForFileExecutor.execute(request.input, &context)
-        }
-        "vault.get_markdown_graph" => GetMarkdownGraphExecutor.execute(request.input, &context),
-        "vault.create_markdown_file" => CreateMarkdownFileExecutor.execute(request.input, &context),
-        "vault.save_markdown_file" => SaveMarkdownFileExecutor.execute(request.input, &context),
-        "vault.rename_markdown_file" => RenameMarkdownFileExecutor.execute(request.input, &context),
-        "vault.delete_markdown_file" => DeleteMarkdownFileExecutor.execute(request.input, &context),
-        "vault.create_directory" => CreateDirectoryExecutor.execute(request.input, &context),
-        _ => Err(format!(
+    execute_with_contributions(&request, &context).unwrap_or_else(|| {
+        Err(format!(
             "平台能力 {} 已注册，但当前执行器尚未实现",
             request.capability_id
-        )),
-    }
+        ))
+    })
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RelativePathInput {
-    relative_path: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SearchMarkdownFilesInput {
-    query: String,
-    limit: Option<usize>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RelativePathWithOptionalContentInput {
-    relative_path: String,
-    content: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RelativePathWithContentInput {
-    relative_path: String,
-    content: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RenameMarkdownFileInput {
-    from_relative_path: String,
-    to_relative_path: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RelativeDirectoryPathInput {
-    relative_directory_path: String,
-}
-
-struct ReadMarkdownFileExecutor;
-struct SearchMarkdownFilesExecutor;
-struct GetMarkdownOutlineExecutor;
-struct GetBacklinksForFileExecutor;
-struct GetMarkdownGraphExecutor;
-struct CreateMarkdownFileExecutor;
-struct SaveMarkdownFileExecutor;
-struct RenameMarkdownFileExecutor;
-struct DeleteMarkdownFileExecutor;
-struct CreateDirectoryExecutor;
-
-impl CapabilityExecutor for ReadMarkdownFileExecutor {
-    fn execute(
-        &self,
-        input: Value,
-        context: &CapabilityExecutionContext<'_>,
-    ) -> Result<Value, String> {
-        let input: RelativePathInput = parse_input(input, "vault.read_markdown_file")?;
-        let output = vault_app_service::read_vault_markdown_file_in_root(
-            input.relative_path,
-            context.vault_root,
-        )?;
-        serialize_output(output, "vault.read_markdown_file")
-    }
-}
-
-impl CapabilityExecutor for SearchMarkdownFilesExecutor {
-    fn execute(
-        &self,
-        input: Value,
-        context: &CapabilityExecutionContext<'_>,
-    ) -> Result<Value, String> {
-        let input: SearchMarkdownFilesInput = parse_input(input, "vault.search_markdown_files")?;
-        let output = query_app_service::search_vault_markdown_files_in_root(
-            context.vault_root,
-            input.query,
-            input.limit,
-        )?;
-        serialize_output(output, "vault.search_markdown_files")
-    }
-}
-
-impl CapabilityExecutor for GetMarkdownOutlineExecutor {
-    fn execute(
-        &self,
-        input: Value,
-        context: &CapabilityExecutionContext<'_>,
-    ) -> Result<Value, String> {
-        let input: RelativePathInput = parse_input(input, "vault.get_markdown_outline")?;
-        let output = query_app_service::get_vault_markdown_outline_in_root(
-            context.vault_root,
-            input.relative_path,
-        )?;
-        serialize_output(output, "vault.get_markdown_outline")
-    }
-}
-
-impl CapabilityExecutor for GetBacklinksForFileExecutor {
-    fn execute(
-        &self,
-        input: Value,
-        context: &CapabilityExecutionContext<'_>,
-    ) -> Result<Value, String> {
-        let input: RelativePathInput = parse_input(input, "vault.get_backlinks_for_file")?;
-        let output = query_app_service::get_backlinks_for_file_in_root(
-            context.vault_root,
-            &input.relative_path,
-        )?;
-        serialize_output(output, "vault.get_backlinks_for_file")
-    }
-}
-
-impl CapabilityExecutor for GetMarkdownGraphExecutor {
-    fn execute(
-        &self,
-        _input: Value,
-        context: &CapabilityExecutionContext<'_>,
-    ) -> Result<Value, String> {
-        let output =
-            query_app_service::get_current_vault_markdown_graph_in_root(context.vault_root)?;
-        serialize_output(output, "vault.get_markdown_graph")
-    }
-}
-
-impl CapabilityExecutor for CreateMarkdownFileExecutor {
-    fn execute(
-        &self,
-        input: Value,
-        context: &CapabilityExecutionContext<'_>,
-    ) -> Result<Value, String> {
-        let input: RelativePathWithOptionalContentInput =
-            parse_input(input, "vault.create_markdown_file")?;
-        let output = vault_app_service::create_vault_markdown_file_in_root(
-            input.relative_path,
-            input.content,
-            context.vault_root,
-        )?;
-        serialize_output(output, "vault.create_markdown_file")
-    }
-}
-
-impl CapabilityExecutor for SaveMarkdownFileExecutor {
-    fn execute(
-        &self,
-        input: Value,
-        context: &CapabilityExecutionContext<'_>,
-    ) -> Result<Value, String> {
-        let input: RelativePathWithContentInput = parse_input(input, "vault.save_markdown_file")?;
-        let output = vault_app_service::save_vault_markdown_file_in_root(
-            input.relative_path,
-            input.content,
-            context.vault_root,
-        )?;
-        serialize_output(output, "vault.save_markdown_file")
-    }
-}
-
-impl CapabilityExecutor for RenameMarkdownFileExecutor {
-    fn execute(
-        &self,
-        input: Value,
-        context: &CapabilityExecutionContext<'_>,
-    ) -> Result<Value, String> {
-        let input: RenameMarkdownFileInput = parse_input(input, "vault.rename_markdown_file")?;
-        let output = vault_app_service::rename_vault_markdown_file_in_root(
-            input.from_relative_path,
-            input.to_relative_path,
-            context.vault_root,
-        )?;
-        serialize_output(output, "vault.rename_markdown_file")
-    }
-}
-
-impl CapabilityExecutor for DeleteMarkdownFileExecutor {
-    fn execute(
-        &self,
-        input: Value,
-        context: &CapabilityExecutionContext<'_>,
-    ) -> Result<Value, String> {
-        let input: RelativePathInput = parse_input(input, "vault.delete_markdown_file")?;
-        vault_app_service::delete_vault_markdown_file_in_root(
-            input.relative_path,
-            context.vault_root,
-        )?;
-        Ok(serde_json::json!({"ok": true}))
-    }
-}
-
-impl CapabilityExecutor for CreateDirectoryExecutor {
-    fn execute(
-        &self,
-        input: Value,
-        context: &CapabilityExecutionContext<'_>,
-    ) -> Result<Value, String> {
-        let input: RelativeDirectoryPathInput = parse_input(input, "vault.create_directory")?;
-        vault_app_service::create_vault_directory_in_root(
-            input.relative_directory_path,
-            context.vault_root,
-        )?;
-        Ok(serde_json::json!({"ok": true}))
-    }
-}
-
-fn parse_input<T>(input: Value, capability_id: &str) -> Result<T, String>
-where
-    T: for<'de> Deserialize<'de>,
-{
-    serde_json::from_value(input)
-        .map_err(|error| format!("解析能力输入失败 {}: {error}", capability_id))
-}
-
-fn serialize_output<T>(output: T, capability_id: &str) -> Result<Value, String>
-where
-    T: Serialize,
-{
-    serde_json::to_value(output)
-        .map_err(|error| format!("序列化能力输出失败 {}: {error}", capability_id))
+fn execute_with_contributions(
+    request: &CapabilityExecutionRequest,
+    context: &CapabilityExecutionContext<'_>,
+) -> Option<Result<Value, String>> {
+    builtin_capability_execution_contributions()
+        .into_iter()
+        .find_map(|(module_id, execute)| {
+            let execution = execute(request, context);
+            if execution.is_some() {
+                log::debug!(
+                    "[capability] execution routed: capability_id={} module={}",
+                    request.capability_id,
+                    module_id
+                );
+            }
+            execution
+        })
 }
 
 #[cfg(test)]

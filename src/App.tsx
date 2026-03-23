@@ -23,7 +23,7 @@ import {
 } from "./host/store/editorContextStore";
 import { useVaultTreeSync } from "./host/store/vaultStore";
 import { useConfigState, useConfigSync } from "./host/store/configStore";
-import { useThemeSync } from "./host/store/themeStore";
+import { useThemeState, useThemeSync } from "./host/store/themeStore";
 import { useAutoSaveLifecycle } from "./host/store/autoSaveService";
 import { useVaultState } from "./host/store/vaultStore";
 import { useWindowDragGestureSupport } from "./utils/windowDragGesture";
@@ -71,6 +71,7 @@ function App() {
   const vaultState = useVaultState();
   const focusedArticle = useFocusedArticle();
   const configState = useConfigState();
+  const themeState = useThemeState();
   const isGlassEffectEnabled = runtimeInfo.isTauriRuntime && configState.featureSettings.glassEffectEnabled;
   const [isWindowFocused, setIsWindowFocused] = useState<boolean>(() => {
     if (typeof document === "undefined") {
@@ -154,6 +155,7 @@ function App() {
 
     void updateMainWindowAcrylicEffect({
       enabled: isGlassEffectEnabled,
+      appThemeMode: themeState.themeMode,
       disableSystemBackdrop: configState.featureSettings.windowsAcrylicDisableSystemBackdrop,
       focusedColor: {
         red: configState.featureSettings.windowsAcrylicFocusedRed,
@@ -174,6 +176,7 @@ function App() {
     }).then(() => {
       console.info("[window] windows acrylic config applied", {
         enabled: isGlassEffectEnabled,
+        appThemeMode: themeState.themeMode,
         disableSystemBackdrop: configState.featureSettings.windowsAcrylicDisableSystemBackdrop,
         focusedColor: {
           red: configState.featureSettings.windowsAcrylicFocusedRed,
@@ -212,6 +215,7 @@ function App() {
     configState.featureSettings.windowsAcrylicInactiveRed,
     configState.featureSettings.windowsAcrylicDisableSystemBackdrop,
     isGlassEffectEnabled,
+    themeState.themeMode,
     runtimeInfo.isTauriRuntime,
     runtimeInfo.isMacOS,
     runtimeInfo.isWindows,

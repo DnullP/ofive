@@ -3,6 +3,8 @@
 //! 暴露前端日志转发命令，统一输出到后端日志。
 //! 当 `log` 框架已初始化时，前端日志也将被持久化到日志文件。
 
+pub(crate) const FRONTEND_LOG_COMMAND_IDS: &[&str] = &["forward_frontend_log"];
+
 /// 前端日志桥接命令：将前端日志输出到后端日志流。
 ///
 /// # 参数

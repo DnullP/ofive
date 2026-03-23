@@ -7,7 +7,9 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use ofive_lib::{get_current_vault_markdown_graph_in_root, resolve_wikilink_target_in_root};
+use ofive_lib::test_support::{
+    get_current_vault_markdown_graph_in_root, resolve_wikilink_target_in_root,
+};
 use serde_json::Value;
 use support::TestVault;
 

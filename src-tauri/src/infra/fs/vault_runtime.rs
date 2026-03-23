@@ -15,11 +15,12 @@ use crate::infra::fs::fs_helpers::{
 };
 use crate::infra::fs::watcher;
 use crate::infra::persistence::vault_config_store::{
-    ensure_vault_config_file, load_vault_config, VaultConfig,
+    ensure_vault_config_file, load_vault_config,
 };
 use crate::infra::query::query_index;
 use crate::shared::vault_contracts::{
-    ReadBinaryFileResponse, ReadMarkdownResponse, SetVaultResponse, VaultTreeResponse,
+    ReadBinaryFileResponse, ReadMarkdownResponse, SetVaultResponse, VaultConfig,
+    VaultTreeResponse,
 };
 use crate::state::{get_vault_root, set_vault_root, AppState};
 

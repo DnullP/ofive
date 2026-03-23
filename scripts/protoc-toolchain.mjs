@@ -13,6 +13,95 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
 export const PINNED_PROTOC_VERSION = "33.4";
+const PINNED_PROTOC_MAJOR = Number.parseInt(
+    PINNED_PROTOC_VERSION.split(".")[0] ?? "0",
+    10,
+);
+
+/**
+ * @function parseProtocVersion
+ * @description 解析 `protoc --version` 输出，提取可比较的语义化版本信息。
+ * @param {string} versionOutput `protoc --version` 原始输出。
+ * @returns {{ raw: string, major: number, minor: number, patch: number }} 版本对象。
+ */
+function parseProtocVersion(versionOutput) {
+    const normalizedOutput = versionOutput.trim();
+    const match = /libprotoc\s+(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(normalizedOutput);
+
+    if (!match) {
+        throw new Error(`Unable to parse protoc version output: ${normalizedOutput}`);
+    }
+
+    return {
+        raw: normalizedOutput,
+        major: Number.parseInt(match[1] ?? "0", 10),
+        minor: Number.parseInt(match[2] ?? "0", 10),
+        patch: Number.parseInt(match[3] ?? "0", 10),
+    };
+}
+
+/**
+ * @function isCompatibleProtocVersion
+ * @description 判断给定 protoc 版本是否满足当前仓库允许的兼容策略。
+ * @param {string} versionOutput `protoc --version` 输出。
+ * @returns {boolean} 是否兼容当前仓库。
+ */
+function isCompatibleProtocVersion(versionOutput) {
+    const version = parseProtocVersion(versionOutput);
+    return version.major === PINNED_PROTOC_MAJOR;
+}
+
+/**
+ * @function resolveSystemProtocPath
+ * @description 解析当前主机 PATH 中的系统 protoc，便于离线开发场景复用本地工具链。
+ * @returns {string | null} 系统 protoc 可执行文件路径。
+ */
+function resolveSystemProtocPath() {
+    const locator = process.platform === "win32"
+        ? "where"
+        : "which";
+
+    try {
+        const locatorOutput = execFileSync(locator, ["protoc"], {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "ignore"],
+        });
+
+        return locatorOutput
+            .split(/\r?\n/u)
+            .map((entry) => entry.trim())
+            .find((entry) => entry.length > 0) ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * @function resolveCompatibleSystemProtoc
+ * @description 查找本机已安装且与仓库版本策略兼容的 protoc。
+ * @returns {{ path: string, version: string } | null} 兼容的系统 protoc 信息。
+ */
+function resolveCompatibleSystemProtoc() {
+    const systemProtocPath = resolveSystemProtocPath();
+    if (!systemProtocPath) {
+        return null;
+    }
+
+    const systemProtocVersion = readPinnedProtocVersion(systemProtocPath);
+    if (!isCompatibleProtocVersion(systemProtocVersion)) {
+        console.warn("[protoc-toolchain] system protoc rejected", {
+            systemProtocPath,
+            systemProtocVersion,
+            compatibleMajor: PINNED_PROTOC_MAJOR,
+        });
+        return null;
+    }
+
+    return {
+        path: systemProtocPath,
+        version: systemProtocVersion,
+    };
+}
 
 /**
  * @function resolvePinnedProtocPath
@@ -132,12 +221,33 @@ function resolveConfiguredProtocPath() {
 export async function ensurePinnedProtoc() {
     const configuredProtocPath = resolveConfiguredProtocPath();
     if (configuredProtocPath) {
+        const configuredVersion = readPinnedProtocVersion(configuredProtocPath);
+        if (!isCompatibleProtocVersion(configuredVersion)) {
+            throw new Error(
+                `Configured protoc is incompatible: ${configuredVersion}. Expected major ${PINNED_PROTOC_MAJOR}.x`,
+            );
+        }
+
+        console.info("[protoc-toolchain] using configured protoc", {
+            configuredProtocPath,
+            configuredVersion,
+        });
         return configuredProtocPath;
     }
 
     const protocPath = resolvePinnedProtocPath();
     if (existsSync(protocPath)) {
         return protocPath;
+    }
+
+    const compatibleSystemProtoc = resolveCompatibleSystemProtoc();
+    if (compatibleSystemProtoc) {
+        console.info("[protoc-toolchain] using compatible system protoc", {
+            protocPath: compatibleSystemProtoc.path,
+            version: compatibleSystemProtoc.version,
+            preferredVersion: PINNED_PROTOC_VERSION,
+        });
+        return compatibleSystemProtoc.path;
     }
 
     const archiveName = resolveDownloadArchiveName();
@@ -178,6 +288,12 @@ export async function ensurePinnedProtoc() {
         });
 
         return protocPath;
+    } catch (error) {
+        throw new Error(
+            `[protoc-toolchain] unable to resolve compatible protoc. `
+            + `Preferred version: ${PINNED_PROTOC_VERSION}; accepted major: ${PINNED_PROTOC_MAJOR}.x; `
+            + `download failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
     } finally {
         rmSync(tempRoot, { recursive: true, force: true });
     }

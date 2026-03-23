@@ -12,7 +12,7 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use ofive_lib::suggest_wikilink_targets_in_root;
+use ofive_lib::test_support::suggest_wikilink_targets_in_root;
 use serde_json::Value;
 use support::TestVault;
 

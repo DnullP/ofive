@@ -6,7 +6,7 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use ofive_lib::search_vault_markdown_files_in_root;
+use ofive_lib::test_support::search_vault_markdown_files_in_root;
 use serde_json::Value;
 use support::TestVault;
 

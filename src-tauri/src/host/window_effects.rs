@@ -8,7 +8,7 @@
 //! 该模块仅负责窗口层视觉效果，不处理前端透明样式。
 
 use serde::{Deserialize, Serialize};
-use tauri::WebviewWindow;
+use tauri::{Theme, WebviewWindow};
 
 #[cfg(target_os = "windows")]
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -84,6 +84,7 @@ fn pack_windows_acrylic_gradient_color(color: (u8, u8, u8, u8)) -> u32 {
 #[serde(rename_all = "camelCase")]
 pub struct WindowsAcrylicEffectConfig {
     pub enabled: bool,
+    pub app_theme_mode: AppThemeMode,
     pub disable_system_backdrop: bool,
     pub focused_color: WindowsAcrylicColor,
     pub focused_accent_flags: u32,
@@ -93,10 +94,29 @@ pub struct WindowsAcrylicEffectConfig {
     pub inactive_animation_id: u32,
 }
 
+/// 应用前端主题模式快照。
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum AppThemeMode {
+    Dark,
+    Light,
+    Kraft,
+}
+
+impl AppThemeMode {
+    fn to_tauri_theme(&self) -> Theme {
+        match self {
+            Self::Dark => Theme::Dark,
+            Self::Light | Self::Kraft => Theme::Light,
+        }
+    }
+}
+
 impl Default for WindowsAcrylicEffectConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            app_theme_mode: AppThemeMode::Dark,
             disable_system_backdrop: true,
             focused_color: WindowsAcrylicColor {
                 red: 56,
@@ -160,6 +180,7 @@ pub(crate) fn apply_runtime_window_effect_config(
     #[cfg(target_os = "macos")]
     {
         let _ = is_focused;
+        apply_macos_theme(window, &windows_acrylic_config.app_theme_mode)?;
         return apply_macos_effect(window, windows_acrylic_config.enabled);
     }
 
@@ -170,6 +191,23 @@ pub(crate) fn apply_runtime_window_effect_config(
         let _ = is_focused;
         Ok(())
     }
+}
+
+#[cfg(target_os = "macos")]
+fn apply_macos_theme(
+    window: &WebviewWindow,
+    app_theme_mode: &AppThemeMode,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let native_theme = app_theme_mode.to_tauri_theme();
+    window
+        .set_theme(Some(native_theme.clone()))
+        .map_err(|error| format!("macOS set_theme failed: {error}"))?;
+
+    log::info!(
+        "[window] applied macOS native theme: {:?}",
+        native_theme
+    );
+    Ok(())
 }
 
 /// 为 Windows 主窗口应用系统毛玻璃效果。
@@ -484,7 +522,8 @@ fn apply_macos_window_corner_radius(
 
 #[cfg(test)]
 mod tests {
-    use super::WindowsAcrylicEffectConfig;
+    use super::{AppThemeMode, WindowsAcrylicEffectConfig};
+    use tauri::Theme;
 
     #[cfg(target_os = "windows")]
     use super::pack_windows_acrylic_gradient_color;
@@ -494,6 +533,7 @@ mod tests {
         let config = WindowsAcrylicEffectConfig::default();
 
         assert!(config.enabled);
+        assert_eq!(config.app_theme_mode, AppThemeMode::Dark);
         assert!(config.disable_system_backdrop);
         assert_eq!(config.focused_color.red, 56);
         assert_eq!(config.focused_color.green, 64);
@@ -507,6 +547,13 @@ mod tests {
         assert_eq!(config.inactive_color.alpha, 56);
         assert_eq!(config.inactive_accent_flags, 0);
         assert_eq!(config.inactive_animation_id, 0);
+    }
+
+    #[test]
+    fn app_theme_mode_maps_to_expected_native_theme() {
+        assert_eq!(AppThemeMode::Dark.to_tauri_theme(), Theme::Dark);
+        assert_eq!(AppThemeMode::Light.to_tauri_theme(), Theme::Light);
+        assert_eq!(AppThemeMode::Kraft.to_tauri_theme(), Theme::Light);
     }
 
     #[cfg(target_os = "windows")]

@@ -2,8 +2,25 @@
 //!
 //! 定义 vault 相关命令、查询与 root helper 共享的输入输出结构体。
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultConfig {
+    pub schema_version: u32,
+    pub entries: Map<String, Value>,
+}
+
+impl Default for VaultConfig {
+    fn default() -> Self {
+        Self {
+            schema_version: 1,
+            entries: Map::new(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

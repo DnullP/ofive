@@ -46,8 +46,9 @@ use crate::ai_service::{
 };
 use crate::infra::persistence::extension_private_store;
 use crate::infra::persistence::vault_config_store::{
-    load_vault_config, save_vault_config, VaultConfig,
+    load_vault_config, save_vault_config,
 };
+use crate::shared::vault_contracts::VaultConfig;
 use crate::state::{get_vault_root, AppState};
 
 const AI_EXTENSION_PRIVATE_STORE_OWNER: &str = "ai-chat";
@@ -607,9 +608,8 @@ mod tests {
     use crate::ai_service::{
         AiChatConversationRecord, AiChatHistoryMessage, AiChatHistoryState, AiChatSettings,
     };
-    use crate::infra::persistence::vault_config_store::{
-        load_vault_config, save_vault_config, VaultConfig,
-    };
+    use crate::infra::persistence::vault_config_store::{load_vault_config, save_vault_config};
+    use crate::shared::vault_contracts::VaultConfig;
     use serde_json::json;
     use std::collections::HashMap;
     use std::fs;

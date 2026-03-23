@@ -3,29 +3,10 @@
 //! 该模块负责仓库级配置文件的读写与初始化。
 //! 当前阶段仅提供配置持久化基础能力，不承载具体业务规则。
 
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// 仓库配置对象。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VaultConfig {
-    /// 配置结构版本。
-    pub schema_version: u32,
-    /// 预留配置项集合。
-    pub entries: Map<String, Value>,
-}
-
-impl Default for VaultConfig {
-    fn default() -> Self {
-        Self {
-            schema_version: 1,
-            entries: Map::new(),
-        }
-    }
-}
+use crate::shared::vault_contracts::VaultConfig;
 
 fn vault_config_dir(vault_root: &Path) -> PathBuf {
     vault_root.join(".ofive")

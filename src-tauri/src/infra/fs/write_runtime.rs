@@ -15,10 +15,10 @@ use crate::infra::fs::fs_helpers::{
     resolve_binary_target_path, resolve_markdown_path, resolve_markdown_target_path,
     resolve_vault_directory_path,
 };
-use crate::infra::persistence::vault_config_store::{save_vault_config, VaultConfig};
+use crate::infra::persistence::vault_config_store::save_vault_config;
 use crate::infra::query::query_index;
 use crate::shared::vault_contracts::{
-    CopyEntryResponse, WriteBinaryFileResponse, WriteMarkdownResponse,
+    CopyEntryResponse, VaultConfig, WriteBinaryFileResponse, WriteMarkdownResponse,
 };
 use crate::state::{get_vault_root, AppState, PendingVaultWriteTrace};
 
@@ -956,7 +956,7 @@ mod tests {
         save_vault_markdown_file_in_root,
     };
     use crate::host::window_effects::WindowsAcrylicEffectConfig;
-    use crate::infra::persistence::vault_config_store::VaultConfig;
+    use crate::shared::vault_contracts::VaultConfig;
     use crate::state::AppState;
 
     static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(1);

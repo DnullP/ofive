@@ -7,4 +7,5 @@ pub(crate) mod bootstrap;
 pub(crate) mod command_registry;
 pub(crate) mod commands;
 pub(crate) mod events;
+pub(crate) mod module_contribution;
 pub(crate) mod window_effects;

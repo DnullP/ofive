@@ -4,7 +4,7 @@
 //! - 支持文件名、相对路径、绝对路径
 //! - 多同名文件时按“与当前目录路径树距离”选择最近项
 
-use ofive_lib::resolve_wikilink_target_path_in_vault;
+use ofive_lib::test_support::resolve_wikilink_target_path_in_vault;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};

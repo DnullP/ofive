@@ -6,7 +6,7 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use ofive_lib::{get_vault_markdown_ast_in_root, parse_markdown_to_ast};
+use ofive_lib::test_support::{get_vault_markdown_ast_in_root, parse_markdown_to_ast};
 use serde_json::Value;
 use support::TestVault;
 

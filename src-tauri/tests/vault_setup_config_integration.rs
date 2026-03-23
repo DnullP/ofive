@@ -8,7 +8,7 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use ofive_lib::{
+use ofive_lib::test_support::{
     get_current_vault_config_in_root, save_current_vault_config_in_root,
     set_current_vault_precheck, VaultConfig,
 };
