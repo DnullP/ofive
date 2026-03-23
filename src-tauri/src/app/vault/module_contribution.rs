@@ -2,12 +2,25 @@
 //!
 //! 定义 Vault 后端模块向宿主平台贡献的模块元数据。
 
-use crate::backend_module_manifest::BackendModuleManifest;
+use crate::backend_module_manifest::{BackendModuleManifest, BackendModulePublicSurface};
 use crate::host::commands::vault_commands::VAULT_COMMAND_IDS;
 use crate::module_contribution::BackendModuleContribution;
 
 #[cfg(test)]
 use crate::module_boundary_template::{ModuleBoundaryTemplate, ModulePrivateNamespaceTemplate};
+
+const VAULT_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[BackendModulePublicSurface {
+    namespace: "crate::shared::vault_contracts",
+    allowed_paths: &[
+        "src/app/vault/",
+        "src/host/commands/vault_commands.rs",
+        "src/infra/fs/",
+        "src/infra/query/",
+        "src/infra/persistence/",
+        "src/test_support/",
+    ],
+    rationale: "vault 输入输出与配置结构属于 Vault 模块对外复用的稳定 shared contract",
+}];
 
 #[cfg(test)]
 const VAULT_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[
@@ -62,6 +75,7 @@ pub(crate) fn vault_backend_module_manifest() -> BackendModuleManifest {
     BackendModuleManifest {
         module_id: contribution.module_id,
         contribution,
+        public_surfaces: VAULT_PUBLIC_SURFACES,
         #[cfg(test)]
         boundary_template: Some(ModuleBoundaryTemplate {
             module_id: "vault",

@@ -23,16 +23,21 @@ pub(crate) async fn ensure_ai_sidecar_endpoint(
     app_handle: &AppHandle,
     state: &State<'_, AppState>,
 ) -> Result<String, String> {
-    let current_endpoint = {
+    let current_runtime = {
         let guard = state
             .ai_sidecar_runtime
             .lock()
             .map_err(|error| format!("读取 AI sidecar 状态失败: {error}"))?;
-        guard.as_ref().map(|runtime| runtime.endpoint.clone())
+        guard.as_ref().map(|runtime| (runtime.port, runtime.endpoint.clone()))
     };
 
-    if let Some(endpoint) = current_endpoint {
+    if let Some((port, endpoint)) = current_runtime {
         if wait_for_sidecar_ready(endpoint.clone()).await.is_ok() {
+            log::debug!(
+                "[ai-service] reuse healthy sidecar runtime: port={} endpoint={}",
+                port,
+                endpoint
+            );
             return Ok(endpoint);
         }
 
@@ -40,7 +45,14 @@ pub(crate) async fn ensure_ai_sidecar_endpoint(
             .ai_sidecar_runtime
             .lock()
             .map_err(|error| format!("重置 AI sidecar 状态失败: {error}"))?;
-        *guard = None;
+        if let Some(runtime) = guard.take() {
+            log::warn!(
+                "[ai-service] sidecar runtime unhealthy, restarting: port={} endpoint={}",
+                runtime.port,
+                runtime.endpoint
+            );
+            let _ = runtime.child.kill();
+        }
     }
 
     let endpoint = spawn_sidecar(app_handle, state)?;
@@ -56,6 +68,11 @@ fn spawn_sidecar(app_handle: &AppHandle, state: &State<'_, AppState>) -> Result<
         .map_err(|error| format!("写入 AI sidecar 状态失败: {error}"))?;
 
     if let Some(runtime) = guard.as_ref() {
+        log::debug!(
+            "[ai-service] sidecar runtime already registered: port={} endpoint={}",
+            runtime.port,
+            runtime.endpoint
+        );
         return Ok(runtime.endpoint.clone());
     }
 

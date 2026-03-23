@@ -4,7 +4,7 @@
 //! 当前阶段 AI 先贡献命令、事件与 persistence owner；
 //! capability/tool 暴露仍主要通过平台 capability registry 投影其他模块能力。
 
-use crate::backend_module_manifest::BackendModuleManifest;
+use crate::backend_module_manifest::{BackendModuleManifest, BackendModulePublicSurface};
 use crate::host::commands::ai_commands::AI_COMMAND_IDS;
 use crate::host::events::ai_events::AI_EVENTS;
 use crate::infra::persistence::backend_plugin_store::AI_BACKEND_PLUGIN_ID;
@@ -14,6 +14,29 @@ use crate::module_contribution::BackendModuleContribution;
 use crate::module_boundary_template::{ModuleBoundaryTemplate, ModulePrivateNamespaceTemplate};
 
 const AI_PERSISTENCE_OWNERS: &[&str] = &[AI_BACKEND_PLUGIN_ID];
+
+const AI_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[
+    BackendModulePublicSurface {
+        namespace: "crate::shared::backend_plugin_contracts",
+        allowed_paths: &[
+            "src/app/ai/",
+            "src/host/commands/ai_commands.rs",
+            "src/infra/persistence/backend_plugin_store.rs",
+        ],
+        rationale: "backend plugin 配置契约属于 AI 模块对外复用的稳定 shared contract",
+    },
+    BackendModulePublicSurface {
+        namespace: "crate::ai_service::",
+        allowed_paths: &[
+            "src/app/ai/",
+            "src/infra/ai/",
+            "src/infra/persistence/ai_chat_store.rs",
+            "src/host/commands/ai_commands.rs",
+            "src/host/events/ai_events.rs",
+        ],
+        rationale: "AI protobuf 与流式事件 payload 属于 AI 模块共享契约边界",
+    },
+];
 
 #[cfg(test)]
 const AI_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[
@@ -57,6 +80,7 @@ pub(crate) fn ai_backend_module_manifest() -> BackendModuleManifest {
     BackendModuleManifest {
         module_id: contribution.module_id,
         contribution,
+        public_surfaces: AI_PUBLIC_SURFACES,
         #[cfg(test)]
         boundary_template: Some(ModuleBoundaryTemplate {
             module_id: "ai-chat",

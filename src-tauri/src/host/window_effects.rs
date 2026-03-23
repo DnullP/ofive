@@ -203,10 +203,7 @@ fn apply_macos_theme(
         .set_theme(Some(native_theme.clone()))
         .map_err(|error| format!("macOS set_theme failed: {error}"))?;
 
-    log::info!(
-        "[window] applied macOS native theme: {:?}",
-        native_theme
-    );
+    log::info!("[window] applied macOS native theme: {:?}", native_theme);
     Ok(())
 }
 

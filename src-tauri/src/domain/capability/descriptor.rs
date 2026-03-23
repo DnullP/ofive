@@ -6,6 +6,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 /// 平台能力类型。
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum CapabilityKind {

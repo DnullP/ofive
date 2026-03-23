@@ -5,6 +5,7 @@
 //!
 //! - module_id
 //! - module contribution
+//! - 模块声明的公共依赖面
 //! - 模块私有边界模板（测试态）
 //!
 //! 目标是让模块接入平台时，优先通过一个统一入口声明自身，
@@ -15,6 +16,18 @@ use crate::module_contribution::BackendModuleContribution;
 #[cfg(test)]
 use crate::module_boundary_template::ModuleBoundaryTemplate;
 
+/// 模块对平台声明的一条稳定公共依赖面规则。
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Clone, Copy)]
+pub(crate) struct BackendModulePublicSurface {
+    /// 允许被跨模块依赖的命名空间前缀。
+    pub namespace: &'static str,
+    /// 允许使用该公共依赖面的源码路径前缀。
+    pub allowed_paths: &'static [&'static str],
+    /// 保留该公共依赖面的原因说明。
+    pub rationale: &'static str,
+}
+
 /// 后端模块统一 manifest。
 pub(crate) struct BackendModuleManifest {
     /// 模块唯一标识。
@@ -22,6 +35,8 @@ pub(crate) struct BackendModuleManifest {
     pub module_id: &'static str,
     /// 模块向平台贡献的运行时元数据与能力入口。
     pub contribution: BackendModuleContribution,
+    /// 模块声明的稳定公共依赖面。
+    pub public_surfaces: &'static [BackendModulePublicSurface],
     /// 模块私有边界模板。
     #[cfg(test)]
     pub boundary_template: Option<ModuleBoundaryTemplate>,
@@ -62,6 +77,16 @@ mod tests {
                 assert_eq!(
                     manifest.module_id, boundary_template.module_id,
                     "boundary template should stay aligned with manifest module_id"
+                );
+            }
+
+            let mut public_surface_namespaces = HashSet::new();
+            for public_surface in manifest.public_surfaces {
+                assert!(
+                    public_surface_namespaces.insert(public_surface.namespace),
+                    "module public surface namespace should not duplicate inside one manifest: module={} namespace={}",
+                    manifest.module_id,
+                    public_surface.namespace
                 );
             }
         }

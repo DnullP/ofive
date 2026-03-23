@@ -25,7 +25,8 @@ mod tests {
 
     #[test]
     fn platform_public_surfaces_should_only_be_used_from_allowed_paths() {
-        let violations = collect_namespace_rule_violations(platform_public_surface_rules());
+        let rules = platform_public_surface_rules();
+        let violations = collect_namespace_rule_violations(&rules);
 
         assert!(
             violations.is_empty(),
@@ -149,7 +150,8 @@ mod tests {
         }
     }
 
-    fn private_namespace_rules() -> Vec<&'static crate::module_boundary_template::ModulePrivateNamespaceTemplate> {
+    fn private_namespace_rules(
+    ) -> Vec<&'static crate::module_boundary_template::ModulePrivateNamespaceTemplate> {
         builtin_module_boundary_templates()
             .iter()
             .flat_map(|template| template.private_namespaces.iter())
