@@ -9,13 +9,14 @@ ofive 是一个基于 Tauri + React + TypeScript + Rust 的桌面笔记应用，
 1. Bun
 2. Rust stable toolchain
 3. Go
-4. `protoc`（Protocol Buffers 编译器）
 
 说明：
 
 - `bun run tauri dev` 会先执行 `bun run build:sidecar`
-- `build:sidecar` 会调用 `go` 和 `protoc`
-- 如果缺少任一前置，桌面开发和桌面打包都会失败
+- 项目脚本会自动下载并缓存固定版本的 `protoc` 到 `.tools/protoc/`
+- `build:sidecar` 会调用 `go` 和仓库内固定版本的 `protoc`
+- 如果缺少 Bun / Rust / Go，桌面开发和桌面打包都会失败
+- 如果你直接运行 `cargo test` / `cargo build` 而不是通过仓库脚本，仍需要自行安装 `protoc` 或设置 `PROTOC`
 
 ## Windows 构建说明
 
@@ -27,7 +28,6 @@ ofive 是一个基于 Tauri + React + TypeScript + Rust 的桌面笔记应用，
 winget install --id Oven-sh.Bun -e
 winget install --id Rustlang.Rustup -e
 winget install --id GoLang.Go -e
-winget install --id Google.Protobuf -e
 winget install --id Microsoft.EdgeWebView2Runtime -e
 ```
 
@@ -46,7 +46,6 @@ bun --version
 rustc --version
 cargo --version
 go version
-protoc --version
 ```
 
 ### 2. 安装项目依赖
@@ -80,7 +79,7 @@ xcode-select --install
 如果使用 Homebrew，推荐安装：
 
 ```bash
-brew install oven-sh/bun/bun go protobuf
+brew install oven-sh/bun/bun go
 ```
 
 安装 Rust：
@@ -97,7 +96,6 @@ bun --version
 rustc --version
 cargo --version
 go version
-protoc --version
 ```
 
 ### 2. 安装项目依赖
@@ -137,7 +135,6 @@ sudo apt-get install -y \
 	libwebkit2gtk-4.1-dev \
 	libxdo-dev \
 	patchelf \
-	protobuf-compiler \
 	wget
 ```
 
@@ -156,7 +153,6 @@ bun --version
 rustc --version
 cargo --version
 go version
-protoc --version
 ```
 
 ### 3. 安装项目依赖
@@ -215,6 +211,8 @@ bun run web:preview
 
 ```bash
 bun run build:sidecar
+bun run proto:generate
+bun run proto:check
 bun run build
 bun run test
 bun run test:rust
@@ -231,7 +229,12 @@ bun run tauri build
 
 ### `Executable not found in $PATH: protoc`
 
-说明 `protoc` 未安装，或安装后没有重新打开终端。
+如果你是通过 `bun run test:rust`、`bun run tauri dev`、`bun run tauri build` 或 `bun run build:sidecar` 执行，一般不会再看到这个错误，因为这些脚本会自动准备固定版本的 `protoc`。
+
+如果你是直接运行 `cargo test`、`cargo build` 或 IDE 内部直接调用 Cargo，这说明当前环境没有可用的 `protoc`。解决方式二选一：
+
+1. 安装系统级 `protoc`
+2. 改用仓库脚本，或显式设置 `PROTOC=.tools/protoc/<version>/<platform>/bin/protoc`
 
 ### `protoc-gen-go: The system cannot find the file specified`
 
@@ -241,7 +244,13 @@ bun run tauri build
 bun run build:sidecar
 ```
 
-如果仍失败，优先检查 `go`、`protoc` 和终端 PATH。
+如果仍失败，优先检查 `go` 是否可用，以及当前网络环境是否允许下载仓库固定版本的 `protoc`。
+
+## Proto 协作约定
+
+- 修改 `proto/ai_sidecar.proto` 后，优先执行 `bun run proto:generate`
+- 提交前执行 `bun run proto:check`，确认生成代码没有漂移
+- 不要直接依赖本机系统 `protoc` 重新生成 Go stub；项目脚本会统一使用仓库固定版本
 
 ## 文档
 

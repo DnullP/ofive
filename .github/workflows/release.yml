@@ -31,11 +31,6 @@ jobs:
         with:
           go-version-file: sidecars/go/ofive-ai-agent/go.mod
 
-      - name: Setup Protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          version: '31.1'
-
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -68,6 +63,9 @@ jobs:
 
       - name: Build Go sidecar binary
         run: bun run build:sidecar
+
+      - name: Verify generated Go stubs are up to date
+        run: git diff --exit-code -- sidecars/go/ofive-ai-agent/gen/ofive/aiv1
 
       - name: Install Playwright browser
         run: bun run test:playwright:install
@@ -130,11 +128,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: sidecars/go/ofive-ai-agent/go.mod
-
-      - name: Setup Protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          version: '31.1'
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable

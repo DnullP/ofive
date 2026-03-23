@@ -13,6 +13,7 @@ import { registerHorizontalRuleSyntaxRenderer } from "./syntaxPlugins/horizontal
 import { registerInlineCodeSyntaxRenderer } from "./syntaxPlugins/inlineCodeSyntaxRenderer";
 import { registerItalicSyntaxRenderer } from "./syntaxPlugins/italicSyntaxRenderer";
 import { registerLinkSyntaxRenderer } from "./syntaxPlugins/linkSyntaxRenderer";
+import { registerListSyntaxRenderer } from "./syntaxPlugins/listSyntaxRenderer";
 import { registerStrikethroughSyntaxRenderer } from "./syntaxPlugins/strikethroughSyntaxRenderer";
 import { registerTagSyntaxRenderer } from "./syntaxPlugins/tagSyntaxRenderer";
 import { registerWikiLinkSyntaxRenderer } from "./syntaxPlugins/wikiLinkSyntaxRenderer";
@@ -35,6 +36,7 @@ export function ensureBuiltinSyntaxRenderersRegistered(): void {
     registerInlineCodeSyntaxRenderer();
     registerWikiLinkSyntaxRenderer();
     registerTagSyntaxRenderer();
+    registerListSyntaxRenderer();
     registerBlockquoteSyntaxRenderer();
     registerHorizontalRuleSyntaxRenderer();
     registerLinkSyntaxRenderer();

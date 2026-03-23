@@ -2,6 +2,11 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+    ensurePinnedProtoc,
+    PINNED_PROTOC_VERSION,
+    readPinnedProtocVersion,
+} from "./protoc-toolchain.mjs";
 
 /**
  * @module scripts/build-sidecar
@@ -67,8 +72,8 @@ function ensureGoCodegenTools(target) {
         mkdirSync(toolDir, { recursive: true });
     }
 
-    const protocGenGoPath = path.join(toolDir, "protoc-gen-go");
-    const protocGenGoGrpcPath = path.join(toolDir, "protoc-gen-go-grpc");
+    const protocGenGoPath = resolveLocalExecutable(toolDir, "protoc-gen-go");
+    const protocGenGoGrpcPath = resolveLocalExecutable(toolDir, "protoc-gen-go-grpc");
 
     if (!existsSync(protocGenGoPath)) {
         execFileSync(
@@ -107,8 +112,9 @@ function ensureGoCodegenTools(target) {
  * @function generateGoStubs
  * @description 根据共享 proto 为指定 sidecar 生成 Go gRPC 代码。
  * @param {{ sourceDir: string, protoFiles: string[], generatedDir: string }} target sidecar 构建目标。
+ * @param {string} protocPath 固定版本 protoc 路径。
  */
-function generateGoStubs(target) {
+function generateGoStubs(target, protocPath) {
     if (!existsSync(target.generatedDir)) {
         mkdirSync(target.generatedDir, { recursive: true });
     }
@@ -117,7 +123,7 @@ function generateGoStubs(target) {
     const protocGenGoPath = resolveLocalExecutable(toolDir, "protoc-gen-go");
     const protocGenGoGrpcPath = resolveLocalExecutable(toolDir, "protoc-gen-go-grpc");
     execFileSync(
-        "protoc",
+        protocPath,
         [
             `-I${protoDir}`,
             `--plugin=protoc-gen-go=${protocGenGoPath}`,
@@ -139,13 +145,22 @@ function generateGoStubs(target) {
  * @function buildSidecars
  * @description 编译当前平台 sidecar 二进制集合。
  */
-function buildSidecars() {
+async function buildSidecars() {
+    const generateOnly = process.argv.includes("--generate-only");
     const hostTuple = getHostTuple();
     const extension = process.platform === "win32" ? ".exe" : "";
+    const protocPath = await ensurePinnedProtoc();
+    const protocVersion = readPinnedProtocVersion(protocPath);
 
     if (!existsSync(outputDir)) {
         mkdirSync(outputDir, { recursive: true });
     }
+
+    console.info("[sidecar-build] using protoc", {
+        version: protocVersion,
+        pinnedVersion: PINNED_PROTOC_VERSION,
+        protocPath,
+    });
 
     for (const target of SIDECAR_TARGETS) {
         const binaryName = `${target.id}-${hostTuple}${extension}`;
@@ -158,7 +173,14 @@ function buildSidecars() {
         });
 
         ensureGoCodegenTools(target);
-        generateGoStubs(target);
+        generateGoStubs(target, protocPath);
+
+        if (generateOnly) {
+            console.info("[sidecar-build] codegen-only success", {
+                id: target.id,
+            });
+            continue;
+        }
 
         execFileSync(
             "go",
@@ -181,4 +203,4 @@ function buildSidecars() {
     }
 }
 
-buildSidecars();
+await buildSidecars();
