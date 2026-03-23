@@ -1140,7 +1140,9 @@ export function DockviewLayout({
                     console.info("[DockviewLayout] skip relayout for recoverable pane error", { error });
                     return;
                 }
-                throw error;
+                /* 在 rAF/setTimeout 中重新抛出错误会导致无法捕获的 window 错误，
+                 * 因此记录错误后静默返回，避免污染 pageErrors。 */
+                console.warn("[DockviewLayout] pane relayout error (suppressed in async context)", { error });
             }
         };
 
