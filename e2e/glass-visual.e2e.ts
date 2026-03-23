@@ -27,6 +27,8 @@ test.describe("glass visual reference", () => {
 
         await page.getByRole("main", { name: "Dockview Main Area" }).waitFor({ state: "visible" });
         await page.getByTitle("AI 对话").click();
+        /* 等待 AI 对话面板渲染完毕，避免 evaluate 时元素尚未出现 */
+        await page.locator(".ai-chat-panel").waitFor({ state: "visible" });
 
         const styleSnapshot = await page.evaluate(() => {
             const html = document.documentElement;
