@@ -1,5 +1,7 @@
 # ofive 插件开发教程
 
+> 如果你在做的是完整功能扩展，而不是单纯的前端插件实现，请先看总流程文档：`docs/feature-extension-workflow.md`。
+
 本文面向当前仓库的前端插件系统，目标是回答三个问题：
 
 1. 插件是怎么被加载的。
@@ -13,28 +15,28 @@
 
 ## 1. 插件系统概览
 
-当前项目的插件系统采用“自动发现 + 模块自注册”模式。
+当前项目的插件系统采用“自动发现 + 插件运行时激活”模式。
 
 插件加载入口在 [src/main.tsx](../src/main.tsx)：
 
 ```ts
-import.meta.glob("./plugins/**/*.{ts,tsx}", { eager: true });
+await startDiscoveredPlugins();
 ```
 
 这意味着：
 
-1. `src/plugins/` 下的每一个 `.ts` 或 `.tsx` 文件都会在启动时被立即导入。
+1. `src/plugins/` 下匹配 `*Plugin.ts` / `*Plugin.tsx` 的入口文件会被插件运行时自动发现。
 2. 插件不需要在别处手动 `import`。
-3. 插件模块被导入时，应直接执行自注册副作用。
+3. 入口模块应导出 `activatePlugin()`，由运行时负责激活、卸载与 HMR 重载。
 
 推荐把插件理解成“入口文件”。入口文件的职责通常只有两类：
 
 1. 注册 UI 扩展点，例如 activity、panel、tab。
-2. 注册插件自己的架构元数据、i18n 资源、日志入口。
+2. 注册插件自己的架构元数据、i18n 资源、日志入口，并返回清理函数。
 
 ## 2. 一个重要约束
 
-`src/plugins/` 目录是自动扫描目录，所以不要把以下内容直接放进这里：
+`src/plugins/` 目录是插件入口自动扫描目录，所以不要把以下内容直接放进这里：
 
 1. 测试文件。
 2. 纯工具模块。
@@ -50,7 +52,25 @@ import.meta.glob("./plugins/**/*.{ts,tsx}", { eager: true });
 1. 入口文件在 [src/plugins/architectureDevtoolsPlugin.tsx](../src/plugins/architectureDevtoolsPlugin.tsx)
 2. 实际实现放在 [src/devtools/architecture/](../src/devtools/architecture)
 
-如果把 helper 文件也放进 `src/plugins/`，它们也会被 eager import，并在模块顶层代码存在副作用时被误当成插件执行。
+如果把 helper 文件也放进 `src/plugins/`，它们可能被误识别为插件入口，或者在后续重构时重新进入自动扫描范围。
+
+### 2.1 当前插件入口约定
+
+当前推荐写法：
+
+```ts
+export function activatePlugin(): () => void {
+    const disposeA = registerSomething();
+    const disposeB = registerSomethingElse();
+
+    return () => {
+        disposeB();
+        disposeA();
+    };
+}
+```
+
+不要再依赖“模块一导入就直接顶层执行注册副作用”的模式。当前仓库已经有统一插件运行时，插件入口应把生命周期显式交给运行时管理。
 
 ## 3. 当前支持的扩展点
 
