@@ -27,7 +27,7 @@ async function collectRawModules(pattern: string): Promise<Record<string, string
 }
 
 describe("architectureDiscovery", () => {
-    it("应自动发现插件、事件、前端接口与后端命令", async () => {
+    it("应自动发现插件、事件、前端接口、后端命令与后端模块边界", async () => {
         const slice = createAutoDiscoveredArchitectureSlice({
             frontendModules: await collectRawModules("src/**/*.{ts,tsx}"),
             backendModules: await collectRawModules("src-tauri/src/**/*.rs"),
@@ -38,11 +38,15 @@ describe("architectureDiscovery", () => {
         expect(slice.nodes.some((node) => node.kind === "event")).toBe(true);
         expect(slice.nodes.some((node) => node.kind === "frontend-api")).toBe(true);
         expect(slice.nodes.some((node) => node.kind === "backend-api")).toBe(true);
+        expect(slice.nodes.some((node) => node.kind === "backend-module")).toBe(true);
+        expect(slice.nodes.some((node) => node.kind === "backend-event")).toBe(true);
 
         expect(nodeTitles.has("outlinePlugin")).toBe(true);
         expect(nodeTitles.has("vault.fs")).toBe(true);
         expect(nodeTitles.has("getCurrentVaultTree")).toBe(true);
         expect(nodeTitles.has("get_current_vault_tree")).toBe(true);
+        expect(nodeTitles.has("vault")).toBe(true);
+        expect(nodeTitles.has("ai://chat-stream")).toBe(true);
     });
 
     it("应建立前端 API 到后端命令的调用边", async () => {
@@ -128,6 +132,54 @@ describe("architectureDiscovery", () => {
                 node.title === "fileTreeClipboard" &&
                 node.moduleLayer === "plugin-logic"
             );
+        })).toBe(true);
+    });
+
+    it("应将后端模块与命令连接起来，并把边界规则保留在模块详情中", async () => {
+        const slice = createAutoDiscoveredArchitectureSlice({
+            frontendModules: await collectRawModules("src/**/*.{ts,tsx}"),
+            backendModules: await collectRawModules("src-tauri/src/**/*.rs"),
+        });
+
+        const vaultModule = slice.nodes.find((node) => node.id === "backend-module:vault");
+
+        expect(slice.edges.some((edge) => {
+            return (
+                edge.from === "backend-api:get_current_vault_tree" &&
+                edge.to === "backend-module:vault" &&
+                edge.kind === "implemented-by-backend-module"
+            );
+        })).toBe(true);
+
+        expect(vaultModule?.details?.includes("public surface: shared::vault_contracts")).toBe(true);
+        expect(vaultModule?.details?.includes("private boundary: app::vault::")).toBe(true);
+
+        expect(slice.edges.some((edge) => {
+            return (
+                edge.from === "backend-event:ai://chat-stream" &&
+                edge.to === "backend-module:ai-chat" &&
+                edge.kind === "owned-by-backend-module"
+            );
+        })).toBe(true);
+    });
+
+    it("应发现后端模块之间的依赖关系，并记录依赖产生原因", async () => {
+        const slice = createAutoDiscoveredArchitectureSlice({
+            frontendModules: await collectRawModules("src/**/*.{ts,tsx}"),
+            backendModules: await collectRawModules("src-tauri/src/**/*.rs"),
+        });
+
+        const aiToHostDependency = slice.edges.find((edge) => {
+            return (
+                edge.from === "backend-module:ai-chat" &&
+                edge.to === "backend-module:host-platform" &&
+                edge.kind === "depends-on-backend-module"
+            );
+        });
+
+        expect(aiToHostDependency).toBeDefined();
+        expect(aiToHostDependency?.details?.some((detail) => {
+            return detail.includes("public · app::capability::") || detail.includes("public · app::persistence::persistence_app_service");
         })).toBe(true);
     });
 });

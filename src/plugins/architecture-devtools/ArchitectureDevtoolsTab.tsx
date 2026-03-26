@@ -49,6 +49,8 @@ const KIND_ORDER: ArchitectureNodeKind[] = [
     "event",
     "frontend-api",
     "backend-api",
+    "backend-event",
+    "backend-module",
 ];
 
 const FILTER_KIND_ORDER: Array<ArchitectureNodeKind | "all"> = [
@@ -59,6 +61,8 @@ const FILTER_KIND_ORDER: Array<ArchitectureNodeKind | "all"> = [
     "event",
     "frontend-api",
     "backend-api",
+    "backend-event",
+    "backend-module",
 ];
 
 const MODULE_LAYER_ORDER: ArchitectureModuleLayer[] = [
@@ -269,6 +273,10 @@ function getKindLabel(kind: ArchitectureNodeKind): string {
             return t("architectureDevtools.frontendApis");
         case "backend-api":
             return t("architectureDevtools.backendApis");
+        case "backend-event":
+            return t("architectureDevtools.backendEvents");
+        case "backend-module":
+            return t("architectureDevtools.backendModules");
         default:
             return kind;
     }
@@ -1552,10 +1560,26 @@ export function ArchitectureDevtoolsTab(
                         </div>
                         <div className="architecture-summary-card">
                             <div className="architecture-summary-label">
+                                {t("architectureDevtools.backendModules")}
+                            </div>
+                            <div className="architecture-summary-value">
+                                {summarizeKindCount(snapshot.nodes, "backend-module")}
+                            </div>
+                        </div>
+                        <div className="architecture-summary-card">
+                            <div className="architecture-summary-label">
                                 {t("architectureDevtools.backendApis")}
                             </div>
                             <div className="architecture-summary-value">
                                 {summarizeKindCount(snapshot.nodes, "backend-api")}
+                            </div>
+                        </div>
+                        <div className="architecture-summary-card">
+                            <div className="architecture-summary-label">
+                                {t("architectureDevtools.backendEvents")}
+                            </div>
+                            <div className="architecture-summary-value">
+                                {summarizeKindCount(snapshot.nodes, "backend-event")}
                             </div>
                         </div>
                         <div className="architecture-summary-card">
@@ -2016,7 +2040,21 @@ export function ArchitectureDevtoolsTab(
                                             className="architecture-inspector-item"
                                             key={`${edge.from}-${edge.to}-${edge.kind}-${edge.label ?? ""}`}
                                         >
-                                            {formatEdgeDescription(edge, nodeMap)}
+                                            <div className="architecture-inspector-item-title">
+                                                {formatEdgeDescription(edge, nodeMap)}
+                                            </div>
+                                            {edge.details && edge.details.length > 0 ? (
+                                                <div className="architecture-inspector-item-details">
+                                                    {edge.details.map((detail) => (
+                                                        <div
+                                                            className="architecture-inspector-item-detail"
+                                                            key={`${edge.from}-${edge.to}-${detail}`}
+                                                        >
+                                                            {detail}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : null}
                                         </div>
                                     ))}
                                 </div>

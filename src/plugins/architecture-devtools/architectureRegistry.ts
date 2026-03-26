@@ -52,7 +52,9 @@ export type ArchitectureNodeKind =
     | "store"
     | "event"
     | "frontend-api"
-    | "backend-api";
+    | "backend-api"
+    | "backend-event"
+    | "backend-module";
 
 /**
  * @type ArchitectureModuleLayer
@@ -72,7 +74,10 @@ export type ArchitectureEdgeKind =
     | "emits-event"
     | "calls-api"
     | "bridges-event"
-    | "persists-config";
+    | "persists-config"
+    | "depends-on-backend-module"
+    | "implemented-by-backend-module"
+    | "owned-by-backend-module";
 
 /**
  * @interface ArchitectureNode
@@ -133,6 +138,8 @@ export interface ArchitectureEdge {
     kind: ArchitectureEdgeKind;
     /** 边标签 */
     label?: string;
+    /** 边细项说明 */
+    details?: string[];
 }
 
 /**
@@ -197,6 +204,8 @@ function compareNodeKinds(
         "event",
         "frontend-api",
         "backend-api",
+        "backend-event",
+        "backend-module",
     ];
 
     return order.indexOf(left) - order.indexOf(right);
@@ -220,7 +229,16 @@ function emit(): void {
         });
         slice.edges.forEach((edge) => {
             const edgeId = `${edge.from}->${edge.to}:${edge.kind}:${edge.label ?? ""}`;
-            edgeMap.set(edgeId, edge);
+            const existing = edgeMap.get(edgeId);
+            if (!existing) {
+                edgeMap.set(edgeId, edge);
+                return;
+            }
+
+            edgeMap.set(edgeId, {
+                ...existing,
+                details: Array.from(new Set([...(existing.details ?? []), ...(edge.details ?? [])])),
+            });
         });
     });
 

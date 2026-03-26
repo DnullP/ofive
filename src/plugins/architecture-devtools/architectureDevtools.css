@@ -443,8 +443,32 @@
     stroke: var(--architecture-node-frontend-api-stroke);
 }
 
+/* architecture-node--backend-module rect: 后端模块节点配色 */
+.architecture-node--backend-module rect {
+    fill: var(--architecture-node-module-fill);
+    stroke: var(--architecture-node-module-stroke);
+}
+
+/* architecture-node--backend-surface rect: 后端公共依赖面节点配色 */
+.architecture-node--backend-surface rect {
+    fill: var(--architecture-node-frontend-api-fill);
+    stroke: var(--architecture-node-frontend-api-stroke);
+}
+
+/* architecture-node--backend-boundary rect: 后端私有边界节点配色 */
+.architecture-node--backend-boundary rect {
+    fill: var(--architecture-node-event-fill);
+    stroke: var(--architecture-node-event-stroke);
+}
+
 /* architecture-node--backend-api rect: 后端接口节点配色 */
 .architecture-node--backend-api rect {
+    fill: var(--architecture-node-backend-api-fill);
+    stroke: var(--architecture-node-backend-api-stroke);
+}
+
+/* architecture-node--backend-event rect: 后端事件节点配色 */
+.architecture-node--backend-event rect {
     fill: var(--architecture-node-backend-api-fill);
     stroke: var(--architecture-node-backend-api-stroke);
 }
@@ -640,6 +664,28 @@
     background: var(--architecture-surface-item);
     color: var(--architecture-text-muted);
     line-height: 1.5;
+}
+
+/* architecture-inspector-item-title: 检查器条目主标题 */
+.architecture-inspector-item-title {
+    color: var(--architecture-text-strong);
+}
+
+/* architecture-inspector-item-details: 检查器条目细节列表 */
+.architecture-inspector-item-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+/* architecture-inspector-item-detail: 检查器条目细节文本 */
+.architecture-inspector-item-detail {
+    color: var(--architecture-text-muted);
+    font-size: 12px;
+    line-height: 1.45;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 /* architecture-inventory-header: 清单头部 */

@@ -4,7 +4,7 @@
  *
  *   该模块不维护手工架构清单，而是通过以下方式构建图谱：
  *   - 扫描 `src/` 下的 TS/TSX 源码，识别插件、模块、Store、事件与前端 API。
- *   - 扫描 `src-tauri/src/` 下的 Rust 源文件中的 Tauri 命令，识别后端接口。
+ *   - 扫描 `src-tauri/src/` 下的 Rust 源文件中的 Tauri 命令与模块 manifest，识别后端接口与模块边界。
  *   - 通过 import 关系、事件函数命名、`invoke()` 调用等文本特征推断依赖边。
  *
  * @dependencies
@@ -83,6 +83,37 @@ interface ParsedBackendCommand {
     location: string;
 }
 
+interface ParsedBackendSurface {
+    namespace: string;
+    allowedPaths: string[];
+    rationale: string;
+    location: string;
+}
+
+interface ParsedBackendBoundary {
+    namespace: string;
+    allowedPaths: string[];
+    rationale: string;
+    location: string;
+}
+
+interface ParsedBackendEventDescriptor {
+    id: string;
+    kind: string;
+    location: string;
+}
+
+interface ParsedBackendModule {
+    moduleId: string;
+    summary: string;
+    location: string;
+    commandSourcePaths: string[];
+    eventDescriptors: ParsedBackendEventDescriptor[];
+    publicSurfaces: ParsedBackendSurface[];
+    privateBoundaries: ParsedBackendBoundary[];
+    details: string[];
+}
+
 const HARD_INFRASTRUCTURE_MODULE_PREFIXES = [
     "src/host/events/",
     "src/host/registry/",
@@ -119,12 +150,15 @@ export function createAutoDiscoveredArchitectureSlice(input?: DiscoveryInput): A
     const frontendModules = input?.frontendModules ?? FRONTEND_SOURCE_MODULES;
     const backendModules = input?.backendModules ?? BACKEND_SOURCE_MODULES;
     const sourceFiles = collectFrontendSourceFiles(frontendModules);
+    const backendSourceFiles = collectBackendSourceFiles(backendModules);
+    const backendSourceFileMap = new Map(backendSourceFiles.map((file) => [file.path, file]));
     const sourceFileMap = new Map(sourceFiles.map((file) => [file.path, file]));
     const importersByPath = buildImportersMap(sourceFiles);
     const moduleLayerCache = new Map<string, ArchitectureModuleLayer>();
     const backendCommands = Object.entries(backendModules).flatMap(([rawPath, content]) => {
         return parseBackendCommands(content, normalizeSourcePath(rawPath));
     });
+    const backendModulesGraph = parseBackendModules(backendSourceFiles, backendSourceFileMap);
 
     const pluginFiles = sourceFiles.filter((file) => isPluginFile(file.path));
     const storeFiles = sourceFiles.filter((file) => isStoreFile(file.path));
@@ -165,6 +199,8 @@ export function createAutoDiscoveredArchitectureSlice(input?: DiscoveryInput): A
     const eventNodeIdMap = new Map<string, string>();
     const apiNodeIdMap = new Map<string, string>();
     const backendNodeIdMap = new Map<string, string>();
+    const backendModuleNodeIdMap = new Map<string, string>();
+    const backendEventNodeIdMap = new Map<string, string>();
 
     pluginFiles.forEach((file) => {
         const node = createFileNode(file, "plugin");
@@ -225,6 +261,41 @@ export function createAutoDiscoveredArchitectureSlice(input?: DiscoveryInput): A
         };
         nodes.push(node);
         backendNodeIdMap.set(command.name, node.id);
+    });
+
+    backendModulesGraph.forEach((backendModule) => {
+        const moduleNodeId = `backend-module:${backendModule.moduleId}`;
+        nodes.push({
+            id: moduleNodeId,
+            title: backendModule.moduleId,
+            kind: "backend-module",
+            summary: backendModule.summary,
+            location: backendModule.location,
+            details: backendModule.details,
+        });
+        backendModuleNodeIdMap.set(backendModule.moduleId, moduleNodeId);
+
+        backendModule.eventDescriptors.forEach((eventDescriptor) => {
+            const eventNodeId = `backend-event:${eventDescriptor.id}`;
+            if (!backendEventNodeIdMap.has(eventDescriptor.id)) {
+                nodes.push({
+                    id: eventNodeId,
+                    title: eventDescriptor.id,
+                    kind: "backend-event",
+                    summary: `后端事件：${eventDescriptor.kind}`,
+                    location: eventDescriptor.location,
+                    details: [`kind: ${eventDescriptor.kind}`],
+                });
+                backendEventNodeIdMap.set(eventDescriptor.id, eventNodeId);
+            }
+
+            edges.push({
+                from: eventNodeId,
+                to: moduleNodeId,
+                kind: "owned-by-backend-module",
+                label: eventDescriptor.kind,
+            });
+        });
     });
 
     sourceFiles.forEach((file) => {
@@ -295,6 +366,39 @@ export function createAutoDiscoveredArchitectureSlice(input?: DiscoveryInput): A
         });
     });
 
+    backendModulesGraph.forEach((backendModule) => {
+        const moduleNodeId = backendModuleNodeIdMap.get(backendModule.moduleId);
+        if (!moduleNodeId) {
+            return;
+        }
+
+        backendModule.commandSourcePaths.forEach((commandSourcePath) => {
+            backendCommands
+                .filter((command) => command.location === commandSourcePath)
+                .forEach((command) => {
+                    const commandNodeId = backendNodeIdMap.get(command.name);
+                    if (!commandNodeId) {
+                        return;
+                    }
+
+                    edges.push({
+                        from: commandNodeId,
+                        to: moduleNodeId,
+                        kind: "implemented-by-backend-module",
+                        label: "command",
+                    });
+                });
+        });
+    });
+
+    edges.push(
+        ...buildBackendModuleDependencyEdges(
+            backendSourceFiles,
+            backendModulesGraph,
+            backendModuleNodeIdMap,
+        ),
+    );
+
     return {
         id: "auto-discovered-architecture",
         title: "Auto Discovered Architecture",
@@ -323,6 +427,23 @@ function collectFrontendSourceFiles(frontendModules: RawModuleMap): SourceFileRe
         content: entry.content,
         imports: parseResolvedImports(entry.path, entry.content, existingPaths),
     }));
+}
+
+/**
+ * @function collectBackendSourceFiles
+ * @description 收集后端 Rust 源文件，供后端架构扫描使用。
+ * @param backendModules 后端原始模块映射。
+ * @returns 后端源码记录列表。
+ */
+function collectBackendSourceFiles(
+    backendModules: RawModuleMap,
+): Array<{ path: string; content: string }> {
+    return Object.entries(backendModules)
+        .map(([rawPath, content]) => ({
+            path: normalizeSourcePath(rawPath),
+            content,
+        }))
+        .filter((entry) => entry.path.startsWith("src-tauri/src/"));
 }
 
 /**
@@ -722,6 +843,607 @@ function parseBackendCommands(content: string, location: string): ParsedBackendC
 }
 
 /**
+ * @function buildBackendModuleDependencyEdges
+ * @description 基于 Rust `use crate::...` 导入生成后端模块之间的依赖边。
+ * @param backendFiles 后端源码文件记录。
+ * @param backendModules 后端模块描述列表。
+ * @param backendModuleNodeIdMap 后端模块节点映射。
+ * @returns 模块依赖边列表。
+ */
+function buildBackendModuleDependencyEdges(
+    backendFiles: Array<{ path: string; content: string }>,
+    backendModules: ParsedBackendModule[],
+    backendModuleNodeIdMap: Map<string, string>,
+): ArchitectureEdge[] {
+    const ownerships = buildBackendModuleOwnerships(backendModules);
+    const dependencyMap = new Map<string, ArchitectureEdge>();
+
+    backendFiles.forEach((file) => {
+        const importerModuleId = resolveBackendModuleOwnerForPath(file.path, ownerships);
+        if (!importerModuleId) {
+            return;
+        }
+
+        const runtimeContent = file.content.split(/\n#\[cfg\(test\)\]/)[0] ?? file.content;
+        const useStatements = extractRustUseStatements(runtimeContent);
+
+        useStatements.forEach((useStatement) => {
+            const targetRule = resolveBackendImportRule(useStatement, importerModuleId, ownerships);
+            if (!targetRule) {
+                return;
+            }
+
+            const fromNodeId = backendModuleNodeIdMap.get(importerModuleId);
+            const toNodeId = backendModuleNodeIdMap.get(targetRule.moduleId);
+            if (!fromNodeId || !toNodeId || fromNodeId === toNodeId) {
+                return;
+            }
+
+            const edgeId = `${fromNodeId}->${toNodeId}:depends-on-backend-module:module dependency`;
+            const detailPrefix = targetRule.visibility === "public" ? "public" : "private";
+            const detail = `${detailPrefix} · ${shortenRustNamespace(targetRule.namespace)} ← ${file.path}`;
+            const existing = dependencyMap.get(edgeId);
+
+            if (!existing) {
+                dependencyMap.set(edgeId, {
+                    from: fromNodeId,
+                    to: toNodeId,
+                    kind: "depends-on-backend-module",
+                    label: "module dependency",
+                    details: [detail],
+                });
+                return;
+            }
+
+            dependencyMap.set(edgeId, {
+                ...existing,
+                details: Array.from(new Set([...(existing.details ?? []), detail])),
+            });
+        });
+    });
+
+    return Array.from(dependencyMap.values());
+}
+
+interface BackendModuleOwnership {
+    moduleId: string;
+    pathPatterns: string[];
+    namespaceRules: Array<{
+        namespace: string;
+        visibility: "public" | "private";
+    }>;
+}
+
+/**
+ * @function buildBackendModuleOwnerships
+ * @description 为每个后端模块构建源码归属模式与命名空间规则。
+ * @param backendModules 后端模块描述列表。
+ * @returns 模块归属规则列表。
+ */
+function buildBackendModuleOwnerships(
+    backendModules: ParsedBackendModule[],
+): BackendModuleOwnership[] {
+    return backendModules.map((backendModule) => ({
+        moduleId: backendModule.moduleId,
+        pathPatterns: Array.from(new Set([
+            backendModule.location,
+            ...backendModule.commandSourcePaths,
+            ...backendModule.eventDescriptors.map((descriptor) => descriptor.location),
+            ...backendModule.publicSurfaces.flatMap((surface) => namespaceToPathPatterns(surface.namespace)),
+            ...backendModule.privateBoundaries.flatMap((boundary) => namespaceToPathPatterns(boundary.namespace)),
+        ])),
+        namespaceRules: [
+            ...backendModule.publicSurfaces.map((surface) => ({
+                namespace: surface.namespace,
+                visibility: "public" as const,
+            })),
+            ...backendModule.privateBoundaries.map((boundary) => ({
+                namespace: boundary.namespace,
+                visibility: "private" as const,
+            })),
+        ],
+    }));
+}
+
+/**
+ * @function namespaceToPathPatterns
+ * @description 将 Rust namespace 前缀转换为源码路径模式。
+ * @param namespace Rust 命名空间。
+ * @returns 路径模式列表。
+ */
+function namespaceToPathPatterns(namespace: string): string[] {
+    const normalized = namespace.replace(/^crate::/, "").replace(/::$/, "");
+    if (!normalized) {
+        return [];
+    }
+
+    const pathBase = `src-tauri/src/${normalized.replace(/::/g, "/")}`;
+    return [`${pathBase}.rs`, `${pathBase}/`];
+}
+
+/**
+ * @function resolveBackendModuleOwnerForPath
+ * @description 根据源码路径解析所属后端模块，优先取最长匹配规则。
+ * @param filePath 源码路径。
+ * @param ownerships 模块归属规则列表。
+ * @returns 所属模块 ID。
+ */
+function resolveBackendModuleOwnerForPath(
+    filePath: string,
+    ownerships: BackendModuleOwnership[],
+): string {
+    let bestModuleId = "";
+    let bestScore = -1;
+
+    ownerships.forEach((ownership) => {
+        ownership.pathPatterns.forEach((pattern) => {
+            const matches = pattern.endsWith("/")
+                ? filePath.startsWith(pattern)
+                : filePath === pattern;
+            if (!matches) {
+                return;
+            }
+
+            if (pattern.length > bestScore) {
+                bestModuleId = ownership.moduleId;
+                bestScore = pattern.length;
+            }
+        });
+    });
+
+    return bestModuleId;
+}
+
+/**
+ * @function extractRustUseStatements
+ * @description 提取 Rust 运行时代码中的 `use crate::...` 导入语句。
+ * @param content Rust 源码。
+ * @returns use 语句列表。
+ */
+function extractRustUseStatements(content: string): string[] {
+    return content
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => (line.startsWith("use ") || line.startsWith("pub use ")) && line.includes("crate::"));
+}
+
+/**
+ * @function resolveBackendImportRule
+ * @description 将导入语句映射到被依赖的后端模块命名空间规则。
+ * @param useStatement Rust 导入语句。
+ * @param importerModuleId 导入方模块 ID。
+ * @param ownerships 模块归属规则列表。
+ * @returns 命中的模块规则。
+ */
+function resolveBackendImportRule(
+    useStatement: string,
+    importerModuleId: string,
+    ownerships: BackendModuleOwnership[],
+): { moduleId: string; namespace: string; visibility: "public" | "private" } | null {
+    const normalizedStatement = useStatement.replace(/\s+/g, " ");
+    let bestMatch: { moduleId: string; namespace: string; visibility: "public" | "private" } | null = null;
+    let bestScore = -1;
+
+    ownerships.forEach((ownership) => {
+        if (ownership.moduleId === importerModuleId) {
+            return;
+        }
+
+        ownership.namespaceRules.forEach((rule) => {
+            const namespaceNeedle = rule.namespace.replace(/::$/, "");
+            if (!normalizedStatement.includes(namespaceNeedle)) {
+                return;
+            }
+
+            if (namespaceNeedle.length > bestScore) {
+                bestMatch = {
+                    moduleId: ownership.moduleId,
+                    namespace: rule.namespace,
+                    visibility: rule.visibility,
+                };
+                bestScore = namespaceNeedle.length;
+            }
+        });
+    });
+
+    return bestMatch;
+}
+
+/**
+ * @function parseBackendModules
+ * @description 基于后端模块 contribution 源码解析后端模块图。
+ * @param backendFiles 后端源码文件记录。
+ * @param backendSourceFileMap 后端源码映射。
+ * @returns 后端模块描述列表。
+ */
+function parseBackendModules(
+    backendFiles: Array<{ path: string; content: string }>,
+    backendSourceFileMap: Map<string, { path: string; content: string }>,
+): ParsedBackendModule[] {
+    return backendFiles
+        .filter((file) => file.path.endsWith("module_contribution.rs"))
+        .map((file) => parseBackendModule(file.path, file.content, backendSourceFileMap))
+        .filter((module): module is ParsedBackendModule => module !== null);
+}
+
+/**
+ * @function parseBackendModule
+ * @description 解析单个后端模块 contribution 文件。
+ * @param location 源码位置。
+ * @param content 源码内容。
+ * @param backendSourceFileMap 后端源码映射。
+ * @returns 模块描述；无法识别时返回 null。
+ */
+function parseBackendModule(
+    location: string,
+    content: string,
+    backendSourceFileMap: Map<string, { path: string; content: string }>,
+): ParsedBackendModule | null {
+    const imports = parseRustImports(content);
+    const contributionFunctionName = findBackendContributionFunctionName(content);
+    if (!contributionFunctionName) {
+        return null;
+    }
+
+    const contributionBody = extractNamedFunctionBody(content, contributionFunctionName);
+    if (!contributionBody) {
+        return null;
+    }
+
+    const moduleId = extractRustFieldStringLiteral(contributionBody, "module_id");
+    if (!moduleId) {
+        return null;
+    }
+
+    const commandSourcePaths = resolveRustReferenceSourcePaths(
+        extractRustFieldExpression(contributionBody, "command_ids"),
+        content,
+        imports,
+        backendSourceFileMap,
+    );
+    const eventDescriptors = parseReferencedBackendEvents(
+        extractRustFieldExpression(contributionBody, "events"),
+        content,
+        imports,
+        backendSourceFileMap,
+    );
+    const persistenceOwners = resolveRustStringValues(
+        extractRustFieldExpression(contributionBody, "persistence_owners"),
+        content,
+        imports,
+        backendSourceFileMap,
+    );
+    const publicSurfaces = parseBackendPublicSurfaces(location, content);
+    const privateBoundaries = parseBackendPrivateBoundaries(location, content);
+
+    return {
+        moduleId,
+        summary: extractPrimaryDescription(content) || `后端模块：${moduleId}`,
+        location,
+        commandSourcePaths,
+        eventDescriptors,
+        publicSurfaces,
+        privateBoundaries,
+        details: [
+            `commands: ${commandSourcePaths.length}`,
+            `events: ${eventDescriptors.length}`,
+            `persistence owners: ${persistenceOwners.length}`,
+            ...publicSurfaces.map((surface) => `public surface: ${shortenRustNamespace(surface.namespace)}`),
+            ...privateBoundaries.map((boundary) => `private boundary: ${shortenRustNamespace(boundary.namespace)}`),
+        ],
+    };
+}
+
+/**
+ * @function findBackendContributionFunctionName
+ * @description 查找后端模块 contribution 函数名。
+ * @param content 源码内容。
+ * @returns 函数名。
+ */
+function findBackendContributionFunctionName(content: string): string {
+    return content.match(/fn\s+([a-z0-9_]+_backend_module_contribution)\s*\(/)?.[1] ?? "";
+}
+
+/**
+ * @function extractNamedFunctionBody
+ * @description 提取具名函数体文本。
+ * @param content 源码内容。
+ * @param functionName 函数名。
+ * @returns 函数体文本。
+ */
+function extractNamedFunctionBody(content: string, functionName: string): string {
+    const startIndex = content.search(new RegExp(`fn\\s+${functionName}\\s*\\(`));
+    if (startIndex < 0) {
+        return "";
+    }
+
+    return extractFunctionBody(content, startIndex);
+}
+
+/**
+ * @function extractRustFieldExpression
+ * @description 提取 Rust 结构体字面量字段表达式。
+ * @param body 文本。
+ * @param fieldName 字段名。
+ * @returns 字段表达式。
+ */
+function extractRustFieldExpression(body: string, fieldName: string): string {
+    const match = body.match(new RegExp(`${fieldName}:\\s*([^,\\n]+)`, "m"));
+    return match?.[1]?.trim() ?? "";
+}
+
+/**
+ * @function extractRustFieldStringLiteral
+ * @description 提取 Rust 结构体字段中的字符串字面量。
+ * @param body 文本。
+ * @param fieldName 字段名。
+ * @returns 字符串值。
+ */
+function extractRustFieldStringLiteral(body: string, fieldName: string): string {
+    return extractRustFieldExpression(body, fieldName).match(/^"([^"]+)"$/)?.[1] ?? "";
+}
+
+/**
+ * @function parseBackendPublicSurfaces
+ * @description 解析模块文件中的公共依赖面声明。
+ * @param location 源码位置。
+ * @param content 源码内容。
+ * @returns 公共依赖面列表。
+ */
+function parseBackendPublicSurfaces(location: string, content: string): ParsedBackendSurface[] {
+    return Array.from(content.matchAll(/BackendModulePublicSurface\s*\{([\s\S]*?)\n\s*\}/g)).map((match) => {
+        const body = match[1] ?? "";
+        return {
+            namespace: extractRustStringField(body, "namespace"),
+            allowedPaths: extractRustStringArrayField(body, "allowed_paths"),
+            rationale: extractRustStringField(body, "rationale"),
+            location,
+        };
+    }).filter((surface) => Boolean(surface.namespace));
+}
+
+/**
+ * @function parseBackendPrivateBoundaries
+ * @description 解析模块文件中的私有边界模板。
+ * @param location 源码位置。
+ * @param content 源码内容。
+ * @returns 私有边界列表。
+ */
+function parseBackendPrivateBoundaries(location: string, content: string): ParsedBackendBoundary[] {
+    return Array.from(content.matchAll(/ModulePrivateNamespaceTemplate\s*\{([\s\S]*?)\n\s*\}/g)).map((match) => {
+        const body = match[1] ?? "";
+        return {
+            namespace: extractRustStringField(body, "namespace"),
+            allowedPaths: extractRustStringArrayField(body, "allowed_paths"),
+            rationale: extractRustStringField(body, "rationale"),
+            location,
+        };
+    }).filter((boundary) => Boolean(boundary.namespace));
+}
+
+/**
+ * @function parseReferencedBackendEvents
+ * @description 解析模块引用的后端事件描述。
+ * @param expression 事件字段表达式。
+ * @param currentPath 当前文件路径。
+ * @param currentContent 当前文件内容。
+ * @param imports Rust 导入映射。
+ * @param backendSourceFileMap 后端源码映射。
+ * @returns 事件描述列表。
+ */
+function parseReferencedBackendEvents(
+    expression: string,
+    currentContent: string,
+    imports: Map<string, string>,
+    backendSourceFileMap: Map<string, { path: string; content: string }>,
+): ParsedBackendEventDescriptor[] {
+    const sourcePaths = resolveRustReferenceSourcePaths(
+        expression,
+        currentContent,
+        imports,
+        backendSourceFileMap,
+    );
+
+    return sourcePaths.flatMap((sourcePath) => {
+        const targetFile = backendSourceFileMap.get(sourcePath);
+        if (!targetFile) {
+            return [];
+        }
+
+        const stringConstants = parseRustStringConstants(targetFile.content);
+        return Array.from(targetFile.content.matchAll(/BackendEventDescriptor::new\(\s*([A-Z0-9_]+|"[^"]+")\s*,\s*BackendEventKind::([A-Za-z]+)\s*,?\s*\)/g)).map((match) => {
+            const rawId = match[1] ?? "";
+            return {
+                id: rawId.startsWith("\"")
+                    ? rawId.replace(/^"|"$/g, "")
+                    : (stringConstants.get(rawId) ?? rawId),
+                kind: match[2] ?? "Unknown",
+                location: sourcePath,
+            };
+        });
+    });
+}
+
+/**
+ * @function resolveRustReferenceSourcePaths
+ * @description 将 Rust 字段表达式解析为其引用的源码文件路径。
+ * @param expression 字段表达式。
+ * @param currentPath 当前文件路径。
+ * @param currentContent 当前文件内容。
+ * @param imports Rust 导入映射。
+ * @param backendSourceFileMap 后端源码映射。
+ * @returns 源码文件路径列表。
+ */
+function resolveRustReferenceSourcePaths(
+    expression: string,
+    currentContent: string,
+    imports: Map<string, string>,
+    backendSourceFileMap: Map<string, { path: string; content: string }>,
+): string[] {
+    if (!expression || expression === "&[]") {
+        return [];
+    }
+
+    const rootIdentifier = expression.match(/^([A-Z0-9_]+)/)?.[1] ?? "";
+    if (!rootIdentifier) {
+        return [];
+    }
+
+    const importedPath = imports.get(rootIdentifier);
+    if (importedPath) {
+        return backendSourceFileMap.has(importedPath) ? [importedPath] : [];
+    }
+
+    const localConstBody = extractRustConstArrayBody(currentContent, rootIdentifier);
+    if (!localConstBody) {
+        return [];
+    }
+
+    return Array.from(localConstBody.matchAll(/([A-Z0-9_]+)(?:\[[0-9]+\])?/g))
+        .map((match) => imports.get(match[1] ?? "") ?? "")
+        .filter((path) => backendSourceFileMap.has(path));
+}
+
+/**
+ * @function resolveRustStringValues
+ * @description 解析 Rust 字符串数组表达式中的字符串值。
+ * @param expression 字段表达式。
+ * @param currentPath 当前文件路径。
+ * @param currentContent 当前文件内容。
+ * @param imports Rust 导入映射。
+ * @param backendSourceFileMap 后端源码映射。
+ * @returns 字符串值列表。
+ */
+function resolveRustStringValues(
+    expression: string,
+    currentContent: string,
+    imports: Map<string, string>,
+    backendSourceFileMap: Map<string, { path: string; content: string }>,
+): string[] {
+    if (!expression || expression === "&[]") {
+        return [];
+    }
+
+    const inlineValues = Array.from(expression.matchAll(/"([^"]+)"/g)).map((match) => match[1] ?? "");
+    if (inlineValues.length > 0) {
+        return inlineValues;
+    }
+
+    const rootIdentifier = expression.match(/^([A-Z0-9_]+)/)?.[1] ?? "";
+    if (!rootIdentifier) {
+        return [];
+    }
+
+    const importedPath = imports.get(rootIdentifier);
+    if (importedPath) {
+        const importedFile = backendSourceFileMap.get(importedPath);
+        const arrayBody = extractRustConstArrayBody(importedFile?.content ?? "", rootIdentifier);
+        return Array.from(arrayBody.matchAll(/"([^"]+)"/g)).map((match) => match[1] ?? "");
+    }
+
+    const localConstBody = extractRustConstArrayBody(currentContent, rootIdentifier);
+    return Array.from(localConstBody.matchAll(/"([^"]+)"/g)).map((match) => match[1] ?? "");
+}
+
+/**
+ * @function parseRustImports
+ * @description 解析 Rust use 语句，建立符号到源码文件的映射。
+ * @param content Rust 源码。
+ * @returns 导入映射。
+ */
+function parseRustImports(content: string): Map<string, string> {
+    const imports = new Map<string, string>();
+
+    for (const match of content.matchAll(/use\s+crate::([a-zA-Z0-9_:]+)::\{([\s\S]*?)\};/g)) {
+        const modulePath = match[1] ?? "";
+        const names = (match[2] ?? "")
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+        names.forEach((name) => {
+            imports.set(name, rustModulePathToSourcePath(`${modulePath}::${name}`));
+        });
+    }
+
+    for (const match of content.matchAll(/use\s+crate::([a-zA-Z0-9_:]+)::([A-Z0-9_]+);/g)) {
+        const modulePath = match[1] ?? "";
+        const name = match[2] ?? "";
+        imports.set(name, rustModulePathToSourcePath(`${modulePath}::${name}`));
+    }
+
+    return imports;
+}
+
+/**
+ * @function rustModulePathToSourcePath
+ * @description 将 Rust crate 模块路径映射为源码文件路径。
+ * @param rustPath Rust 模块路径。
+ * @returns 源码路径。
+ */
+function rustModulePathToSourcePath(rustPath: string): string {
+    const segments = rustPath.replace(/^crate::/, "").split("::");
+    return `src-tauri/src/${segments.slice(0, -1).join("/")}.rs`;
+}
+
+/**
+ * @function extractRustConstArrayBody
+ * @description 提取 Rust const 数组主体。
+ * @param content 源码内容。
+ * @param constName 常量名。
+ * @returns 数组主体文本。
+ */
+function extractRustConstArrayBody(content: string, constName: string): string {
+    return content.match(new RegExp(`const\\s+${constName}:[^=]+=\\s*&\\[([\\s\\S]*?)\\];`))?.[1] ?? "";
+}
+
+/**
+ * @function extractRustStringField
+ * @description 提取 Rust 结构体体内的字符串字段。
+ * @param body 结构体体文本。
+ * @param fieldName 字段名。
+ * @returns 字符串值。
+ */
+function extractRustStringField(body: string, fieldName: string): string {
+    return body.match(new RegExp(`${fieldName}:\\s*"([^"]+)"`))?.[1] ?? "";
+}
+
+/**
+ * @function extractRustStringArrayField
+ * @description 提取 Rust 结构体体内的字符串数组字段。
+ * @param body 结构体体文本。
+ * @param fieldName 字段名。
+ * @returns 字符串数组。
+ */
+function extractRustStringArrayField(body: string, fieldName: string): string[] {
+    const arrayBody = body.match(new RegExp(`${fieldName}:\\s*&\\[([\\s\\S]*?)\\]`))?.[1] ?? "";
+    return Array.from(arrayBody.matchAll(/"([^"]+)"/g)).map((match) => match[1] ?? "");
+}
+
+/**
+ * @function parseRustStringConstants
+ * @description 解析 Rust 字符串常量。
+ * @param content 源码内容。
+ * @returns 常量映射。
+ */
+function parseRustStringConstants(content: string): Map<string, string> {
+    const constants = new Map<string, string>();
+    for (const match of content.matchAll(/(?:pub(?:\([^)]*\))?\s+)?const\s+([A-Z0-9_]+):\s*&str\s*=\s*"([^"]+)";/g)) {
+        constants.set(match[1] ?? "", match[2] ?? "");
+    }
+    return constants;
+}
+
+/**
+ * @function shortenRustNamespace
+ * @description 缩短 Rust 命名空间以便图中展示。
+ * @param namespace 原始命名空间。
+ * @returns 缩短后的名称。
+ */
+function shortenRustNamespace(namespace: string): string {
+    return namespace.replace(/^crate::/, "");
+}
+
+/**
  * @function createFileImportEdge
  * @description 根据文件到文件的 import 生成依赖边。
  * @param fromPath 来源文件路径。
@@ -1034,7 +1756,17 @@ function dedupeNodes(nodes: ArchitectureNode[]): ArchitectureNode[] {
 function dedupeEdges(edges: ArchitectureEdge[]): ArchitectureEdge[] {
     const map = new Map<string, ArchitectureEdge>();
     edges.forEach((edge) => {
-        map.set(`${edge.from}->${edge.to}:${edge.kind}:${edge.label ?? ""}`, edge);
+        const edgeId = `${edge.from}->${edge.to}:${edge.kind}:${edge.label ?? ""}`;
+        const existing = map.get(edgeId);
+        if (!existing) {
+            map.set(edgeId, edge);
+            return;
+        }
+
+        map.set(edgeId, {
+            ...existing,
+            details: Array.from(new Set([...(existing.details ?? []), ...(edge.details ?? [])])),
+        });
     });
 
     return Array.from(map.values()).sort((left, right) => {
