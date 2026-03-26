@@ -317,15 +317,21 @@ export function registerListSyntaxRenderer(): void {
             }
 
             const lineEnd = context.lineFrom + context.lineText.length;
+            const markerFrom = context.lineFrom + listMatch.markerStart;
+            const markerTo = markerFrom + listMatch.markerText.length;
+            const contentFrom = context.lineFrom + listMatch.contentStart;
             const isEditing =
                 context.view.hasFocus &&
                 rangeIntersectsSelection(context.view, context.lineFrom, lineEnd);
             if (isEditing) {
+                pushSyntaxDecorationRange(
+                    context.ranges,
+                    markerFrom,
+                    markerTo,
+                    Decoration.mark({ class: "cm-list-syntax-marker-source" }),
+                );
                 return;
             }
-
-            const markerFrom = context.lineFrom + listMatch.markerStart;
-            const contentFrom = context.lineFrom + listMatch.contentStart;
 
             pushSyntaxDecorationRange(
                 context.ranges,

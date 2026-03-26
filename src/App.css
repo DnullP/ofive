@@ -51,6 +51,40 @@
   --editor-caret-color: #d4d4d4;
   --editor-active-line-bg-color: rgba(255, 255, 255, 0.04);
   --editor-active-line-gutter-bg-color: rgba(255, 255, 255, 0.06);
+  --editor-muted-text-color: var(--text-secondary);
+  --editor-faint-text-color: var(--text-tertiary);
+  --editor-symbol-color: color-mix(in srgb, var(--text-primary) 84%, white 16%);
+  --editor-symbol-shadow-color: color-mix(in srgb, var(--text-primary) 42%, transparent);
+  --editor-panel-bg-color: var(--bg-primary);
+  --editor-panel-bg-elevated-color: var(--bg-secondary);
+  --editor-panel-bg-soft-color: var(--bg-hover);
+  --editor-panel-border-color: var(--border-color);
+  --editor-panel-text-color: var(--text-primary);
+  --editor-panel-muted-text-color: var(--text-secondary);
+  --editor-tag-bg-color: var(--bg-hover);
+  --editor-tag-border-color: var(--border-color);
+  --editor-tag-text-color: var(--text-primary);
+  --editor-blockquote-text-color: var(--text-secondary);
+  --editor-blockquote-border-color: var(--border-color);
+  --editor-list-marker-color: var(--text-secondary);
+  --editor-list-source-marker-color: var(--editor-symbol-color);
+  --editor-list-source-marker-shadow-color: var(--editor-symbol-shadow-color);
+  --editor-task-checkbox-border-color: var(--border-color);
+  --editor-divider-color: var(--border-color);
+  --editor-suggest-item-hover-bg: color-mix(in srgb, var(--accent-primary-soft-weak) 72%, var(--editor-panel-bg-soft-color));
+  --editor-suggest-item-hover-border-color: color-mix(in srgb, var(--accent-primary) 55%, transparent);
+  --editor-suggest-item-selected-bg:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-primary) 30%, transparent), transparent 24%),
+    color-mix(in srgb, var(--accent-primary) 34%, var(--editor-panel-bg-soft-color));
+  --editor-suggest-item-selected-border-color: var(--accent-primary);
+  --editor-suggest-item-selected-title-color: var(--accent-primary-foreground);
+  --editor-suggest-item-selected-path-color: color-mix(in srgb, var(--accent-primary-foreground) 84%, var(--editor-panel-text-color));
+  --editor-suggest-item-selected-match-bg: color-mix(in srgb, var(--accent-primary-foreground) 18%, transparent);
+  --editor-suggest-item-selected-match-color: var(--accent-primary-foreground);
+  --editor-suggest-item-selected-ref-bg: color-mix(in srgb, var(--accent-primary-foreground) 16%, transparent);
+  --editor-suggest-item-selected-ref-color: var(--accent-primary-foreground);
+  --editor-warning-text-color: var(--text-warning);
+  --editor-warning-bg-color: var(--bg-warning);
 
   --graph-bg-primary: var(--bg-primary);
   --graph-bg-secondary: var(--bg-secondary);
@@ -311,6 +345,40 @@
   --editor-caret-color: #1f2937;
   --editor-active-line-bg-color: rgba(15, 23, 42, 0.04);
   --editor-active-line-gutter-bg-color: rgba(15, 23, 42, 0.08);
+  --editor-muted-text-color: var(--text-secondary);
+  --editor-faint-text-color: var(--text-tertiary);
+  --editor-symbol-color: var(--text-primary);
+  --editor-symbol-shadow-color: transparent;
+  --editor-panel-bg-color: var(--bg-primary);
+  --editor-panel-bg-elevated-color: var(--bg-secondary);
+  --editor-panel-bg-soft-color: var(--bg-hover);
+  --editor-panel-border-color: var(--border-color);
+  --editor-panel-text-color: var(--text-primary);
+  --editor-panel-muted-text-color: var(--text-secondary);
+  --editor-tag-bg-color: var(--bg-hover);
+  --editor-tag-border-color: var(--border-color);
+  --editor-tag-text-color: var(--text-primary);
+  --editor-blockquote-text-color: var(--text-secondary);
+  --editor-blockquote-border-color: var(--border-color);
+  --editor-list-marker-color: var(--text-secondary);
+  --editor-list-source-marker-color: var(--editor-symbol-color);
+  --editor-list-source-marker-shadow-color: var(--editor-symbol-shadow-color);
+  --editor-task-checkbox-border-color: var(--border-color);
+  --editor-divider-color: var(--border-color);
+  --editor-suggest-item-hover-bg: color-mix(in srgb, var(--accent-primary-soft-weak) 72%, var(--editor-panel-bg-soft-color));
+  --editor-suggest-item-hover-border-color: color-mix(in srgb, var(--accent-primary) 55%, transparent);
+  --editor-suggest-item-selected-bg:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-primary) 30%, transparent), transparent 24%),
+    color-mix(in srgb, var(--accent-primary) 34%, var(--editor-panel-bg-soft-color));
+  --editor-suggest-item-selected-border-color: var(--accent-primary);
+  --editor-suggest-item-selected-title-color: var(--accent-primary-foreground);
+  --editor-suggest-item-selected-path-color: color-mix(in srgb, var(--accent-primary-foreground) 84%, var(--editor-panel-text-color));
+  --editor-suggest-item-selected-match-bg: color-mix(in srgb, var(--accent-primary-foreground) 18%, transparent);
+  --editor-suggest-item-selected-match-color: var(--accent-primary-foreground);
+  --editor-suggest-item-selected-ref-bg: color-mix(in srgb, var(--accent-primary-foreground) 16%, transparent);
+  --editor-suggest-item-selected-ref-color: var(--accent-primary-foreground);
+  --editor-warning-text-color: var(--text-warning);
+  --editor-warning-bg-color: var(--bg-warning);
 
   --graph-bg-primary: var(--bg-primary);
   --graph-bg-secondary: var(--bg-secondary);
@@ -441,6 +509,40 @@
   --editor-caret-color: #4e3d2b;
   --editor-active-line-bg-color: rgba(94, 66, 38, 0.04);
   --editor-active-line-gutter-bg-color: rgba(94, 66, 38, 0.08);
+  --editor-muted-text-color: var(--text-secondary);
+  --editor-faint-text-color: var(--text-tertiary);
+  --editor-symbol-color: var(--text-primary);
+  --editor-symbol-shadow-color: transparent;
+  --editor-panel-bg-color: var(--bg-primary);
+  --editor-panel-bg-elevated-color: var(--bg-secondary);
+  --editor-panel-bg-soft-color: var(--bg-hover);
+  --editor-panel-border-color: var(--border-color);
+  --editor-panel-text-color: var(--text-primary);
+  --editor-panel-muted-text-color: var(--text-secondary);
+  --editor-tag-bg-color: var(--bg-hover);
+  --editor-tag-border-color: var(--border-color);
+  --editor-tag-text-color: var(--text-primary);
+  --editor-blockquote-text-color: var(--text-secondary);
+  --editor-blockquote-border-color: var(--border-color);
+  --editor-list-marker-color: var(--text-secondary);
+  --editor-list-source-marker-color: var(--editor-symbol-color);
+  --editor-list-source-marker-shadow-color: var(--editor-symbol-shadow-color);
+  --editor-task-checkbox-border-color: var(--border-color);
+  --editor-divider-color: var(--border-color);
+  --editor-suggest-item-hover-bg: color-mix(in srgb, var(--accent-primary-soft-weak) 72%, var(--editor-panel-bg-soft-color));
+  --editor-suggest-item-hover-border-color: color-mix(in srgb, var(--accent-primary) 55%, transparent);
+  --editor-suggest-item-selected-bg:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-primary) 26%, transparent), transparent 24%),
+    color-mix(in srgb, var(--accent-primary) 30%, var(--editor-panel-bg-soft-color));
+  --editor-suggest-item-selected-border-color: var(--accent-primary);
+  --editor-suggest-item-selected-title-color: var(--accent-primary-foreground);
+  --editor-suggest-item-selected-path-color: color-mix(in srgb, var(--accent-primary-foreground) 80%, var(--editor-panel-text-color));
+  --editor-suggest-item-selected-match-bg: color-mix(in srgb, var(--accent-primary-foreground) 16%, transparent);
+  --editor-suggest-item-selected-match-color: var(--accent-primary-foreground);
+  --editor-suggest-item-selected-ref-bg: color-mix(in srgb, var(--accent-primary-foreground) 14%, transparent);
+  --editor-suggest-item-selected-ref-color: var(--accent-primary-foreground);
+  --editor-warning-text-color: var(--text-warning);
+  --editor-warning-bg-color: var(--bg-warning);
 
   --graph-bg-primary: var(--bg-primary);
   --graph-bg-secondary: var(--bg-secondary);
@@ -548,11 +650,23 @@
   --floating-backdrop-bg: rgba(var(--window-glass-bg-rgb), 0.24);
   --editor-bg-color: rgba(var(--window-glass-bg-rgb), 0.18);
   --editor-gutter-bg-color: rgba(var(--window-glass-elevated-rgb), 0.24);
+  --editor-panel-bg-color: var(--bg-primary);
+  --editor-panel-bg-elevated-color: var(--bg-secondary);
+  --editor-panel-bg-soft-color: var(--bg-hover);
+  --editor-panel-border-color: var(--border-color);
   --graph-label-bg: rgba(var(--window-glass-elevated-rgb), 0.26);
   --architecture-surface-hero: rgba(var(--window-glass-elevated-rgb), 0.3);
   --architecture-surface-card: rgba(var(--window-glass-elevated-rgb), 0.28);
   --architecture-surface-card-subtle: rgba(var(--window-glass-bg-rgb), 0.22);
   --architecture-surface-grid: rgba(var(--window-glass-elevated-rgb), 0.24);
+}
+
+/* 暗色毛玻璃下列表源码 marker 需要更强对比，统一在主题层集中控制。 */
+:root[data-theme="dark"].app-runtime--tauri.app-effect--glass {
+  --editor-symbol-color: color-mix(in srgb, var(--text-primary) 88%, white 12%);
+  --editor-symbol-shadow-color: color-mix(in srgb, var(--text-primary) 50%, transparent);
+  --editor-list-source-marker-color: var(--editor-symbol-color);
+  --editor-list-source-marker-shadow-color: var(--editor-symbol-shadow-color);
 }
 
 :root.app-runtime--tauri.app-effect--glass.app-window--inactive {}

@@ -8,8 +8,8 @@
 /* 编辑器头部：显示当前文件路径 */
 .cm-tab-header {
     padding: 10px 12px;
-    border-bottom: 1px solid var(--border-color);
-    color: var(--text-secondary);
+    border-bottom: 1px solid var(--editor-panel-border-color);
+    color: var(--editor-muted-text-color);
     font-size: 12px;
     user-select: none;
     cursor: text;
@@ -18,10 +18,10 @@
 /* 编辑模式文件名输入框：支持重命名当前文件 */
 .cm-tab-header-input {
     width: 100%;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--editor-panel-border-color);
     border-radius: 6px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--editor-panel-bg-color);
+    color: var(--editor-panel-text-color);
     font-size: 12px;
     padding: 4px 8px;
 }
@@ -29,7 +29,7 @@
 /* 文件重命名错误提示：展示校验或后端返回错误 */
 .cm-tab-header-error {
     padding: 6px 12px;
-    color: var(--text-secondary);
+    color: var(--editor-panel-muted-text-color);
     font-size: 12px;
 }
 
@@ -41,14 +41,14 @@
     justify-content: center;
     flex: 1;
     gap: 8px;
-    color: var(--text-secondary);
+    color: var(--editor-panel-muted-text-color);
     font-size: 14px;
 }
 
 /* 错误边界错误详情：展示具体错误信息 */
 .cm-tab-error-detail {
     font-size: 12px;
-    color: var(--text-tertiary, var(--text-secondary));
+    color: var(--editor-faint-text-color);
     max-width: 400px;
     text-align: center;
     word-break: break-word;
@@ -58,10 +58,10 @@
 .cm-tab-error-retry {
     margin-top: 8px;
     padding: 6px 16px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--editor-panel-border-color);
     border-radius: 6px;
-    background: var(--bg-secondary, var(--bg-primary));
-    color: var(--text-primary);
+    background: var(--editor-panel-bg-elevated-color);
+    color: var(--editor-panel-text-color);
     font-size: 13px;
     cursor: pointer;
 }
@@ -105,7 +105,7 @@
 .cm-tab-editor .cm-gutters {
     background: var(--editor-gutter-bg-color) !important;
     color: var(--editor-gutter-text-color) !important;
-    border-right: 1px solid var(--border-color) !important;
+    border-right: 1px solid var(--editor-panel-border-color) !important;
 }
 
 /* CodeMirror 行号文本：与侧栏文本色保持一致。
@@ -160,13 +160,13 @@
 .cm-tab-editor .cm-rendered-bold {
     font-weight: 700;
     font-style: normal;
-    color: var(--text-primary);
+    color: var(--editor-text-color);
 }
 
 /* 行内斜体渲染样式 */
 .cm-tab-editor .cm-rendered-italic {
     font-style: italic;
-    color: var(--text-primary);
+    color: var(--editor-text-color);
 }
 
 /* 行内删除线渲染样式 */
@@ -201,17 +201,17 @@
     display: inline-block;
     padding: 0 6px;
     border-radius: 999px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-hover);
-    color: var(--text-primary);
+    border: 1px solid var(--editor-tag-border-color);
+    background: var(--editor-tag-bg-color);
+    color: var(--editor-tag-text-color);
     line-height: 1.35;
 }
 
 /* 引用块内容渲染样式：左侧竖线 + 次级文本色 */
 .cm-tab-editor .cm-rendered-blockquote {
-    border-left: 3px solid var(--border-color);
+    border-left: 3px solid var(--editor-blockquote-border-color);
     padding-left: 12px;
-    color: var(--text-secondary);
+    color: var(--editor-blockquote-text-color);
     font-style: italic;
 }
 
@@ -222,9 +222,23 @@
     justify-content: center;
     min-width: 1.5em;
     margin-right: 0.25em;
-    color: var(--text-secondary);
+    color: var(--editor-list-marker-color);
     vertical-align: middle;
     user-select: none;
+}
+
+/* 编辑态列表语法 marker：仅抬高源码中的 `-` / `*` / `+` / `1.` 可见性，不影响普通正文。 */
+.cm-tab-editor .cm-list-syntax-marker-source {
+    color: var(--editor-list-source-marker-color) !important;
+    font-weight: 700;
+    opacity: 1 !important;
+    text-shadow: 0 0 0.6px var(--editor-list-source-marker-shadow-color);
+}
+
+/* 兜底覆盖嵌套的 markdown token span，避免列表源码 marker 继续被默认语法色压暗。 */
+.cm-tab-editor .cm-list-syntax-marker-source * {
+    color: inherit !important;
+    opacity: 1 !important;
 }
 
 /* 无序列表 marker：使用居中的圆点替代源码中的 `-` / `*` / `+` */
@@ -257,9 +271,9 @@
     display: inline-block;
     width: 0.95em;
     height: 0.95em;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--editor-task-checkbox-border-color);
     border-radius: 0.22em;
-    background: var(--bg-primary);
+    background: var(--editor-panel-bg-color);
     box-sizing: border-box;
     position: relative;
     cursor: pointer;
@@ -267,7 +281,7 @@
 
 /* 未勾选 task checkbox：保持空盒子外观 */
 .cm-tab-editor .cm-rendered-task-checkbox-unchecked {
-    background: var(--bg-primary);
+    background: var(--editor-panel-bg-color);
 }
 
 /* 已勾选 task checkbox：填充主色，用于提示完成态 */
@@ -284,14 +298,14 @@
     top: 0.08em;
     width: 0.22em;
     height: 0.46em;
-    border: solid var(--bg-primary);
+    border: solid var(--editor-panel-bg-color);
     border-width: 0 0.12em 0.12em 0;
     transform: rotate(45deg);
 }
 
 /* 列表内容区：统一正文色，保持与普通段落一致的可读性 */
 .cm-tab-editor .cm-rendered-list-item {
-    color: var(--text-primary);
+    color: var(--editor-text-color);
 }
 
 /* 已完成 task list 内容：降低强调度，帮助快速区分完成项 */
@@ -305,7 +319,7 @@
     display: inline-block;
     width: 100%;
     font-size: 0;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--editor-divider-color);
     margin: 4px 0;
 }
 
@@ -352,7 +366,7 @@
 
 /* 围栏行可见态（光标在块内时）：柔和显示 ``` 标记 */
 .cm-tab-editor .cm-line.cm-code-fence-visible {
-    color: var(--text-secondary);
+    color: var(--editor-muted-text-color);
     background: var(--editor-inline-code-bg);
     font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 0.85em;
@@ -363,10 +377,10 @@
     float: right;
     margin: 0 0 0 8px;
     padding: 1px 8px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--editor-panel-border-color);
     border-radius: 4px;
-    background: var(--bg-primary);
-    color: var(--text-secondary);
+    background: var(--editor-panel-bg-color);
+    color: var(--editor-panel-muted-text-color);
     font-size: 11px;
     font-family: inherit;
     cursor: pointer;
@@ -383,8 +397,8 @@
 
 /* Copy 按钮悬浮态：加深背景提升交互反馈 */
 .cm-code-block-copy-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
+    background: var(--editor-panel-bg-soft-color);
+    color: var(--editor-panel-text-color);
 }
 
 /* =========================================================================
@@ -482,23 +496,23 @@
     gap: 6px;
     width: min(100%, 520px);
     margin: 6px 0;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--editor-panel-border-color);
     border-radius: 8px;
-    background: var(--bg-hover);
+    background: var(--editor-panel-bg-soft-color);
     padding: 8px;
     box-sizing: border-box;
 }
 
 /* 图片嵌入加载态样式：在图片未完成读取时显示提示。 */
 .cm-tab-editor .cm-image-embed-loading {
-    color: var(--text-secondary);
+    color: var(--editor-panel-muted-text-color);
     font-size: 12px;
     line-height: 1.4;
 }
 
 /* 图片嵌入错误态样式：在路径或读取失败时显示错误信息。 */
 .cm-tab-editor .cm-image-embed-error {
-    color: var(--text-secondary);
+    color: var(--editor-panel-muted-text-color);
     font-size: 12px;
     line-height: 1.4;
 }
@@ -514,7 +528,7 @@
 
 /* 图片嵌入标题样式：显示解析后的文件名。 */
 .cm-tab-editor .cm-image-embed-caption {
-    color: var(--text-secondary);
+    color: var(--editor-panel-muted-text-color);
     font-size: 12px;
     line-height: 1.4;
     word-break: break-all;
@@ -567,14 +581,14 @@
 .cm-tab-editor .cm-frontmatter-title {
     font-size: 12px;
     font-weight: 700;
-    color: var(--text-secondary);
+    color: var(--editor-muted-text-color);
     user-select: none;
 }
 
 /* Frontmatter 空态：提示未解析到可编辑 key-value 字段 */
 .cm-tab-editor .cm-frontmatter-empty {
     font-size: 12px;
-    color: var(--text-secondary);
+    color: var(--editor-panel-muted-text-color);
     line-height: 1.4;
 }
 
@@ -588,7 +602,7 @@
 
 /* Frontmatter 字段名：展示 YAML key */
 .cm-tab-editor .cm-frontmatter-field-key {
-    color: var(--text-secondary);
+    color: var(--editor-muted-text-color);
     font-size: 12px;
     line-height: 1.4;
     word-break: break-all;
@@ -613,11 +627,11 @@
 .cm-tab-editor .cm-frontmatter-input {
     min-width: 0;
     height: 26px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--editor-panel-border-color);
     border-radius: 6px;
     padding: 0 8px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--editor-panel-bg-color);
+    color: var(--editor-panel-text-color);
     font-size: 12px;
 }
 
@@ -638,7 +652,7 @@
 
 /* Frontmatter 布尔值文本：显示 true/false 当前值 */
 .cm-tab-editor .cm-frontmatter-boolean-text {
-    color: var(--text-secondary);
+    color: var(--editor-panel-muted-text-color);
     font-size: 12px;
 }
 
@@ -662,10 +676,10 @@
 .cm-tab-editor .cm-frontmatter-list-action {
     height: 24px;
     min-width: 24px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--editor-panel-border-color);
     border-radius: 6px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--editor-panel-bg-color);
+    color: var(--editor-panel-text-color);
     cursor: pointer;
 }
 
@@ -676,7 +690,7 @@
 
 /* Frontmatter 空列表提示：当列表无 item 时给出视觉反馈 */
 .cm-tab-editor .cm-frontmatter-list-empty {
-    color: var(--text-secondary);
+    color: var(--editor-panel-muted-text-color);
     font-size: 12px;
 }
 
@@ -707,12 +721,12 @@
 .cm-tab-editor .cm-frontmatter-yaml-editor {
     width: 100%;
     min-height: 160px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--editor-panel-border-color);
     border-radius: 6px;
     padding: 8px;
     resize: vertical;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--editor-panel-bg-color);
+    color: var(--editor-panel-text-color);
     font-size: 12px;
     line-height: 1.5;
     font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -730,11 +744,11 @@
 /* Frontmatter 操作按钮：统一保存/重置按钮外观 */
 .cm-tab-editor .cm-frontmatter-action {
     height: 28px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--editor-panel-border-color);
     border-radius: 6px;
     padding: 0 10px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--editor-panel-bg-color);
+    color: var(--editor-panel-text-color);
     font-size: 12px;
     cursor: pointer;
 }
@@ -752,9 +766,9 @@
     max-height: 300px;
     overflow-y: auto;
     overflow-x: hidden;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--editor-panel-border-color);
     border-radius: 8px;
-    background: var(--bg-primary);
+    background: var(--editor-panel-bg-color);
     box-shadow: var(--overlay-shadow-floating);
     padding: 4px 0;
     font-size: 13px;
@@ -764,7 +778,7 @@
 /* 空状态提示文本：无匹配笔记时显示 */
 .cm-wikilink-suggest-empty {
     padding: 8px 12px;
-    color: var(--text-secondary);
+    color: var(--editor-panel-muted-text-color);
     font-size: 12px;
     text-align: center;
 }
@@ -784,23 +798,21 @@
 
 /* 候选项行悬浮态 */
 .cm-wikilink-suggest-item:hover {
-    background: color-mix(in srgb, var(--accent-primary-soft-weak) 72%, var(--bg-hover));
-    border-left-color: color-mix(in srgb, var(--accent-primary) 55%, transparent);
+    background: var(--editor-suggest-item-hover-bg);
+    border-left-color: var(--editor-suggest-item-hover-border-color);
 }
 
 /* 候选项选中态：键盘选中时高亮背景 */
 .cm-wikilink-suggest-item-selected {
-    background:
-        linear-gradient(90deg, color-mix(in srgb, var(--accent-primary) 14%, transparent), transparent 22%),
-        color-mix(in srgb, var(--accent-primary-soft) 92%, var(--bg-hover));
-    border-left-color: var(--accent-primary);
+    background: var(--editor-suggest-item-selected-bg);
+    border-left-color: var(--editor-suggest-item-selected-border-color);
 }
 
 /* 候选项标题文本：主展示内容 */
 .cm-wikilink-suggest-title {
     flex: 0 1 auto;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--editor-panel-text-color);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -808,14 +820,14 @@
 
 /* 选中项标题文本：提高选中行的主文本对比度。 */
 .cm-wikilink-suggest-item-selected .cm-wikilink-suggest-title {
-    color: var(--accent-primary);
+    color: var(--editor-suggest-item-selected-title-color);
 }
 
 /* 候选项路径文本：次级展示内容 */
 .cm-wikilink-suggest-path {
     flex: 1 1 0;
     min-width: 0;
-    color: var(--text-secondary);
+    color: var(--editor-panel-muted-text-color);
     font-size: 11px;
     white-space: nowrap;
     overflow: hidden;
@@ -824,7 +836,7 @@
 
 /* 选中项路径文本：略微抬高次级文本亮度，保持层次但避免发灰。 */
 .cm-wikilink-suggest-item-selected .cm-wikilink-suggest-path {
-    color: color-mix(in srgb, var(--accent-primary) 46%, var(--text-primary));
+    color: var(--editor-suggest-item-selected-path-color);
 }
 
 /* 命中文本高亮：直接强调 query 对应片段，避免只靠整行背景辨认。 */
@@ -832,14 +844,14 @@
     padding: 0 2px;
     border-radius: 4px;
     background: color-mix(in srgb, var(--editor-highlight-bg) 92%, transparent);
-    color: var(--text-primary);
+    color: var(--editor-panel-text-color);
     font-weight: 700;
 }
 
 /* 选中项命中文本高亮：在已选中行里进一步抬高对比，避免蓝底上发糊。 */
 .cm-wikilink-suggest-item-selected .cm-wikilink-suggest-match {
-    background: color-mix(in srgb, var(--accent-primary) 24%, var(--editor-highlight-bg));
-    color: var(--accent-primary);
+    background: var(--editor-suggest-item-selected-match-bg);
+    color: var(--editor-suggest-item-selected-match-color);
 }
 
 /* 候选项引用次数：仅当 referenceCount > 0 时渲染 */
@@ -847,16 +859,16 @@
     flex: 0 0 auto;
     padding: 1px 6px;
     border-radius: 999px;
-    background: var(--bg-hover);
-    color: var(--text-secondary);
+    background: var(--editor-panel-bg-soft-color);
+    color: var(--editor-panel-muted-text-color);
     font-size: 10px;
     line-height: 1.4;
 }
 
 /* 选中项引用次数：与选中态主色联动，避免次级徽标被背景吞掉。 */
 .cm-wikilink-suggest-item-selected .cm-wikilink-suggest-ref-count {
-    background: color-mix(in srgb, var(--accent-primary) 16%, transparent);
-    color: var(--accent-primary);
+    background: var(--editor-suggest-item-selected-ref-bg);
+    color: var(--editor-suggest-item-selected-ref-color);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -867,12 +879,12 @@
 .cm-latex-inline-widget {
     display: inline;
     vertical-align: baseline;
-    color: var(--text-primary);
+    color: var(--editor-text-color);
 }
 
 /* 行内 LaTeX 公式渲染错误时的样式 */
 .cm-latex-inline-widget.cm-latex-inline-error {
-    color: var(--text-warning);
+    color: var(--editor-warning-text-color);
 }
 
 /* 块级 LaTeX 公式 Widget 容器：居中显示，上下留白 */
@@ -884,7 +896,7 @@
     margin: 4px 0;
     border-radius: 6px;
     background: var(--editor-code-block-bg, transparent);
-    color: var(--text-primary);
+    color: var(--editor-text-color);
     font-size: 1rem;
     line-height: normal;
     overflow-x: auto;
@@ -892,21 +904,21 @@
 
 /* 块级 LaTeX 公式渲染错误时的样式 */
 .cm-latex-block-widget.cm-latex-block-error {
-    background: var(--bg-warning);
-    color: var(--text-warning);
+    background: var(--editor-warning-bg-color);
+    color: var(--editor-warning-text-color);
 }
 
 /* KaTeX 渲染失败时源码回显样式 */
 .cm-latex-error {
     font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 0.9em;
-    color: var(--text-warning);
+    color: var(--editor-warning-text-color);
     cursor: help;
 }
 
 /* 确保 KaTeX 内部元素在编辑器中正确显示颜色 */
 .cm-tab-editor .katex {
-    color: var(--text-primary);
+    color: var(--editor-text-color);
 }
 
 /* KaTeX display 模式下的公式去除默认 margin */
