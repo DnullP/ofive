@@ -138,9 +138,25 @@ pub(crate) fn validate_backend_module_contributions(
             contribution.persistence_owners,
             &mut persistence_owners,
         )?;
+        validate_module_private_persistence_owners(contribution)?;
     }
 
     validate_backend_module_capability_contributions(contributions)?;
+
+    Ok(())
+}
+
+fn validate_module_private_persistence_owners(
+    contribution: &BackendModuleContribution,
+) -> Result<(), String> {
+    for owner in contribution.persistence_owners {
+        if *owner != contribution.module_id {
+            return Err(format!(
+                "module_private persistence owner must stay aligned with module_id: module={} owner={}",
+                contribution.module_id, owner
+            ));
+        }
+    }
 
     Ok(())
 }
@@ -196,42 +212,72 @@ pub(crate) fn validate_backend_module_capability_contributions(
                 ));
             }
 
-            let probe_request = CapabilityExecutionRequest {
-                capability_id: descriptor.id.clone(),
-                consumer: CapabilityConsumer::Frontend,
-                input: Value::Null,
-            };
-            let matched_modules = execution_contributions
-                .iter()
-                .filter_map(|(module_id, execute)| {
-                    execute(&probe_request, &probe_context).map(|_| *module_id)
-                })
-                .collect::<Vec<_>>();
+            for consumer in &descriptor.supported_consumers {
+                let matched_modules = probe_capability_execution_modules(
+                    &execution_contributions,
+                    &probe_context,
+                    &descriptor.id,
+                    consumer,
+                );
 
-            if matched_modules.is_empty() {
-                return Err(format!(
-                    "capability descriptor has no execution route: module={} capability_id={}",
-                    contribution.module_id, descriptor.id
-                ));
-            }
+                if matched_modules.is_empty() {
+                    return Err(format!(
+                        "capability descriptor has no execution route for supported consumer: module={} capability_id={} consumer={}",
+                        contribution.module_id,
+                        descriptor.id,
+                        capability_consumer_label(consumer)
+                    ));
+                }
 
-            if matched_modules.len() > 1 {
-                return Err(format!(
-                    "capability descriptor matched multiple execution routes: capability_id={} modules={:?}",
-                    descriptor.id, matched_modules
-                ));
-            }
+                if matched_modules.len() > 1 {
+                    return Err(format!(
+                        "capability descriptor matched multiple execution routes for supported consumer: capability_id={} consumer={} modules={:?}",
+                        descriptor.id,
+                        capability_consumer_label(consumer),
+                        matched_modules
+                    ));
+                }
 
-            if matched_modules[0] != contribution.module_id {
-                return Err(format!(
-                    "capability descriptor routed to a different module execution: declared_module={} routed_module={} capability_id={}",
-                    contribution.module_id, matched_modules[0], descriptor.id
-                ));
+                if matched_modules[0] != contribution.module_id {
+                    return Err(format!(
+                        "capability descriptor routed to a different module execution: declared_module={} routed_module={} capability_id={} consumer={}",
+                        contribution.module_id,
+                        matched_modules[0],
+                        descriptor.id,
+                        capability_consumer_label(consumer)
+                    ));
+                }
             }
         }
     }
 
     Ok(())
+}
+
+fn probe_capability_execution_modules(
+    execution_contributions: &[(
+        &'static str,
+        for<'a> fn(
+            &CapabilityExecutionRequest,
+            &CapabilityExecutionContext<'a>,
+        ) -> Option<Result<Value, String>>,
+    )],
+    probe_context: &CapabilityExecutionContext<'_>,
+    capability_id: &str,
+    consumer: &CapabilityConsumer,
+) -> Vec<&'static str> {
+    let probe_request = CapabilityExecutionRequest {
+        capability_id: capability_id.to_string(),
+        consumer: consumer.clone(),
+        input: Value::Null,
+    };
+
+    execution_contributions
+        .iter()
+        .filter_map(|(module_id, execute)| {
+            execute(&probe_request, probe_context).map(|_| *module_id)
+        })
+        .collect()
 }
 
 fn ensure_unique_identifiers(
@@ -333,6 +379,14 @@ fn validate_capability_descriptor(
     }
 
     Ok(())
+}
+
+fn capability_consumer_label(consumer: &CapabilityConsumer) -> &'static str {
+    match consumer {
+        CapabilityConsumer::Frontend => "frontend",
+        CapabilityConsumer::AiTool => "ai-tool",
+        CapabilityConsumer::Sidecar => "sidecar",
+    }
 }
 
 #[cfg(test)]
@@ -442,6 +496,23 @@ mod tests {
     }
 
     #[test]
+    fn backend_module_contributions_should_reject_persistence_owner_mismatch() {
+        let contributions = vec![BackendModuleContribution {
+            module_id: "module-a",
+            command_ids: &[],
+            events: &[],
+            persistence_owners: &["module-b"],
+            capability_catalog: None,
+            capability_execute: None,
+        }];
+
+        let error = validate_backend_module_contributions(&contributions)
+            .expect_err("未对齐的 persistence owner 应被拒绝");
+
+        assert!(error.contains("module_private persistence owner must stay aligned with module_id"));
+    }
+
+    #[test]
     fn builtin_backend_module_capability_contributions_should_be_consistent() {
         let contributions = builtin_backend_module_contributions();
 
@@ -517,6 +588,71 @@ mod tests {
             .expect_err("catalog 缺少 execution route 应被拒绝");
 
         assert!(error.contains("declares capability catalog without execution route"));
+    }
+
+    #[test]
+    fn backend_module_capability_contributions_should_accept_consumer_specific_execution_route() {
+        fn ai_only_catalog() -> Vec<CapabilityDescriptor> {
+            vec![CapabilityDescriptor {
+                supported_consumers: vec![CapabilityConsumer::AiTool],
+                ..test_capability_descriptor("module.ai_only")
+            }]
+        }
+
+        fn execute_ai_only(
+            request: &CapabilityExecutionRequest,
+            _: &CapabilityExecutionContext<'_>,
+        ) -> Option<Result<Value, String>> {
+            (request.capability_id == "module.ai_only"
+                && request.consumer == CapabilityConsumer::AiTool)
+                .then(|| Ok(json!({"ok": true})))
+        }
+
+        let contributions = vec![BackendModuleContribution {
+            module_id: "module-a",
+            command_ids: &[],
+            events: &[],
+            persistence_owners: &[],
+            capability_catalog: Some(ai_only_catalog),
+            capability_execute: Some(execute_ai_only),
+        }];
+
+        validate_backend_module_capability_contributions(&contributions)
+            .expect("consumer 特定执行路由应通过校验");
+    }
+
+    #[test]
+    fn backend_module_capability_contributions_should_reject_missing_supported_consumer_route() {
+        fn dual_consumer_catalog() -> Vec<CapabilityDescriptor> {
+            vec![CapabilityDescriptor {
+                supported_consumers: vec![CapabilityConsumer::AiTool, CapabilityConsumer::Sidecar],
+                ..test_capability_descriptor("module.dual_consumer")
+            }]
+        }
+
+        fn execute_ai_only(
+            request: &CapabilityExecutionRequest,
+            _: &CapabilityExecutionContext<'_>,
+        ) -> Option<Result<Value, String>> {
+            (request.capability_id == "module.dual_consumer"
+                && request.consumer == CapabilityConsumer::AiTool)
+                .then(|| Ok(json!({"ok": true})))
+        }
+
+        let contributions = vec![BackendModuleContribution {
+            module_id: "module-a",
+            command_ids: &[],
+            events: &[],
+            persistence_owners: &[],
+            capability_catalog: Some(dual_consumer_catalog),
+            capability_execute: Some(execute_ai_only),
+        }];
+
+        let error = validate_backend_module_capability_contributions(&contributions)
+            .expect_err("缺少 supported consumer 路由应被拒绝");
+
+        assert!(error.contains("has no execution route for supported consumer"));
+        assert!(error.contains("consumer=sidecar"));
     }
 
     #[test]

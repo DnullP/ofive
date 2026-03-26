@@ -53,6 +53,8 @@ pub enum PersistenceResponseStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PersistenceErrorCode {
+    /// 请求结构或字段取值无效。
+    InvalidRequest,
     /// 请求的 apiVersion 不受支持。
     UnsupportedApiVersion,
     /// 请求的 scope 当前未实现。

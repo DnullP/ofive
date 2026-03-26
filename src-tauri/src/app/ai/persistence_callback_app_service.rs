@@ -99,7 +99,7 @@ async fn handle_persistence_request(
 
     persistence_app_service::execute_persistence_request_in_root(&state.vault_root, request)
         .map(Json)
-        .map_err(|error| (StatusCode::BAD_REQUEST, error))
+        .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))
 }
 
 fn is_authorized(headers: &HeaderMap, expected_token: &str) -> bool {
@@ -156,6 +156,21 @@ mod tests {
             unique, sequence
         ));
         fs::create_dir_all(root.join(".ofive")).expect("应成功创建测试根目录");
+        root
+    }
+
+    fn create_broken_test_root() -> PathBuf {
+        let sequence = TEST_ROOT_SEQ.fetch_add(1, Ordering::Relaxed);
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let root = std::env::temp_dir().join(format!(
+            "ofive-persistence-callback-broken-test-{}-{}",
+            unique, sequence
+        ));
+        fs::create_dir_all(&root).expect("应成功创建测试根目录");
+        fs::write(root.join(".ofive"), "broken").expect("应成功写入冲突文件");
         root
     }
 
@@ -223,6 +238,29 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
         handle.shutdown();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn persistence_callback_server_should_return_internal_server_error_for_storage_failure() {
+        let root = create_broken_test_root();
+        let handle = start_sidecar_persistence_callback_server(root.clone())
+            .await
+            .expect("应成功启动 persistence callback server");
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(&handle.callback_url)
+            .header("x-ofive-sidecar-token", &handle.callback_token)
+            .json(&build_request())
+            .send()
+            .await
+            .expect("应成功发送请求");
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        handle.shutdown();
+        let _ = fs::remove_file(root.join(".ofive"));
         let _ = fs::remove_dir_all(root);
     }
 }

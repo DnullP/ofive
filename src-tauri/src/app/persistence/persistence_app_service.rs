@@ -33,10 +33,12 @@ pub(crate) fn execute_persistence_request_in_root(
     vault_root: &Path,
     request: PersistenceRequest,
 ) -> Result<PersistenceResponse, String> {
-    validate_request_shape(&request)?;
-    let access_decision = evaluate_persistence_access(&request)?;
     let audit_record = crate::domain::persistence::build_persistence_audit_record(&request);
-    log_persistence_request_start(&audit_record, &access_decision.required_permissions);
+
+    if let Some(response) = validate_request_shape(&request) {
+        log_persistence_request_finish(&audit_record, &response);
+        return Ok(response);
+    }
 
     if request.api_version != PERSISTENCE_CONTRACT_API_VERSION {
         let response = error_response(
@@ -63,6 +65,9 @@ pub(crate) fn execute_persistence_request_in_root(
         log_persistence_request_finish(&audit_record, &response);
         return Ok(response);
     }
+
+    let access_decision = evaluate_persistence_access(&request)?;
+    log_persistence_request_start(&audit_record, &access_decision.required_permissions);
 
     if find_builtin_backend_module_contribution(&request.module_id).is_none() {
         let response = error_response(
@@ -155,7 +160,10 @@ fn handle_load(
     vault_root: &Path,
     request: &PersistenceRequest,
 ) -> Result<PersistenceResponse, String> {
-    let state_key = require_state_key(request)?;
+    let state_key = match require_state_key(request) {
+        Ok(state_key) => state_key,
+        Err(response) => return Ok(response),
+    };
     let current = extension_private_store::load_extension_private_state_value(
         vault_root,
         &request.owner,
@@ -177,11 +185,17 @@ fn handle_save(
     vault_root: &Path,
     request: &PersistenceRequest,
 ) -> Result<PersistenceResponse, String> {
-    let state_key = require_state_key(request)?;
-    let payload = request
-        .payload
-        .clone()
-        .ok_or_else(|| "persistence save request requires payload to be present".to_string())?;
+    let state_key = match require_state_key(request) {
+        Ok(state_key) => state_key,
+        Err(response) => return Ok(response),
+    };
+    let Some(payload) = request.payload.clone() else {
+        return Ok(error_response(
+            request,
+            PersistenceErrorCode::PayloadRequired,
+            "persistence save request requires payload to be present".to_string(),
+        ));
+    };
 
     let current = extension_private_store::load_extension_private_state_value(
         vault_root,
@@ -211,7 +225,10 @@ fn handle_delete(
     vault_root: &Path,
     request: &PersistenceRequest,
 ) -> Result<PersistenceResponse, String> {
-    let state_key = require_state_key(request)?;
+    let state_key = match require_state_key(request) {
+        Ok(state_key) => state_key,
+        Err(response) => return Ok(response),
+    };
     let current = extension_private_store::load_extension_private_state_value(
         vault_root,
         &request.owner,
@@ -268,29 +285,52 @@ fn handle_list(
     })
 }
 
-fn validate_request_shape(request: &PersistenceRequest) -> Result<(), String> {
+fn validate_request_shape(request: &PersistenceRequest) -> Option<PersistenceResponse> {
     if request.module_id.trim().is_empty() {
-        return Err("persistence request module_id cannot be empty".to_string());
+        return Some(error_response(
+            request,
+            PersistenceErrorCode::InvalidRequest,
+            "persistence request module_id cannot be empty".to_string(),
+        ));
     }
     if request.runtime_id.trim().is_empty() {
-        return Err("persistence request runtime_id cannot be empty".to_string());
+        return Some(error_response(
+            request,
+            PersistenceErrorCode::InvalidRequest,
+            "persistence request runtime_id cannot be empty".to_string(),
+        ));
     }
     if request.owner.trim().is_empty() {
-        return Err("persistence request owner cannot be empty".to_string());
+        return Some(error_response(
+            request,
+            PersistenceErrorCode::InvalidRequest,
+            "persistence request owner cannot be empty".to_string(),
+        ));
     }
     if request.schema_version == 0 {
-        return Err("persistence request schema_version cannot be 0".to_string());
+        return Some(error_response(
+            request,
+            PersistenceErrorCode::InvalidRequest,
+            "persistence request schema_version cannot be 0".to_string(),
+        ));
     }
-    Ok(())
+
+    None
 }
 
-fn require_state_key<'a>(request: &'a PersistenceRequest) -> Result<&'a str, String> {
+fn require_state_key<'a>(request: &'a PersistenceRequest) -> Result<&'a str, PersistenceResponse> {
     request
         .state_key
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| "persistence request state_key cannot be empty".to_string())
+        .ok_or_else(|| {
+            error_response(
+                request,
+                PersistenceErrorCode::StateKeyRequired,
+                "persistence request state_key cannot be empty".to_string(),
+            )
+        })
 }
 
 fn detect_revision_conflict(
@@ -547,6 +587,77 @@ mod tests {
         assert_eq!(
             response.error_code,
             Some(PersistenceErrorCode::UndeclaredPersistenceOwner)
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn persistence_contract_should_return_structured_error_for_unsupported_scope() {
+        let root = create_test_root();
+        let mut request = base_request(PersistenceAction::Load);
+        request.scope = PersistenceScope::Core;
+
+        let response = execute_persistence_request_in_root(&root, request)
+            .expect("未支持 scope 应返回协议错误");
+
+        assert_eq!(response.status, PersistenceResponseStatus::Error);
+        assert_eq!(
+            response.error_code,
+            Some(PersistenceErrorCode::UnsupportedScope)
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn persistence_contract_should_return_structured_error_for_missing_state_key() {
+        let root = create_test_root();
+        let mut request = base_request(PersistenceAction::Load);
+        request.state_key = None;
+
+        let response = execute_persistence_request_in_root(&root, request)
+            .expect("缺少 state_key 应返回协议错误");
+
+        assert_eq!(response.status, PersistenceResponseStatus::Error);
+        assert_eq!(
+            response.error_code,
+            Some(PersistenceErrorCode::StateKeyRequired)
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn persistence_contract_should_return_structured_error_for_missing_payload() {
+        let root = create_test_root();
+        let request = base_request(PersistenceAction::Save);
+
+        let response = execute_persistence_request_in_root(&root, request)
+            .expect("缺少 payload 应返回协议错误");
+
+        assert_eq!(response.status, PersistenceResponseStatus::Error);
+        assert_eq!(
+            response.error_code,
+            Some(PersistenceErrorCode::PayloadRequired)
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn persistence_contract_should_return_structured_error_for_invalid_request_shape() {
+        let root = create_test_root();
+        let mut request = base_request(PersistenceAction::Load);
+        request.runtime_id = "   ".to_string();
+
+        let response = execute_persistence_request_in_root(&root, request)
+            .expect("非法请求结构应返回协议错误");
+
+        assert_eq!(response.status, PersistenceResponseStatus::Error);
+        assert_eq!(
+            response.error_code,
+            Some(PersistenceErrorCode::InvalidRequest)
         );
 
         let _ = fs::remove_dir_all(root);
