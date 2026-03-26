@@ -9,18 +9,26 @@ use crate::module_contribution::BackendModuleContribution;
 #[cfg(test)]
 use crate::module_boundary_template::{ModuleBoundaryTemplate, ModulePrivateNamespaceTemplate};
 
-const VAULT_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[BackendModulePublicSurface {
-    namespace: "crate::shared::vault_contracts",
-    allowed_paths: &[
-        "src/app/vault/",
-        "src/host/commands/vault_commands.rs",
-        "src/infra/fs/",
-        "src/infra/query/",
-        "src/infra/persistence/",
-        "src/test_support/",
-    ],
-    rationale: "vault 输入输出与配置结构属于 Vault 模块对外复用的稳定 shared contract",
-}];
+const VAULT_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[
+    BackendModulePublicSurface {
+        namespace: "crate::shared::vault_contracts",
+        allowed_paths: &[
+            "src/app/vault/",
+            "src/host/commands/vault_commands.rs",
+            "src/infra/fs/",
+            "src/infra/query/",
+            "src/infra/persistence/",
+            "src/test_support/",
+            "src/app/sync/",
+        ],
+        rationale: "vault 输入输出与配置结构属于 Vault 模块对外复用的稳定 shared contract",
+    },
+    BackendModulePublicSurface {
+        namespace: "crate::app::vault::sync_facade",
+        allowed_paths: &["src/app/sync/", "src/app/vault/"],
+        rationale: "sync facade 是 Vault 向未来同步模块暴露的受管控消费入口",
+    },
+];
 
 #[cfg(test)]
 const VAULT_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[

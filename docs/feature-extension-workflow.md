@@ -21,6 +21,7 @@
 
 - 后端专项流程：`docs/backend-module-extension-workflow.md`
 - 前端插件开发说明：`docs/plugin-development-guide.md`
+- 同步模块待办与续做入口：`docs/sync-module-roadmap.md`
 - 后端基线目标与结论：`docs/backend-parallel-agent-target.md`
 
 ## 1.1 快速 Checklist

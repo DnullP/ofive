@@ -3,6 +3,7 @@
 > 这是后端专项流程文档。
 >
 > 如果你要新增的是完整功能，而不是纯后端能力，请先看总流程文档：`docs/feature-extension-workflow.md`。
+> 如果你要继续推进多端同步模块，请同时参考：`docs/sync-module-roadmap.md`。
 > 本文只负责回答“后端模块如何接入平台、如何保持模块边界稳定”。
 
 ## 1. 文档定位
@@ -143,6 +144,7 @@
 - `ai-chat`
 - `vault`
 - `host-platform`
+- `sync`（当前已接入模块身份与 persistence owner，后续同步流程应优先通过 `src-tauri/src/app/vault/sync_facade.rs` 消费 Vault）
 
 ## 4.2 先在模块目录内落业务实现
 
@@ -387,6 +389,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 可优先参考：
 
 - `src-tauri/src/app/vault/module_contribution.rs`
+- `src-tauri/src/app/vault/sync_facade.rs`
 - `src-tauri/src/app/vault/capability_execution.rs`
 - `src-tauri/src/domain/capability/vault_catalog.rs`
 - `src-tauri/src/app/ai/module_contribution.rs`
