@@ -316,8 +316,14 @@ const zh = {
         shortcutActions: "操作",
         shortcutRecordPlaceholder: "按下组合键…",
         shortcutInvalid: "快捷键格式无效，请重新录制或输入",
+        shortcutReservedNotAllowed: "该快捷键属于保留键，不能分配给当前命令",
         loadShortcutFailed: "加载快捷键配置失败",
         saveShortcutFailed: "保存快捷键配置失败",
+        shortcutPolicySystemReserved: "系统保留",
+        shortcutPolicyPreferReserved: "可使用保留键回退",
+        shortcutIssueReservedBlocked: "该按键保留给系统级命令",
+        shortcutIssueHardConflict: "与以下命令冲突：{{commands}}",
+        shortcutIssueConditionalShared: "按条件与以下命令共享：{{commands}}",
         /* 知识图谱设置 */
         graphSection: "知识图谱",
         /* 语言设置 */
@@ -365,6 +371,12 @@ const zh = {
     focusContext: {
         editorFocused: "编辑器聚焦",
         fileTreeFocused: "文件树聚焦",
+    },
+    conditions: {
+        activeTabPresent: "存在活动标签页",
+        activeEditorPresent: "存在活跃编辑器",
+        vaultLoaded: "仓库已加载",
+        overlayClosed: "浮层已关闭",
     },
 
     /* ==================== 标题栏 ==================== */

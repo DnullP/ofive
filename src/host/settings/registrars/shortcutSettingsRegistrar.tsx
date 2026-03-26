@@ -17,10 +17,14 @@ import {
     useShortcutState,
 } from "../../store/shortcutStore";
 import {
+    getCommandBindingPolicy,
+    getCommandRouteClass,
+    getCommandConditions,
     getCommandDefinitions,
     type CommandId,
 } from "../../commands/commandSystem";
-import { SHORTCUT_CONDITION_LABELS } from "../../commands/focusContext";
+import { getConditionLabel } from "../../conditions/conditionEvaluator";
+import { analyzeShortcutGovernance } from "../../commands/shortcutGovernance";
 import { registerSettingsSection } from "../settingsRegistry";
 
 function ShortcutSettingsSection(): ReactNode {
@@ -34,9 +38,96 @@ function ShortcutSettingsSection(): ReactNode {
         [shortcutState.bindings],
     );
 
+    const governanceByCommandId = useMemo(
+        () => analyzeShortcutGovernance(
+            editableShortcutCommands.map((command) => ({
+                id: command.id,
+                title: command.title,
+                routeClass: getCommandRouteClass(command.id),
+                bindingPolicy: getCommandBindingPolicy(command.id),
+                condition: command.condition,
+                conditions: command.conditions,
+            })),
+            shortcutState.bindings,
+        ),
+        [editableShortcutCommands, shortcutState.bindings],
+    );
+
     useEffect(() => {
         setShortcutInputs(shortcutState.bindings);
     }, [shortcutState.bindings]);
+
+    /**
+     * @function renderCommandConditions
+     * @description 渲染命令条件展示文本。
+     * @param commandId 命令 id。
+     * @returns 条件文本。
+     */
+    const renderCommandConditions = (commandId: CommandId): string => {
+        const conditions = getCommandConditions(commandId);
+        if (conditions.length === 0) {
+            return "—";
+        }
+
+        return conditions
+            .map((condition) => {
+                const label = getConditionLabel(condition);
+                return label ? t(label) : condition;
+            })
+            .join(" & ");
+    };
+
+    /**
+     * @function renderGovernanceNotes
+     * @description 渲染快捷键治理状态说明。
+     * @param commandId 命令 id。
+     * @returns 状态节点。
+     */
+    const renderGovernanceNotes = (commandId: CommandId): ReactNode => {
+        const summary = governanceByCommandId[commandId];
+        if (!summary) {
+            return null;
+        }
+
+        const notes: string[] = [];
+        if (summary.bindingPolicy === "system-reserved") {
+            notes.push(t("settings.shortcutPolicySystemReserved"));
+        } else if (summary.bindingPolicy === "prefer-system-reserved") {
+            notes.push(t("settings.shortcutPolicyPreferReserved"));
+        }
+
+        summary.issues.forEach((issue) => {
+            const relatedTitles = issue.relatedCommandIds
+                .map((id) => editableShortcutCommands.find((command) => command.id === id))
+                .filter((command): command is NonNullable<typeof command> => Boolean(command))
+                .map((command) => t(command.title))
+                .join(", ");
+
+            if (issue.type === "reserved-binding-not-allowed") {
+                notes.push(t("settings.shortcutIssueReservedBlocked"));
+            }
+
+            if (issue.type === "hard-conflict") {
+                notes.push(t("settings.shortcutIssueHardConflict", { commands: relatedTitles }));
+            }
+
+            if (issue.type === "conditional-overlap") {
+                notes.push(t("settings.shortcutIssueConditionalShared", { commands: relatedTitles }));
+            }
+        });
+
+        if (notes.length === 0) {
+            return null;
+        }
+
+        return (
+            <div>
+                {notes.map((note) => (
+                    <div key={note}>{note}</div>
+                ))}
+            </div>
+        );
+    };
 
     useEffect(() => {
         if (!recordingCommandId) {
@@ -95,22 +186,25 @@ function ShortcutSettingsSection(): ReactNode {
                                     {t(command.title)}
                                 </td>
                                 <td className="settings-shortcut-td settings-shortcut-td-keybinding">
-                                    {isRecordingCurrent ? (
-                                        <input
-                                            className="settings-shortcut-inline-input"
-                                            value={inputValue}
-                                            readOnly
-                                            placeholder={t("settings.shortcutRecordPlaceholder")}
-                                            autoFocus
-                                        />
-                                    ) : (
-                                        <kbd className="settings-shortcut-kbd">
-                                            {inputValue || command.shortcut?.defaultBinding || "—"}
-                                        </kbd>
-                                    )}
+                                    <div>
+                                        {isRecordingCurrent ? (
+                                            <input
+                                                className="settings-shortcut-inline-input"
+                                                value={inputValue}
+                                                readOnly
+                                                placeholder={t("settings.shortcutRecordPlaceholder")}
+                                                autoFocus
+                                            />
+                                        ) : (
+                                            <kbd className="settings-shortcut-kbd">
+                                                {inputValue || command.shortcut?.defaultBinding || "—"}
+                                            </kbd>
+                                        )}
+                                        {renderGovernanceNotes(commandId)}
+                                    </div>
                                 </td>
                                 <td className="settings-shortcut-td settings-shortcut-td-when">
-                                    {command.condition ? t(SHORTCUT_CONDITION_LABELS[command.condition]) : "—"}
+                                    {renderCommandConditions(commandId)}
                                 </td>
                                 <td className="settings-shortcut-td settings-shortcut-td-actions">
                                     {isRecordingCurrent ? (

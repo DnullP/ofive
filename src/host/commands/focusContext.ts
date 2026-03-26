@@ -11,8 +11,8 @@
  *     - `"tab:<component>"` — 主区标签聚焦（如 `"tab:codemirror"`）
  *     - `"other"` — 未匹配任何容器
  *
- *   快捷键条件（ShortcutCondition）通过映射表关联到 FocusedComponent 标识，
- *   新增面板/标签类型只需在 CONDITION_FOCUSED_COMPONENT_MAP 中添加映射。
+ *   快捷键条件的具体评估逻辑已委托给 host/conditions/conditionEvaluator，
+ *   本模块负责提供焦点相关输入，并兼容现有焦点条件接口。
  *
  * @dependencies 无
  *
@@ -26,7 +26,7 @@
  *   - 清理时机：DockviewLayout 卸载时调用返回的清理函数
  *
  * 导出：
- *  - ShortcutCondition 类型 — 快捷键触发条件标识
+ *  - ShortcutCondition 类型 — 快捷键触发条件标识（由条件子系统定义）
  *  - FocusedComponent 类型 — 当前聚焦组件标识字符串
  *  - SHORTCUT_CONDITION_LABELS 常量 — 条件到可读标签的映射
  *  - PANEL_ID_DATA_ATTR / TAB_COMPONENT_DATA_ATTR — 容器标记属性名
@@ -37,13 +37,15 @@
  *  - initFocusTracking 函数 — 初始化焦点追踪与日志
  */
 
-/**
- * @type ShortcutCondition
- * @description 快捷键触发条件标识。
- *   当命令定义中携带该条件时，仅当对应组件聚焦时快捷键才会激活该命令。
- *   设计为可扩展的联合类型，后续新增条件只需在此添加新值并更新 CONDITION_FOCUSED_COMPONENT_MAP。
- */
-export type ShortcutCondition = "editorFocused" | "fileTreeFocused";
+import {
+    createConditionContext,
+    evaluateCondition,
+    SHORTCUT_CONDITION_LABELS,
+    type ShortcutCondition,
+} from "../conditions/conditionEvaluator";
+
+export { SHORTCUT_CONDITION_LABELS };
+export type { ShortcutCondition };
 
 /**
  * @type FocusedComponent
@@ -52,29 +54,6 @@ export type ShortcutCondition = "editorFocused" | "fileTreeFocused";
  *   与具体面板/标签无关，由 DOM 属性动态确定。
  */
 export type FocusedComponent = string;
-
-/**
- * @constant SHORTCUT_CONDITION_LABELS
- * @description 条件标识到人类可读标签的映射，用于设置 UI 展示。
- */
-export const SHORTCUT_CONDITION_LABELS: Record<ShortcutCondition, string> = {
-    /* 编辑器标签聚焦时激活 */
-    editorFocused: "focusContext.editorFocused",
-    /* 文件树面板聚焦时激活 */
-    fileTreeFocused: "focusContext.fileTreeFocused",
-};
-
-/**
- * @constant CONDITION_FOCUSED_COMPONENT_MAP
- * @description 快捷键条件到 FocusedComponent 标识的映射。
- *   新增条件或面板类型时，在此添加对应的映射条目即可。
- */
-const CONDITION_FOCUSED_COMPONENT_MAP: Record<ShortcutCondition, string> = {
-    /* 编辑器标签 → tab:codemirror */
-    editorFocused: "tab:codemirror",
-    /* 文件树面板 → panel:files */
-    fileTreeFocused: "panel:files",
-};
 
 /**
  * @constant PANEL_ID_DATA_ATTR
@@ -153,16 +132,12 @@ export function isConditionSatisfied(
     condition: ShortcutCondition | undefined,
     focused: FocusedComponent,
 ): boolean {
-    if (!condition) {
-        return true;
-    }
-
-    const expectedFocused = CONDITION_FOCUSED_COMPONENT_MAP[condition];
-    if (!expectedFocused) {
-        return false;
-    }
-
-    return focused === expectedFocused;
+    return evaluateCondition(
+        condition,
+        createConditionContext({
+            focusedComponent: focused,
+        }),
+    );
 }
 
 /** 当前聚焦组件（模块级状态） */

@@ -29,16 +29,15 @@ import {
 } from "../../../host/store/editorContextStore";
 import {
     executeCommand,
-    getCommandCondition,
     type CommandId,
     type EditorNativeCommandId,
 } from "../../../host/commands/commandSystem";
-import { isConditionSatisfied } from "../../../host/commands/focusContext";
 import {
     notifyTabCloseShortcutTriggered,
 } from "../../../host/commands/shortcutEvents";
-import { matchShortcut, useShortcutState } from "../../../host/store/shortcutStore";
-import { resolveSystemShortcutCommand } from "../../../host/commands/systemShortcutSubsystem";
+import { useShortcutState } from "../../../host/store/shortcutStore";
+import { dispatchShortcut } from "../../../host/commands/shortcutDispatcher";
+import { createConditionContext } from "../../../host/conditions/conditionEvaluator";
 import { useVaultState } from "../../../host/store/vaultStore";
 import {
     createVaultBinaryFile,
@@ -905,48 +904,39 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 return;
             }
 
-            const systemShortcutResolution = resolveSystemShortcutCommand(event, bindingsRef.current);
-            if (systemShortcutResolution) {
+            const resolution = dispatchShortcut({
+                event,
+                bindings: bindingsRef.current,
+                source: "editor",
+                conditionContext: createConditionContext({
+                    focusedComponent: "tab:codemirror",
+                    activeTabId: articleId,
+                    activeEditorArticleId: articleId,
+                    currentVaultPath,
+                }),
+                managedShortcutCandidates: managedEditorShortcutCandidatesRef.current,
+            });
+
+            if (resolution.kind === "none") {
+                return;
+            }
+
+            if (resolution.shouldPreventDefault) {
                 event.preventDefault();
+            }
+            if (resolution.shouldStopPropagation) {
                 event.stopPropagation();
-
-                if (systemShortcutResolution.commandId === "tab.closeFocused") {
-                    notifyTabCloseShortcutTriggered();
-                }
-
-                executeEditorCommandRef.current(systemShortcutResolution.commandId);
-                return;
             }
 
-            // 仅匹配条件满足当前编辑器上下文的命令，跳过其他组件条件的命令
-            // (如 fileTreeFocused 的命令不在编辑器中执行)
-            const commandId = (Object.entries(bindingsRef.current).find(([id, shortcut]) => {
-                if (!matchShortcut(event, shortcut)) return false;
-                const condition = getCommandCondition(id as CommandId);
-                return isConditionSatisfied(condition, "tab:codemirror");
-            })?.[0] ?? null) as CommandId | null;
-
-            if (!commandId) {
-                const shouldBlockNativeShortcut = managedEditorShortcutCandidatesRef.current.some((shortcut) =>
-                    matchShortcut(event, shortcut),
-                );
-
-                if (shouldBlockNativeShortcut) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                }
-
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            if (commandId === "tab.closeFocused") {
+            if (resolution.notifyTabClose) {
                 notifyTabCloseShortcutTriggered();
             }
 
-            executeEditorCommandRef.current(commandId);
+            if (resolution.kind === "block-native" || !resolution.commandId) {
+                return;
+            }
+
+            executeEditorCommandRef.current(resolution.commandId);
         };
 
         view.dom.addEventListener("keydown", handleKeydown, true);

@@ -58,16 +58,13 @@ import {
 import { useVaultState } from "../store/vaultStore";
 import {
     executeCommand,
-    getCommandCondition,
     getCommandDefinitions,
-    isEditorScopedCommand,
     type CommandContext,
     type CommandId,
 } from "../commands/commandSystem";
 import {
     detectFocusedComponentFromEvent,
     initFocusTracking,
-    isConditionSatisfied,
     PANEL_ID_DATA_ATTR,
     TAB_COMPONENT_DATA_ATTR,
 } from "../commands/focusContext";
@@ -77,13 +74,13 @@ import {
 } from "../commands/shortcutEvents";
 import {
     ensureShortcutBindingsLoaded,
-    matchShortcut,
     useShortcutState,
 } from "../store/shortcutStore";
 import {
     requestApplicationQuit,
-    resolveSystemShortcutCommand,
 } from "../commands/systemShortcutSubsystem";
+import { dispatchShortcut } from "../commands/shortcutDispatcher";
+import { createConditionContext } from "../conditions/conditionEvaluator";
 import { applyPanelOrderForPosition } from "./panelOrderUtils";
 import { MoveFileDirectoryModal } from "./MoveFileDirectoryModal";
 import { CreateEntryModal } from "./CreateEntryModal";
@@ -2764,62 +2761,33 @@ export function DockviewLayout({
                 return;
             }
 
-            // 系统级快捷键（Cmd+W/Cmd+Q）优先级最高
-            const systemShortcutResolution = resolveSystemShortcutCommand(event, bindings);
-            if (systemShortcutResolution) {
+            const resolution = dispatchShortcut({
+                event,
+                bindings,
+                source: "global",
+                conditionContext: createConditionContext({
+                    focusedComponent: detectFocusedComponentFromEvent(event),
+                    activeTabId,
+                    currentVaultPath,
+                }),
+            });
+
+            if (resolution.kind !== "execute" || !resolution.commandId) {
+                return;
+            }
+
+            if (resolution.shouldPreventDefault) {
                 event.preventDefault();
+            }
+            if (resolution.shouldStopPropagation) {
                 event.stopPropagation();
-
-                if (systemShortcutResolution.commandId === "tab.closeFocused") {
-                    notifyTabCloseShortcutTriggered();
-                }
-
-                executeCommand(systemShortcutResolution.commandId, buildCommandContext());
-                return;
             }
 
-            // 检测当前焦点上下文，用于条件匹配
-            const focusedComponent = detectFocusedComponentFromEvent(event);
-
-            // 找到所有快捷键匹配的命令
-            const matchingCommandIds = Object.entries(bindings)
-                .filter(([, shortcut]) => matchShortcut(event, shortcut))
-                .map(([id]) => id as CommandId);
-
-            if (matchingCommandIds.length === 0) {
-                return;
-            }
-
-            // 优先选择条件匹配的命令（更具体），其次无条件的全局命令
-            const conditionedMatch = matchingCommandIds.find((id) => {
-                const condition = getCommandCondition(id);
-                return condition !== undefined && isConditionSatisfied(condition, focusedComponent);
-            });
-
-            const unconditionedMatch = matchingCommandIds.find((id) => {
-                const condition = getCommandCondition(id);
-                return condition === undefined && !isEditorScopedCommand(id);
-            });
-
-            const commandId = conditionedMatch ?? unconditionedMatch ?? null;
-
-            if (!commandId) {
-                return;
-            }
-
-            // 编辑器作用域命令不在全局 handler 中执行（已由编辑器内部 handler 处理）
-            if (isEditorScopedCommand(commandId)) {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            if (commandId === "tab.closeFocused") {
+            if (resolution.notifyTabClose) {
                 notifyTabCloseShortcutTriggered();
             }
 
-            executeCommand(commandId, buildCommandContext());
+            executeCommand(resolution.commandId, buildCommandContext());
         };
 
         window.addEventListener("keydown", handleKeydown, { capture: true });

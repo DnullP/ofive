@@ -306,8 +306,14 @@ const en = {
         shortcutActions: "Actions",
         shortcutRecordPlaceholder: "Press key combination…",
         shortcutInvalid: "Invalid shortcut format, please re-record or type",
+        shortcutReservedNotAllowed: "This shortcut is reserved and cannot be assigned to this command",
         loadShortcutFailed: "Failed to load shortcut settings",
         saveShortcutFailed: "Failed to save shortcut settings",
+        shortcutPolicySystemReserved: "System reserved",
+        shortcutPolicyPreferReserved: "Reserved fallback eligible",
+        shortcutIssueReservedBlocked: "This key is reserved for system-level commands",
+        shortcutIssueHardConflict: "Conflicts with: {{commands}}",
+        shortcutIssueConditionalShared: "Shared by condition with: {{commands}}",
         /* Knowledge graph */
         graphSection: "Knowledge Graph",
         /* Language */
@@ -355,6 +361,12 @@ const en = {
     focusContext: {
         editorFocused: "Editor Focused",
         fileTreeFocused: "File Tree Focused",
+    },
+    conditions: {
+        activeTabPresent: "Active tab present",
+        activeEditorPresent: "Active editor present",
+        vaultLoaded: "Vault loaded",
+        overlayClosed: "Overlay closed",
     },
 
     /* ==================== Titlebar ==================== */

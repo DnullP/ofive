@@ -21,7 +21,9 @@ import {
 } from "../store/editorContextStore";
 import { markContentAsSaved } from "../store/autoSaveService";
 import { emitEditorRenameRequestedEvent } from "../events/appEventBus";
-import type { ShortcutCondition } from "./focusContext";
+import type { ShortcutCondition } from "../conditions/conditionEvaluator";
+import type { CommandRouteClass } from "./shortcutGovernance";
+import type { ShortcutBindingPolicy } from "./shortcutPolicies";
 
 /**
  * @type BuiltinCommandId
@@ -106,6 +108,8 @@ export interface CommandShortcutMeta {
     defaultBinding: string;
     /** 是否在设置页暴露可编辑项 */
     editableInSettings: boolean;
+    /** 绑定策略 */
+    bindingPolicy?: ShortcutBindingPolicy;
 }
 
 /**
@@ -275,10 +279,14 @@ export interface CommandDefinition {
     execute: (context: CommandContext) => void | Promise<void>;
     /** 指令作用域 */
     scope?: CommandScope;
+    /** 指令快捷键路由域 */
+    routeClass?: CommandRouteClass;
     /** 指令快捷键元信息（可选） */
     shortcut?: CommandShortcutMeta;
     /** 指令触发条件（可选）；设置后仅当条件满足时快捷键才激活该命令 */
     condition?: ShortcutCondition;
+    /** 指令触发条件列表（可选）；以 AND 语义与 condition 一并参与评估 */
+    conditions?: ShortcutCondition[];
 }
 
 /**
@@ -289,9 +297,11 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
     "tab.closeFocused": {
         id: "tab.closeFocused",
         title: "commands.closeCurrentTab",
+        routeClass: "frontend-window",
         shortcut: {
             defaultBinding: "Ctrl+W",
             editableInSettings: true,
+            bindingPolicy: "prefer-system-reserved",
         },
         execute(context) {
             if (!context.activeTabId) {
@@ -304,9 +314,11 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
     "app.quit": {
         id: "app.quit",
         title: "commands.exitApp",
+        routeClass: "native-reserved",
         shortcut: {
             defaultBinding: "Cmd+Q",
             editableInSettings: false,
+            bindingPolicy: "system-reserved",
         },
         execute(context) {
             if (!context.quitApplication) {
@@ -483,6 +495,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.undo",
         title: "commands.undo",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+Z",
@@ -496,6 +509,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.redo",
         title: "commands.redo",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+Shift+Z",
@@ -509,6 +523,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.selectAll",
         title: "commands.selectAll",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+A",
@@ -522,6 +537,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.find",
         title: "commands.find",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+F",
@@ -535,6 +551,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.toggleComment",
         title: "commands.toggleComment",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+/",
@@ -548,6 +565,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.indentMore",
         title: "commands.increaseIndent",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+]",
@@ -561,6 +579,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.indentLess",
         title: "commands.decreaseIndent",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+[",
@@ -574,6 +593,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.toggleBold",
         title: "commands.toggleBold",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+B",
@@ -587,6 +607,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.toggleItalic",
         title: "commands.toggleItalic",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+I",
@@ -600,6 +621,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.toggleStrikethrough",
         title: "commands.toggleStrikethrough",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+Shift+X",
@@ -613,6 +635,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.toggleInlineCode",
         title: "commands.toggleInlineCode",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+E",
@@ -626,6 +649,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.toggleHighlight",
         title: "commands.toggleHighlight",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+Shift+H",
@@ -639,6 +663,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.insertLink",
         title: "commands.insertLink",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "Cmd+K",
@@ -652,6 +677,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         id: "editor.insertTask",
         title: "commands.insertTask",
         scope: "editor",
+        routeClass: "frontend-editor",
         condition: "editorFocused",
         shortcut: {
             defaultBinding: "",
@@ -822,6 +848,35 @@ export function isEditorScopedCommand(commandId: CommandId): boolean {
 }
 
 /**
+ * @function getCommandRouteClass
+ * @description 获取命令快捷键路由域。
+ * @param commandId 指令 id。
+ * @returns 路由域。
+ */
+export function getCommandRouteClass(commandId: CommandId): CommandRouteClass {
+    const definition = getCommandDefinition(commandId);
+    if (!definition) {
+        return "frontend-window";
+    }
+
+    if (definition.routeClass) {
+        return definition.routeClass;
+    }
+
+    return definition.scope === "editor" ? "frontend-editor" : "frontend-window";
+}
+
+/**
+ * @function getCommandBindingPolicy
+ * @description 获取命令快捷键绑定策略。
+ * @param commandId 指令 id。
+ * @returns 绑定策略。
+ */
+export function getCommandBindingPolicy(commandId: CommandId): ShortcutBindingPolicy {
+    return getCommandDefinition(commandId)?.shortcut?.bindingPolicy ?? "user-configurable";
+}
+
+/**
  * @function getCommandCondition
  * @description 获取指令的触发条件。
  * @param commandId 指令 id。
@@ -829,4 +884,25 @@ export function isEditorScopedCommand(commandId: CommandId): boolean {
  */
 export function getCommandCondition(commandId: CommandId): ShortcutCondition | undefined {
     return getCommandDefinition(commandId)?.condition;
+}
+
+/**
+ * @function getCommandConditions
+ * @description 获取指令全部触发条件。
+ *   兼容历史单条件字段，并支持新的复合条件列表。
+ * @param commandId 指令 id。
+ * @returns 条件数组；无条件时返回空数组。
+ */
+export function getCommandConditions(commandId: CommandId): ShortcutCondition[] {
+    const definition = getCommandDefinition(commandId);
+    if (!definition) {
+        return [];
+    }
+
+    const conditions = [...(definition.conditions ?? [])];
+    if (definition.condition) {
+        conditions.unshift(definition.condition);
+    }
+
+    return [...new Set(conditions)];
 }

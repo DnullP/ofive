@@ -14,10 +14,12 @@ import {
     type VaultConfig,
 } from "../../api/vaultApi";
 import {
+    getCommandBindingPolicy,
     getCommandDefinitions,
     subscribeCommands,
     type CommandId,
 } from "../commands/commandSystem";
+import { allowsSystemReservedBinding, isSystemReservedBinding } from "../commands/shortcutPolicies";
 import i18n from "../../i18n";
 
 /**
@@ -510,6 +512,12 @@ class ShortcutStore {
         const nextShortcut = normalizeShortcutString(shortcut);
         if (!nextShortcut) {
             this.setError(i18n.t("settings.shortcutInvalid"));
+            return;
+        }
+
+        const bindingPolicy = getCommandBindingPolicy(commandId);
+        if (isSystemReservedBinding(nextShortcut) && !allowsSystemReservedBinding(bindingPolicy)) {
+            this.setError(i18n.t("settings.shortcutReservedNotAllowed"));
             return;
         }
 

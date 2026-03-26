@@ -6,7 +6,8 @@
  *  - ../store/shortcutStore
  */
 
-import type { CommandId } from "./commandSystem";
+import { getCommandBindingPolicy, type CommandId } from "./commandSystem";
+import { SYSTEM_RESERVED_BINDINGS, allowsSystemReservedBinding } from "./shortcutPolicies";
 import { matchShortcut } from "../store/shortcutStore";
 
 /**
@@ -33,19 +34,19 @@ export interface SystemShortcutResolution {
 
 const SYSTEM_SHORTCUT_POLICIES: SystemShortcutPolicy[] = [
     {
-        reservedBinding: "Cmd+W",
+        reservedBinding: SYSTEM_RESERVED_BINDINGS[0],
         fallbackCommandId: "tab.closeFocused",
     },
     {
-        reservedBinding: "Ctrl+W",
+        reservedBinding: SYSTEM_RESERVED_BINDINGS[1],
         fallbackCommandId: "tab.closeFocused",
     },
     {
-        reservedBinding: "Cmd+Q",
+        reservedBinding: SYSTEM_RESERVED_BINDINGS[2],
         fallbackCommandId: "app.quit",
     },
     {
-        reservedBinding: "Ctrl+Q",
+        reservedBinding: SYSTEM_RESERVED_BINDINGS[3],
         fallbackCommandId: "app.quit",
     },
 ];
@@ -77,6 +78,13 @@ export function resolveSystemShortcutCommand(
     })?.[0] ?? null) as CommandId | null;
 
     if (matchedCommandId) {
+        if (!allowsSystemReservedBinding(getCommandBindingPolicy(matchedCommandId))) {
+            return {
+                commandId: matchedPolicy.fallbackCommandId,
+                source: "reserved",
+            };
+        }
+
         return {
             commandId: matchedCommandId,
             source: "binding",
