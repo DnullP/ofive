@@ -11,6 +11,16 @@ use serde::Deserialize;
 use crate::ai_service::{AiChatSettings, AiVendorModelDefinition};
 use crate::infra::persistence::ai_chat_store;
 
+const MINIMAX_MODELS: &[&str] = &[
+    "MiniMax-M2",
+    "MiniMax-M2.1",
+    "MiniMax-M2.1-highspeed",
+    "MiniMax-M2.5",
+    "MiniMax-M2.5-highspeed",
+    "MiniMax-M2.7",
+    "MiniMax-M2.7-highspeed",
+];
+
 #[derive(Debug, Deserialize)]
 struct BaiduModelListResponse {
     data: Vec<BaiduModelListItem>,
@@ -31,9 +41,23 @@ pub(crate) async fn fetch_ai_vendor_models(
     let sanitized = ai_chat_store::validate_ai_chat_settings_for_chat(settings)?;
 
     match sanitized.vendor_id.as_str() {
+        "minimax-anthropic" => Ok(fetch_minimax_vendor_models()),
         "baidu-qianfan" => fetch_baidu_vendor_models(sanitized).await,
         other => Err(format!("当前 vendor 暂不支持获取模型列表: {other}")),
     }
+}
+
+/// 返回静态维护的 MiniMax 模型目录。
+fn fetch_minimax_vendor_models() -> Vec<AiVendorModelDefinition> {
+    MINIMAX_MODELS
+        .iter()
+        .map(|model_id| AiVendorModelDefinition {
+            id: (*model_id).to_string(),
+            object: Some("model".to_string()),
+            owned_by: Some("MiniMax".to_string()),
+            created: None,
+        })
+        .collect()
 }
 
 /// 从百度千帆接口拉取模型列表。
@@ -74,7 +98,9 @@ async fn fetch_baidu_vendor_models(
         .header(CONTENT_TYPE, "application/json")
         .send()
         .await
-        .map_err(|error| format!("请求 Baidu Qianfan 模型列表失败 endpoint={list_endpoint}: {error}"))?;
+        .map_err(|error| {
+            format!("请求 Baidu Qianfan 模型列表失败 endpoint={list_endpoint}: {error}")
+        })?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -99,4 +125,44 @@ async fn fetch_baidu_vendor_models(
             created: item.created,
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{fetch_ai_vendor_models, fetch_minimax_vendor_models, MINIMAX_MODELS};
+    use crate::ai_service::AiChatSettings;
+    use std::collections::HashMap;
+
+    #[test]
+    fn fetch_minimax_vendor_models_should_return_static_catalog() {
+        let models = fetch_minimax_vendor_models();
+
+        assert_eq!(models.len(), MINIMAX_MODELS.len());
+        assert_eq!(
+            models.first().map(|model| model.id.as_str()),
+            Some("MiniMax-M2")
+        );
+        assert_eq!(
+            models.last().map(|model| model.id.as_str()),
+            Some("MiniMax-M2.7-highspeed")
+        );
+        assert!(models
+            .iter()
+            .all(|model| model.owned_by.as_deref() == Some("MiniMax")));
+    }
+
+    #[tokio::test]
+    async fn fetch_ai_vendor_models_should_use_static_minimax_catalog() {
+        let models = fetch_ai_vendor_models(AiChatSettings {
+            vendor_id: "minimax-anthropic".to_string(),
+            model: "MiniMax-M2.7".to_string(),
+            field_values: HashMap::from([("apiKey".to_string(), "test-key".to_string())]),
+        })
+        .await
+        .expect("MiniMax 静态模型目录应成功返回");
+
+        assert_eq!(models.len(), MINIMAX_MODELS.len());
+        assert_eq!(models[0].id, "MiniMax-M2");
+        assert_eq!(models[6].id, "MiniMax-M2.7-highspeed");
+    }
 }

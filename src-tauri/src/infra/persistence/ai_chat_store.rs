@@ -45,9 +45,7 @@ use crate::ai_service::{
     AiVendorDefinition, AiVendorFieldDefinition,
 };
 use crate::infra::persistence::extension_private_store;
-use crate::infra::persistence::vault_config_store::{
-    load_vault_config, save_vault_config,
-};
+use crate::infra::persistence::vault_config_store::{load_vault_config, save_vault_config};
 use crate::shared::vault_contracts::VaultConfig;
 use crate::state::{get_vault_root, AppState};
 
@@ -56,7 +54,7 @@ const AI_CHAT_SETTINGS_STATE_KEY: &str = "settings";
 const AI_CHAT_HISTORY_STATE_KEY: &str = "history";
 const AI_CHAT_SETTINGS_CONFIG_KEY: &str = "aiChatSettings";
 const AI_CHAT_HISTORY_CONFIG_KEY: &str = "aiChatHistory";
-const DEFAULT_AI_VENDOR_ID: &str = "baidu-qianfan";
+const DEFAULT_AI_VENDOR_ID: &str = "minimax-anthropic";
 
 /// 返回当前宿主支持的 AI vendor 目录。
 ///
@@ -66,43 +64,71 @@ const DEFAULT_AI_VENDOR_ID: &str = "baidu-qianfan";
 /// # 返回值
 /// - `Vec<AiVendorDefinition>`：当前版本支持的全部 vendor 定义。
 pub(crate) fn get_ai_vendor_catalog() -> Vec<AiVendorDefinition> {
-    vec![AiVendorDefinition {
-        id: DEFAULT_AI_VENDOR_ID.to_string(),
-        title: "Baidu Qianfan".to_string(),
-        description: "Use Baidu Qianfan chat completions through the Go ADK sidecar.".to_string(),
-        default_model: String::new(),
-        fields: vec![
-            AiVendorFieldDefinition {
-                key: "authToken".to_string(),
-                label: "IAM Token / Authorization".to_string(),
-                description: "Paste the raw IAM token or the full Authorization header value. If you paste only the token, the sidecar will send it as Bearer <token>.".to_string(),
-                field_type: "password".to_string(),
-                required: true,
-                placeholder: Some("Bearer ... or raw IAM token".to_string()),
-                default_value: None,
-            },
-            AiVendorFieldDefinition {
-                key: "appId".to_string(),
-                label: "App ID".to_string(),
-                description: "Optional Baidu application id header.".to_string(),
-                field_type: "text".to_string(),
-                required: false,
-                placeholder: Some("Baidu app id".to_string()),
-                default_value: None,
-            },
-            AiVendorFieldDefinition {
-                key: "endpoint".to_string(),
-                label: "Endpoint".to_string(),
-                description: "Optional custom Qianfan endpoint override.".to_string(),
-                field_type: "text".to_string(),
-                required: false,
-                placeholder: Some("https://qianfan.baidubce.com/v2/chat/completions".to_string()),
-                default_value: Some(
-                    "https://qianfan.baidubce.com/v2/chat/completions".to_string(),
-                ),
-            },
-        ],
-    }]
+    vec![
+        AiVendorDefinition {
+            id: DEFAULT_AI_VENDOR_ID.to_string(),
+            title: "MiniMax (Anthropic Compatible)".to_string(),
+            description: "Use MiniMax text generation through the Anthropic-compatible API.".to_string(),
+            default_model: "MiniMax-M2.7".to_string(),
+            fields: vec![
+                AiVendorFieldDefinition {
+                    key: "apiKey".to_string(),
+                    label: "API Key".to_string(),
+                    description: "MiniMax API key used for Anthropic-compatible requests.".to_string(),
+                    field_type: "password".to_string(),
+                    required: true,
+                    placeholder: Some("MiniMax API key".to_string()),
+                    default_value: None,
+                },
+                AiVendorFieldDefinition {
+                    key: "endpoint".to_string(),
+                    label: "Endpoint".to_string(),
+                    description: "Anthropic-compatible MiniMax base URL. Usually keep the default value.".to_string(),
+                    field_type: "text".to_string(),
+                    required: false,
+                    placeholder: Some("https://api.minimaxi.com/anthropic".to_string()),
+                    default_value: Some("https://api.minimaxi.com/anthropic".to_string()),
+                },
+            ],
+        },
+        AiVendorDefinition {
+            id: "baidu-qianfan".to_string(),
+            title: "Baidu Qianfan".to_string(),
+            description: "Use Baidu Qianfan chat completions through the Go ADK sidecar.".to_string(),
+            default_model: String::new(),
+            fields: vec![
+                AiVendorFieldDefinition {
+                    key: "authToken".to_string(),
+                    label: "IAM Token / Authorization".to_string(),
+                    description: "Paste the raw IAM token or the full Authorization header value. If you paste only the token, the sidecar will send it as Bearer <token>.".to_string(),
+                    field_type: "password".to_string(),
+                    required: true,
+                    placeholder: Some("Bearer ... or raw IAM token".to_string()),
+                    default_value: None,
+                },
+                AiVendorFieldDefinition {
+                    key: "appId".to_string(),
+                    label: "App ID".to_string(),
+                    description: "Optional Baidu application id header.".to_string(),
+                    field_type: "text".to_string(),
+                    required: false,
+                    placeholder: Some("Baidu app id".to_string()),
+                    default_value: None,
+                },
+                AiVendorFieldDefinition {
+                    key: "endpoint".to_string(),
+                    label: "Endpoint".to_string(),
+                    description: "Optional custom Qianfan endpoint override.".to_string(),
+                    field_type: "text".to_string(),
+                    required: false,
+                    placeholder: Some("https://qianfan.baidubce.com/v2/chat/completions".to_string()),
+                    default_value: Some(
+                        "https://qianfan.baidubce.com/v2/chat/completions".to_string(),
+                    ),
+                },
+            ],
+        },
+    ]
 }
 
 /// 读取当前仓库的 AI 设置。
@@ -400,8 +426,8 @@ fn default_ai_chat_settings() -> AiChatSettings {
         .find(|vendor| vendor.id == DEFAULT_AI_VENDOR_ID)
         .unwrap_or_else(|| AiVendorDefinition {
             id: DEFAULT_AI_VENDOR_ID.to_string(),
-            title: "Baidu Qianfan".to_string(),
-            description: "Baidu Qianfan Chat Completions via ADK-compatible sidecar.".to_string(),
+            title: "MiniMax (Anthropic Compatible)".to_string(),
+            description: "MiniMax text generation via Anthropic-compatible sidecar.".to_string(),
             default_model: String::new(),
             fields: Vec::new(),
         });
@@ -452,8 +478,8 @@ fn sanitize_ai_chat_settings(settings: AiChatSettings) -> AiChatSettings {
     let vendor = find_ai_vendor(settings.vendor_id.trim()).unwrap_or_else(|| {
         find_ai_vendor(&fallback.vendor_id).unwrap_or_else(|| AiVendorDefinition {
             id: fallback.vendor_id.clone(),
-            title: "Baidu Qianfan".to_string(),
-            description: "Use Baidu Qianfan chat completions through the Go ADK sidecar."
+            title: "MiniMax (Anthropic Compatible)".to_string(),
+            description: "Use MiniMax text generation through the Anthropic-compatible sidecar."
                 .to_string(),
             default_model: fallback.model.clone(),
             fields: Vec::new(),
@@ -602,8 +628,9 @@ fn sanitize_ai_chat_message(message: AiChatHistoryMessage) -> Option<AiChatHisto
 #[cfg(test)]
 mod tests {
     use super::{
-        load_ai_chat_history_in_root, load_ai_chat_settings_in_root, save_ai_chat_history_in_root,
-        AI_CHAT_HISTORY_CONFIG_KEY, AI_CHAT_SETTINGS_CONFIG_KEY,
+        default_ai_chat_settings, load_ai_chat_history_in_root, load_ai_chat_settings_in_root,
+        sanitize_ai_chat_settings, save_ai_chat_history_in_root, AI_CHAT_HISTORY_CONFIG_KEY,
+        AI_CHAT_SETTINGS_CONFIG_KEY,
     };
     use crate::ai_service::{
         AiChatConversationRecord, AiChatHistoryMessage, AiChatHistoryState, AiChatSettings,
@@ -770,5 +797,37 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn default_ai_chat_settings_should_use_minimax_vendor_and_defaults() {
+        let settings = default_ai_chat_settings();
+
+        assert_eq!(settings.vendor_id, "minimax-anthropic");
+        assert_eq!(settings.model, "MiniMax-M2.7");
+        assert_eq!(
+            settings.field_values.get("endpoint").map(String::as_str),
+            Some("https://api.minimaxi.com/anthropic")
+        );
+    }
+
+    #[test]
+    fn sanitize_ai_chat_settings_should_fill_minimax_default_endpoint() {
+        let settings = sanitize_ai_chat_settings(AiChatSettings {
+            vendor_id: "minimax-anthropic".to_string(),
+            model: "  ".to_string(),
+            field_values: HashMap::from([("apiKey".to_string(), " test-key ".to_string())]),
+        });
+
+        assert_eq!(settings.vendor_id, "minimax-anthropic");
+        assert_eq!(settings.model, "MiniMax-M2.7");
+        assert_eq!(
+            settings.field_values.get("apiKey").map(String::as_str),
+            Some("test-key")
+        );
+        assert_eq!(
+            settings.field_values.get("endpoint").map(String::as_str),
+            Some("https://api.minimaxi.com/anthropic")
+        );
     }
 }

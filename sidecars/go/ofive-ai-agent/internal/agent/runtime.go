@@ -691,6 +691,48 @@ func (r *Runtime) buildAgent(
 	_ = ctx
 
 	switch strings.TrimSpace(vendorConfig.VendorID) {
+	case "minimax-anthropic":
+		llm := llms.NewMinimaxLLM(
+			"minimax-anthropic",
+			vendorConfig.FieldValues["endpoint"],
+			vendorConfig.Model,
+			vendorConfig.FieldValues["apiKey"],
+		)
+		llm.SetTraceEmitter(func(title string, text string) error {
+			return emitDebugTrace(trace, DebugTraceEvent{Title: title, Text: text})
+		})
+
+		toolsets, err := buildMCPToolsets(bridgeConfig)
+		if err != nil {
+			return nil, "", err
+		}
+
+		var modelRequestSequence atomic.Int32
+
+		adkAgent, err := llmagent.New(llmagent.Config{
+			Name:        agentName,
+			Description: "AI assistant for ofive desktop notes.",
+			Instruction: buildAgentInstruction(bridgeConfig),
+			Model:       llm,
+			Toolsets:    toolsets,
+			BeforeModelCallbacks: []llmagent.BeforeModelCallback{
+				func(_ agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error) {
+					requestIndex := modelRequestSequence.Add(1)
+					if err := emitDebugTrace(trace, DebugTraceEvent{
+						Title: fmt.Sprintf("Model request #%d", requestIndex),
+						Text:  formatModelRequest(llmRequest),
+					}); err != nil {
+						return nil, err
+					}
+					return nil, nil
+				},
+			},
+		})
+		if err != nil {
+			return nil, "", fmt.Errorf("create minimax llm agent: %w", err)
+		}
+
+		return adkAgent, llm.Name(), nil
 	case "baidu-qianfan":
 		llm := llms.NewBaiduLLM(
 			"baidu-qianfan",
