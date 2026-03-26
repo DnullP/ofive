@@ -15,11 +15,9 @@ import React, {
 import { ArrowUp, Bot, Check, Plus, Sparkles, X } from "lucide-react";
 import {
     getAiChatHistory,
-    getAiChatSettings,
     getAiVendorCatalog,
     getAiVendorModels,
     saveAiChatHistory,
-    saveAiChatSettings,
     startAiChatStream,
     submitAiChatConfirmation,
     subscribeAiChatStreamEvents,
@@ -27,10 +25,36 @@ import {
     type AiChatHistoryMessage,
     type AiChatHistoryState,
     type AiChatSettings,
-    type AiChatStreamEventPayload,
     type AiVendorDefinition,
     type AiVendorModelDefinition,
 } from "../api/aiApi";
+import {
+    ensureAiChatSettingsLoaded,
+    getAiChatSettingsSnapshot,
+    resetAiChatSettingsStore,
+    saveAiChatSettingsToStore,
+    subscribeAiChatSettingsSnapshot,
+} from "../ai-chat/aiChatSettingsStore";
+import {
+    buildPersistableHistory,
+    createConversationRecord,
+    deriveConversationTitle,
+    ensureHistoryState,
+    filterConversations,
+    formatAiPanelError,
+    formatConversationTime,
+    mergeSettingsForVendor,
+    resolveVendor,
+    sortConversations,
+} from "../ai-chat/aiChatShared";
+import {
+    createEmptyPendingStreamBinding,
+    createPendingStreamBinding,
+    reduceAiChatStreamEvent,
+    type ChatDebugEntry,
+    type PendingStreamBinding,
+    type PendingToolConfirmation,
+} from "../ai-chat/aiChatStreamState";
 import { registerActivity } from "../host/registry/activityRegistry";
 import { registerPanel } from "../host/registry/panelRegistry";
 import { registerSettingsSection } from "../host/settings/settingsRegistry";
@@ -80,6 +104,14 @@ i18n.addResourceBundle("en", "translation", {
         debugEntryFallbackTitle: "Debug trace",
         confirmationFallbackHint: "This action will modify the vault.",
         confirmationToolLabel: "Tool",
+        tabHistory: "Conversations",
+        conversationManager: "Manage",
+        conversationManagerHint: "Browse, search, and resume previous conversations without leaving this panel.",
+        conversationActiveLabel: "Current conversation",
+        conversationCount: "{{count}} conversations",
+        conversationSearchPlaceholder: "Search conversations",
+        conversationSearchEmpty: "No matching conversations.",
+        conversationBackToChat: "Back to chat",
         confirmApprove: "Approve",
         confirmReject: "Reject",
         confirmSubmitting: "Submitting...",
@@ -137,6 +169,14 @@ i18n.addResourceBundle("zh", "translation", {
         debugEntryFallbackTitle: "调试轨迹",
         confirmationFallbackHint: "这个操作会修改仓库内容。",
         confirmationToolLabel: "工具",
+        tabHistory: "会话",
+        conversationManager: "管理",
+        conversationManagerHint: "在这个面板内浏览、搜索并恢复历史会话。",
+        conversationActiveLabel: "当前会话",
+        conversationCount: "共 {{count}} 个会话",
+        conversationSearchPlaceholder: "搜索会话",
+        conversationSearchEmpty: "没有匹配的会话。",
+        conversationBackToChat: "返回对话",
         confirmApprove: "批准",
         confirmReject: "拒绝",
         confirmSubmitting: "提交中...",
@@ -153,46 +193,14 @@ i18n.addResourceBundle("zh", "translation", {
 }, true, true);
 
 const AI_CHAT_PANEL_ID = "ai-chat";
-const AI_CHAT_SETTINGS_UPDATED_EVENT = "ofive:ai-settings-updated";
-
-interface ChatDebugEntry {
-    id: string;
-    streamId: string;
-    title: string;
-    text: string;
-}
-
-interface PendingStreamBinding {
-    streamId: string | null;
-    conversationId: string | null;
-    sessionId: string | null;
-    assistantMessageId: string | null;
-}
-
-interface PendingToolConfirmation {
-    confirmationId: string;
-    sessionId: string;
-    assistantMessageId: string;
-    conversationId: string;
-    hint: string;
-    toolName: string;
-    toolArgsJson: string;
-    isSubmitting: boolean;
-}
 
 interface QuickPromptDefinition {
     id: string;
     translationKey: string;
 }
 
-interface AiPanelErrorDisplay {
-    summary: string;
-    detail: string | null;
-}
-
 let chatMessageSequence = 1;
 let chatDebugSequence = 1;
-let chatConversationSequence = 1;
 
 const QUICK_PROMPTS: QuickPromptDefinition[] = [
     { id: "summarize", translationKey: "aiChatPlugin.quickPromptSummarize" },
@@ -223,203 +231,6 @@ function nextChatDebugEntryId(): string {
 }
 
 /**
- * @function nextConversationId
- * @description 生成会话唯一 ID。
- * @returns 会话 ID。
- */
-function nextConversationId(): string {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-        return crypto.randomUUID();
-    }
-
-    const nextId = `ai-chat-conversation-${Date.now()}-${String(chatConversationSequence)}`;
-    chatConversationSequence += 1;
-    return nextId;
-}
-
-/**
- * @function resolveVendor
- * @description 根据 vendorId 在目录中查找 vendor 定义。
- * @param vendorCatalog vendor 列表。
- * @param vendorId vendor 标识。
- * @returns 对应 vendor 或 null。
- */
-function resolveVendor(
-    vendorCatalog: AiVendorDefinition[],
-    vendorId: string,
-): AiVendorDefinition | null {
-    return vendorCatalog.find((vendor) => vendor.id === vendorId) ?? null;
-}
-
-/**
- * @function mergeSettingsForVendor
- * @description 将当前设置与目标 vendor 的字段定义合并。
- * @param currentSettings 当前设置。
- * @param vendor 目标 vendor。
- * @returns 合并后的设置。
- */
-function mergeSettingsForVendor(
-    currentSettings: AiChatSettings,
-    vendor: AiVendorDefinition,
-): AiChatSettings {
-    const nextFieldValues: Record<string, string> = {};
-    vendor.fields.forEach((field) => {
-        const currentValue = currentSettings.fieldValues[field.key];
-        nextFieldValues[field.key] = currentValue ?? field.defaultValue ?? "";
-    });
-
-    return {
-        vendorId: vendor.id,
-        model: currentSettings.model || vendor.defaultModel,
-        fieldValues: nextFieldValues,
-    };
-}
-
-/**
- * @function formatAiPanelError
- * @description 将后端错误拆分为适合侧栏展示的摘要和详情。
- * @param rawError 原始错误文本。
- * @returns 展示用错误对象。
- */
-function formatAiPanelError(rawError: string): AiPanelErrorDisplay {
-    const trimmed = rawError.trim();
-    if (!trimmed) {
-        return {
-            summary: "AI request failed",
-            detail: null,
-        };
-    }
-
-    const firstSeparatorIndex = trimmed.indexOf(": ");
-    if (firstSeparatorIndex <= 0) {
-        return {
-            summary: trimmed,
-            detail: null,
-        };
-    }
-
-    return {
-        summary: trimmed.slice(0, firstSeparatorIndex).trim() || trimmed,
-        detail: trimmed.slice(firstSeparatorIndex + 2).trim() || null,
-    };
-}
-
-/**
- * @function createConversationRecord
- * @description 创建空会话记录。
- * @returns 新会话记录。
- */
-function createConversationRecord(): AiChatConversationRecord {
-    const now = Date.now();
-    const id = nextConversationId();
-    return {
-        id,
-        sessionId: `ai-chat-session-${id}`,
-        title: i18n.t("aiChatPlugin.untitledConversation"),
-        createdAtUnixMs: now,
-        updatedAtUnixMs: now,
-        messages: [],
-    };
-}
-
-/**
- * @function sortConversations
- * @description 按更新时间倒序排列会话。
- * @param conversations 会话列表。
- * @returns 排序结果。
- */
-function sortConversations(conversations: AiChatConversationRecord[]): AiChatConversationRecord[] {
-    return [...conversations].sort((left, right) => {
-        if (left.updatedAtUnixMs === right.updatedAtUnixMs) {
-            return left.createdAtUnixMs - right.createdAtUnixMs;
-        }
-        return right.updatedAtUnixMs - left.updatedAtUnixMs;
-    });
-}
-
-/**
- * @function deriveConversationTitle
- * @description 根据首条用户消息生成会话标题。
- * @param messages 会话消息。
- * @returns 标题文本。
- */
-function deriveConversationTitle(messages: AiChatHistoryMessage[]): string {
-    const firstUserMessage = messages.find((message) => message.role === "user" && message.text.trim().length > 0);
-    if (!firstUserMessage) {
-        return i18n.t("aiChatPlugin.untitledConversation");
-    }
-
-    const normalized = firstUserMessage.text.replace(/\s+/g, " ").trim();
-    if (normalized.length <= 26) {
-        return normalized;
-    }
-    return `${normalized.slice(0, 26)}...`;
-}
-
-/**
- * @function ensureHistoryState
- * @description 保证历史状态始终有一个可用会话。
- * @param history 历史状态。
- * @returns 修正后的历史状态。
- */
-function ensureHistoryState(history: AiChatHistoryState): AiChatHistoryState {
-    if (history.conversations.length === 0) {
-        const conversation = createConversationRecord();
-        return {
-            activeConversationId: conversation.id,
-            conversations: [conversation],
-        };
-    }
-
-    const activeConversationId = history.activeConversationId
-        && history.conversations.some((conversation) => conversation.id === history.activeConversationId)
-        ? history.activeConversationId
-        : history.conversations[0]?.id ?? null;
-
-    return {
-        activeConversationId,
-        conversations: sortConversations(history.conversations),
-    };
-}
-
-/**
- * @function buildPersistableHistory
- * @description 生成可持久化的历史状态。
- * @param historyState 当前历史状态。
- * @returns 过滤后的历史状态。
- */
-function buildPersistableHistory(historyState: AiChatHistoryState): AiChatHistoryState {
-    return {
-        activeConversationId: historyState.activeConversationId,
-        conversations: sortConversations(historyState.conversations).map((conversation) => ({
-            ...conversation,
-            title: deriveConversationTitle(conversation.messages),
-            messages: conversation.messages.filter((message) => message.text.trim().length > 0),
-        })),
-    };
-}
-
-/**
- * @function formatConversationTime
- * @description 格式化会话更新时间。
- * @param timestamp 时间戳。
- * @returns 格式化结果。
- */
-function formatConversationTime(timestamp: number): string {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const isSameDay = date.toDateString() === now.toDateString();
-
-    return new Intl.DateTimeFormat(i18n.language === "zh" ? "zh-CN" : "en-US", {
-        month: isSameDay ? undefined : "2-digit",
-        day: isSameDay ? undefined : "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-    }).format(date);
-}
-
-/**
  * @function ChatPanel
  * @description 渲染右侧 AI 聊天面板。
  * @returns 面板 React 节点。
@@ -429,18 +240,14 @@ function ChatPanel(): ReactNode {
     const [historyState, setHistoryState] = useState<AiChatHistoryState | null>(null);
     const [debugEntriesByConversation, setDebugEntriesByConversation] = useState<Record<string, ChatDebugEntry[]>>({});
     const [pendingConfirmations, setPendingConfirmations] = useState<Record<string, PendingToolConfirmation>>({});
-    const [activeTab, setActiveTab] = useState<"chat" | "debug">("chat");
+    const [activeTab, setActiveTab] = useState<"history" | "chat" | "debug">("chat");
+    const [conversationQuery, setConversationQuery] = useState("");
     const [draft, setDraft] = useState("");
     const [isStreaming, setIsStreaming] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [settings, setSettings] = useState<AiChatSettings | null>(null);
     const [vendorCatalog, setVendorCatalog] = useState<AiVendorDefinition[]>([]);
-    const streamBindingRef = useRef<PendingStreamBinding>({
-        streamId: null,
-        conversationId: null,
-        sessionId: null,
-        assistantMessageId: null,
-    });
+    const streamBindingRef = useRef<PendingStreamBinding>(createEmptyPendingStreamBinding());
     const historyLoadedRef = useRef(false);
     const historySaveTimerRef = useRef<number | null>(null);
     const threadViewportRef = useRef<HTMLDivElement | null>(null);
@@ -550,6 +357,10 @@ function ChatPanel(): ReactNode {
         return debugEntriesByConversation[activeConversation.id] ?? [];
     }, [activeConversation, debugEntriesByConversation]);
 
+    const filteredConversations = useMemo(() => {
+        return filterConversations(historyState?.conversations ?? [], conversationQuery);
+    }, [conversationQuery, historyState?.conversations]);
+
     const formattedError = useMemo(() => {
         if (!error) {
             return null;
@@ -579,10 +390,15 @@ function ChatPanel(): ReactNode {
             setHistoryState(null);
             setSettings(null);
             historyLoadedRef.current = false;
+            resetAiChatSettingsStore();
             return;
         }
 
-        Promise.all([getAiVendorCatalog(), getAiChatSettings(), getAiChatHistory()])
+        Promise.all([
+            getAiVendorCatalog(),
+            ensureAiChatSettingsLoaded(currentVaultPath),
+            getAiChatHistory(),
+        ])
             .then(([catalog, nextSettings, history]) => {
                 if (disposed) {
                     return;
@@ -601,19 +417,22 @@ function ChatPanel(): ReactNode {
                 setError(loadError instanceof Error ? loadError.message : String(loadError));
             });
 
-        const handleSettingsUpdated = (): void => {
-            void getAiChatSettings().then((nextSettings) => {
-                if (!disposed) {
-                    setSettings(nextSettings);
-                }
-            });
-        };
+        const unsubscribe = subscribeAiChatSettingsSnapshot(() => {
+            if (disposed) {
+                return;
+            }
 
-        window.addEventListener(AI_CHAT_SETTINGS_UPDATED_EVENT, handleSettingsUpdated);
+            const snapshot = getAiChatSettingsSnapshot();
+            if (snapshot.vaultPath !== currentVaultPath) {
+                return;
+            }
+
+            setSettings(snapshot.settings);
+        });
 
         return () => {
             disposed = true;
-            window.removeEventListener(AI_CHAT_SETTINGS_UPDATED_EVENT, handleSettingsUpdated);
+            unsubscribe();
         };
     }, [currentVaultPath]);
 
@@ -644,77 +463,52 @@ function ChatPanel(): ReactNode {
         let disposed = false;
         let cleanup: (() => void) | undefined;
 
-        void subscribeAiChatStreamEvents((payload: AiChatStreamEventPayload) => {
+        void subscribeAiChatStreamEvents((payload) => {
             if (disposed) {
                 return;
             }
 
             const binding = streamBindingRef.current;
-            if (!binding.assistantMessageId || !binding.conversationId) {
-                return;
-            }
+            const transition = reduceAiChatStreamEvent({
+                payload,
+                binding,
+                debugEntryId: nextChatDebugEntryId(),
+                debugFallbackTitle: i18n.t("aiChatPlugin.debugEntryFallbackTitle"),
+                confirmationFallbackHint: i18n.t("aiChatPlugin.confirmationFallbackHint"),
+            });
 
-            if (!binding.streamId) {
-                binding.streamId = payload.streamId;
-            }
-            if (binding.streamId !== payload.streamId) {
-                return;
-            }
+            streamBindingRef.current = transition.nextBinding;
 
-            if (payload.eventType === "debug") {
-                appendDebugEntry(binding.conversationId, {
-                    id: nextChatDebugEntryId(),
-                    streamId: payload.streamId,
-                    title: payload.debugTitle ?? i18n.t("aiChatPlugin.debugEntryFallbackTitle"),
-                    text: payload.debugText ?? "",
-                });
-                return;
-            }
-
-            if (payload.eventType === "confirmation") {
-                const confirmationText = payload.confirmationHint ?? i18n.t("aiChatPlugin.confirmationFallbackHint");
-                updateConversation(binding.conversationId, (conversation) => ({
-                    ...conversation,
-                    updatedAtUnixMs: Date.now(),
-                    messages: conversation.messages.map((message) => {
-                        if (message.id !== binding.assistantMessageId) {
-                            return message;
-                        }
-                        return {
-                            ...message,
-                            text: confirmationText,
-                        };
-                    }),
-                }));
-
-                setIsStreaming(false);
-
-                if (payload.confirmationId && payload.sessionId) {
-                    setPendingConfirmationState({
-                        confirmationId: payload.confirmationId,
-                        sessionId: payload.sessionId,
-                        assistantMessageId: binding.assistantMessageId,
+            if (!transition.matchesBinding) {
+                if (!binding.streamId && transition.nextBinding.streamId === payload.streamId) {
+                    console.info("[aiChatPlugin] stream bound", {
+                        streamId: payload.streamId,
                         conversationId: binding.conversationId,
-                        hint: payload.confirmationHint ?? "",
-                        toolName: payload.confirmationToolName ?? "",
-                        toolArgsJson: payload.confirmationToolArgsJson ?? "{}",
-                        isSubmitting: false,
+                        sessionId: binding.sessionId,
                     });
-                } else {
-                    setError("AI confirmation payload is incomplete");
                 }
-
-                streamBindingRef.current = {
-                    streamId: null,
-                    conversationId: null,
-                    sessionId: null,
-                    assistantMessageId: null,
-                };
                 return;
             }
 
-            if (payload.eventType === "delta" || payload.eventType === "done") {
-                updateConversation(binding.conversationId, (conversation) => ({
+            if (!binding.streamId && transition.nextBinding.streamId === payload.streamId) {
+                console.info("[aiChatPlugin] stream bound", {
+                    streamId: payload.streamId,
+                    conversationId: binding.conversationId,
+                    sessionId: binding.sessionId,
+                });
+            }
+
+            if (transition.nextDebugEntry) {
+                console.debug("[aiChatPlugin] stream debug chunk", {
+                    streamId: payload.streamId,
+                    title: transition.nextDebugEntry.title,
+                });
+                appendDebugEntry(binding.conversationId!, transition.nextDebugEntry);
+                return;
+            }
+
+            if (transition.nextAssistantText) {
+                updateConversation(binding.conversationId!, (conversation) => ({
                     ...conversation,
                     updatedAtUnixMs: Date.now(),
                     messages: conversation.messages.map((message) => {
@@ -723,34 +517,48 @@ function ChatPanel(): ReactNode {
                         }
                         return {
                             ...message,
-                            text: payload.accumulatedText ?? message.text,
+                            text: transition.nextAssistantText ?? message.text,
                         };
                     }),
                 }));
             }
 
-            if (payload.eventType === "error") {
-                setError(payload.error ?? "AI stream failed");
+            if (transition.nextConfirmation) {
+                console.info("[aiChatPlugin] stream confirmation requested", {
+                    streamId: payload.streamId,
+                    confirmationId: transition.nextConfirmation.confirmationId,
+                    toolName: transition.nextConfirmation.toolName || null,
+                });
+                setPendingConfirmationState(transition.nextConfirmation);
+            }
+
+            if (transition.errorMessage) {
+                if (payload.eventType === "error") {
+                    console.warn("[aiChatPlugin] stream failed", {
+                        streamId: payload.streamId,
+                        message: transition.errorMessage,
+                    });
+                }
+                setError(transition.errorMessage);
+            }
+
+            if (transition.shouldStopStreaming) {
                 setIsStreaming(false);
-                clearPendingConfirmationState(binding.assistantMessageId);
-                streamBindingRef.current = {
-                    streamId: null,
-                    conversationId: null,
-                    sessionId: null,
-                    assistantMessageId: null,
-                };
+            }
+
+            if (transition.shouldClearPendingConfirmation) {
+                clearPendingConfirmationState(binding.assistantMessageId!);
+            }
+
+            if (transition.nextConfirmation) {
                 return;
             }
 
-            if (payload.eventType === "done") {
-                setIsStreaming(false);
-                clearPendingConfirmationState(binding.assistantMessageId);
-                streamBindingRef.current = {
-                    streamId: null,
-                    conversationId: null,
-                    sessionId: null,
-                    assistantMessageId: null,
-                };
+            if (transition.isDone) {
+                console.info("[aiChatPlugin] stream completed", {
+                    streamId: payload.streamId,
+                    conversationId: binding.conversationId,
+                });
             }
         }).then((unlisten) => {
             cleanup = unlisten;
@@ -798,6 +606,7 @@ function ChatPanel(): ReactNode {
             };
         });
         setActiveTab("chat");
+        setConversationQuery("");
         setDraft("");
         setError(null);
     };
@@ -816,6 +625,7 @@ function ChatPanel(): ReactNode {
             activeConversationId: conversationId,
         } : currentState);
         setActiveTab("chat");
+        setConversationQuery("");
         setError(null);
     };
 
@@ -835,12 +645,11 @@ function ChatPanel(): ReactNode {
             isSubmitting: true,
         });
         setIsStreaming(true);
-        streamBindingRef.current = {
-            streamId: null,
-            conversationId: confirmation.conversationId,
-            sessionId: confirmation.sessionId,
-            assistantMessageId: confirmation.assistantMessageId,
-        };
+        streamBindingRef.current = createPendingStreamBinding(
+            confirmation.conversationId,
+            confirmation.sessionId,
+            confirmation.assistantMessageId,
+        );
 
         try {
             const response = await submitAiChatConfirmation({
@@ -848,12 +657,12 @@ function ChatPanel(): ReactNode {
                 confirmed: approved,
                 sessionId: confirmation.sessionId,
             });
-            streamBindingRef.current = {
-                streamId: response.streamId,
-                conversationId: confirmation.conversationId,
-                sessionId: confirmation.sessionId,
-                assistantMessageId: confirmation.assistantMessageId,
-            };
+            streamBindingRef.current = createPendingStreamBinding(
+                confirmation.conversationId,
+                confirmation.sessionId,
+                confirmation.assistantMessageId,
+                response.streamId,
+            );
             clearPendingConfirmationState(confirmation.assistantMessageId);
         } catch (submitError) {
             setError(submitError instanceof Error ? submitError.message : String(submitError));
@@ -862,12 +671,7 @@ function ChatPanel(): ReactNode {
                 ...confirmation,
                 isSubmitting: false,
             });
-            streamBindingRef.current = {
-                streamId: null,
-                conversationId: null,
-                sessionId: null,
-                assistantMessageId: null,
-            };
+            streamBindingRef.current = createEmptyPendingStreamBinding();
         }
     };
 
@@ -884,6 +688,12 @@ function ChatPanel(): ReactNode {
         if (!trimmed || isStreaming) {
             return;
         }
+
+        console.info("[aiChatPlugin] submit message", {
+            conversationId: activeConversation.id,
+            sessionId: activeConversation.sessionId,
+            messageLength: trimmed.length,
+        });
 
         const userMessage: AiChatHistoryMessage = {
             id: nextChatMessageId(),
@@ -909,12 +719,11 @@ function ChatPanel(): ReactNode {
             messages: [...conversation.messages, userMessage, assistantMessage],
         }));
 
-        streamBindingRef.current = {
-            streamId: null,
-            conversationId: activeConversation.id,
-            sessionId: activeConversation.sessionId,
-            assistantMessageId: assistantMessage.id,
-        };
+        streamBindingRef.current = createPendingStreamBinding(
+            activeConversation.id,
+            activeConversation.sessionId,
+            assistantMessage.id,
+        );
 
         try {
             const response = await startAiChatStream({
@@ -922,21 +731,16 @@ function ChatPanel(): ReactNode {
                 sessionId: activeConversation.sessionId,
                 history,
             });
-            streamBindingRef.current = {
-                streamId: response.streamId,
-                conversationId: activeConversation.id,
-                sessionId: activeConversation.sessionId,
-                assistantMessageId: assistantMessage.id,
-            };
+            streamBindingRef.current = createPendingStreamBinding(
+                activeConversation.id,
+                activeConversation.sessionId,
+                assistantMessage.id,
+                response.streamId,
+            );
         } catch (submitError) {
             setError(submitError instanceof Error ? submitError.message : String(submitError));
             setIsStreaming(false);
-            streamBindingRef.current = {
-                streamId: null,
-                conversationId: null,
-                sessionId: null,
-                assistantMessageId: null,
-            };
+            streamBindingRef.current = createEmptyPendingStreamBinding();
         }
     };
 
@@ -984,34 +788,39 @@ function ChatPanel(): ReactNode {
                 <div className="ai-chat-conversation-bar">
                     <div className="ai-chat-conversation-bar-header">
                         <span className="ai-chat-section-label">{i18n.t("aiChatPlugin.historySection")}</span>
-                        <button
-                            type="button"
-                            className="ai-chat-conversation-create"
-                            disabled={isStreaming}
-                            onClick={handleCreateConversation}
-                        >
-                            <Plus size={13} strokeWidth={2} />
-                            <span>{i18n.t("aiChatPlugin.newConversation")}</span>
-                        </button>
-                    </div>
-                    <div className="ai-chat-conversation-list">
-                        {historyState?.conversations.length ? historyState.conversations.map((conversation) => (
+                        <div className="ai-chat-conversation-actions">
                             <button
-                                key={conversation.id}
                                 type="button"
-                                className={`ai-chat-conversation-item ${historyState.activeConversationId === conversation.id ? "active" : ""}`}
+                                className="ai-chat-conversation-manage"
                                 disabled={isStreaming}
                                 onClick={() => {
-                                    handleSelectConversation(conversation.id);
+                                    setActiveTab("history");
                                 }}
                             >
-                                <span className="ai-chat-conversation-title">{conversation.title}</span>
-                                <span className="ai-chat-conversation-time">{formatConversationTime(conversation.updatedAtUnixMs)}</span>
+                                <span>{i18n.t("aiChatPlugin.conversationManager")}</span>
                             </button>
-                        )) : (
-                            <div className="ai-chat-conversation-empty">{i18n.t("aiChatPlugin.historyEmpty")}</div>
-                        )}
+                            <button
+                                type="button"
+                                className="ai-chat-conversation-create"
+                                disabled={isStreaming}
+                                onClick={handleCreateConversation}
+                            >
+                                <Plus size={13} strokeWidth={2} />
+                                <span>{i18n.t("aiChatPlugin.newConversation")}</span>
+                            </button>
+                        </div>
                     </div>
+                    <div className="ai-chat-conversation-summary">
+                        <div className="ai-chat-conversation-summary-meta">
+                            <span className="ai-chat-conversation-summary-label">{i18n.t("aiChatPlugin.conversationActiveLabel")}</span>
+                            <span className="ai-chat-conversation-summary-title">{activeConversation?.title ?? i18n.t("aiChatPlugin.untitledConversation")}</span>
+                        </div>
+                        <div className="ai-chat-conversation-summary-side">
+                            <span className="ai-chat-conversation-time">{activeConversation ? formatConversationTime(activeConversation.updatedAtUnixMs) : "-"}</span>
+                            <span className="ai-chat-conversation-count">{i18n.t("aiChatPlugin.conversationCount", { count: historyState?.conversations.length ?? 0 })}</span>
+                        </div>
+                    </div>
+                    <div className="ai-chat-conversation-hint">{i18n.t("aiChatPlugin.conversationManagerHint")}</div>
                 </div>
 
                 {formattedError ? (
@@ -1025,6 +834,17 @@ function ChatPanel(): ReactNode {
             </div>
 
             <div className="ai-chat-tab-strip" role="tablist" aria-label={i18n.t("aiChatPlugin.title")}>
+                <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === "history"}
+                    className={`ai-chat-tab-button ${activeTab === "history" ? "active" : ""}`}
+                    onClick={() => {
+                        setActiveTab("history");
+                    }}
+                >
+                    {i18n.t("aiChatPlugin.tabHistory")}
+                </button>
                 <button
                     type="button"
                     role="tab"
@@ -1049,7 +869,51 @@ function ChatPanel(): ReactNode {
                 </button>
             </div>
 
-            {activeTab === "chat" ? (
+            {activeTab === "history" ? (
+                <div className="ai-chat-history-shell" role="tabpanel">
+                    <div className="ai-chat-history-toolbar">
+                        <input
+                            className="ai-chat-history-search"
+                            type="text"
+                            value={conversationQuery}
+                            placeholder={i18n.t("aiChatPlugin.conversationSearchPlaceholder")}
+                            onChange={(event) => {
+                                setConversationQuery(event.target.value);
+                            }}
+                        />
+                        <button
+                            type="button"
+                            className="ai-chat-conversation-manage"
+                            onClick={() => {
+                                setActiveTab("chat");
+                            }}
+                        >
+                            <span>{i18n.t("aiChatPlugin.conversationBackToChat")}</span>
+                        </button>
+                    </div>
+                    <div className="ai-chat-history-list">
+                        {filteredConversations.length ? filteredConversations.map((conversation) => (
+                            <button
+                                key={conversation.id}
+                                type="button"
+                                className={`ai-chat-history-item ${historyState?.activeConversationId === conversation.id ? "active" : ""}`}
+                                disabled={isStreaming}
+                                onClick={() => {
+                                    handleSelectConversation(conversation.id);
+                                }}
+                            >
+                                <div className="ai-chat-history-item-main">
+                                    <span className="ai-chat-conversation-title">{conversation.title}</span>
+                                    <span className="ai-chat-history-preview">{conversation.messages[conversation.messages.length - 1]?.text || i18n.t("aiChatPlugin.historyEmpty")}</span>
+                                </div>
+                                <span className="ai-chat-conversation-time">{formatConversationTime(conversation.updatedAtUnixMs)}</span>
+                            </button>
+                        )) : (
+                            <div className="ai-chat-conversation-empty">{i18n.t("aiChatPlugin.conversationSearchEmpty")}</div>
+                        )}
+                    </div>
+                </div>
+            ) : activeTab === "chat" ? (
                 <div className="ai-chat-thread-shell" role="tabpanel">
                     {!activeConversation?.messages.length ? (
                         <div className="ai-chat-welcome-card">
@@ -1173,7 +1037,7 @@ function ChatPanel(): ReactNode {
                     className="ai-chat-input"
                     value={draft}
                     placeholder={i18n.t("aiChatPlugin.draftPlaceholder")}
-                    disabled={!currentVaultPath || isStreaming || !activeConversation}
+                    disabled={!currentVaultPath || isStreaming || !activeConversation || activeTab === "history"}
                     onKeyDown={handleInputKeyDown}
                     onChange={(event) => {
                         setDraft(event.target.value);
@@ -1231,11 +1095,15 @@ function AiChatSettingsSection(): ReactNode {
         if (!currentVaultPath) {
             setSettings(null);
             setVendorCatalog([]);
+            resetAiChatSettingsStore();
             return;
         }
 
         setIsLoading(true);
-        Promise.all([getAiVendorCatalog(), getAiChatSettings()])
+        Promise.all([
+            getAiVendorCatalog(),
+            ensureAiChatSettingsLoaded(currentVaultPath),
+        ])
             .then(([catalog, currentSettings]) => {
                 if (disposed) {
                     return;
@@ -1263,6 +1131,34 @@ function AiChatSettingsSection(): ReactNode {
             disposed = true;
         };
     }, [currentVaultPath]);
+
+    useEffect(() => {
+        if (!currentVaultPath) {
+            return;
+        }
+
+        let disposed = false;
+        const unsubscribe = subscribeAiChatSettingsSnapshot(() => {
+            if (disposed) {
+                return;
+            }
+
+            const snapshot = getAiChatSettingsSnapshot();
+            if (snapshot.vaultPath !== currentVaultPath || !snapshot.settings) {
+                return;
+            }
+
+            const nextVendor = resolveVendor(vendorCatalog, snapshot.settings.vendorId);
+            setSettings(nextVendor
+                ? mergeSettingsForVendor(snapshot.settings, nextVendor)
+                : snapshot.settings);
+        });
+
+        return () => {
+            disposed = true;
+            unsubscribe();
+        };
+    }, [currentVaultPath, vendorCatalog]);
 
     /**
      * @function loadVendorModels
@@ -1354,7 +1250,7 @@ function AiChatSettingsSection(): ReactNode {
      * @description 保存当前 AI 设置。
      */
     const handleSave = async (): Promise<void> => {
-        if (!settings) {
+        if (!settings || !currentVaultPath) {
             return;
         }
 
@@ -1363,11 +1259,10 @@ function AiChatSettingsSection(): ReactNode {
         setFeedbackIsError(false);
 
         try {
-            const savedSettings = await saveAiChatSettings(settings);
+            const savedSettings = await saveAiChatSettingsToStore(currentVaultPath, settings);
             const vendor = resolveVendor(vendorCatalog, savedSettings.vendorId);
             setSettings(vendor ? mergeSettingsForVendor(savedSettings, vendor) : savedSettings);
             setFeedback(i18n.t("aiChatPlugin.saveSuccess"));
-            window.dispatchEvent(new Event(AI_CHAT_SETTINGS_UPDATED_EVENT));
         } catch (saveError) {
             setFeedback(saveError instanceof Error ? saveError.message : String(saveError));
             setFeedbackIsError(true);

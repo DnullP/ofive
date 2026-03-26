@@ -89,6 +89,28 @@
     gap: 8px;
 }
 
+/* ai-chat-conversation-actions：会话操作按钮组 */
+.ai-chat-conversation-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ai-chat-conversation-manage：会话管理按钮 */
+.ai-chat-conversation-manage {
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 5px 9px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+    cursor: pointer;
+}
+
 /* ai-chat-conversation-bar-header：会话列表标题行 */
 .ai-chat-conversation-bar-header {
     display: flex;
@@ -127,42 +149,55 @@
     cursor: not-allowed;
 }
 
-/* ai-chat-conversation-list：会话列表滚动区 */
-.ai-chat-conversation-list {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-}
-
-/* ai-chat-conversation-item：单条会话按钮 */
-.ai-chat-conversation-item {
-    min-width: 120px;
-    max-width: 180px;
+/* ai-chat-conversation-summary：当前会话摘要卡片 */
+.ai-chat-conversation-summary {
     border: 1px solid var(--border-color);
     border-radius: 12px;
-    padding: 8px 10px;
+    padding: 9px 10px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+}
+
+/* ai-chat-conversation-summary-meta：当前会话摘要主信息 */
+.ai-chat-conversation-summary-meta {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
-    text-align: left;
+}
+
+/* ai-chat-conversation-summary-side：当前会话摘要侧信息 */
+.ai-chat-conversation-summary-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+/* ai-chat-conversation-summary-label：当前会话摘要标签 */
+.ai-chat-conversation-summary-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+/* ai-chat-conversation-count：会话数量摘要 */
+.ai-chat-conversation-count {
+    font-size: 10px;
+    color: var(--text-tertiary);
+}
+
+/* ai-chat-conversation-hint：会话管理说明 */
+.ai-chat-conversation-hint {
+    font-size: 11px;
+    line-height: 1.5;
     color: var(--text-secondary);
-    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
-    cursor: pointer;
-}
-
-/* ai-chat-conversation-item.active：当前会话 */
-.ai-chat-conversation-item.active {
-    color: var(--text-primary);
-    border-color: color-mix(in srgb, var(--accent-primary) 28%, var(--border-color));
-    background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-primary));
-}
-
-/* ai-chat-conversation-item:disabled：会话按钮禁用态 */
-.ai-chat-conversation-item:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
 }
 
 /* ai-chat-conversation-title：会话标题 */
@@ -222,10 +257,104 @@
 /* ai-chat-tab-strip：chat/debug tab 容器 */
 .ai-chat-tab-strip {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
     padding: 8px 10px;
     border-bottom: 1px solid var(--border-color);
+}
+
+/* ai-chat-history-shell：会话管理页容器 */
+.ai-chat-history-shell {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+    overflow: hidden;
+}
+
+/* ai-chat-history-toolbar：会话页工具栏 */
+.ai-chat-history-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ai-chat-history-search：会话搜索框 */
+.ai-chat-history-search {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font: inherit;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-primary) 90%, var(--bg-secondary));
+}
+
+/* ai-chat-history-search:focus：会话搜索框聚焦态 */
+.ai-chat-history-search:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+}
+
+/* ai-chat-history-list：会话页列表滚动区 */
+.ai-chat-history-list {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* ai-chat-history-item：会话页单条会话按钮 */
+.ai-chat-history-item {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    text-align: left;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+    cursor: pointer;
+}
+
+/* ai-chat-history-item.active：当前会话高亮态 */
+.ai-chat-history-item.active {
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--accent-primary) 28%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-primary));
+}
+
+/* ai-chat-history-item:disabled：会话页按钮禁用态 */
+.ai-chat-history-item:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ai-chat-history-item-main：会话页主内容区 */
+.ai-chat-history-item-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* ai-chat-history-preview：会话页最近消息预览 */
+.ai-chat-history-preview {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
 }
 
 /* ai-chat-tab-button：tab 按钮 */
@@ -636,6 +765,11 @@
     border-color: color-mix(in srgb, var(--accent-primary) 24%, var(--border-color));
 }
 
+/* ai-chat-conversation-manage:hover：会话管理按钮悬停态 */
+.ai-chat-conversation-manage:hover {
+    border-color: color-mix(in srgb, var(--accent-primary) 24%, var(--border-color));
+}
+
 /* ai-chat-send-button:hover：发送按钮悬停态 */
 .ai-chat-send-button:hover {
     filter: brightness(1.04);
@@ -793,10 +927,13 @@
 /* 桌面毛玻璃 AI 面板交互控件：与现有会话列表和输入控件保持一致。 */
 .app-runtime--tauri.app-effect--glass .ai-chat-settings-input,
 .app-runtime--tauri.app-effect--glass .ai-chat-settings-refresh,
+.app-runtime--tauri.app-effect--glass .ai-chat-history-search,
 .app-runtime--tauri.app-effect--glass .ai-chat-vendor-badge,
 .app-runtime--tauri.app-effect--glass .ai-chat-status-chip,
-.app-runtime--tauri.app-effect--glass .ai-chat-conversation-item,
+.app-runtime--tauri.app-effect--glass .ai-chat-conversation-summary,
+.app-runtime--tauri.app-effect--glass .ai-chat-history-item,
 .app-runtime--tauri.app-effect--glass .ai-chat-conversation-create,
+.app-runtime--tauri.app-effect--glass .ai-chat-conversation-manage,
 .app-runtime--tauri.app-effect--glass .ai-chat-tab-button,
 .app-runtime--tauri.app-effect--glass .ai-chat-input,
 .app-runtime--tauri.app-effect--glass .ai-chat-message-bubble {
@@ -814,8 +951,11 @@
         justify-content: flex-start;
     }
 
-    .ai-chat-conversation-item {
-        min-width: 110px;
+    .ai-chat-conversation-bar-header,
+    .ai-chat-history-toolbar,
+    .ai-chat-conversation-summary {
+        flex-direction: column;
+        align-items: stretch;
     }
 
     .ai-chat-composer-row {
