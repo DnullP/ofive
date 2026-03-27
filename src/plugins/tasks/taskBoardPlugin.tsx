@@ -2,14 +2,8 @@
  * @module plugins/tasks/taskBoardPlugin
  * @description 任务看板插件：注册任务 activity icon、打开命令和看板 tab 组件。
  * @dependencies
- *  - react
- *  - lucide-react
  *  - ../../host/commands/commandSystem
- *  - ../../host/registry/activityRegistry
- *  - ../../host/registry/tabComponentRegistry
- *  - ../../i18n
- *  - ../../host/commands/commandSystem
- *  - ./TaskBoardTab
+ *  - ./task-board/TaskBoardTab
  *  - ./taskBoardPluginRuntime
  *
  * @exports
@@ -17,7 +11,7 @@
  */
 
 import { registerCommand } from "../../host/commands/commandSystem";
-import { TaskBoardTab } from "./TaskBoardTab";
+import { TaskBoardTab } from "./task-board/TaskBoardTab";
 import { activateTaskBoardPluginRuntime } from "./taskBoardPluginRuntime";
 
 /**

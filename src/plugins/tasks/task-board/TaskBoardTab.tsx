@@ -1,15 +1,15 @@
 /**
- * @module plugins/tasks/TaskBoardTab
+ * @module plugins/tasks/task-board/TaskBoardTab
  * @description 任务看板 Tab：查询整个仓库中的任务，并支持基于气泡框编辑 due 和 priority。
  * @dependencies
  *  - react
  *  - dockview
  *  - lucide-react
- *  - ../../api/vaultApi
- *  - ../../host/events/appEventBus
- *  - ../../host/layout/openFileService
- *  - ../../i18n
- *  - ../../utils/taskSyntax
+ *  - ../../../api/vaultApi
+ *  - ../../../host/events/appEventBus
+ *  - ../../../host/layout/openFileService
+ *  - ../../../i18n
+ *  - ../../../utils/taskSyntax
  *  - ./taskBoard.css
  *
  * @exports
@@ -38,17 +38,17 @@ import {
     readVaultMarkdownFile,
     saveVaultMarkdownFile,
     type VaultTaskItem,
-} from "../../api/vaultApi";
-import { subscribePersistedContentUpdatedEvent } from "../../host/events/appEventBus";
-import { openFileInDockview } from "../../host/layout/openFileService";
-import i18n from "../../i18n";
+} from "../../../api/vaultApi";
+import { subscribePersistedContentUpdatedEvent } from "../../../host/events/appEventBus";
+import { openFileInDockview } from "../../../host/layout/openFileService";
+import i18n from "../../../i18n";
 import {
     dateTimeLocalInputToTaskDue,
     formatTaskDueLabel,
     normalizeTaskMetadataValue,
     replaceTaskBoardMetadataInMarkdown,
     taskDueValueToDateTimeLocalInput,
-} from "../../utils/taskSyntax";
+} from "../../../utils/taskSyntax";
 import "./taskBoard.css";
 
 type TaskStatusFilter = "all" | "open" | "done";

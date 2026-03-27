@@ -91,12 +91,15 @@ lines.forEach((line, index) => {
 
 **新增解析 Markdown 内容的组件时，必须通过 `markdownBlockDetector` 过滤块级结构内的行，否则会出现代码块内注释被错误识别的问题。**
 
-### 后端文本层用法（`src-tauri/src/vault_commands/markdown_block_detector.rs`）
+### 后端文本层用法（`src-tauri/src/infra/query/markdown_block_detector.rs`）
 
 任何需要扫描 Markdown 内容提取语法元素（WikiLink、inline link 等）的 Rust 函数，都应使用该模块跳过块级结构内的匹配：
 
 ```rust
-use crate::vault_commands::markdown_block_detector::{detect_excluded_byte_ranges, is_byte_offset_excluded};
+use crate::infra::query::markdown_block_detector::{
+    detect_excluded_byte_ranges,
+    is_byte_offset_excluded,
+};
 
 let excluded = detect_excluded_byte_ranges(content);
 // 扫描到 [[wikilink]] 时，检查其起始字节偏移

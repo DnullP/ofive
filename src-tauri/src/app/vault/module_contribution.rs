@@ -58,7 +58,6 @@ const VAULT_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[
             "src/infra/fs/",
             "src/infra/query/",
             "src/test_support/",
-            "src/vault_commands/",
         ],
         rationale: "Vault 查询 infra 属于 Vault 模块私有实现",
     },
