@@ -81,7 +81,7 @@ define_app_commands![
     ),
     (
         "forward_frontend_log",
-        crate::frontend_log::forward_frontend_log
+        crate::host::commands::frontend_log_commands::forward_frontend_log
     ),
     (
         "set_current_vault",

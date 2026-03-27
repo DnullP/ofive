@@ -1,8 +1,7 @@
-//! # AI 契约模块
+//! # AI 共享契约模块
 //!
-//! 定义 AI 相关的共享数据结构与 protobuf 契约。
-//! 具体应用编排、基础设施连接和宿主事件桥接已分别迁移到
-//! `app/ai`、`infra/ai` 与 `host/events`。
+//! 定义 AI 模块对应用层、基础设施层与宿主桥接层共享的数据结构与
+//! protobuf 契约。该模块只承载稳定契约，不负责业务编排或运行时连接。
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

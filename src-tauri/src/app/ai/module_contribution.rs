@@ -26,7 +26,7 @@ const AI_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[
         rationale: "backend plugin 配置契约属于 AI 模块对外复用的稳定 shared contract",
     },
     BackendModulePublicSurface {
-        namespace: "crate::ai_service::",
+        namespace: "crate::shared::ai_service::",
         allowed_paths: &[
             "src/app/ai/",
             "src/infra/ai/",

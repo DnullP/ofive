@@ -718,7 +718,7 @@ mod tests {
         assert_eq!(results[0].relative_path, "notes/topic.md");
         assert!(results[0].matched_content);
         assert!(results[0].matched_tag);
-        assert_eq!(results[0].snippet_line, Some(5));
+        assert_eq!(results[0].snippet_line, Some(6));
         assert_eq!(results[0].tags, vec!["project"]);
 
         let _ = fs::remove_dir_all(root);

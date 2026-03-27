@@ -41,7 +41,7 @@ pub use crate::app::vault::vault_app_service::rename_vault_markdown_file_in_root
 pub use crate::app::vault::vault_app_service::save_current_vault_config_in_root;
 pub use crate::app::vault::vault_app_service::save_vault_markdown_file_in_root;
 pub use crate::app::vault::vault_app_service::set_current_vault_precheck;
-pub use crate::frontend_log::forward_frontend_log;
+pub use crate::host::commands::frontend_log_commands::forward_frontend_log;
 pub use crate::host::commands::vault_commands::segment_chinese_text;
 pub use crate::infra::logging::init as init_logging;
 pub use crate::infra::query::query_index::ensure_query_index_current;

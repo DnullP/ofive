@@ -8,7 +8,7 @@ use std::time::Duration;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 
-use crate::ai_service::{AiChatSettings, AiVendorModelDefinition};
+use crate::shared::ai_service::{AiChatSettings, AiVendorModelDefinition};
 use crate::infra::persistence::ai_chat_store;
 
 const MINIMAX_MODELS: &[&str] = &[
@@ -130,7 +130,7 @@ async fn fetch_baidu_vendor_models(
 #[cfg(test)]
 mod tests {
     use super::{fetch_ai_vendor_models, fetch_minimax_vendor_models, MINIMAX_MODELS};
-    use crate::ai_service::AiChatSettings;
+    use crate::shared::ai_service::AiChatSettings;
     use std::collections::HashMap;
 
     #[test]

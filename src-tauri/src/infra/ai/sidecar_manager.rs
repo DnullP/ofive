@@ -10,7 +10,7 @@ use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tonic::Request;
 
-use crate::ai_service::pb;
+use crate::shared::ai_service::pb;
 use crate::infra::ai::grpc_client;
 use crate::infra::logging;
 use crate::state::{AiSidecarRuntime, AppState};

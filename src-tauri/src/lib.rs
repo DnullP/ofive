@@ -9,13 +9,11 @@
 //! - `shared`：跨层共享的稳定数据契约
 //! - `state`：全局共享状态
 
-mod ai_service;
 mod app;
 #[cfg(test)]
 mod architecture_guard;
 mod backend_module_manifest;
 mod domain;
-mod frontend_log;
 mod host;
 mod infra;
 #[cfg(test)]

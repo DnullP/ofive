@@ -4,7 +4,7 @@
 
 use tauri::{AppHandle, State};
 
-use crate::ai_service::{
+use crate::shared::ai_service::{
     AiChatHistoryMessage, AiChatHistoryState, AiChatSettings, AiChatStreamStartResponse,
     AiSidecarHealthResponse, AiVendorDefinition, AiVendorModelDefinition,
 };

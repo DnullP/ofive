@@ -8,7 +8,7 @@
 //! - `crate::state`：解析当前已打开 vault 的根目录。
 //! - `crate::infra::persistence::extension_private_store`：扩展私有命名空间持久化。
 //! - `crate::infra::persistence::vault_config_store`：兼容旧版 `vault config` 字段并执行迁移。
-//! - `crate::ai_service`：复用 AI 设置、vendor 元数据与历史记录的数据结构。
+//! - `crate::shared::ai_service`：复用 AI 设置、vendor 元数据与历史记录的数据结构。
 //!
 //! ## 使用示例
 //! ```rust,ignore
@@ -40,7 +40,7 @@ use std::path::Path;
 
 use tauri::State;
 
-use crate::ai_service::{
+use crate::shared::ai_service::{
     AiChatConversationRecord, AiChatHistoryMessage, AiChatHistoryState, AiChatSettings,
     AiVendorDefinition, AiVendorFieldDefinition,
 };
@@ -632,7 +632,7 @@ mod tests {
         sanitize_ai_chat_settings, save_ai_chat_history_in_root, AI_CHAT_HISTORY_CONFIG_KEY,
         AI_CHAT_SETTINGS_CONFIG_KEY,
     };
-    use crate::ai_service::{
+    use crate::shared::ai_service::{
         AiChatConversationRecord, AiChatHistoryMessage, AiChatHistoryState, AiChatSettings,
     };
     use crate::infra::persistence::vault_config_store::{load_vault_config, save_vault_config};

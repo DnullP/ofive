@@ -5,7 +5,7 @@
 use tauri::{AppHandle, State};
 use tonic::Request;
 
-use crate::ai_service::{
+use crate::shared::ai_service::{
     pb, AiChatHistoryMessage, AiChatStreamEventPayload, AiChatStreamStartResponse,
     AiSidecarHealthResponse,
 };

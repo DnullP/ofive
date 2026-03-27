@@ -7,8 +7,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use tauri::{AppHandle, Emitter};
 
-use crate::ai_service::AiChatStreamEventPayload;
 use crate::module_contribution::{BackendEventDescriptor, BackendEventKind};
+use crate::shared::ai_service::AiChatStreamEventPayload;
 
 pub(crate) const AI_CHAT_STREAM_EVENT_NAME: &str = "ai://chat-stream";
 pub(crate) const AI_EVENTS: &[BackendEventDescriptor] = &[BackendEventDescriptor::new(

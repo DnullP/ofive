@@ -4,7 +4,7 @@
 
 use tauri::State;
 
-use crate::ai_service::{
+use crate::shared::ai_service::{
     AiChatHistoryState, AiChatSettings, AiVendorDefinition, AiVendorModelDefinition,
 };
 use crate::app::ai::plugin_app_service;

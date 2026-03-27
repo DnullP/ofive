@@ -5,7 +5,7 @@
 
 use tonic::transport::Channel;
 
-use crate::ai_service::pb;
+use crate::shared::ai_service::pb;
 
 /// 建立到指定 sidecar endpoint 的 gRPC 客户端连接。
 pub(crate) async fn connect_ai_sidecar_client(

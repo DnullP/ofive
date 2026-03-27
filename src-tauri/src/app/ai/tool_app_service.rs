@@ -5,11 +5,11 @@
 
 use tauri::State;
 
-use crate::ai_service::pb;
 use crate::app::ai::plugin_app_service;
 use crate::domain::ai::tool::AiToolDescriptor;
 use crate::domain::ai::tool_registry::build_ai_tool_catalog;
 use crate::domain::capability::{build_builtin_capability_registry, CapabilityRiskLevel};
+use crate::shared::ai_service::pb;
 use crate::state::AppState;
 
 /// 获取当前 AI runtime 可见的 tool 目录。

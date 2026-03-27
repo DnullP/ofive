@@ -5,8 +5,8 @@
 //! 平台级命令与宿主桥接能力。
 
 use crate::backend_module_manifest::{BackendModuleManifest, BackendModulePublicSurface};
-use crate::frontend_log::FRONTEND_LOG_COMMAND_IDS;
 use crate::host::commands::capability_commands::CAPABILITY_COMMAND_IDS;
+use crate::host::commands::frontend_log_commands::FRONTEND_LOG_COMMAND_IDS;
 use crate::host::commands::persistence_commands::PERSISTENCE_COMMAND_IDS;
 use crate::host::commands::window_commands::WINDOW_COMMAND_IDS;
 use crate::module_contribution::BackendModuleContribution;
