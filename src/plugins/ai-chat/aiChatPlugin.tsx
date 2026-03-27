@@ -1,5 +1,5 @@
 /**
- * @module plugins/aiChatPlugin
+ * @module plugins/ai-chat/aiChatPlugin
  * @description AI 聊天插件：注册右侧聊天面板和 AI 设置选栏。
  */
 
@@ -27,14 +27,14 @@ import {
     type AiChatSettings,
     type AiVendorDefinition,
     type AiVendorModelDefinition,
-} from "../api/aiApi";
+} from "../../api/aiApi";
 import {
     ensureAiChatSettingsLoaded,
     getAiChatSettingsSnapshot,
     resetAiChatSettingsStore,
     saveAiChatSettingsToStore,
     subscribeAiChatSettingsSnapshot,
-} from "../ai-chat/aiChatSettingsStore";
+} from "./aiChatSettingsStore";
 import {
     buildPersistableHistory,
     createConversationRecord,
@@ -46,7 +46,7 @@ import {
     mergeSettingsForVendor,
     resolveVendor,
     sortConversations,
-} from "../ai-chat/aiChatShared";
+} from "./aiChatShared";
 import {
     createEmptyPendingStreamBinding,
     createPendingStreamBinding,
@@ -54,12 +54,12 @@ import {
     type ChatDebugEntry,
     type PendingStreamBinding,
     type PendingToolConfirmation,
-} from "../ai-chat/aiChatStreamState";
-import { registerActivity } from "../host/registry/activityRegistry";
-import { registerPanel } from "../host/registry/panelRegistry";
-import { registerSettingsSection } from "../host/settings/settingsRegistry";
-import { useVaultState } from "../host/store/vaultStore";
-import i18n from "../i18n";
+} from "./aiChatStreamState";
+import { registerActivity } from "../../host/registry/activityRegistry";
+import { registerPanel } from "../../host/registry/panelRegistry";
+import { registerSettingsSection } from "../../host/settings/settingsRegistry";
+import { useVaultState } from "../../host/store/vaultStore";
+import i18n from "../../i18n";
 import "./aiChatPlugin.css";
 
 i18n.addResourceBundle("en", "translation", {

@@ -376,7 +376,8 @@ function isDisposedDockviewResourceError(error: unknown): boolean {
 
 function isRecoverablePaneviewError(error: unknown): boolean {
     return isDisposedDockviewResourceError(error)
-        || (error instanceof DOMException && error.name === "NotFoundError");
+        || (error instanceof DOMException && error.name === "NotFoundError")
+        || (error instanceof TypeError && error.message.includes("reading 'size'"));
 }
 
 /**
@@ -854,8 +855,10 @@ export function DockviewLayout({
             });
             setPaneLayoutRevision((value) => value + 1);
         } catch (error) {
-            if (isDisposedDockviewResourceError(error)) {
-                console.info("[DockviewLayout] skip capture pane layout for disposed resource");
+            if (isRecoverablePaneviewError(error)) {
+                console.info("[DockviewLayout] skip capture pane layout for recoverable pane error", {
+                    error,
+                });
                 return;
             }
             throw error;
@@ -1321,8 +1324,10 @@ export function DockviewLayout({
         try {
             serializedPaneview = api.toJSON();
         } catch (error) {
-            if (isDisposedDockviewResourceError(error)) {
-                console.info("[DockviewLayout] skip syncing disposed pane resource");
+            if (isRecoverablePaneviewError(error)) {
+                console.info("[DockviewLayout] skip syncing pane resource after recoverable pane error", {
+                    error,
+                });
                 return;
             }
             throw error;
@@ -3342,6 +3347,19 @@ export function DockviewLayout({
             const configId = item.id.slice(CUSTOM_ACTIVITY_REGISTRATION_PREFIX.length);
             const deletedActivityId = item.id;
             const deletedPanelId = `custom-panel:${configId}`;
+            const nextLeftActivityId = leftPanelActivityItems.find((candidate) => candidate.id !== deletedActivityId)?.id ?? null;
+            const nextRightActivityId = rightBarItems.find((candidate) => {
+                if (candidate.id === deletedActivityId || candidate.isSettings) {
+                    return false;
+                }
+
+                const activityDescriptor = activityDescriptorById.get(candidate.id);
+                if (activityDescriptor?.type === "callback") {
+                    return false;
+                }
+
+                return activityIdsWithSidebarContainer.has(candidate.id);
+            })?.id ?? null;
 
             updateActivityBarConfig({
                 items: mergedActivityItems
@@ -3359,8 +3377,8 @@ export function DockviewLayout({
                 deletedActivityId,
                 deletedPanelId,
             ));
-            setActiveActivityId((current) => current === deletedActivityId ? null : current);
-            setActiveRightActivityId((current) => current === deletedActivityId ? null : current);
+            setActiveActivityId((current) => current === deletedActivityId ? nextLeftActivityId : current);
+            setActiveRightActivityId((current) => current === deletedActivityId ? nextRightActivityId : current);
             setActivePanelId((current) => current === deletedPanelId ? null : current);
             lastActiveLeftPanelByActivityRef.current.delete(deletedActivityId);
             paneSizeStateRef.current.delete(deletedPanelId);

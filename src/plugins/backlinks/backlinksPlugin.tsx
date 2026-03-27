@@ -1,5 +1,5 @@
 /**
- * @module plugins/backlinksPlugin
+ * @module plugins/backlinks/backlinksPlugin
  * @description 反向链接面板插件：自注册式插件，展示当前聚焦笔记的所有反向链接。
  *
  *   本模块是"零接触扩展"的示范：放置在 src/plugins/ 目录下后，
@@ -10,9 +10,9 @@
  *
  * @dependencies
  *   - react
- *   - ../host/registry/panelRegistry
- *   - ../host/store/activeEditorStore
- *   - ../api/vaultApi
+ *   - ../../host/registry/panelRegistry
+ *   - ../../host/store/activeEditorStore
+ *   - ../../api/vaultApi
  *   - i18next
  *
  * @exports
@@ -20,12 +20,12 @@
  */
 
 import React, { useEffect, useState, useCallback, type ReactNode } from "react";
-import { registerCommand } from "../host/commands/commandSystem";
-import { registerPanel } from "../host/registry/panelRegistry";
-import type { PanelRenderContext } from "../host/layout/DockviewLayout";
-import { useActiveEditor } from "../host/store/activeEditorStore";
-import { getBacklinksForFile, type BacklinkItem } from "../api/vaultApi";
-import i18n from "../i18n";
+import { registerCommand } from "../../host/commands/commandSystem";
+import { registerPanel } from "../../host/registry/panelRegistry";
+import type { PanelRenderContext } from "../../host/layout/DockviewLayout";
+import { useActiveEditor } from "../../host/store/activeEditorStore";
+import { getBacklinksForFile, type BacklinkItem } from "../../api/vaultApi";
+import i18n from "../../i18n";
 import "./backlinksPlugin.css";
 
 /* ────────────────── i18n 资源注册 ────────────────── */

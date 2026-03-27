@@ -31,11 +31,13 @@ test.describe("glass visual reference", () => {
         const styleSnapshot = await page.evaluate(() => {
             const html = document.documentElement;
             const mainArea = document.querySelector<HTMLElement>(".main-content-area");
-            const leftSidebar = document.querySelector<HTMLElement>(".sidebar-left");
+            const leftSidebar = document.querySelector<HTMLElement>(".sidebar.sidebar-left");
             const fileTree = document.querySelector<HTMLElement>(".file-tree");
             const aiChatPanel = document.querySelector<HTMLElement>(".ai-chat-panel");
             const aiChatHeader = document.querySelector<HTMLElement>(".ai-chat-header");
-            const aiChatCard = document.querySelector<HTMLElement>(".ai-chat-welcome-card");
+            const aiChatCard = document.querySelector<HTMLElement>(
+                ".ai-chat-welcome-card, .ai-chat-conversation-summary, .ai-chat-status",
+            );
 
             if (!mainArea || !leftSidebar || !fileTree || !aiChatPanel || !aiChatHeader || !aiChatCard) {
                 throw new Error("glass visual selectors missing");

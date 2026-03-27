@@ -1,5 +1,5 @@
 /**
- * @module ai-chat/aiChatSettingsStore.test
+ * @module plugins/ai-chat/aiChatSettingsStore.test
  * @description AI 聊天设置 store 单元测试：覆盖按 vault 缓存加载、保存广播与重置行为。
  * @dependencies
  *   - bun:test
@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import type { AiChatSettings } from "../api/aiApi";
+import type { AiChatSettings } from "../../api/aiApi";
 import { createAiChatSettingsStore } from "./aiChatSettingsStore";
 
 function createSettings(model: string): AiChatSettings {

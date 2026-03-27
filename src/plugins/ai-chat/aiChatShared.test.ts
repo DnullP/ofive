@@ -1,5 +1,5 @@
 /**
- * @module ai-chat/aiChatShared.test
+ * @module plugins/ai-chat/aiChatShared.test
  * @description AI 聊天共享状态工具单元测试：覆盖设置合并、标题生成、历史归一化与错误格式化。
  * @dependencies
  *   - bun:test

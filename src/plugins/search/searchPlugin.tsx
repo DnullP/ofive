@@ -1,16 +1,16 @@
 /**
- * @module plugins/searchPlugin
+ * @module plugins/search/searchPlugin
  * @description 搜索插件入口：负责注册搜索 activity 与 panel，并在面板内提供
  *   文件名搜索、全文本搜索和 tag 过滤能力。
  *
  * @dependencies
  *   - react
- *   - ../api/vaultApi
- *   - ../host/store/configStore
- *   - ../host/registry/activityRegistry
- *   - ../host/registry/panelRegistry
- *   - ../host/layout/DockviewLayout
- *   - ../i18n
+ *   - ../../api/vaultApi
+ *   - ../../host/store/configStore
+ *   - ../../host/registry/activityRegistry
+ *   - ../../host/registry/panelRegistry
+ *   - ../../host/layout/DockviewLayout
+ *   - ../../i18n
  *   - lucide-react
  *
  * @example
@@ -30,23 +30,23 @@ import {
     searchVaultMarkdown,
     type VaultSearchMatchItem,
     type VaultSearchScope,
-} from "../api/vaultApi";
-import type { PanelRenderContext } from "../host/layout/DockviewLayout";
-import i18n from "../i18n";
+} from "../../api/vaultApi";
+import type { PanelRenderContext } from "../../host/layout/DockviewLayout";
+import i18n from "../../i18n";
 import {
     getConfigSnapshot,
     subscribeConfigChanges,
-} from "../host/store/configStore";
+} from "../../host/store/configStore";
 import {
     registerActivity,
     unregisterActivity,
     type ActivityDescriptor,
-} from "../host/registry/activityRegistry";
+} from "../../host/registry/activityRegistry";
 import {
     registerPanel,
     unregisterPanel,
     type PanelDescriptor,
-} from "../host/registry/panelRegistry";
+} from "../../host/registry/panelRegistry";
 import "./searchPlugin.css";
 
 const SEARCH_SURFACE_ID = "search";
@@ -103,19 +103,19 @@ const SEARCH_SCOPE_OPTIONS: Array<{
     scope: VaultSearchScope;
     translationKey: string;
 }> = [
-    {
-        scope: "all",
-        translationKey: "searchPlugin.scopeAll",
-    },
-    {
-        scope: "content",
-        translationKey: "searchPlugin.scopeContent",
-    },
-    {
-        scope: "fileName",
-        translationKey: "searchPlugin.scopeFileName",
-    },
-];
+        {
+            scope: "all",
+            translationKey: "searchPlugin.scopeAll",
+        },
+        {
+            scope: "content",
+            translationKey: "searchPlugin.scopeContent",
+        },
+        {
+            scope: "fileName",
+            translationKey: "searchPlugin.scopeFileName",
+        },
+    ];
 
 /**
  * @interface SearchHighlightSegment

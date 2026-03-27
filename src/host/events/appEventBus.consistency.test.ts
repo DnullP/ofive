@@ -13,14 +13,40 @@
  *   bun test src/host/events/appEventBus.consistency.test.ts
  */
 
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, mock } from "bun:test";
 import type { VaultFsEventPayload, VaultConfigEventPayload } from "../../api/vaultApi";
-import {
+
+mock.module("../../api/vaultApi", () => ({
+    subscribeVaultFsEvents: async () => {
+        return () => {
+            /* noop */
+        };
+    },
+    subscribeVaultConfigEvents: async () => {
+        return () => {
+            /* noop */
+        };
+    },
+    searchVaultMarkdown: async () => [],
+    isSelfTriggeredVaultFsEvent: () => false,
+    readVaultMarkdownFile: async () => ({ content: "# latest" }),
+    saveVaultMarkdownFile: async () => ({ relativePath: "notes/demo.md", created: false }),
+    isTauriRuntime: () => false,
+    getCurrentVaultConfig: async () => ({
+        feature_settings: {},
+    }),
+    saveCurrentVaultConfig: async () => ({
+        feature_settings: {},
+    }),
+    isSelfTriggeredVaultConfigEvent: () => false,
+}));
+
+const {
     dispatchVaultFsBusEventForTest,
     dispatchVaultConfigBusEventForTest,
     subscribeVaultFsBusEvent,
     subscribeVaultConfigBusEvent,
-} from "./appEventBus";
+} = await import("./appEventBus");
 
 // ────────── 辅助工厂 ──────────
 

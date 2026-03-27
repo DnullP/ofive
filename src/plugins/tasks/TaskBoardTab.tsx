@@ -1,15 +1,15 @@
 /**
- * @module task-board/TaskBoardTab
+ * @module plugins/tasks/TaskBoardTab
  * @description 任务看板 Tab：查询整个仓库中的任务，并支持基于气泡框编辑 due 和 priority。
  * @dependencies
  *  - react
  *  - dockview
  *  - lucide-react
- *  - ../api/vaultApi
- *  - ../host/events/appEventBus
- *  - ../host/layout/openFileService
- *  - ../i18n
- *  - ../utils/taskSyntax
+ *  - ../../api/vaultApi
+ *  - ../../host/events/appEventBus
+ *  - ../../host/layout/openFileService
+ *  - ../../i18n
+ *  - ../../utils/taskSyntax
  *  - ./taskBoard.css
  *
  * @exports
@@ -38,17 +38,17 @@ import {
     readVaultMarkdownFile,
     saveVaultMarkdownFile,
     type VaultTaskItem,
-} from "../api/vaultApi";
-import { subscribePersistedContentUpdatedEvent } from "../host/events/appEventBus";
-import { openFileInDockview } from "../host/layout/openFileService";
-import i18n from "../i18n";
+} from "../../api/vaultApi";
+import { subscribePersistedContentUpdatedEvent } from "../../host/events/appEventBus";
+import { openFileInDockview } from "../../host/layout/openFileService";
+import i18n from "../../i18n";
 import {
     dateTimeLocalInputToTaskDue,
     formatTaskDueLabel,
     normalizeTaskMetadataValue,
     replaceTaskBoardMetadataInMarkdown,
     taskDueValueToDateTimeLocalInput,
-} from "../utils/taskSyntax";
+} from "../../utils/taskSyntax";
 import "./taskBoard.css";
 
 i18n.addResourceBundle("en", "translation", {
@@ -154,30 +154,30 @@ const PRIORITY_OPTIONS: Array<{
     value: TaskPriorityBucket;
     labelKey: string;
 }> = [
-    { value: "none", labelKey: "taskBoard.priorityNone" },
-    { value: "high", labelKey: "taskBoard.priorityHigh" },
-    { value: "medium", labelKey: "taskBoard.priorityMedium" },
-    { value: "low", labelKey: "taskBoard.priorityLow" },
-];
+        { value: "none", labelKey: "taskBoard.priorityNone" },
+        { value: "high", labelKey: "taskBoard.priorityHigh" },
+        { value: "medium", labelKey: "taskBoard.priorityMedium" },
+        { value: "low", labelKey: "taskBoard.priorityLow" },
+    ];
 
 const FILTER_OPTIONS: Array<{
     value: TaskStatusFilter;
     labelKey: string;
 }> = [
-    { value: "all", labelKey: "taskBoard.statusAll" },
-    { value: "open", labelKey: "taskBoard.statusOpen" },
-    { value: "done", labelKey: "taskBoard.statusDone" },
-];
+        { value: "all", labelKey: "taskBoard.statusAll" },
+        { value: "open", labelKey: "taskBoard.statusOpen" },
+        { value: "done", labelKey: "taskBoard.statusDone" },
+    ];
 
 const COLUMN_DEFINITIONS: Array<{
     id: TaskPriorityBucket;
     titleKey: string;
 }> = [
-    { id: "high", titleKey: "taskBoard.columnHigh" },
-    { id: "medium", titleKey: "taskBoard.columnMedium" },
-    { id: "low", titleKey: "taskBoard.columnLow" },
-    { id: "none", titleKey: "taskBoard.columnNone" },
-];
+        { id: "high", titleKey: "taskBoard.columnHigh" },
+        { id: "medium", titleKey: "taskBoard.columnMedium" },
+        { id: "low", titleKey: "taskBoard.columnLow" },
+        { id: "none", titleKey: "taskBoard.columnNone" },
+    ];
 
 /**
  * @function TaskBoardTab

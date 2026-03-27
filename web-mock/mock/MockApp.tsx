@@ -23,9 +23,9 @@ import { registerActivity } from "../../src/host/registry/activityRegistry";
 import { registerPanel } from "../../src/host/registry/panelRegistry";
 import { registerTabComponent } from "../../src/host/registry/tabComponentRegistry";
 import { MockVaultPanel } from "./MockVaultPanel";
-import "../../src/plugins/aiChatPlugin.css";
-import "../../src/plugins/backlinksPlugin.css";
-import "../../src/plugins/outlinePlugin.css";
+import "../../src/plugins/ai-chat/aiChatPlugin.css";
+import "../../src/plugins/backlinks/backlinksPlugin.css";
+import "../../src/plugins/outline/outlinePlugin.css";
 import "../../src/App.css";
 
 const MOCK_VAULT_PATH = "/mock/notes";

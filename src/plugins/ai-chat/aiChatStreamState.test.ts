@@ -1,5 +1,5 @@
 /**
- * @module ai-chat/aiChatStreamState.test
+ * @module plugins/ai-chat/aiChatStreamState.test
  * @description AI 聊天流式状态单元测试：覆盖 debug、confirmation、完成态与错误态迁移。
  * @dependencies
  *   - bun:test

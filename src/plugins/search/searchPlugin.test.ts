@@ -1,32 +1,63 @@
 /**
- * @module plugins/searchPlugin.test
+ * @module plugins/search/searchPlugin.test
  * @description 搜索插件单元测试：覆盖初始注册、配置切换与重复启用去重。
  * @dependencies
  *   - bun:test
+ *   - ../../api/vaultApi
  *   - ./searchPlugin
  *   - ../host/registry/activityRegistry
  *   - ../host/registry/panelRegistry
  *
  * @example
- *   bun test src/plugins/searchPlugin.test.ts
+ *   bun test src/plugins/search/searchPlugin.test.ts
  */
 
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, mock } from "bun:test";
 import {
     getActivitiesSnapshot,
     registerActivity,
     unregisterActivity,
-} from "../host/registry/activityRegistry";
+} from "../../host/registry/activityRegistry";
 import {
     getPanelsSnapshot,
     registerPanel,
     unregisterPanel,
-} from "../host/registry/panelRegistry";
-import {
+} from "../../host/registry/panelRegistry";
+
+mock.module("../../api/vaultApi", () => ({
+    searchVaultMarkdown: async () => [],
+    isSelfTriggeredVaultFsEvent: () => false,
+    readVaultMarkdownFile: async () => ({ content: "# latest" }),
+    saveVaultMarkdownFile: async () => ({ relativePath: "notes/demo.md", created: false }),
+    isTauriRuntime: () => false,
+    getCurrentVaultConfig: async () => ({
+        feature_settings: {},
+    }),
+    saveCurrentVaultConfig: async () => ({
+        feature_settings: {},
+    }),
+    isSelfTriggeredVaultConfigEvent: () => false,
+}));
+
+mock.module("../../host/store/configStore", () => ({
+    getConfigSnapshot: () => ({
+        featureSettings: {
+            searchEnabled: false,
+        },
+    }),
+    subscribeConfigChanges: () => {
+        return () => {
+            /* noop */
+        };
+    },
+}));
+
+const {
     activateSearchPluginRuntime,
     buildSearchHighlightSegments,
-    type SearchPluginConfigState,
-} from "./searchPlugin";
+} = await import("./searchPlugin");
+
+type SearchPluginConfigState = import("./searchPlugin").SearchPluginConfigState;
 
 /**
  * @function createState

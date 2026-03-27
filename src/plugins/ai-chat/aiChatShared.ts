@@ -1,9 +1,9 @@
 /**
- * @module ai-chat/aiChatShared
+ * @module plugins/ai-chat/aiChatShared
  * @description AI 聊天前端共享状态工具：负责会话标题、历史归一化、设置合并与错误展示格式化。
  * @dependencies
- *   - ../api/aiApi
- *   - ../i18n
+ *   - ../../api/aiApi
+ *   - ../../i18n
  *
  * @example
  *   const historyState = ensureHistoryState(rawHistory);
@@ -29,8 +29,8 @@ import type {
     AiChatHistoryState,
     AiChatSettings,
     AiVendorDefinition,
-} from "../api/aiApi";
-import i18n from "../i18n";
+} from "../../api/aiApi";
+import i18n from "../../i18n";
 
 /**
  * @interface AiPanelErrorDisplay

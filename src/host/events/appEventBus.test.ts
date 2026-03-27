@@ -9,15 +9,41 @@
  *   bun test src/host/events/appEventBus.test.ts
  */
 
-import { describe, expect, it } from "bun:test";
-import {
+import { describe, expect, it, mock } from "bun:test";
+
+mock.module("../../api/vaultApi", () => ({
+    subscribeVaultFsEvents: async () => {
+        return () => {
+            /* noop */
+        };
+    },
+    subscribeVaultConfigEvents: async () => {
+        return () => {
+            /* noop */
+        };
+    },
+    searchVaultMarkdown: async () => [],
+    isSelfTriggeredVaultFsEvent: () => false,
+    readVaultMarkdownFile: async () => ({ content: "# latest" }),
+    saveVaultMarkdownFile: async () => ({ relativePath: "notes/demo.md", created: false }),
+    isTauriRuntime: () => false,
+    getCurrentVaultConfig: async () => ({
+        feature_settings: {},
+    }),
+    saveCurrentVaultConfig: async () => ({
+        feature_settings: {},
+    }),
+    isSelfTriggeredVaultConfigEvent: () => false,
+}));
+
+const {
     emitEditorContentChangedEvent,
     emitEditorFocusChangedEvent,
     emitEditorRevealRequestedEvent,
     subscribeEditorContentBusEvent,
     subscribeEditorFocusBusEvent,
     subscribeEditorRevealRequestedEvent,
-} from "./appEventBus";
+} = await import("./appEventBus");
 
 describe("appEventBus editor event flow", () => {
     /**

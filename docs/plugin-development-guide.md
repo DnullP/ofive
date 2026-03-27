@@ -10,8 +10,8 @@
 
 本文以当前项目中的两个真实样板为参考：
 
-1. [src/plugins/outlinePlugin.tsx](../src/plugins/outlinePlugin.tsx)
-2. [src/plugins/architectureDevtoolsPlugin.tsx](../src/plugins/architectureDevtoolsPlugin.tsx)
+1. [src/plugins/outline/outlinePlugin.tsx](../src/plugins/outline/outlinePlugin.tsx)
+2. [src/plugins/architecture-devtools/architectureDevtoolsPlugin.tsx](../src/plugins/architecture-devtools/architectureDevtoolsPlugin.tsx)
 
 ## 1. 插件系统概览
 
@@ -36,23 +36,25 @@ await startDiscoveredPlugins();
 
 ## 2. 一个重要约束
 
-`src/plugins/` 目录是插件入口自动扫描目录，所以不要把以下内容直接放进这里：
+`src/plugins/` 目录是插件入口自动扫描目录，但运行时只会自动发现匹配 `*Plugin.ts` / `*Plugin.tsx` 的入口文件。
+因此约束不是“插件业务逻辑不能放在 `src/plugins/`”，而是：
 
-1. 测试文件。
-2. 纯工具模块。
-3. 只想被插件入口调用、不想自动执行的 helper 文件。
+1. 不要把插件相关文件继续散落在 `src/plugins/` 根目录。
+2. 不要让非入口文件误用 `*Plugin` 命名。
+3. 不要把跨插件共享模块伪装成某个插件的私有实现。
 
 正确做法是：
 
-1. 插件入口文件放在 `src/plugins/`。
-2. 插件内部的 helper、model、view、test 放到其他目录。
+1. 每个插件使用自己的子目录，例如 `src/plugins/my-feature/`。
+2. 插件入口文件、helper、model、view、style、test 默认都闭环在该插件目录内。
+3. 只有真正跨插件共享的模块，才上移到 `src/` 其他公共目录。
 
 当前仓库里的架构 DevTools 插件就是这样组织的：
 
-1. 入口文件在 [src/plugins/architectureDevtoolsPlugin.tsx](../src/plugins/architectureDevtoolsPlugin.tsx)
-2. 实际实现放在 [src/devtools/architecture/](../src/devtools/architecture)
+1. 入口文件在 [src/plugins/architecture-devtools/architectureDevtoolsPlugin.tsx](../src/plugins/architecture-devtools/architectureDevtoolsPlugin.tsx)
+2. 其余实现与测试也收在 [src/plugins/architecture-devtools/](../src/plugins/architecture-devtools)
 
-如果把 helper 文件也放进 `src/plugins/`，它们可能被误识别为插件入口，或者在后续重构时重新进入自动扫描范围。
+只要文件不匹配 `*Plugin` 命名，就不会被插件运行时自动激活；真正需要避免的是把插件私有模块继续散落在 `src/plugins/` 根目录，导致边界模糊。
 
 ### 2.1 当前插件入口约定
 
@@ -180,36 +182,35 @@ context.openTab({
 ```text
 src/
   plugins/
-    myFeaturePlugin.tsx
-  my-feature/
-    MyFeaturePanel.tsx
-    myFeatureStore.ts
-    myFeature.css
-    myFeature.test.ts
+        my-feature/
+            myFeaturePlugin.tsx
+            MyFeaturePanel.tsx
+            myFeatureStore.ts
+            myFeature.css
+            myFeature.test.ts
 ```
 
-也可以像架构 DevTools 一样：
+当前推荐的主流写法也是这样，例如：
 
 ```text
 src/
   plugins/
-    architectureDevtoolsPlugin.tsx
-  devtools/
-    architecture/
+        architecture-devtools/
+            architectureDevtoolsPlugin.tsx
       ArchitectureDevtoolsTab.tsx
       architectureRegistry.ts
-      architectureModel.ts
       architectureRegistry.test.ts
 ```
 
 原则只有一个：
 
-1. 真正需要自动执行的入口文件放进 `src/plugins/`
-2. 其他东西放在自动扫描目录之外
+1. 真正需要自动执行的入口文件使用 `*Plugin` 命名，并放在所属插件目录内
+2. 该插件的业务逻辑默认闭环在同一插件目录中
+3. 只有跨插件复用时，再提取到 `src/` 其他公共目录
 
 ## 5. 第一个插件：内容型读插件
 
-当前最成熟的插件样板是 [src/plugins/outlinePlugin.tsx](../src/plugins/outlinePlugin.tsx)。
+当前最成熟的插件样板是 [src/plugins/outline/outlinePlugin.tsx](../src/plugins/outline/outlinePlugin.tsx)。
 
 它展示了一个内容型读插件的完整链路：
 
@@ -248,7 +249,7 @@ if (!activeEditor?.path) {
 
 推荐监听：
 
-1. [src/events/appEventBus.ts](../src/events/appEventBus.ts) 中的 `persisted.content.updated`
+1. [src/host/events/appEventBus.ts](../src/host/events/appEventBus.ts) 中的 `persisted.content.updated`
 
 典型用法：
 
@@ -303,7 +304,7 @@ const result = await getVaultMarkdownOutline(relativePath);
 
 工具型插件的典型样板是：
 
-1. [src/plugins/architectureDevtoolsPlugin.tsx](../src/plugins/architectureDevtoolsPlugin.tsx)
+1. [src/plugins/architecture-devtools/architectureDevtoolsPlugin.tsx](../src/plugins/architecture-devtools/architectureDevtoolsPlugin.tsx)
 
 这个样板适合：
 
@@ -316,7 +317,7 @@ const result = await getVaultMarkdownOutline(relativePath);
 
 1. 入口是一个 callback activity。
 2. 点击后直接打开 tab。
-3. 核心界面逻辑不放在 `src/plugins/` 里，而是放在专门目录。
+3. 核心界面逻辑与入口同样可以收在插件自己的目录中。
 
 推荐流程：
 
@@ -345,7 +346,7 @@ const result = await getVaultMarkdownOutline(relativePath);
 
 ### 7.2 事件建议
 
-推荐使用 [src/events/appEventBus.ts](../src/events/appEventBus.ts) 里的语义化事件。
+推荐使用 [src/host/events/appEventBus.ts](../src/host/events/appEventBus.ts) 里的语义化事件。
 
 当前常用事件包括：
 
@@ -421,8 +422,8 @@ console.error("[outlinePlugin] failed to load outline", { relativePath, error: m
 
 例如：
 
-1. [src/plugins/outlinePlugin.css](../src/plugins/outlinePlugin.css)
-2. [src/devtools/architecture/architectureDevtools.css](../src/devtools/architecture/architectureDevtools.css)
+1. [src/plugins/outline/outlinePlugin.css](../src/plugins/outline/outlinePlugin.css)
+2. [src/plugins/architecture-devtools/architectureDevtools.css](../src/plugins/architecture-devtools/architectureDevtools.css)
 
 如果插件会新增 modal、popover、command palette、context bubble 这类浮层，并且需要在桌面毛玻璃模式下保持可读性，请遵循当前全局浮层契约：
 
@@ -438,9 +439,9 @@ console.error("[outlinePlugin] failed to load outline", { relativePath, error: m
 
 步骤如下：
 
-1. 在 `src/plugins/` 新建入口文件 `myPlugin.tsx`
-2. 在模块顶层注册 i18n 文案
-3. 实现 panel 组件
+1. 在 `src/plugins/my-plugin/` 新建入口文件 `myPlugin.tsx`
+2. 在同目录实现 panel、store、style 等插件内部模块
+3. 在模块顶层注册 i18n 文案
 4. 调用 `registerActivity`
 5. 调用 `registerPanel`
 6. 使用公开 store、事件和 `vaultApi` 衔接逻辑
@@ -490,8 +491,8 @@ registerPanel({
 
 步骤如下：
 
-1. 在非 `src/plugins/` 目录实现 tab 组件
-2. 在 `src/plugins/` 里写入口文件
+1. 在插件自己的目录里实现 tab 组件
+2. 在同目录放置入口文件
 3. 注册 `registerTabComponent`
 4. 注册 `callback activity`
 5. 点击图标时 `openTab`
@@ -540,7 +541,7 @@ bunx tsc --noEmit
 例如架构注册中心测试：
 
 ```bash
-bun test src/devtools/architecture/architectureRegistry.test.ts
+bun test src/plugins/architecture-devtools/architectureRegistry.test.ts
 ```
 
 ## 11. 进阶：让插件进入架构可视化中心
@@ -549,7 +550,7 @@ bun test src/devtools/architecture/architectureRegistry.test.ts
 
 入口 API 在：
 
-1. [src/devtools/architecture/architectureRegistry.ts](../src/devtools/architecture/architectureRegistry.ts)
+1. [src/plugins/architecture-devtools/architectureRegistry.ts](../src/plugins/architecture-devtools/architectureRegistry.ts)
 
 示例：
 
@@ -573,17 +574,18 @@ registerArchitectureSlice({
 
 ## 12. 常见错误
 
-### 错误一：helper 文件也放进 `src/plugins/`
+### 错误一：插件相关文件散落在 `src/plugins/` 根目录
 
 后果：
 
-1. helper 被自动执行
-2. 测试文件被自动执行
-3. 模块顶层副作用在启动时被误触发
+1. 插件边界难以从目录结构上看清
+2. 样式、测试、状态模块和入口文件混在一起
+3. 后续重构时容易误判哪些是插件私有实现
 
 解决：
 
-1. 只把入口文件放进 `src/plugins/`
+1. 每个插件一个子目录
+2. 只有真实入口文件使用 `*Plugin` 命名
 
 ### 错误二：直接依赖布局内部实现
 
@@ -613,7 +615,7 @@ registerArchitectureSlice({
 
 提交前建议自查：
 
-1. 插件入口是否只放在 `src/plugins/`
+1. 插件是否已经收敛到自己的目录中
 2. 是否使用 registry 完成 UI 注册
 3. 是否优先走 `vaultApi` 而不是散落的 `invoke`
 4. 是否有清晰日志
@@ -626,7 +628,7 @@ registerArchitectureSlice({
 
 如果你要新增一个插件，最推荐的起步方式不是从零写，而是复制一个最接近的样板：
 
-1. 做跟随当前文件的侧边栏插件：复制 [src/plugins/outlinePlugin.tsx](../src/plugins/outlinePlugin.tsx)
-2. 做打开工具页面的插件：参考 [src/plugins/architectureDevtoolsPlugin.tsx](../src/plugins/architectureDevtoolsPlugin.tsx)
+1. 做跟随当前文件的侧边栏插件：复制 [src/plugins/outline/outlinePlugin.tsx](../src/plugins/outline/outlinePlugin.tsx)
+2. 做打开工具页面的插件：参考 [src/plugins/architecture-devtools/architectureDevtoolsPlugin.tsx](../src/plugins/architecture-devtools/architectureDevtoolsPlugin.tsx)
 
 当前仓库的插件系统还在持续演进，但这两类样板已经足够支撑绝大多数新插件开发。

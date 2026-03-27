@@ -28,6 +28,16 @@ mock.module("../../api/vaultApi", () => ({
         return { relativePath: path, created: false };
     },
     isTauriRuntime: () => false,
+    searchVaultMarkdown: async () => [],
+    isSelfTriggeredVaultFsEvent: () => false,
+    readVaultMarkdownFile: async () => ({ content: "# latest" }),
+    getCurrentVaultConfig: async () => ({
+        feature_settings: {},
+    }),
+    saveCurrentVaultConfig: async () => ({
+        feature_settings: {},
+    }),
+    isSelfTriggeredVaultConfigEvent: () => false,
 }));
 
 /** 内容变化事件监听器引用 */

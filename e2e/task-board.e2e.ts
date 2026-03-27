@@ -42,7 +42,7 @@ test.describe("任务看板", () => {
         const popover = page.locator(".task-board__popover.is-positioned");
         await expect(popover).toBeVisible();
         await popover.locator(".task-board__input").fill("2026-03-26T18:45");
-        await popover.locator(".task-board__select").selectOption("low");
+        await popover.getByRole("button", { name: /Low|低/ }).click();
         await popover.getByRole("button").filter({ hasText: /Save|保存/ }).click();
 
         await expect(popover).toHaveCount(0);

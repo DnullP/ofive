@@ -1,8 +1,8 @@
 /**
- * @module ai-chat/aiChatStreamState
+ * @module plugins/ai-chat/aiChatStreamState
  * @description AI 聊天流式状态辅助模块：负责 stream binding、debug/confirmation 派生与事件状态迁移。
  * @dependencies
- *   - ../api/aiApi
+ *   - ../../api/aiApi
  *
  * @example
  *   const transition = reduceAiChatStreamEvent({
@@ -23,7 +23,7 @@
  *   - reduceAiChatStreamEvent
  */
 
-import type { AiChatStreamEventPayload } from "../api/aiApi";
+import type { AiChatStreamEventPayload } from "../../api/aiApi";
 
 export interface ChatDebugEntry {
     id: string;

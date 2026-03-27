@@ -1,12 +1,12 @@
 /**
- * @module plugins/vaultFsSyncPlugin
+ * @module plugins/vault-fs-sync/vaultFsSyncPlugin
  * @description Vault 文件系统同步插件：负责将后端 fs 事件转换为前端持久态更新语义，
  *   并在当前聚焦 Markdown 文件被外部修改时刷新编辑器内容。
  *
  * @dependencies
- *   - ../api/vaultApi
- *   - ../host/events/appEventBus
- *   - ../host/store/editorContextStore
+ *   - ../../api/vaultApi
+ *   - ../../host/events/appEventBus
+ *   - ../../host/store/editorContextStore
  *
  * @example
  *   import { activatePlugin } from "./vaultFsSyncPlugin";
@@ -22,15 +22,15 @@ import {
     isSelfTriggeredVaultFsEvent,
     readVaultMarkdownFile,
     type VaultFsEventPayload,
-} from "../api/vaultApi";
+} from "../../api/vaultApi";
 import {
     emitPersistedContentUpdatedEvent,
     subscribeVaultFsBusEvent,
-} from "../host/events/appEventBus";
+} from "../../host/events/appEventBus";
 import {
     getFocusedArticleSnapshot,
     reportArticleContentByPath,
-} from "../host/store/editorContextStore";
+} from "../../host/store/editorContextStore";
 
 /**
  * @interface VaultFsSyncPluginDependencies

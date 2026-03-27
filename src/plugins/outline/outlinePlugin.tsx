@@ -1,5 +1,5 @@
 /**
- * @module plugins/outlinePlugin
+ * @module plugins/outline/outlinePlugin
  * @description 文章大纲插件：自注册式插件，展示当前聚焦笔记的标题大纲。
  *
  *   本模块是"内容型读插件"的标准样板：
@@ -13,11 +13,11 @@
  * @dependencies
  *   - react
  *   - lucide-react (Compass 图标)
- *   - ../host/registry/activityRegistry
- *   - ../host/registry/panelRegistry
- *   - ../host/store/activeEditorStore
- *   - ../host/events/appEventBus
- *   - ../api/vaultApi
+ *   - ../../host/registry/activityRegistry
+ *   - ../../host/registry/panelRegistry
+ *   - ../../host/store/activeEditorStore
+ *   - ../../host/events/appEventBus
+ *   - ../../api/vaultApi
  *   - i18next
  *
  * @exports
@@ -26,17 +26,17 @@
 
 import React, { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { Compass } from "lucide-react";
-import { registerCommand } from "../host/commands/commandSystem";
-import { registerActivity } from "../host/registry/activityRegistry";
-import { registerPanel } from "../host/registry/panelRegistry";
-import { useActiveEditor } from "../host/store/activeEditorStore";
-import { getVaultMarkdownOutline, type OutlineHeading } from "../api/vaultApi";
+import { registerCommand } from "../../host/commands/commandSystem";
+import { registerActivity } from "../../host/registry/activityRegistry";
+import { registerPanel } from "../../host/registry/panelRegistry";
+import { useActiveEditor } from "../../host/store/activeEditorStore";
+import { getVaultMarkdownOutline, type OutlineHeading } from "../../api/vaultApi";
 import {
     emitEditorRevealRequestedEvent,
     subscribePersistedContentUpdatedEvent,
     type PersistedContentUpdatedBusEvent,
-} from "../host/events/appEventBus";
-import i18n from "../i18n";
+} from "../../host/events/appEventBus";
+import i18n from "../../i18n";
 import "./outlinePlugin.css";
 
 /* ────────────────── i18n 资源注册 ────────────────── */

@@ -1,8 +1,8 @@
 /**
- * @module ai-chat/aiChatSettingsStore
+ * @module plugins/ai-chat/aiChatSettingsStore
  * @description AI 聊天设置同步 store：负责当前 vault 的设置加载、保存与跨组件广播，替代 ad-hoc window 事件同步。
  * @dependencies
- *   - ../api/aiApi
+ *   - ../../api/aiApi
  *
  * @example
  *   await ensureAiChatSettingsLoaded(vaultPath);
@@ -23,7 +23,7 @@ import {
     getAiChatSettings,
     saveAiChatSettings,
     type AiChatSettings,
-} from "../api/aiApi";
+} from "../../api/aiApi";
 
 export interface AiChatSettingsStoreSnapshot {
     vaultPath: string | null;

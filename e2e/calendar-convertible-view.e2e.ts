@@ -162,7 +162,7 @@ test.describe("日历 tab/panel 转换", () => {
         await expect(calendarPaneOnLeft.locator(".dv-pane-header-icon.collapsed")).toHaveCount(0);
 
         await page.getByTestId("activity-bar-item-search").click();
-        await expect(leftSidebar.getByText("Search Panel")).toBeVisible();
+        await expect(leftSidebar.locator(".search-toolbar")).toBeVisible();
 
         await page.getByTestId("activity-bar-item-files").click();
         await expect(calendarPaneOnLeft.locator(".dv-pane-header")).toBeVisible();

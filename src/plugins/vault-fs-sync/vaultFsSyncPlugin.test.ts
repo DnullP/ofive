@@ -1,20 +1,52 @@
 /**
- * @module plugins/vaultFsSyncPlugin.test
+ * @module plugins/vault-fs-sync/vaultFsSyncPlugin.test
  * @description Vault fs 同步插件单元测试：覆盖自触发过滤、持久态事件转发与聚焦文章同步。
  * @dependencies
  *   - bun:test
+ *   - ../../api/vaultApi
  *   - ./vaultFsSyncPlugin
  *
  * @example
- *   bun test src/plugins/vaultFsSyncPlugin.test.ts
+ *   bun test src/plugins/vault-fs-sync/vaultFsSyncPlugin.test.ts
  */
 
 import { describe, expect, it, mock } from "bun:test";
-import {
+import type { VaultFsEventPayload } from "../../api/vaultApi";
+
+mock.module("../../api/vaultApi", () => ({
+    isSelfTriggeredVaultFsEvent: () => false,
+    readVaultMarkdownFile: async () => ({ content: "# latest" }),
+    searchVaultMarkdown: async () => [],
+    saveVaultMarkdownFile: async () => ({ relativePath: "notes/demo.md", created: false }),
+    isTauriRuntime: () => false,
+    getCurrentVaultConfig: async () => ({
+        feature_settings: {},
+    }),
+    saveCurrentVaultConfig: async () => ({
+        feature_settings: {},
+    }),
+    isSelfTriggeredVaultConfigEvent: () => false,
+}));
+
+mock.module("../../host/events/appEventBus", () => ({
+    emitPersistedContentUpdatedEvent: () => undefined,
+    subscribeVaultFsBusEvent: () => {
+        return () => {
+            /* noop */
+        };
+    },
+}));
+
+mock.module("../../host/store/editorContextStore", () => ({
+    getFocusedArticleSnapshot: () => null,
+    reportArticleContentByPath: () => undefined,
+}));
+
+const {
     activateVaultFsSyncPluginRuntime,
-    type VaultFsSyncPluginDependencies,
-} from "./vaultFsSyncPlugin";
-import type { VaultFsEventPayload } from "../api/vaultApi";
+} = await import("./vaultFsSyncPlugin");
+
+type VaultFsSyncPluginDependencies = import("./vaultFsSyncPlugin").VaultFsSyncPluginDependencies;
 
 /**
  * @function createPayload
