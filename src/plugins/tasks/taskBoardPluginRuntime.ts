@@ -17,7 +17,7 @@ import { CheckSquare } from "lucide-react";
 import type { ReactNode } from "react";
 import type { IDockviewPanelProps } from "dockview";
 import i18n from "../../i18n";
-import type { CommandContext, CommandDefinition } from "../../host/commands/commandSystem";
+import type { CommandDefinition } from "../../host/commands/commandSystem";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerTabComponent } from "../../host/registry/tabComponentRegistry";
 

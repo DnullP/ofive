@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import type { AiChatStreamEventPayload } from "../api/aiApi";
+import type { AiChatStreamEventPayload } from "../../api/aiApi";
 import {
     createEmptyPendingStreamBinding,
     createPendingStreamBinding,

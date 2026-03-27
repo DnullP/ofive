@@ -10,9 +10,62 @@
 .search-toolbar {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border-color);
+    gap: 12px;
+    padding: 14px 14px 12px;
+    border-bottom: 1px solid var(--surface-card-border);
+    background: var(--surface-card-bg-muted);
+}
+
+/* 搜索工具栏头部：展示标题文案与当前结果数。 */
+.search-toolbar-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+/* 搜索工具栏文案区：承载标题与提示。 */
+.search-toolbar-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* 搜索工具栏标题：强调搜索面板用途。 */
+.search-toolbar-title {
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 700;
+}
+
+/* 搜索工具栏说明：补充可搜索内容范围。 */
+.search-toolbar-hint {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+/* 搜索工具栏网格：在宽屏下并排列出两个输入区域。 */
+.search-toolbar-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 10px;
+}
+
+/* 搜索输入堆叠：让字段标签位于输入框上方。 */
+.search-input-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* 搜索输入标签：弱化显示字段名称。 */
+.search-input-label {
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
 
 /* 主搜索框：横向对齐图标与输入元素。 */
@@ -20,11 +73,12 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border: 1px solid var(--surface-input-border);
+    border-radius: 12px;
     padding: 0 10px;
-    background: var(--bg-secondary);
+    background: var(--surface-input-bg);
     color: var(--text-secondary);
+    box-shadow: var(--surface-input-shadow);
 }
 
 /* 标签过滤输入框：与主搜索框保持一致的视觉层级。 */
@@ -32,11 +86,12 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border: 1px solid var(--surface-input-border);
+    border-radius: 12px;
     padding: 0 10px;
-    background: var(--bg-secondary);
+    background: var(--surface-input-bg);
     color: var(--text-secondary);
+    box-shadow: var(--surface-input-shadow);
 }
 
 /* 搜索输入元素：保持透明背景并填满容器。 */
@@ -54,25 +109,26 @@
 /* 搜索范围切换容器：承载分段按钮。 */
 .search-scope-switch {
     display: flex;
-    gap: 6px;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 /* 搜索范围按钮：未激活态为弱化描边按钮。 */
 .search-scope-button {
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--surface-chip-border);
     border-radius: 999px;
-    background: transparent;
-    color: var(--text-secondary);
+    background: var(--surface-chip-bg);
+    color: var(--surface-chip-text);
     font-size: 12px;
-    padding: 5px 10px;
+    padding: 6px 10px;
     cursor: pointer;
 }
 
 /* 搜索范围按钮激活态：强调当前搜索范围。 */
 .search-scope-button--active {
-    background: var(--accent-primary);
-    border-color: var(--accent-primary);
-    color: var(--accent-primary-foreground);
+    background: var(--surface-chip-bg-strong);
+    border-color: var(--surface-list-active-border);
+    color: var(--surface-chip-text-strong);
 }
 
 /* 元信息栏：显示结果计数与加载状态。 */
@@ -80,9 +136,29 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 12px;
+    padding: 10px 14px 8px;
     color: var(--text-secondary);
     font-size: 12px;
+}
+
+/* 搜索状态徽章：统一展示统计和加载状态。 */
+.search-meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--surface-chip-border);
+    border-radius: 999px;
+    background: var(--surface-chip-bg);
+    color: var(--surface-chip-text);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* 激活状态徽章：在加载时更明显。 */
+.search-meta-chip--active {
+    background: var(--surface-chip-bg-strong);
+    color: var(--surface-chip-text-strong);
 }
 
 /* 错误提示：展示 API 或打开文件失败信息。 */
@@ -94,9 +170,13 @@
 
 /* 空状态容器：展示搜索前或无结果时的提示。 */
 .search-empty {
-    padding: 18px 12px;
+    padding: 20px 14px;
     color: var(--text-secondary);
     font-size: 12px;
+    border: 1px dashed var(--surface-card-border);
+    border-radius: 16px;
+    background: var(--surface-card-bg-muted);
+    margin: 0 14px 12px;
 }
 
 /* 空状态标题：强化初始引导文本。 */
@@ -110,7 +190,7 @@
 .search-results {
     list-style: none;
     margin: 0;
-    padding: 0 8px 8px;
+    padding: 0 10px 10px;
     overflow: auto;
     flex: 1;
     min-height: 0;
@@ -119,21 +199,25 @@
 /* 单条搜索结果按钮：纵向展示标题、路径、摘要和标签。 */
 .search-result {
     width: 100%;
-    border: 0;
-    background: transparent;
+    border: 1px solid transparent;
+    background: var(--surface-card-bg-muted);
     color: var(--text-primary);
     text-align: left;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 10px;
-    border-radius: 10px;
+    padding: 12px;
+    border-radius: 14px;
     cursor: pointer;
+    box-shadow: var(--surface-card-shadow);
+    transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
 /* 搜索结果悬浮态：给予轻量背景反馈。 */
 .search-result:hover {
-    background: var(--bg-hover);
+    background: var(--surface-list-hover-bg);
+    border-color: var(--surface-list-active-border);
+    transform: translateY(-1px);
 }
 
 /* 搜索结果头部：左右布局标题与徽章。 */
@@ -173,8 +257,9 @@
 .search-badge {
     padding: 2px 6px;
     border-radius: 999px;
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
+    background: var(--surface-chip-bg);
+    color: var(--surface-chip-text);
+    border: 1px solid var(--surface-chip-border);
     font-size: 11px;
 }
 
@@ -222,18 +307,18 @@
 
 /* 毛玻璃模式下的搜索工具栏：避免盖住宿主玻璃。 */
 .app-runtime--tauri.app-effect--glass .search-toolbar {
-    background: rgba(var(--window-glass-elevated-rgb), 0.08);
+    background: var(--surface-card-bg-muted);
 }
 
 /* 毛玻璃模式下的输入框：保持半透明表面层次。 */
 .app-runtime--tauri.app-effect--glass .search-query-field,
 .app-runtime--tauri.app-effect--glass .search-tag-field {
-    background: rgba(var(--window-glass-bg-rgb), 0.12);
+    background: var(--surface-input-bg);
 }
 
 /* 毛玻璃模式下的徽章：使用更轻的背景强调。 */
 .app-runtime--tauri.app-effect--glass .search-badge {
-    background: rgba(var(--window-glass-bg-rgb), 0.16);
+    background: var(--surface-chip-bg);
 }
 
 /* 毛玻璃模式下的高亮：降低实色覆盖，保持内容可读性。 */
@@ -262,6 +347,15 @@
 }
 
 @media (max-width: 720px) {
+
+    /* 窄屏下工具栏：改为纵向排布避免输入框压缩。 */
+    .search-toolbar-grid,
+    .search-toolbar-head,
+    .search-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
 
     /* 窄屏下结果头部：允许标题与徽章换行避免挤压。 */
     .search-result-header {

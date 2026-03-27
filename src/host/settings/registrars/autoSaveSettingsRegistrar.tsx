@@ -95,6 +95,8 @@ export function registerAutoSaveSettingsSection(): () => void {
         id: "editor-auto-save",
         title: "settings.saveSection",
         order: 25,
+        description: "settings.saveSectionDesc",
+        searchTerms: ["save", "auto save", "delay", "保存", "自动保存", "延迟"],
         render: () => <AutoSaveSettingsSection />,
     });
 }

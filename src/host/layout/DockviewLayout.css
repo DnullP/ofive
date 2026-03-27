@@ -4,7 +4,9 @@
   grid-template-columns: 48px var(--left-sidebar-width, 280px) 1fr;
   height: 100%;
   width: 100%;
-  background: var(--bg-primary);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 14%, transparent), transparent 10%),
+    var(--surface-base);
   color: var(--text-primary);
 }
 
@@ -22,6 +24,10 @@
 .main-content-area {
   min-width: 0;
   min-height: 0;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 32%, transparent), transparent 12%),
+    var(--surface-base);
+  box-shadow: inset 1px 0 0 var(--panel-muted-border);
 }
 
 /* dockview 官方 React 组件挂载区域 */
@@ -34,6 +40,7 @@
 .main-dockview-host {
   width: 100%;
   height: 100%;
+  background: transparent;
 }
 
 /* 桌面毛玻璃主编辑宿主：避免额外不透明底色覆盖原生材质。 */
@@ -72,12 +79,12 @@
 .dv-dockview,
 .dv-paneview,
 .sidebar-paneview-container {
-  --dv-group-view-background-color: var(--bg-primary);
-  --dv-tabs-and-actions-container-background-color: var(--bg-secondary);
-  --dv-activegroup-visiblepanel-tab-background-color: var(--bg-primary);
-  --dv-activegroup-hiddenpanel-tab-background-color: var(--bg-secondary);
-  --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg-primary);
-  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--bg-secondary);
+  --dv-group-view-background-color: var(--surface-base);
+  --dv-tabs-and-actions-container-background-color: color-mix(in srgb, var(--surface-elevated) 92%, transparent);
+  --dv-activegroup-visiblepanel-tab-background-color: color-mix(in srgb, var(--surface-elevated-strong) 90%, transparent);
+  --dv-activegroup-hiddenpanel-tab-background-color: color-mix(in srgb, var(--surface-base) 78%, transparent);
+  --dv-inactivegroup-visiblepanel-tab-background-color: color-mix(in srgb, var(--surface-base) 84%, transparent);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: color-mix(in srgb, var(--surface-base) 74%, transparent);
   --dv-tab-divider-color: var(--border-color);
   --dv-activegroup-visiblepanel-tab-color: var(--text-primary);
   --dv-activegroup-hiddenpanel-tab-color: var(--text-secondary);

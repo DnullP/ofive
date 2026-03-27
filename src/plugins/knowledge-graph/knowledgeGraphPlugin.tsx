@@ -39,18 +39,6 @@ const KNOWLEDGE_GRAPH_TAB_COMPONENT_ID = "knowledgegraph";
 const KNOWLEDGE_GRAPH_ACTIVITY_ID = "knowledge-graph";
 const KNOWLEDGE_GRAPH_COMMAND_ID = "knowledgeGraph.open";
 
-i18n.addResourceBundle("en", "translation", {
-    knowledgeGraphPlugin: {
-        openCommand: "Open Knowledge Graph",
-    },
-}, true, true);
-
-i18n.addResourceBundle("zh", "translation", {
-    knowledgeGraphPlugin: {
-        openCommand: "打开知识图谱",
-    },
-}, true, true);
-
 /**
  * @function t
  * @description 图谱插件翻译辅助函数。

@@ -8,9 +8,10 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 8px 0;
-    border-right: 1px solid var(--border-color);
-    background: var(--bg-secondary);
+    padding: 10px 0 12px;
+    border-right: 1px solid var(--panel-muted-border);
+    background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
+    box-shadow: inset -1px 0 0 color-mix(in srgb, var(--border-color) 52%, transparent);
     user-select: none;
 }
 
@@ -50,14 +51,15 @@
 .activity-bar-item {
     width: 36px;
     height: 36px;
-    border: 0;
-    border-radius: 8px;
+    border: 1px solid transparent;
+    border-radius: 10px;
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
     user-select: none;
+    position: relative;
     /* 拖拽偏移动画：使 transform translateY 平滑过渡 */
-    transition: transform 0.12s ease;
+    transition: transform 0.12s ease, background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease;
 }
 
 /* 活动栏按钮禁拖拽：保留点击交互，避免误触发窗口移动。 */
@@ -75,15 +77,36 @@
 }
 
 /* 激活和悬浮样式 */
-.activity-bar-item.active,
 .activity-bar-item:hover {
-    background: var(--bg-hover);
+    background: var(--surface-hover-accent);
+    border-color: var(--nav-item-hover-border);
     color: var(--text-primary);
 }
 
-/* 拖拽中样式：降低透明度 */
+/* 激活态：使用强调色表面和更清晰的边界。 */
+.activity-bar-item.active {
+    background: var(--surface-active-accent);
+    border-color: var(--nav-item-active-border);
+    color: var(--text-primary);
+    box-shadow: var(--nav-item-active-shadow);
+}
+
+/* 激活态内标记：增加垂直导航的视觉锚点。 */
+.activity-bar-item.active::before {
+    content: '';
+    position: absolute;
+    left: -7px;
+    top: 10px;
+    width: 3px;
+    height: 14px;
+    border-radius: 999px;
+    background: var(--accent-primary);
+}
+
+/* 拖拽中的图标：降低透明度并去掉阴影，避免误判为激活态。 */
 .activity-bar-item.dragging {
     opacity: 0.3;
+    box-shadow: none;
 }
 
 /* 拖拽放置指示器：绝对定位于视觉间隙中，覆盖整个间隙以捕获 dragover 事件。

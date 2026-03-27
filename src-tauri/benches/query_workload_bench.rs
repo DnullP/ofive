@@ -11,8 +11,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ofive_lib::test_support::{
     get_current_vault_markdown_graph_in_root, query_vault_tasks_in_root,
-    search_vault_markdown_files_in_root, search_vault_markdown_in_root,
-    VaultSearchScope,
+    search_vault_markdown_files_in_root, search_vault_markdown_in_root, VaultSearchScope,
 };
 use serde::Serialize;
 use std::fs;
@@ -70,11 +69,7 @@ fn cleanup_bench_root(root: &Path) {
 }
 
 /// 生成查询工作负载测试数据。
-fn generate_query_vault(
-    root: &Path,
-    file_count: usize,
-    tasks_per_file: usize,
-) -> (usize, usize) {
+fn generate_query_vault(root: &Path, file_count: usize, tasks_per_file: usize) -> (usize, usize) {
     let mut total_task_count = 0usize;
 
     for index in 0..file_count {
@@ -128,12 +123,7 @@ fn append_metric_record(record: &BenchMetricRecord) {
 }
 
 /// 运行一次代表性样本并输出结构化记录。
-fn emit_sample_records(
-    root: &Path,
-    dataset: &str,
-    file_count: usize,
-    task_count: usize,
-) {
+fn emit_sample_records(root: &Path, dataset: &str, file_count: usize, task_count: usize) {
     let search_start = Instant::now();
     let search_results = search_vault_markdown_in_root(
         root,
@@ -158,12 +148,9 @@ fn emit_sample_records(
     });
 
     let quick_switch_start = Instant::now();
-    let quick_switch_results = search_vault_markdown_files_in_root(
-        root,
-        "project".to_string(),
-        Some(40),
-    )
-    .expect("基准样本：快速切换搜索应成功");
+    let quick_switch_results =
+        search_vault_markdown_files_in_root(root, "project".to_string(), Some(40))
+            .expect("基准样本：快速切换搜索应成功");
     append_metric_record(&BenchMetricRecord {
         schema_version: "ofive.perf.metric.v1",
         name: "backend.query.search-vault-markdown-files",
@@ -195,8 +182,7 @@ fn emit_sample_records(
     });
 
     let graph_start = Instant::now();
-    let graph = get_current_vault_markdown_graph_in_root(root)
-        .expect("基准样本：图谱查询应成功");
+    let graph = get_current_vault_markdown_graph_in_root(root).expect("基准样本：图谱查询应成功");
     append_metric_record(&BenchMetricRecord {
         schema_version: "ofive.perf.metric.v1",
         name: "backend.query.get-current-vault-markdown-graph",
@@ -259,12 +245,8 @@ fn bench_query_workloads(c: &mut Criterion) {
             &root,
             |b, root| {
                 b.iter(|| {
-                    search_vault_markdown_files_in_root(
-                        root,
-                        "project".to_string(),
-                        Some(40),
-                    )
-                    .expect("基准测试：快速切换搜索应成功");
+                    search_vault_markdown_files_in_root(root, "project".to_string(), Some(40))
+                        .expect("基准测试：快速切换搜索应成功");
                 });
             },
         );

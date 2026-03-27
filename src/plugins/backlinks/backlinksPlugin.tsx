@@ -28,38 +28,6 @@ import { getBacklinksForFile, type BacklinkItem } from "../../api/vaultApi";
 import i18n from "../../i18n";
 import "./backlinksPlugin.css";
 
-/* ────────────────── i18n 资源注册 ────────────────── */
-
-/**
- * 为插件注册 i18n 资源包，避免修改全局 locale 文件。
- * 使用 addResourceBundle 的 deep + overwrite 合并模式。
- */
-i18n.addResourceBundle("en", "translation", {
-    backlinks: {
-        title: "Backlinks",
-        noFocusedArticle: "No focused article",
-        focusArticleHint: "Focus an article to see its backlinks.",
-        noBacklinks: "No backlinks found.",
-        loading: "Loading backlinks...",
-        loadFailed: "Failed to load backlinks: {{message}}",
-        referencedBy: "Referenced by {{count}} note(s)",
-        openCommand: "Open Backlinks Panel",
-    },
-}, true, true);
-
-i18n.addResourceBundle("zh", "translation", {
-    backlinks: {
-        title: "反向链接",
-        noFocusedArticle: "未聚焦文章",
-        focusArticleHint: "请先聚焦一篇文章以查看其反向链接。",
-        noBacklinks: "未找到反向链接。",
-        loading: "正在加载反向链接...",
-        loadFailed: "加载反向链接失败：{{message}}",
-        referencedBy: "被 {{count}} 篇笔记引用",
-        openCommand: "打开反向链接面板",
-    },
-}, true, true);
-
 const BACKLINKS_PANEL_ID = "backlinks";
 
 /* ────────────────── React 组件 ────────────────── */

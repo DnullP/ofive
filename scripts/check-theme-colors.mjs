@@ -18,6 +18,7 @@ import path from "node:path";
 const workspaceRoot = process.cwd();
 const srcRoot = path.join(workspaceRoot, "src");
 const cssAllowList = new Set([path.join(srcRoot, "App.css")]);
+const cssTokenFilePattern = /(?:^|\/)[^/]+\.tokens\.css$/;
 const colorPattern = /#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|(?:^|[\s:(,])(white|black)(?=$|[\s);,])/g;
 const inlineStyleBlockPattern = /style=\{\{[\s\S]*?\}\}/g;
 const inlineStyleColorPattern = /\b(?:color|background|backgroundColor|borderColor|outlineColor|fill|stroke|textDecorationColor|boxShadow)\s*:\s*(['"`])(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]+\)|hsla?\([^)]+\)|white|black)\1/g;
@@ -119,7 +120,7 @@ function offsetToLineNumber(content, offset) {
  * @returns 违规项数组。
  */
 function checkFile(filePath) {
-    if (cssAllowList.has(filePath)) {
+    if (cssAllowList.has(filePath) || cssTokenFilePattern.test(filePath)) {
         return [];
     }
 
@@ -312,7 +313,7 @@ if (allViolations.length > 0) {
         console.error("");
     }
 
-    console.error("[theme-guard] 请改为使用 var(--token)。若确需例外，可在上一行添加 theme-guard-ignore-next-line 注释。");
+    console.error("[theme-guard] 请改为使用 var(--token)。主题 token 只能定义在 src/App.css 或 *.tokens.css 中；若确需例外，可在上一行添加 theme-guard-ignore-next-line 注释。");
     process.exit(1);
 }
 

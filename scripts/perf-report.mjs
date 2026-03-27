@@ -920,15 +920,15 @@ function writeHtmlReport(frontendReports, backendRecords, records, rows) {
         <section class="panel">
             <h2>Frontend Raw Reports</h2>
             ${frontendReports.length > 0
-                ? frontendReports.map(({ fileName, report }) => `<div class="raw-report-block"><h3>${escapeHtml(fileName)}</h3><pre>${escapeHtml(JSON.stringify(report, null, 2))}</pre></div>`).join("\n")
-                : '<p class="empty">frontend reports not found</p>'}
+            ? frontendReports.map(({ fileName, report }) => `<div class="raw-report-block"><h3>${escapeHtml(fileName)}</h3><pre>${escapeHtml(JSON.stringify(report, null, 2))}</pre></div>`).join("\n")
+            : '<p class="empty">frontend reports not found</p>'}
         </section>
 
         <section class="panel">
             <h2>Backend Raw Records</h2>
             ${backendRecords.length > 0
-                ? `<pre>${escapeHtml(JSON.stringify(backendRecords, null, 2))}</pre>`
-                : '<p class="empty">backend benchmark records not found</p>'}
+            ? `<pre>${escapeHtml(JSON.stringify(backendRecords, null, 2))}</pre>`
+            : '<p class="empty">backend benchmark records not found</p>'}
         </section>
     </main>
 

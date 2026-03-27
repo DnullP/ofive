@@ -7,7 +7,7 @@
     align-items: flex-start;
     justify-content: center;
     padding-top: 10vh;
-    background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+    background: var(--surface-overlay-backdrop);
 }
 
 /* 浮窗主体容器：承载输入框与候选列表 */
@@ -16,23 +16,88 @@
     max-height: 72vh;
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    background: var(--bg-secondary);
-    box-shadow: var(--overlay-shadow-strong);
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--surface-overlay-panel-border);
+    border-radius: 18px;
+    background: var(--surface-overlay-panel-bg);
+    box-shadow: var(--surface-overlay-panel-shadow);
     overflow: hidden;
+}
+
+/* 浮窗头部：展示模式信息与当前快捷键提示。 */
+.command-palette-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+/* 浮窗头部文案区：承载 kicker 与统计。 */
+.command-palette-header-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* 浮窗头部 kicker：弱化显示模式名称。 */
+.command-palette-kicker {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* 浮窗统计标题：强调当前命令数量。 */
+.command-palette-summary {
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+/* 浮窗头部徽章：展示当前键盘导航提示。 */
+.command-palette-header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--surface-chip-border);
+    border-radius: 999px;
+    background: var(--surface-chip-bg);
+    color: var(--surface-chip-text);
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+/* 浮窗输入容器：统一图标、边框与输入背景。 */
+.command-palette-input-shell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    border: 1px solid var(--surface-input-border);
+    border-radius: 14px;
+    background: var(--surface-input-bg);
+    box-shadow: var(--surface-input-shadow);
+}
+
+/* 浮窗输入图标：辅助提示搜索语义。 */
+.command-palette-input-icon {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
 }
 
 /* 搜索输入框：用户输入关键字并实时过滤指令 */
 .command-palette-input {
     border: 0;
-    border-bottom: 1px solid var(--border-color);
     background: transparent;
     color: var(--text-primary);
     font-size: 16px;
     line-height: 1.5;
-    padding: 14px 16px;
+    padding: 14px 0;
     outline: none;
+    width: 100%;
 }
 
 /* 输入框占位符文本：弱化提示信息 */
@@ -47,49 +112,74 @@
     overflow: auto;
     min-height: 120px;
     max-height: 54vh;
+    padding-right: 2px;
 }
 
 /* 空态文本：用于展示无匹配结果 */
 .command-palette-empty {
-    padding: 18px 16px;
+    padding: 20px 16px;
     color: var(--text-secondary);
     font-size: 13px;
+    border: 1px dashed var(--surface-card-border);
+    border-radius: 14px;
+    background: var(--surface-card-bg-muted);
 }
 
 /* 候选项按钮：每条指令的可点击区域 */
 .command-palette-item {
     width: 100%;
-    border: 0;
-    border-bottom: 1px solid var(--border-color);
-    background: transparent;
+    border: 1px solid transparent;
+    background: var(--surface-card-bg-muted);
     color: var(--text-primary);
     text-align: left;
     cursor: pointer;
-    padding: 10px 14px;
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
     gap: 4px;
+    border-radius: 14px;
+    margin-bottom: 8px;
+    transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
 /* 候选项最后一项：移除底边框避免视觉重叠 */
 .command-palette-item:last-child {
-    border-bottom: 0;
+    margin-bottom: 0;
 }
 
 /* 候选项悬浮/高亮态：突出当前选择目标 */
 .command-palette-item:hover,
 .command-palette-item.active {
-    background:
-        linear-gradient(135deg,
-            color-mix(in srgb, var(--accent-primary) 22%, var(--bg-hover)),
-            color-mix(in srgb, var(--accent-primary) 10%, var(--bg-secondary)));
+    background: var(--surface-list-active-bg);
     color: var(--text-primary);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 50%, transparent);
+    border-color: var(--surface-list-active-border);
+    box-shadow: var(--surface-list-active-shadow);
+    transform: translateY(-1px);
+}
+
+/* 候选项首行：标题与快捷键分布到两侧。 */
+.command-palette-item-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
 }
 
 /* 候选项标题文本：展示指令名称 */
 .command-palette-item-title {
     font-size: 14px;
+    font-weight: 600;
+}
+
+/* 候选项快捷键：使用 pill 形式强调高频入口。 */
+.command-palette-item-shortcut {
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border: 1px solid var(--surface-chip-border);
+    border-radius: 999px;
+    background: var(--surface-chip-bg);
+    color: var(--surface-chip-text-strong);
+    font-size: 11px;
     font-weight: 600;
 }
 
@@ -103,4 +193,33 @@
 .command-palette-item.active .command-palette-item-meta,
 .command-palette-item:hover .command-palette-item-meta {
     color: color-mix(in srgb, var(--text-primary) 76%, var(--accent-primary));
+}
+
+/* 浮窗底部：展示导航与执行提示。 */
+.command-palette-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding-top: 2px;
+}
+
+/* 执行提示：图标与文案成组显示。 */
+.command-palette-footer-enter {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+@media (max-width: 720px) {
+
+    /* 窄屏下改为纵向布局，避免标题、快捷键和页脚压缩。 */
+    .command-palette-header,
+    .command-palette-footer,
+    .command-palette-item-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 }

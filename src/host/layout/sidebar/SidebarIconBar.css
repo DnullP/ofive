@@ -7,15 +7,15 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     min-height: 20px;
     /* 作为拖放目标需禁用窗口拖拽 */
     -webkit-app-region: no-drag;
     app-region: no-drag;
     /* 拖入过渡 */
     transition: background-color 0.15s ease;
-    border-radius: 4px;
-    padding: 2px 4px;
+    border-radius: 10px;
+    padding: 4px 6px;
 }
 
 /* 图标栏拖入高亮 */
@@ -27,8 +27,8 @@
 .sidebar-icon-bar-item {
     width: 28px;
     height: 28px;
-    border: 0;
-    border-radius: 6px;
+    border: 1px solid transparent;
+    border-radius: 8px;
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
@@ -51,8 +51,16 @@
 /* 激活和悬浮 */
 .sidebar-icon-bar-item.active,
 .sidebar-icon-bar-item:hover {
-    background: var(--bg-hover);
+    background: var(--surface-hover-accent);
+    border-color: var(--nav-item-hover-border);
     color: var(--text-primary);
+}
+
+/* 右侧图标栏激活态：与左侧活动栏保持同一强调语言。 */
+.sidebar-icon-bar-item.active {
+    background: var(--surface-active-accent);
+    border-color: var(--nav-item-active-border);
+    box-shadow: var(--nav-item-active-shadow);
 }
 
 /* 拖拽中 */

@@ -186,6 +186,8 @@ export function registerCodeMirrorSettingsSection(): () => void {
         id: "codemirror-editor",
         title: "settings.editorSection",
         order: 20,
+        description: "settings.editorSectionDesc",
+        searchTerms: ["editor", "vim", "font", "line numbers", "wrap", "tab", "编辑器", "vim", "字体", "行号", "换行", "缩进"],
         render: () => <CodeMirrorSettingsSection />,
     });
 }

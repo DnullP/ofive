@@ -8,20 +8,22 @@
 
 /* 底部仓库路径分隔栏：横线分隔，hover 变色，点击触发打开仓库 */
 .vault-separator {
-    border-top: 1px solid var(--border-color);
-    padding: 6px 12px;
+    border-top: 1px solid var(--surface-card-border);
+    padding: 8px 12px;
     font-size: 12px;
     cursor: pointer;
     user-select: none;
     display: flex;
     align-items: center;
     flex-shrink: 0;
-    transition: background 0.15s ease;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    background: var(--surface-card-bg-muted);
 }
 
 /* 分隔栏 hover 态：背景高亮提示可点击 */
 .vault-separator:hover {
-    background: var(--bg-hover);
+    background: var(--surface-list-hover-bg);
+    border-color: var(--nav-item-hover-border);
 }
 
 /* 分隔栏路径前缀：过长时从右侧截断（省略号紧贴仓库名左侧） */

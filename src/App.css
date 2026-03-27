@@ -26,6 +26,47 @@
   --accent-primary-foreground: #ffffff;
   --accent-primary-soft: rgba(0, 120, 212, 0.22);
   --accent-primary-soft-weak: rgba(0, 120, 212, 0.18);
+  --surface-base: color-mix(in srgb, var(--bg-primary) 94%, black 6%);
+  --surface-elevated: color-mix(in srgb, var(--bg-secondary) 88%, white 12%);
+  --surface-elevated-strong: color-mix(in srgb, var(--bg-secondary) 94%, black 6%);
+  --surface-hover-accent: color-mix(in srgb, var(--accent-primary-soft-weak) 54%, var(--bg-hover));
+  --surface-active-accent: color-mix(in srgb, var(--accent-primary-soft) 72%, var(--bg-secondary));
+  --panel-muted-border: color-mix(in srgb, var(--border-color) 74%, transparent);
+  --nav-item-hover-border: color-mix(in srgb, var(--accent-primary) 22%, transparent);
+  --nav-item-active-border: color-mix(in srgb, var(--accent-primary) 44%, transparent);
+  --nav-item-active-shadow: 0 16px 30px rgba(0, 0, 0, 0.16);
+  --surface-input-bg: color-mix(in srgb, var(--bg-primary) 84%, var(--bg-secondary));
+  --surface-input-border: color-mix(in srgb, var(--border-color) 78%, transparent);
+  --surface-input-border-focus: color-mix(in srgb, var(--accent-primary) 44%, transparent);
+  --surface-input-shadow: var(--overlay-shadow-floating);
+  --surface-card-bg: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
+  --surface-card-bg-muted: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  --surface-card-border: color-mix(in srgb, var(--border-color) 82%, transparent);
+  --surface-card-shadow: var(--overlay-shadow-floating);
+  --surface-list-hover-bg: color-mix(in srgb, var(--accent-primary-soft-weak) 54%, var(--bg-hover));
+  --surface-list-active-bg: color-mix(in srgb, var(--accent-primary-soft) 72%, var(--bg-secondary));
+  --surface-list-active-border: color-mix(in srgb, var(--accent-primary) 42%, transparent);
+  --surface-list-active-shadow: var(--overlay-shadow-floating);
+  --surface-chip-bg: color-mix(in srgb, var(--bg-hover) 92%, transparent);
+  --surface-chip-bg-strong: color-mix(in srgb, var(--accent-primary-soft) 62%, var(--bg-hover));
+  --surface-chip-border: color-mix(in srgb, var(--border-color) 72%, transparent);
+  --surface-chip-text: var(--text-secondary);
+  --surface-chip-text-strong: var(--text-primary);
+  --surface-overlay-backdrop: color-mix(in srgb, var(--bg-primary) 68%, transparent);
+  --surface-overlay-panel-bg: color-mix(in srgb, var(--surface-card-bg) 94%, transparent);
+  --surface-overlay-panel-border: color-mix(in srgb, var(--border-color) 76%, transparent);
+  --surface-overlay-panel-shadow: var(--overlay-shadow-strong);
+  --tree-selection-bg: color-mix(in srgb, var(--accent-primary-soft) 68%, transparent);
+  --tree-selection-bg-strong: color-mix(in srgb, var(--accent-primary-soft) 84%, var(--bg-hover));
+  --tree-drop-bg: color-mix(in srgb, var(--accent-primary-soft) 54%, transparent);
+  --tree-drop-bg-muted: color-mix(in srgb, var(--accent-primary-soft) 42%, transparent);
+  --shell-background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent-primary) 16%, transparent), transparent 32%),
+    radial-gradient(circle at bottom left, color-mix(in srgb, var(--text-primary) 9%, transparent), transparent 28%),
+    var(--bg-primary);
+  --shell-content-background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 18%, transparent), transparent 18%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-primary-soft-weak) 40%, transparent), transparent 24%);
   --scrollbar-thumb-color: rgba(212, 212, 212, 0.38);
   --error-color: #e74c3c;
   --text-warning: #e2a33e;
@@ -648,6 +689,19 @@
   --floating-surface-border: rgba(var(--window-glass-border-rgb), 0.3);
   --floating-surface-shadow: 0 24px 52px rgba(0, 0, 0, 0.24);
   --floating-backdrop-bg: rgba(var(--window-glass-bg-rgb), 0.24);
+  --surface-input-bg: rgba(var(--window-glass-elevated-rgb), 0.18);
+  --surface-input-border: rgba(var(--window-glass-border-rgb), 0.26);
+  --surface-card-bg: rgba(var(--window-glass-elevated-rgb), 0.24);
+  --surface-card-bg-muted: rgba(var(--window-glass-elevated-rgb), 0.18);
+  --surface-card-border: rgba(var(--window-glass-border-rgb), 0.22);
+  --surface-chip-bg: rgba(var(--window-glass-elevated-rgb), 0.18);
+  --surface-chip-bg-strong: rgba(var(--window-glass-elevated-rgb), 0.24);
+  --surface-chip-border: rgba(var(--window-glass-border-rgb), 0.22);
+  --surface-overlay-backdrop: rgba(var(--window-glass-bg-rgb), 0.22);
+  --surface-overlay-panel-bg: rgba(var(--window-glass-elevated-rgb), 0.3);
+  --surface-overlay-panel-border: rgba(var(--window-glass-border-rgb), 0.28);
+  --tree-drop-bg: rgba(var(--window-glass-elevated-rgb), 0.24);
+  --tree-drop-bg-muted: rgba(var(--window-glass-elevated-rgb), 0.18);
   --editor-bg-color: rgba(var(--window-glass-bg-rgb), 0.18);
   --editor-gutter-bg-color: rgba(var(--window-glass-elevated-rgb), 0.24);
   --editor-panel-bg-color: var(--bg-primary);
@@ -790,7 +844,7 @@ textarea,
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary);
+  background: var(--shell-background);
   overflow: hidden;
 }
 
@@ -811,7 +865,8 @@ textarea,
 .app-content {
   flex: 1;
   min-height: 0;
-  background: var(--bg-primary);
+  background: var(--shell-content-background);
+  box-shadow: inset 0 1px 0 var(--panel-muted-border);
 }
 
 .app-runtime--tauri.app-effect--glass .app-content {

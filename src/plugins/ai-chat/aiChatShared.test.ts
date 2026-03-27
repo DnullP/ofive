@@ -13,7 +13,7 @@ import type {
     AiChatHistoryMessage,
     AiChatSettings,
     AiVendorDefinition,
-} from "../api/aiApi";
+} from "../../api/aiApi";
 import {
     buildPersistableHistory,
     deriveConversationTitle,

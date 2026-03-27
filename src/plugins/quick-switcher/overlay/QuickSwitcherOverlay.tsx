@@ -23,8 +23,10 @@ import {
     type KeyboardEvent,
     type ReactNode,
 } from "react";
+import { CornerDownLeft, FileText, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { searchVaultMarkdownFiles, type VaultQuickSwitchItem } from "../../../api/vaultApi";
+import { UI_LANGUAGE } from "../../../i18n/uiLanguage";
 import type { OverlayRenderContext } from "../../../host/registry/overlayRegistry";
 import { QUICK_SWITCHER_OPEN_REQUESTED_EVENT } from "../quickSwitcherEvents";
 import "./QuickSwitcherModal.css";
@@ -77,6 +79,7 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
         }
         return results[selectedIndex] ?? null;
     }, [results, selectedIndex]);
+    const selectedPath = selectedItem?.relativePath ?? null;
 
     /**
      * 选中项变化时，将对应 DOM 元素滚动到可视区域，避免键盘导航跳出视口。
@@ -268,17 +271,31 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
                 data-floating-surface="true"
                 aria-label={t("quickSwitcher.ariaLabel")}
             >
+                <div className="quick-switcher-header">
+                    <div className="quick-switcher-header-copy">
+                        <span className="quick-switcher-kicker">{t("quickSwitcher.ariaLabel")}</span>
+                        <span className="quick-switcher-summary">{t("quickSwitcher.resultCount", { count: results.length })}</span>
+                    </div>
+                    <div className="quick-switcher-header-badge">
+                        <FileText size={14} strokeWidth={1.8} />
+                        <span>{selectedPath ?? t(UI_LANGUAGE.overlays.navigateList)}</span>
+                    </div>
+                </div>
+
                 {/* quick-switcher-input: 搜索输入框，输入即触发后端检索 */}
-                <input
-                    ref={inputRef}
-                    className="quick-switcher-input"
-                    type="text"
-                    value={query}
-                    placeholder={t("quickSwitcher.placeholder")}
-                    onChange={(event) => {
-                        setQuery(event.target.value);
-                    }}
-                />
+                <label className="quick-switcher-input-shell">
+                    <Search size={16} strokeWidth={1.8} className="quick-switcher-input-icon" />
+                    <input
+                        ref={inputRef}
+                        className="quick-switcher-input"
+                        type="text"
+                        value={query}
+                        placeholder={t("quickSwitcher.placeholder")}
+                        onChange={(event) => {
+                            setQuery(event.target.value);
+                        }}
+                    />
+                </label>
 
                 {/* quick-switcher-list: 搜索结果列表容器 */}
                 <div
@@ -307,12 +324,25 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
                                 openResultByIndex(index);
                             }}
                         >
-                            {/* quick-switcher-item-title: 候选项标题文本 */}
-                            <span className="quick-switcher-item-title">{item.title}</span>
+                            <div className="quick-switcher-item-row">
+                                {/* quick-switcher-item-title: 候选项标题文本 */}
+                                <span className="quick-switcher-item-title">{item.title}</span>
+                                {item.score !== null ? (
+                                    <span className="quick-switcher-item-score">{t("quickSwitcher.scoreLabel", { score: item.score.toFixed(2) })}</span>
+                                ) : null}
+                            </div>
                             {/* quick-switcher-item-path: 候选项相对路径文本 */}
                             <span className="quick-switcher-item-path">{item.relativePath}</span>
                         </button>
                     ))}
+                </div>
+
+                <div className="quick-switcher-footer">
+                    <span>{t(UI_LANGUAGE.overlays.navigateList)}</span>
+                    <span className="quick-switcher-footer-enter">
+                        <CornerDownLeft size={12} strokeWidth={1.8} />
+                        {t(UI_LANGUAGE.actions.open)}
+                    </span>
                 </div>
             </section>
         </div>

@@ -142,6 +142,8 @@ export function registerGraphSettingsSection(): () => void {
         id: "graph-component",
         title: "settings.graphSection",
         order: 40,
+        description: "settings.graphSectionDesc",
+        searchTerms: ["graph", "knowledge", "node", "physics", "图谱", "知识图谱", "节点", "布局"],
         render: () => <GraphSettingsSection />,
     });
 }

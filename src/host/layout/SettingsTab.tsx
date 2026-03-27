@@ -7,13 +7,50 @@
  *  - ../settings/registerBuiltinSettings
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ensureBuiltinSettingsRegistered } from "../settings/registerBuiltinSettings";
-import { useSettingsSections } from "../settings/settingsRegistry";
+import { useSettingsSections, type SettingsSectionRegistration } from "../settings/settingsRegistry";
 import "./SettingsTab.css";
 
 ensureBuiltinSettingsRegistered();
+
+/**
+ * @function normalizeSettingsQuery
+ * @description 归一化设置搜索词，便于大小写无关匹配。
+ * @param value 原始输入值。
+ * @returns 归一化后的搜索词。
+ */
+function normalizeSettingsQuery(value: string): string {
+    return value.trim().toLocaleLowerCase();
+}
+
+/**
+ * @function matchesSettingsSection
+ * @description 判断设置分区是否命中当前搜索词。
+ * @param section 设置分区注册定义。
+ * @param normalizedQuery 归一化后的搜索词。
+ * @param translate i18n 翻译函数。
+ * @returns 是否命中。
+ */
+function matchesSettingsSection(
+    section: SettingsSectionRegistration,
+    normalizedQuery: string,
+    translate: (key: string) => string,
+): boolean {
+    if (normalizedQuery.length === 0) {
+        return true;
+    }
+
+    const candidates = [
+        translate(section.title),
+        section.description ? translate(section.description) : "",
+        ...(section.searchTerms ?? []),
+    ];
+
+    return candidates.some((candidate) => candidate.toLocaleLowerCase().includes(normalizedQuery));
+}
 
 /**
  * @function SettingsTab
@@ -24,53 +61,112 @@ export function SettingsTab(): ReactNode {
     const { t } = useTranslation();
     const sections = useSettingsSections();
     const [activeSectionId, setActiveSectionId] = useState<string>("");
+    const [searchQuery, setSearchQuery] = useState<string>("");
+    const deferredSearchQuery = useDeferredValue(searchQuery);
+
+    const visibleSections = useMemo(() => {
+        const normalizedQuery = normalizeSettingsQuery(deferredSearchQuery);
+        return sections.filter((section) => matchesSettingsSection(section, normalizedQuery, t));
+    }, [deferredSearchQuery, sections, t]);
 
     const activeSection = useMemo(
-        () => sections.find((section) => section.id === activeSectionId) ?? sections[0],
-        [sections, activeSectionId],
+        () => visibleSections.find((section) => section.id === activeSectionId) ?? visibleSections[0],
+        [visibleSections, activeSectionId],
     );
 
     useEffect(() => {
-        if (sections.length === 0) {
+        if (visibleSections.length === 0) {
             if (activeSectionId !== "") {
                 setActiveSectionId("");
             }
             return;
         }
 
-        const currentExists = sections.some((section) => section.id === activeSectionId);
+        const currentExists = visibleSections.some((section) => section.id === activeSectionId);
         if (!currentExists) {
-            setActiveSectionId(sections[0].id);
+            setActiveSectionId(visibleSections[0].id);
         }
-    }, [sections, activeSectionId]);
+    }, [visibleSections, activeSectionId]);
 
     return (
         <div className="settings-tab">
             <aside className="settings-tab-sidebar">
-                {sections.map((section) => (
-                    <button
-                        key={section.id}
-                        type="button"
-                        className={`settings-tab-sidebar-item ${section.id === activeSection?.id ? "active" : ""}`}
-                        onClick={() => {
-                            setActiveSectionId(section.id);
+                <div className="settings-tab-sidebar-header">
+                    <span className="settings-tab-sidebar-caption">{t("settings.navigationLabel")}</span>
+                    <span className="settings-tab-sidebar-summary">
+                        {t("settings.searchResultsSummary", {
+                            visible: visibleSections.length,
+                            total: sections.length,
+                        })}
+                    </span>
+                </div>
+
+                <label className="settings-tab-search" htmlFor="settings-search-input">
+                    <Search className="settings-tab-search-icon" aria-hidden="true" />
+                    <input
+                        id="settings-search-input"
+                        className="settings-tab-search-input"
+                        type="search"
+                        value={searchQuery}
+                        placeholder={t("settings.searchPlaceholder")}
+                        onChange={(event) => {
+                            setSearchQuery(event.target.value);
                         }}
-                    >
-                        {t(section.title)}
-                    </button>
-                ))}
+                    />
+                </label>
+
+                <div className="settings-tab-sidebar-list">
+                    {visibleSections.map((section) => (
+                        <button
+                            key={section.id}
+                            type="button"
+                            className={`settings-tab-sidebar-item ${section.id === activeSection?.id ? "active" : ""}`}
+                            onClick={() => {
+                                setActiveSectionId(section.id);
+                            }}
+                        >
+                            <span className="settings-tab-sidebar-item-title">{t(section.title)}</span>
+                            {section.description ? (
+                                <span className="settings-tab-sidebar-item-desc">{t(section.description)}</span>
+                            ) : null}
+                        </button>
+                    ))}
+                </div>
             </aside>
 
             <section className="settings-tab-content">
-                <header className="settings-tab-content-header">{t("settings.title")}</header>
+                <header className="settings-tab-content-header">
+                    <div className="settings-tab-content-title-group">
+                        <div className="settings-tab-content-kicker">{t("settings.title")}</div>
+                        <div className="settings-tab-content-title">
+                            {activeSection ? t(activeSection.title) : t("settings.title")}
+                        </div>
+                        {activeSection?.description ? (
+                            <div className="settings-tab-content-subtitle">{t(activeSection.description)}</div>
+                        ) : null}
+                    </div>
+
+                    {normalizeSettingsQuery(searchQuery).length > 0 ? (
+                        <div className="settings-tab-content-summary">
+                            {t("settings.searchResultsSummary", {
+                                visible: visibleSections.length,
+                                total: sections.length,
+                            })}
+                        </div>
+                    ) : null}
+                </header>
 
                 {activeSection ? activeSection.render() : (
-                    <div className="settings-item-group">
-                        <div className="settings-item">
-                            <div>
-                                <div className="settings-item-title">{t("settings.noSections")}</div>
-                                <div className="settings-item-desc">{t("settings.noSectionsHint")}</div>
-                            </div>
+                    <div className="settings-tab-empty-state">
+                        <div className="settings-tab-empty-state-title">
+                            {normalizeSettingsQuery(searchQuery).length > 0
+                                ? t("settings.noSearchResults")
+                                : t("settings.noSections")}
+                        </div>
+                        <div className="settings-tab-empty-state-desc">
+                            {normalizeSettingsQuery(searchQuery).length > 0
+                                ? t("settings.noSearchResultsHint")
+                                : t("settings.noSectionsHint")}
                         </div>
                     </div>
                 )}

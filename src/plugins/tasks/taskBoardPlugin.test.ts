@@ -9,6 +9,7 @@
  */
 
 import { afterEach, describe, expect, it } from "bun:test";
+import type { CommandDefinition } from "../../host/commands/commandSystem";
 import { getActivitiesSnapshot, unregisterActivity } from "../../host/registry/activityRegistry";
 import {
     getTabComponentsSnapshot,
@@ -19,9 +20,7 @@ import { activateTaskBoardPluginRuntime } from "./taskBoardPluginRuntime";
 interface RecordedCommand {
     id: string;
     title: string;
-    execute: (context: {
-        openTab?: (tab: { id: string; title: string; component: string; params?: Record<string, unknown> }) => void;
-    }) => void;
+    execute: CommandDefinition["execute"];
 }
 
 describe("taskBoardPlugin", () => {

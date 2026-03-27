@@ -26,8 +26,10 @@ export interface SettingsSectionRegistration {
     title: string;
     /** 排序值，数值越小越靠前 */
     order: number;
-    /** 选栏可选描述 */
+    /** 选栏可选描述（可传入 i18n key） */
     description?: string;
+    /** 选栏搜索关键词（用于设置页快速筛选） */
+    searchTerms?: string[];
     /** 选栏渲染器 */
     render: () => ReactNode;
 }

@@ -414,6 +414,8 @@ export function registerThemeSettingsSection(): void {
         id: "theme-style",
         title: "settings.themeSection",
         order: 20,
+        description: "settings.themeSectionDesc",
+        searchTerms: ["theme", "appearance", "glass", "acrylic", "dark", "light", "kraft", "主题", "风格", "毛玻璃", "透明"],
         render: () => <ThemeSettingsSection />,
     });
 }

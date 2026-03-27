@@ -15,9 +15,11 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Command, CornerDownLeft, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { CommandDefinition } from "../../../host/commands/commandSystem";
 import i18n from "../../../i18n";
+import { UI_LANGUAGE } from "../../../i18n/uiLanguage";
 import type { OverlayRenderContext } from "../../../host/registry/overlayRegistry";
 import { COMMAND_PALETTE_OPEN_REQUESTED_EVENT } from "../commandPaletteEvents";
 import "./CommandPaletteModal.css";
@@ -65,6 +67,16 @@ function commandMatchesQuery(command: CommandDefinition, query: string): boolean
 }
 
 /**
+ * @function formatCommandShortcut
+ * @description 提取指令默认快捷键，缺失时返回 null。
+ * @param command 指令定义。
+ * @returns 默认快捷键文本。
+ */
+function formatCommandShortcut(command: CommandDefinition): string | null {
+    return command.shortcut?.defaultBinding?.trim() || null;
+}
+
+/**
  * @function CommandPaletteOverlay
  * @description 渲染指令搜索浮层。
  * @param props 组件参数。
@@ -94,6 +106,7 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
 
         return filteredCommands[selectedIndex] ?? null;
     }, [filteredCommands, selectedIndex]);
+    const selectedShortcut = selectedCommand ? formatCommandShortcut(selectedCommand) : null;
 
     useEffect(() => {
         const handleOpenRequested = (): void => {
@@ -216,17 +229,33 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
                 data-floating-surface="true"
                 aria-label={t("commandPalette.ariaLabel")}
             >
+                <div className="command-palette-header">
+                    <div className="command-palette-header-copy">
+                        <span className="command-palette-kicker">{t("commandPalette.ariaLabel")}</span>
+                        <span className="command-palette-summary">
+                            {t("commandPalette.resultCount", { count: filteredCommands.length })}
+                        </span>
+                    </div>
+                    <div className="command-palette-header-badge">
+                        <Command size={14} strokeWidth={1.8} />
+                        <span>{selectedShortcut ?? t(UI_LANGUAGE.overlays.navigateList)}</span>
+                    </div>
+                </div>
+
                 {/* command-palette-input: 搜索输入框，用于实时过滤指令 */}
-                <input
-                    ref={inputRef}
-                    className="command-palette-input"
-                    type="text"
-                    value={query}
-                    placeholder={t("commandPalette.placeholder")}
-                    onChange={(event) => {
-                        setQuery(event.target.value);
-                    }}
-                />
+                <label className="command-palette-input-shell">
+                    <Search size={16} strokeWidth={1.8} className="command-palette-input-icon" />
+                    <input
+                        ref={inputRef}
+                        className="command-palette-input"
+                        type="text"
+                        value={query}
+                        placeholder={t("commandPalette.placeholder")}
+                        onChange={(event) => {
+                            setQuery(event.target.value);
+                        }}
+                    />
+                </label>
 
                 {/* command-palette-list: 候选列表容器 */}
                 <div className="command-palette-list" role="listbox" aria-activedescendant={selectedCommand?.id}>
@@ -247,15 +276,25 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
                                 executeByIndex(index);
                             }}
                         >
-                            {/* command-palette-item-title: 指令显示名称 */}
-                            <span className="command-palette-item-title">{t(command.title)}</span>
+                            <div className="command-palette-item-row">
+                                {/* command-palette-item-title: 指令显示名称 */}
+                                <span className="command-palette-item-title">{t(command.title)}</span>
+                                {formatCommandShortcut(command) ? (
+                                    <span className="command-palette-item-shortcut">{formatCommandShortcut(command)}</span>
+                                ) : null}
+                            </div>
                             {/* command-palette-item-meta: 指令标识和默认快捷键 */}
-                            <span className="command-palette-item-meta">
-                                {command.id}
-                                {command.shortcut?.defaultBinding ? ` · ${command.shortcut.defaultBinding}` : ""}
-                            </span>
+                            <span className="command-palette-item-meta">{command.id}</span>
                         </button>
                     ))}
+                </div>
+
+                <div className="command-palette-footer">
+                    <span>{t(UI_LANGUAGE.overlays.navigateList)}</span>
+                    <span className="command-palette-footer-enter">
+                        <CornerDownLeft size={12} strokeWidth={1.8} />
+                        {t(UI_LANGUAGE.actions.run)}
+                    </span>
                 </div>
             </section>
         </div>

@@ -47,57 +47,12 @@ import {
     unregisterPanel,
     type PanelDescriptor,
 } from "../../host/registry/panelRegistry";
+import { UI_LANGUAGE } from "../../i18n/uiLanguage";
 import "./searchPlugin.css";
 
 const SEARCH_SURFACE_ID = "search";
 const SEARCH_RESULT_LIMIT = 80;
 const SEARCH_DEBOUNCE_MS = 220;
-
-i18n.addResourceBundle("en", "translation", {
-    searchPlugin: {
-        title: "Search",
-        queryPlaceholder: "Search notes or content",
-        tagPlaceholder: "Filter by tag",
-        emptyStateTitle: "Start searching",
-        emptyStateHint: "Use keywords, file names, or a tag filter to search the vault.",
-        noResults: "No results found.",
-        loading: "Searching...",
-        failed: "Search failed: {{message}}",
-        resultCount: "{{count}} result(s)",
-        tagCount: "{{count}} tag(s)",
-        snippetLine: "Line {{line}}",
-        openFailed: "Failed to open note: {{message}}",
-        scopeAll: "All",
-        scopeContent: "Content",
-        scopeFileName: "File Name",
-        matchedFileName: "File",
-        matchedContent: "Content",
-        matchedTag: "Tag",
-    },
-}, true, true);
-
-i18n.addResourceBundle("zh", "translation", {
-    searchPlugin: {
-        title: "搜索",
-        queryPlaceholder: "搜索笔记标题、路径或正文",
-        tagPlaceholder: "按标签过滤",
-        emptyStateTitle: "开始搜索",
-        emptyStateHint: "输入关键字、文件名或标签过滤条件，在当前 vault 中检索。",
-        noResults: "未找到匹配结果。",
-        loading: "搜索中...",
-        failed: "搜索失败：{{message}}",
-        resultCount: "共 {{count}} 条结果",
-        tagCount: "{{count}} 个标签",
-        snippetLine: "第 {{line}} 行",
-        openFailed: "打开笔记失败：{{message}}",
-        scopeAll: "全部",
-        scopeContent: "正文",
-        scopeFileName: "文件名",
-        matchedFileName: "文件名",
-        matchedContent: "正文",
-        matchedTag: "标签",
-    },
-}, true, true);
 
 const SEARCH_SCOPE_OPTIONS: Array<{
     scope: VaultSearchScope;
@@ -395,31 +350,47 @@ function SearchPanel({ context }: { context: PanelRenderContext }): ReactNode {
         <div className="search-panel">
             {/* search-toolbar: 顶部搜索控制区，承载 query/tag/scope 输入 */}
             <div className="search-toolbar">
-                {/* search-query-field: 主搜索框，负责文件名与全文关键词输入 */}
-                <label className="search-query-field">
-                    <Search size={14} strokeWidth={1.8} />
-                    <input
-                        type="search"
-                        value={query}
-                        placeholder={t("searchPlugin.queryPlaceholder")}
-                        onChange={(event) => {
-                            setQuery(event.target.value);
-                        }}
-                    />
-                </label>
+                <div className="search-toolbar-head">
+                    <div className="search-toolbar-copy">
+                        <span className="search-toolbar-title">{t("searchPlugin.toolbarTitle")}</span>
+                        <span className="search-toolbar-hint">{t("searchPlugin.toolbarHint")}</span>
+                    </div>
+                    <span className="search-meta-chip">{t("searchPlugin.resultCount", { count: results.length })}</span>
+                </div>
 
-                {/* search-tag-field: 标签过滤输入框，仅负责 tag 条件输入 */}
-                <label className="search-tag-field">
-                    <Hash size={14} strokeWidth={1.8} />
-                    <input
-                        type="search"
-                        value={tag}
-                        placeholder={t("searchPlugin.tagPlaceholder")}
-                        onChange={(event) => {
-                            setTag(event.target.value);
-                        }}
-                    />
-                </label>
+                <div className="search-toolbar-grid">
+                    <div className="search-input-stack">
+                        <span className="search-input-label">{t(UI_LANGUAGE.labels.keyword)}</span>
+                        {/* search-query-field: 主搜索框，负责文件名与全文关键词输入 */}
+                        <label className="search-query-field">
+                            <Search size={14} strokeWidth={1.8} />
+                            <input
+                                type="search"
+                                value={query}
+                                placeholder={t("searchPlugin.queryPlaceholder")}
+                                onChange={(event) => {
+                                    setQuery(event.target.value);
+                                }}
+                            />
+                        </label>
+                    </div>
+
+                    <div className="search-input-stack">
+                        <span className="search-input-label">{t(UI_LANGUAGE.labels.tagFilter)}</span>
+                        {/* search-tag-field: 标签过滤输入框，仅负责 tag 条件输入 */}
+                        <label className="search-tag-field">
+                            <Hash size={14} strokeWidth={1.8} />
+                            <input
+                                type="search"
+                                value={tag}
+                                placeholder={t("searchPlugin.tagPlaceholder")}
+                                onChange={(event) => {
+                                    setTag(event.target.value);
+                                }}
+                            />
+                        </label>
+                    </div>
+                </div>
 
                 {/* search-scope-switch: 搜索范围切换按钮组 */}
                 <div className="search-scope-switch">
@@ -442,9 +413,14 @@ function SearchPanel({ context }: { context: PanelRenderContext }): ReactNode {
 
             {/* search-meta: 结果统计与状态信息栏 */}
             <div className="search-meta">
-                <span>{t("searchPlugin.resultCount", { count: results.length })}</span>
+                <span>
+                    {t("searchPlugin.filtersSummary", {
+                        scope: t(SEARCH_SCOPE_OPTIONS.find((entry) => entry.scope === scope)?.translationKey ?? "searchPlugin.scopeAll"),
+                        tag: tag.trim() ? `#${tag.trim().replace(/^#+/, "")}` : t("searchPlugin.scopeAll"),
+                    })}
+                </span>
                 {loading ? (
-                    <span>{t("searchPlugin.loading")}</span>
+                    <span className="search-meta-chip search-meta-chip--active">{t("searchPlugin.loading")}</span>
                 ) : null}
             </div>
 

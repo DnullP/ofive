@@ -2,18 +2,18 @@
 .settings-tab {
     height: 100%;
     display: grid;
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 280px 1fr;
     min-height: 0;
 }
 
 /* 设置页左侧栏：分类菜单容器 */
 .settings-tab-sidebar {
     border-right: 1px solid var(--border-color);
-    background: var(--bg-secondary);
-    padding: 10px;
+    background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+    padding: 16px 12px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 12px;
 }
 
 /* 桌面毛玻璃设置侧栏：比内容面板更实一些，方便做导航。 */
@@ -23,22 +23,111 @@
     box-shadow: inset -1px 0 0 rgba(var(--window-glass-border-rgb), 0.12);
 }
 
+/* 设置页侧栏头部：展示导航标签和命中统计。 */
+.settings-tab-sidebar-header {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 6px 0;
+}
+
+/* 设置页侧栏标签：弱化显示，提示当前为导航区。 */
+.settings-tab-sidebar-caption {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* 设置页侧栏统计：展示当前筛选命中数。 */
+.settings-tab-sidebar-summary {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+/* 设置页搜索框容器：承载图标和输入框。 */
+.settings-tab-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-primary) 78%, var(--bg-secondary));
+    box-shadow: var(--overlay-shadow-floating);
+}
+
+/* 设置页搜索图标：弱化显示，不抢输入焦点。 */
+.settings-tab-search-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+}
+
+/* 设置页搜索输入框：无额外边框，突出内容输入。 */
+.settings-tab-search-input {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+}
+
+/* 设置页侧栏列表：滚动承载所有分区项。 */
+.settings-tab-sidebar-list {
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-right: 2px;
+}
+
 /* 设置页分类按钮：默认态 */
 .settings-tab-sidebar-item {
-    border: 0;
+    border: 1px solid transparent;
     text-align: left;
     background: transparent;
     color: var(--text-secondary);
-    border-radius: 6px;
-    padding: 8px 10px;
+    border-radius: 12px;
+    padding: 12px;
     cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+/* 设置页分类标题：强调当前分区名称。 */
+.settings-tab-sidebar-item-title {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+/* 设置页分类描述：补充当前分区关注点。 */
+.settings-tab-sidebar-item-desc {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
 }
 
 /* 设置页分类按钮：激活态 */
 .settings-tab-sidebar-item.active,
 .settings-tab-sidebar-item:hover {
-    background: var(--bg-hover);
+    background: color-mix(in srgb, var(--accent-primary-soft) 52%, var(--bg-hover));
+    border-color: color-mix(in srgb, var(--accent-primary) 36%, transparent);
     color: var(--text-primary);
+    transform: translateY(-1px);
+}
+
+/* 设置页分类按钮激活态：加强边界与阴影。 */
+.settings-tab-sidebar-item.active {
+    box-shadow: var(--overlay-shadow-floating);
 }
 
 /* 设置页右侧内容区容器 */
@@ -46,7 +135,7 @@
     min-width: 0;
     min-height: 0;
     overflow: auto;
-    padding: 16px;
+    padding: 24px;
 }
 
 /* 桌面毛玻璃设置内容区：保持透明，让中心区域不要整块发黑。 */
@@ -56,10 +145,81 @@
 
 /* 设置页标题 */
 .settings-tab-content-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+/* 设置页标题组：承载 kicker、标题和说明。 */
+.settings-tab-content-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* 设置页标题 kicker：弱提示当前位于设置中。 */
+.settings-tab-content-kicker {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* 设置页主标题：强调当前分区。 */
+.settings-tab-content-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+/* 设置页副标题：补充当前分区作用。 */
+.settings-tab-content-subtitle {
+    max-width: 560px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* 设置页筛选统计：在搜索时提示命中情况。 */
+.settings-tab-content-summary {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 8px 12px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-secondary) 84%, transparent);
+}
+
+/* 设置页空状态：用于无分区或搜索无结果时的占位说明。 */
+.settings-tab-empty-state {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    min-height: 220px;
+    padding: 24px;
+    border: 1px dashed color-mix(in srgb, var(--border-color) 78%, transparent);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+}
+
+/* 设置页空状态标题：突出无结果结论。 */
+.settings-tab-empty-state-title {
+    color: var(--text-primary);
     font-size: 16px;
     font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 14px;
+}
+
+/* 设置页空状态描述：补充下一步提示。 */
+.settings-tab-empty-state-desc {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
 }
 
 /* 设置项组：纵向排列，无间距，由行分隔线连接 */
@@ -498,4 +658,28 @@
 .settings-theme-mode-button.active {
     border-color: var(--accent-primary);
     background: var(--accent-primary-soft);
+}
+
+/* 设置页小屏适配：先收窄导航栏，再切为上下布局。 */
+@media (max-width: 1080px) {
+    .settings-tab {
+        grid-template-columns: 240px 1fr;
+    }
+}
+
+/* 设置页窄屏布局：导航切换为顶部区域，内容保持完整可读。 */
+@media (max-width: 860px) {
+    .settings-tab {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+
+    .settings-tab-sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .settings-tab-content-header {
+        flex-direction: column;
+    }
 }

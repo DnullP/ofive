@@ -262,6 +262,8 @@ export function registerShortcutSettingsSection(): void {
         id: "shortcut-system",
         title: "settings.shortcutSection",
         order: 30,
+        description: "settings.shortcutSectionDesc",
+        searchTerms: ["shortcut", "keybinding", "keyboard", "快捷键", "键位", "键盘"],
         render: () => <ShortcutSettingsSection />,
     });
 }

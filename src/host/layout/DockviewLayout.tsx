@@ -439,6 +439,7 @@ export function DockviewLayout({
     initialActivePanelId,
 }: DockviewLayoutProps): ReactNode {
     const { t } = useTranslation();
+    const currentLanguage = i18n.language;
 
     /* ── 从全局注册中心获取数据 ── */
     const registeredActivities = useActivities();
@@ -472,7 +473,7 @@ export function DockviewLayout({
         }
 
         return result;
-    }, [registeredActivities, registeredPanels]);
+    }, [currentLanguage, registeredActivities, registeredPanels]);
 
     /** 将注册的 Tab 组件转换为旧格式 */
     const tabComponents = useMemo<TabComponentDefinition[]>(
@@ -727,7 +728,7 @@ export function DockviewLayout({
         });
 
         return meta;
-    }, [panels, registeredActivities]);
+    }, [currentLanguage, panels, registeredActivities]);
     const activityIdByPanelId = useMemo(
         () => new Map(panelStates.map((state) => [state.id, state.activityId])),
         [panelStates],
@@ -949,7 +950,7 @@ export function DockviewLayout({
         });
 
         return items;
-    }, [activityMetaById, panels, registeredActivities]);
+    }, [currentLanguage, activityMetaById, panels, registeredActivities]);
 
     /**
      * 将面板派生的活动项与存储的定制配置合并，

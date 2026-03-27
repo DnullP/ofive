@@ -59,18 +59,6 @@ function isMarkdownPath(path: string): boolean {
     return normalizedPath.endsWith(".md") || normalizedPath.endsWith(".markdown");
 }
 
-i18n.addResourceBundle("en", "translation", {
-    fileTreePlugin: {
-        openCommand: "Open Explorer",
-    },
-}, true, true);
-
-i18n.addResourceBundle("zh", "translation", {
-    fileTreePlugin: {
-        openCommand: "打开资源管理器",
-    },
-}, true, true);
-
 /**
  * @function activatePlugin
  * @description 注册文件树活动、面板、标题按钮与相关命令。

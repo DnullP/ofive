@@ -230,14 +230,14 @@ class EditorErrorBoundary extends Component<EditorErrorBoundaryProps, EditorErro
             return (
                 <div className="cm-tab">
                     <div className="cm-tab-error-fallback">
-                        <p>编辑器渲染出错</p>
+                        <p>{i18n.t("editor.errorBoundaryTitle")}</p>
                         <p className="cm-tab-error-detail">{this.state.errorMessage}</p>
                         <button
                             type="button"
                             className="cm-tab-error-retry"
                             onClick={() => this.setState({ hasError: false, errorMessage: null })}
                         >
-                            重试
+                            {i18n.t("editor.errorBoundaryRetry")}
                         </button>
                     </div>
                 </div>
@@ -332,7 +332,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         // noop
     });
     const { bindings } = useShortcutState();
-    const { files } = useVaultState();
+    const { currentVaultPath, files } = useVaultState();
     const { featureSettings } = useConfigState();
     const vimModeEnabled = featureSettings.vimModeEnabled;
     const editorFontFamily = featureSettings.editorFontFamily || DEFAULT_EDITOR_FONT_FAMILY;

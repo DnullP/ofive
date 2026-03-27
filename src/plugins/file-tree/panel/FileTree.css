@@ -12,11 +12,43 @@
 }
 
 .file-tree-header {
-  padding: 10px 12px;
-  font-size: 12px;
+  padding: 12px 14px;
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--surface-card-border);
+  background: var(--surface-card-bg-muted);
   user-select: none;
+}
+
+/* 文件树头部主行：标题和数量标签左右布局。 */
+.file-tree-header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* 文件树头部标题：强调当前导航区域名称。 */
+.file-tree-header-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 文件树头部数量标签：弱化显示当前项目数量。 */
+.file-tree-header-count {
+  color: var(--surface-chip-text);
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid var(--surface-chip-border);
+  border-radius: 999px;
+  background: var(--surface-chip-bg);
+}
+
+/* 文件树头部副标题：展示当前选择摘要。 */
+.file-tree-header-subtitle {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .tree-root,
@@ -35,39 +67,44 @@
 
 /* 根目录空白区拖拽目标高亮：拖拽到非节点空白区域时高亮整个树区域。 */
 .tree-root.drop-target-root {
-  background: color-mix(in srgb, var(--accent-primary-soft) 30%, transparent);
+  background: var(--tree-drop-bg);
   outline: 1px solid var(--accent-primary);
   outline-offset: -1px;
 }
 
 .tree-item {
   width: 100%;
-  border: 0;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text-primary);
   text-align: left;
-  padding: 6px 8px;
+  padding: 7px 8px;
   display: flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
   user-select: none;
+  border-radius: 12px;
+  transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .tree-item:hover,
 .tree-item.active {
-  background: var(--bg-hover);
+  background: var(--surface-list-hover-bg);
+  border-color: var(--nav-item-hover-border);
 }
 
 /* 多选态：强调当前被纳入批量操作的树节点。 */
 .tree-item.selected {
-  background: color-mix(in srgb, var(--accent-primary-soft) 62%, transparent);
+  background: var(--tree-selection-bg);
+  border-color: var(--surface-list-active-border);
 }
 
 /* 多选 + hover/active：保持选中反馈同时叠加更强状态。 */
 .tree-item.selected:hover,
 .tree-item.selected.active {
-  background: color-mix(in srgb, var(--accent-primary-soft) 78%, var(--bg-hover));
+  background: var(--tree-selection-bg-strong);
+  box-shadow: var(--surface-list-active-shadow);
 }
 
 /* 重命名编辑态：输入框行保持与普通树节点一致的布局。 */
@@ -79,11 +116,11 @@
 .tree-rename-input {
   flex: 1;
   min-width: 0;
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  border: 1px solid var(--surface-input-border);
+  background: var(--surface-input-bg);
   color: var(--text-primary);
-  border-radius: 4px;
-  padding: 2px 6px;
+  border-radius: 8px;
+  padding: 4px 8px;
   font: inherit;
 }
 
@@ -94,18 +131,29 @@
 
 /* 目标目录高亮：强调当前可放置的目录节点。 */
 .tree-item.drop-target {
-  background: var(--accent-primary-soft);
+  background: var(--tree-drop-bg);
   outline: 1px solid var(--accent-primary);
 }
 
 /* 目标目录子树高亮：提示目标目录下的文件与子目录范围。 */
 .tree-item.drop-descendant {
-  background: color-mix(in srgb, var(--accent-primary-soft) 48%, transparent);
+  background: var(--tree-drop-bg-muted);
 }
 
 .tree-prefix {
   width: 12px;
   color: var(--text-secondary);
+}
+
+/* 文件树图标：统一文件与目录图标尺寸与颜色。 */
+.tree-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .tree-name {
@@ -117,9 +165,13 @@
 
 /* 空目录提示：告知用户可在空白区域右键新建。 */
 .tree-empty-hint {
-  padding: 10px 12px;
+  padding: 12px 14px;
   color: var(--text-secondary);
   font-size: 12px;
+  border: 1px dashed var(--surface-card-border);
+  border-radius: 14px;
+  background: var(--surface-card-bg-muted);
+  margin: 0 10px 10px;
 }
 
 /* 桌面毛玻璃文件树：根容器保持透明，避免把侧栏玻璃盖成实底。 */

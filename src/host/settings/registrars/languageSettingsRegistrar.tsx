@@ -58,6 +58,8 @@ export function registerLanguageSettingsSection(): void {
         id: "language-i18n",
         title: "settings.languageSection",
         order: 15,
+        description: "settings.languageSectionDesc",
+        searchTerms: ["language", "locale", "translation", "语言", "本地化", "翻译"],
         render: () => <LanguageSettingsSection />,
     });
 }

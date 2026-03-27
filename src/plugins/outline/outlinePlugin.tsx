@@ -39,40 +39,6 @@ import {
 import i18n from "../../i18n";
 import "./outlinePlugin.css";
 
-/* ────────────────── i18n 资源注册 ────────────────── */
-
-/**
- * 为插件注册 i18n 资源包，避免修改全局 locale 文件。
- * 使用 addResourceBundle 的 deep + overwrite 合并模式。
- */
-i18n.addResourceBundle("en", "translation", {
-    outlinePlugin: {
-        title: "Outline",
-        noFocusedArticle: "No focused article",
-        focusArticleHint: "Focus an article to see its outline.",
-        noHeadings: "No heading structure found.",
-        lineNumber: "Line {{line}}",
-        persistedBasis: "Based on saved content",
-        loading: "Loading outline...",
-        loadFailed: "Failed to load outline: {{message}}",
-        openCommand: "Open Outline Panel",
-    },
-}, true, true);
-
-i18n.addResourceBundle("zh", "translation", {
-    outlinePlugin: {
-        title: "大纲",
-        noFocusedArticle: "未聚焦文章",
-        focusArticleHint: "请先聚焦一篇文章以查看其大纲。",
-        noHeadings: "当前文章没有标题结构。",
-        lineNumber: "第 {{line}} 行",
-        persistedBasis: "基于已保存内容",
-        loading: "正在加载大纲...",
-        loadFailed: "加载大纲失败：{{message}}",
-        openCommand: "打开大纲面板",
-    },
-}, true, true);
-
 const OUTLINE_PANEL_ID = "outline";
 
 /* ────────────────── 防抖辅助 ────────────────── */

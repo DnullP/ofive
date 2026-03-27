@@ -78,6 +78,8 @@ export function registerGeneralSettingsSection(): void {
         id: "general-global",
         title: "settings.generalSection",
         order: 10,
+        description: "settings.generalSectionDesc",
+        searchTerms: ["general", "vault", "search", "knowledge graph", "通用", "仓库", "搜索", "知识图谱"],
         render: () => <GeneralSettingsSection />,
     });
 }

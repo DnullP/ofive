@@ -7,6 +7,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { FileText, Folder, FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "./FileTree.css";
 import { showNativeContextMenu } from "../../../host/layout/nativeContextMenu";
@@ -248,6 +249,26 @@ function createDragPreviewElement(label: string): HTMLDivElement {
   return element;
 }
 
+/**
+ * @function buildTreeHeaderSummary
+ * @description 根据当前选择状态构建文件树头部摘要。
+ * @param selectionCount 当前选中数量。
+ * @param itemCount 文件树总项目数。
+ * @param t 国际化函数。
+ * @returns 摘要文本。
+ */
+function buildTreeHeaderSummary(
+  selectionCount: number,
+  itemCount: number,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  if (selectionCount > 0) {
+    return t("fileTree.selectionSummary", { count: selectionCount });
+  }
+
+  return t("fileTree.itemCount", { count: itemCount });
+}
+
 function TreeItem({
   node,
   level,
@@ -404,6 +425,11 @@ function TreeItem({
         }}
       >
         <span className="tree-prefix">{node.isFolder ? (isExpanded ? "▾" : "▸") : ""}</span>
+        <span className="tree-icon" aria-hidden="true">
+          {node.isFolder
+            ? (isExpanded ? <FolderOpen size={14} strokeWidth={1.9} /> : <Folder size={14} strokeWidth={1.9} />)
+            : <FileText size={14} strokeWidth={1.9} />}
+        </span>
         <span className="tree-name">{node.name}</span>
       </button>
       {node.isFolder && isExpanded && node.children.length > 0 && (
@@ -548,6 +574,7 @@ export function FileTree({
     () => flattenVisibleNodes(tree, expandedFolders),
     [tree, expandedFolders],
   );
+  const headerSummary = buildTreeHeaderSummary(selectedPaths.size, items.length, t);
 
   useEffect(() => {
     if (!activePath) {
@@ -1095,7 +1122,13 @@ export function FileTree({
       ref={containerRef}
       tabIndex={-1}
     >
-      <div className="file-tree-header">{t("fileTree.files")}</div>
+      <div className="file-tree-header">
+        <div className="file-tree-header-main">
+          <span className="file-tree-header-title">{t("fileTree.files")}</span>
+          <span className="file-tree-header-count">{t("fileTree.itemCount", { count: items.length })}</span>
+        </div>
+        <div className="file-tree-header-subtitle">{headerSummary}</div>
+      </div>
       <ul
         className={`tree-root ${dropTargetDirectoryPath === "" ? "drop-target-root" : ""}`}
         onContextMenu={handleRootContextMenu}
