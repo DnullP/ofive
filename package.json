@@ -24,9 +24,13 @@
     "test:full": "bun run test:workflow",
     "preview": "vite preview",
     "tauri": "node scripts/run-with-protoc.mjs tauri",
-    "test:e2e": "bunx playwright test",
-    "test:e2e:ui": "bunx playwright test --ui",
-    "test:e2e:headed": "bunx playwright test --headed"
+    "test:e2e": "bunx playwright test --config playwright.config.ts",
+    "test:e2e:ui": "bunx playwright test --config playwright.config.ts --ui",
+    "test:e2e:headed": "bunx playwright test --config playwright.config.ts --headed",
+    "test:perf:frontend": "bunx playwright test --config playwright.perf.config.ts --reporter=line",
+    "test:perf:backend": "mkdir -p test-results/perf && rm -f test-results/perf/backend-query-bench.jsonl && OFIVE_PERF_RESULTS_DIR=$PWD/test-results/perf node scripts/run-with-protoc.mjs cargo bench --manifest-path src-tauri/Cargo.toml --bench query_workload_bench -- --nocapture",
+    "test:perf": "bun run test:perf:frontend && bun run test:perf:backend && bun run report:perf",
+    "report:perf": "node scripts/perf-report.mjs"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",
@@ -46,6 +50,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-i18next": "^16.5.4",
+    "web-vitals": "^5.2.0",
     "yaml": "^2.8.2"
   },
   "devDependencies": {

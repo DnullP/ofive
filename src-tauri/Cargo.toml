@@ -75,3 +75,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bench]]
 name = "rebuild_index_bench"
 harness = false
+
+[[bench]]
+name = "query_workload_bench"
+harness = false

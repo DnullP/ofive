@@ -53,6 +53,32 @@ interface GraphLabelItem {
 }
 
 /**
+ * @interface KnowledgeGraphPerfTestHook
+ * @description 图谱性能测试钩子：为前端 perf 场景提供缩放和标签状态读取能力。
+ */
+interface KnowledgeGraphPerfTestHook {
+    /** 获取当前缩放级别。 */
+    getZoomLevel: () => number;
+    /** 获取当前标签显示阈值。 */
+    getLabelVisibleZoomLevel: () => number;
+    /** 设置当前缩放级别。 */
+    setZoomLevel: (zoomLevel: number) => void;
+    /** 读取标签层当前可见性摘要。 */
+    getLabelStats: () => {
+        totalLabelCount: number;
+        visibleLabelCount: number;
+        opacity: number;
+    };
+}
+
+declare global {
+    interface Window {
+        /** 知识图谱性能测试钩子，仅用于 perf 场景驱动连续缩放。 */
+        __OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?: KnowledgeGraphPerfTestHook;
+    }
+}
+
+/**
  * @constant DRAG_START_REHEAT_ALPHA
  * @description 拖拽起始注入能量，保证整体联动。
  */
@@ -217,6 +243,51 @@ export function KnowledgeGraphTab(
     );
 
     /**
+     * @function registerPerfTestHook
+     * @description 注册图谱性能测试钩子，供 Playwright 场景驱动连续缩放。
+     * @param graph Graph 实例。
+     */
+    const registerPerfTestHook = (graph: Graph): void => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        window.__OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__ = {
+            getZoomLevel: () => graph.getZoomLevel(),
+            getLabelVisibleZoomLevel: () => labelVisibleZoomLevelRef.current,
+            setZoomLevel: (zoomLevel: number) => {
+                graph.setZoomLevel(zoomLevel, 0);
+                scheduleLabelLayoutUpdate(graph);
+            },
+            getLabelStats: () => {
+                const labelLayerElement = labelLayerRef.current;
+                const visibleLabelCount = Array.from(labelElementMapRef.current.values()).filter(
+                    (element) => element.style.display !== "none",
+                ).length;
+                const opacity = Number(labelLayerElement?.style.opacity ?? "0");
+
+                return {
+                    totalLabelCount: labelElementMapRef.current.size,
+                    visibleLabelCount,
+                    opacity: Number.isFinite(opacity) ? opacity : 0,
+                };
+            },
+        };
+    };
+
+    /**
+     * @function unregisterPerfTestHook
+     * @description 清理图谱性能测试钩子。
+     */
+    const unregisterPerfTestHook = (): void => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        delete window.__OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__;
+    };
+
+    /**
      * @function scheduleLabelLayoutUpdate
      * @description 通过 RAF 节流同步标签屏幕坐标并根据缩放级别控制标签整体透明度。
      * @param graph Graph 实例。
@@ -372,6 +443,7 @@ export function KnowledgeGraphTab(
         });
 
         graphRef.current = graph;
+        registerPerfTestHook(graph);
         console.info("[knowledge-graph] graph instance initialized");
 
         return () => {
@@ -384,6 +456,7 @@ export function KnowledgeGraphTab(
             }
             graph.destroy();
             graphRef.current = null;
+            unregisterPerfTestHook();
             console.info("[knowledge-graph] graph instance destroyed");
         };
     }, []);
@@ -405,6 +478,7 @@ export function KnowledgeGraphTab(
             return;
         }
 
+        registerPerfTestHook(graph);
         scheduleLabelLayoutUpdate(graph);
     }, [labels]);
 
@@ -413,6 +487,7 @@ export function KnowledgeGraphTab(
         labelVisibleZoomLevelRef.current = graphSettings.labelVisibleZoomLevel;
         const graph = graphRef.current;
         if (graph) {
+            registerPerfTestHook(graph);
             scheduleLabelLayoutUpdate(graph);
             console.info("[knowledge-graph] labelVisibleZoomLevel updated", {
                 labelVisibleZoomLevel: graphSettings.labelVisibleZoomLevel,

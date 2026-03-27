@@ -169,6 +169,15 @@ export interface VaultMarkdownGraphResponse {
 }
 
 /**
+ * @interface BrowserMockRuntimeWindow
+ * @description 浏览器 mock 运行时测试注入窗口扩展。
+ */
+interface BrowserMockRuntimeWindow extends Window {
+    /** 图谱性能测试注入的 mock 图谱响应。 */
+    __OFIVE_BROWSER_MOCK_GRAPH_RESPONSE__?: VaultMarkdownGraphResponse;
+}
+
+/**
  * @interface FrontmatterQueryMatchItem
  * @description frontmatter 查询命中项。
  */
@@ -847,6 +856,30 @@ function buildBrowserMockMarkdownGraph(): VaultMarkdownGraphResponse {
 }
 
 /**
+ * @function getBrowserMockMarkdownGraphOverride
+ * @description 读取浏览器 mock 运行时注入的图谱覆盖数据。
+ * @returns 覆盖图谱；未注入时返回 null。
+ */
+function getBrowserMockMarkdownGraphOverride(): VaultMarkdownGraphResponse | null {
+    if (typeof window === "undefined") {
+        return null;
+    }
+
+    const runtimeWindow = window as BrowserMockRuntimeWindow;
+    const response = runtimeWindow.__OFIVE_BROWSER_MOCK_GRAPH_RESPONSE__;
+    if (!response) {
+        return null;
+    }
+
+    if (!Array.isArray(response.nodes) || !Array.isArray(response.edges)) {
+        console.warn("[vault-api] browser mock graph override ignored: invalid shape");
+        return null;
+    }
+
+    return response;
+}
+
+/**
  * @function extractBrowserFallbackOutline
  * @description 从浏览器回退模式的 Markdown 内容中提取标题列表。
  *   语义与后端 outline 接口保持一致：跳过 frontmatter、代码块、LaTeX 块中的伪标题。
@@ -1462,6 +1495,15 @@ export async function resolveMediaEmbedTarget(
  */
 export async function getCurrentVaultMarkdownGraph(): Promise<VaultMarkdownGraphResponse> {
     if (!isTauriRuntime()) {
+        const overrideResponse = getBrowserMockMarkdownGraphOverride();
+        if (overrideResponse) {
+            console.info("[vault-api] getCurrentVaultMarkdownGraph fallback to injected browser mock graph", {
+                nodeCount: overrideResponse.nodes.length,
+                edgeCount: overrideResponse.edges.length,
+            });
+            return overrideResponse;
+        }
+
         console.info("[vault-api] getCurrentVaultMarkdownGraph fallback to browser mock data");
         return buildBrowserMockMarkdownGraph();
     }

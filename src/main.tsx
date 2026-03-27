@@ -3,10 +3,12 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { startDiscoveredPlugins } from "./plugins/pluginRuntime";
 import { setupFrontendLogBridge } from "./utils/frontendLogBridge";
+import { setupFrontendPerfMonitoring } from "./utils/perfMetrics";
 /* 初始化 i18n —— 必须在 App 渲染之前引入 */
 import "./i18n";
 
 setupFrontendLogBridge();
+setupFrontendPerfMonitoring();
 
 /**
  * 插件自动发现与运行时启动：在渲染 App 前先激活全部插件入口，

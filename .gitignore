@@ -33,3 +33,4 @@ memories/
 .tools/
 sidecars/go/**/.bin/
 src-tauri/binaries/
+.skills/
