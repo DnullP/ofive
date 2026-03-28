@@ -1,0 +1,48 @@
+name: E2E Mouse Drag
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-mouse-drag-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-mouse-drag:
+    name: Playwright E2E Mouse Drag
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.22
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: bun run test:playwright:install
+
+      - name: Run Playwright mouse drag audits
+        run: bun run test:e2e:mouse-drag --reporter=line

@@ -36,6 +36,7 @@ import {
 
 const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
 const IS_LINUX = process.platform === "linux";
+const MOUSE_DRAG_TAG = "@mouse-drag";
 
 /**
  * @function waitForDockviewReady
@@ -211,6 +212,7 @@ interface TopEdgeSwapAttempt {
     mouseOptions: DockviewMouseDragOptions;
     useVerticalAnchorSnap?: boolean;
     approachTarget?: "header" | "group";
+    useSyntheticFallback?: boolean;
 }
 
 type DockviewVerticalEdge = "top" | "bottom";
@@ -497,6 +499,15 @@ async function runBottomToTopSwapAuditWithRetry(page: Page): Promise<TopEdgeSwap
             },
             useVerticalAnchorSnap: true,
         },
+        {
+            targetOffset: { x: 0.5, y: 0.04 } as DockviewDragTargetOffset,
+            mouseOptions: {
+                finalHoverRepeats: 12,
+                finalHoverDelayMs: 72,
+                settleDelayMs: 620,
+            },
+            useSyntheticFallback: true,
+        },
     ];
 
     let lastResult: TopEdgeSwapAttemptResult | null = null;
@@ -519,6 +530,16 @@ async function runBottomToTopSwapAuditWithRetry(page: Page): Promise<TopEdgeSwap
             .first();
 
         const audit = await runDockviewAnimationAudit(page, async () => {
+            if (attempt.useSyntheticFallback) {
+                await dockviewDragPanel(
+                    page,
+                    sourceTab,
+                    targetHeader,
+                    attempt.targetOffset,
+                );
+                return;
+            }
+
             if (attempt.useVerticalAnchorSnap) {
                 const approachTarget = attempt.approachTarget === "group" ? targetGroup : targetHeader;
                 await dockviewMouseDragPanelToVerticalEdgeAnchor(
@@ -1099,7 +1120,7 @@ test.describe("Dockview split animation audit", () => {
         expect(result.observations.some((item) => item.phase === "capture" && item.source === "drag")).toBe(true);
     });
 
-    test("manual drag audit: left tab to right edge of right group should expose swap case", async ({ page }) => {
+    test(`manual drag audit: left tab to right edge of right group should expose swap case ${MOUSE_DRAG_TAG}`, async ({ page }) => {
         const result = await runManualDragAuditScenario(page, {
             scenario: "manual-home-to-right-of-right",
             setup: async (currentPage) => {
@@ -1140,7 +1161,7 @@ test.describe("Dockview split animation audit", () => {
         expect(result.audit.observations.some((item) => item.phase === "capture" && item.source === "drag")).toBe(true);
     });
 
-    test("manual drag audit: bottom tab to top edge of home should expose vertical swap edge", async ({ page }) => {
+    test(`manual drag audit: bottom tab to top edge of home should expose vertical swap edge ${MOUSE_DRAG_TAG}`, async ({ page }) => {
         const result = await runBottomToTopSwapAuditWithRetry(page);
 
         logAuditResult("manual-bottom-to-top-of-home", {
@@ -1164,7 +1185,7 @@ test.describe("Dockview split animation audit", () => {
         expect(result.audit.didPlay).toBe(true);
     });
 
-    test("manual drag audit: home tab to bottom edge of bottom group should expose reverse vertical swap", async ({ page }) => {
+    test(`manual drag audit: home tab to bottom edge of bottom group should expose reverse vertical swap ${MOUSE_DRAG_TAG}`, async ({ page }) => {
         const result = await runHomeToBottomSwapAuditWithRetry(page);
 
         const homeGroup = findGroupByTabLabel(result.afterGroups, "首页");
@@ -1191,7 +1212,7 @@ test.describe("Dockview split animation audit", () => {
         expect(result.audit.observations.some((item) => item.phase === "capture" && item.source === "drag")).toBe(true);
     });
 
-    test("manual drag audit: nested left-bottom tab to right edge of right column", async ({ page }) => {
+    test(`manual drag audit: nested left-bottom tab to right edge of right column ${MOUSE_DRAG_TAG}`, async ({ page }) => {
         const result = await runManualDragAuditScenarioWithRetry(
             page,
             {
@@ -1264,7 +1285,7 @@ test.describe("Dockview split animation audit", () => {
         expect(result.audit.observations.some((item) => item.phase === "capture" && item.source === "drag")).toBe(true);
     });
 
-    test("manual drag audit: nested right-top tab to bottom edge of left column", async ({ page }) => {
+    test(`manual drag audit: nested right-top tab to bottom edge of left column ${MOUSE_DRAG_TAG}`, async ({ page }) => {
         const result = await runNestedRightTopToBottomOfLeftColumnAuditWithRetry(page);
 
         logAuditResult("nested-right-top-to-bottom-of-left-column", {
@@ -1287,7 +1308,7 @@ test.describe("Dockview split animation audit", () => {
         expect(result.audit.observations.some((item) => item.phase === "capture" && item.source === "drag")).toBe(true);
     });
 
-    test("manual drag audit: mixed swap sequence should keep both drags observable", async ({ page }) => {
+    test(`manual drag audit: mixed swap sequence should keep both drags observable ${MOUSE_DRAG_TAG}`, async ({ page }) => {
         await openMockSplitTab(page, {
             id: "sequence-right",
             title: "Sequence Right",
@@ -1427,7 +1448,7 @@ test.describe("Dockview split animation audit", () => {
         expect(timelineBeforeClick.some((item) => item.type === "play-attempt")).toBe(true);
     });
 
-    test("manual mouse drag audit: guide self split should animate before follow-up click", async ({ page }, testInfo) => {
+    test(`manual mouse drag audit: guide self split should animate before follow-up click ${MOUSE_DRAG_TAG}`, async ({ page }, testInfo) => {
         await openMockGuideTabFromFileTree(page);
 
         const sourceTab = page.locator(".dv-tab", { hasText: "guide.md" }).first();
@@ -1460,7 +1481,7 @@ test.describe("Dockview split animation audit", () => {
         expect(postClickPlayCount).toBe(preClickPlayCount);
     });
 
-    test("manual mouse drag audit: collapsing split back to one group should animate before follow-up click", async ({ page }, testInfo) => {
+    test(`manual mouse drag audit: collapsing split back to one group should animate before follow-up click ${MOUSE_DRAG_TAG}`, async ({ page }, testInfo) => {
         await openMockGuideTabFromFileTree(page);
         await waitForDockviewAnimationsToSettle(page);
 
