@@ -209,8 +209,11 @@ interface TopEdgeSwapAttemptResult extends ManualDragAuditSummary {
 interface TopEdgeSwapAttempt {
     targetOffset: DockviewDragTargetOffset;
     mouseOptions: DockviewMouseDragOptions;
-    useTopAnchorSnap?: boolean;
+    useVerticalAnchorSnap?: boolean;
+    approachTarget?: "header" | "group";
 }
+
+type DockviewVerticalEdge = "top" | "bottom";
 
 interface ManualDragRetryAttempt {
     targetOffset?: DockviewDragTargetOffset;
@@ -223,47 +226,54 @@ interface ManualDragRetryResult extends ManualDragAuditSummary {
 }
 
 /**
- * @function dockviewMouseDragPanelToTopEdgeAnchor
- * @description 在顶部交换场景中，先把鼠标拖到目标 header 顶边，再在可见时吸附到 Dockview 顶部 drop anchor 中心点释放。
+ * @function dockviewMouseDragPanelToVerticalEdgeAnchor
+ * @description 在垂直边缘场景中，先把鼠标拖到目标边缘附近，再在可见时吸附到 Dockview 垂直 drop anchor 中心点释放。
  * @param page Playwright 页面对象。
  * @param source 拖拽源 tab。
- * @param targetHeader 目标 header。
+ * @param approachTarget 用于靠近目标边缘的定位器。
  * @param targetGroup 目标 group。
+ * @param edge 目标垂直边缘。
  * @param options 鼠标拖拽节奏控制参数。
  */
-async function dockviewMouseDragPanelToTopEdgeAnchor(
+async function dockviewMouseDragPanelToVerticalEdgeAnchor(
     page: Page,
     source: Locator,
-    targetHeader: Locator,
+    approachTarget: Locator,
     targetGroup: Locator,
+    edge: DockviewVerticalEdge,
     options: DockviewMouseDragOptions,
 ): Promise<void> {
     await source.waitFor({ state: "visible" });
-    await targetHeader.waitFor({ state: "visible" });
+    await approachTarget.waitFor({ state: "visible" });
     await targetGroup.waitFor({ state: "visible" });
 
     const sourceBox = await source.boundingBox();
-    const headerBox = await targetHeader.boundingBox();
+    const approachBox = await approachTarget.boundingBox();
     const groupBox = await targetGroup.boundingBox();
-    if (!sourceBox || !headerBox || !groupBox) {
-        throw new Error("dockviewMouseDragPanelToTopEdgeAnchor: source or target boundingBox is null");
+    if (!sourceBox || !approachBox || !groupBox) {
+        throw new Error("dockviewMouseDragPanelToVerticalEdgeAnchor: source or target boundingBox is null");
     }
 
     const srcX = sourceBox.x + sourceBox.width / 2;
     const srcY = sourceBox.y + sourceBox.height / 2;
-    const targetX = headerBox.x + headerBox.width / 2;
-    const targetY = headerBox.y + Math.min(Math.max(headerBox.height * 0.08, 2), 8);
+    const targetX = approachBox.x + approachBox.width / 2;
+    const edgeInset = Math.min(Math.max(groupBox.height * 0.03, 4), 18);
+    const targetY = edge === "top"
+        ? approachBox.y + Math.min(Math.max(approachBox.height * 0.08, 2), 8)
+        : groupBox.y + groupBox.height - edgeInset;
     const finalHoverRepeats = options.finalHoverRepeats ?? 10;
     const finalHoverDelayMs = options.finalHoverDelayMs ?? 64;
     const settleDelayMs = options.settleDelayMs ?? 560;
-    const expectedTopY = groupBox.y + Math.min(Math.max(groupBox.height * 0.03, 4), 18);
+    const expectedEdgeY = edge === "top"
+        ? groupBox.y + edgeInset
+        : groupBox.y + groupBox.height - edgeInset;
     const waypoints = [0.12, 0.28, 0.48, 0.7, 0.88, 1].map((progress) => ({
         x: srcX + (targetX - srcX) * progress,
         y: srcY + (targetY - srcY) * progress,
     }));
 
-    const resolveTopAnchorPoint = async (): Promise<{ x: number; y: number } | null> => {
-        return page.evaluate(({ expectedLeft, expectedRight, expectedTop, expectedCenterX }) => {
+    const resolveVerticalAnchorPoint = async (): Promise<{ x: number; y: number } | null> => {
+        return page.evaluate(({ expectedLeft, expectedRight, expectedEdge, expectedCenterX, edgeDirection, maxAnchorHeight }) => {
             const candidates = Array.from(
                 document.querySelectorAll<HTMLElement>(".dv-drop-target-anchor, .dv-drop-target-dropzone"),
             ).map((element) => {
@@ -277,12 +287,16 @@ async function dockviewMouseDragPanelToTopEdgeAnchor(
                     height: rect.height,
                 };
             }).filter((candidate) => {
+                const verticalMatch = edgeDirection === "top"
+                    ? candidate.top <= expectedEdge + 28 && candidate.bottom >= expectedEdge - 6
+                    : candidate.bottom >= expectedEdge - 28 && candidate.top <= expectedEdge + 6;
+                const isThinHorizontalZone = candidate.height <= maxAnchorHeight;
                 return candidate.width > 8
                     && candidate.height > 8
+                    && isThinHorizontalZone
                     && candidate.x >= expectedLeft + 12
                     && candidate.x <= expectedRight - 12
-                    && candidate.top <= expectedTop + 28
-                    && candidate.bottom >= expectedTop - 6;
+                    && verticalMatch;
             });
 
             if (candidates.length === 0) {
@@ -290,8 +304,8 @@ async function dockviewMouseDragPanelToTopEdgeAnchor(
             }
 
             candidates.sort((left, right) => {
-                const leftScore = Math.abs(left.x - expectedCenterX) + Math.abs(left.y - expectedTop) * 2;
-                const rightScore = Math.abs(right.x - expectedCenterX) + Math.abs(right.y - expectedTop) * 2;
+                const leftScore = Math.abs(left.x - expectedCenterX) + Math.abs(left.y - expectedEdge) * 2;
+                const rightScore = Math.abs(right.x - expectedCenterX) + Math.abs(right.y - expectedEdge) * 2;
                 return leftScore - rightScore;
             });
 
@@ -300,8 +314,10 @@ async function dockviewMouseDragPanelToTopEdgeAnchor(
         }, {
             expectedLeft: groupBox.x,
             expectedRight: groupBox.x + groupBox.width,
-            expectedTop: expectedTopY,
+            expectedEdge: expectedEdgeY,
             expectedCenterX: groupBox.x + groupBox.width / 2,
+            edgeDirection: edge,
+            maxAnchorHeight: Math.max(40, groupBox.height * 0.16),
         });
     };
 
@@ -320,11 +336,13 @@ async function dockviewMouseDragPanelToTopEdgeAnchor(
     for (let index = 0; index < finalHoverRepeats; index += 1) {
         const horizontalSweep = index % 3 === 0 ? -6 : index % 3 === 1 ? 0 : 6;
         const hoverX = targetX + horizontalSweep;
-        const hoverY = targetY + (index % 2 === 0 ? 0 : 2);
+        const hoverY = edge === "top"
+            ? targetY + (index % 2 === 0 ? 0 : 2)
+            : targetY - (index % 2 === 0 ? 0 : 2);
         await page.mouse.move(hoverX, hoverY, { steps: 6 });
         await page.waitForTimeout(finalHoverDelayMs);
 
-        snappedAnchorPoint = await resolveTopAnchorPoint();
+        snappedAnchorPoint = await resolveVerticalAnchorPoint();
         if (snappedAnchorPoint) {
             await page.mouse.move(snappedAnchorPoint.x, snappedAnchorPoint.y, { steps: 6 });
             await page.waitForTimeout(finalHoverDelayMs + 24);
@@ -452,45 +470,34 @@ async function runManualDragAuditScenarioWithRetry(
  * @returns 包含尝试次数与交换结果的审计摘要。
  */
 async function runBottomToTopSwapAuditWithRetry(page: Page): Promise<TopEdgeSwapAttemptResult> {
-    const attempts: TopEdgeSwapAttempt[] = IS_LINUX
-        ? [
-            {
-                targetOffset: { x: 0.5, y: 0.04 } as DockviewDragTargetOffset,
-                mouseOptions: {
-                    finalHoverRepeats: 8,
-                    finalHoverDelayMs: 56,
-                    settleDelayMs: 480,
-                },
+    const attempts: TopEdgeSwapAttempt[] = [
+        {
+            targetOffset: { x: 0.5, y: 0.04 } as DockviewDragTargetOffset,
+            mouseOptions: {
+                finalHoverRepeats: 8,
+                finalHoverDelayMs: 56,
+                settleDelayMs: 480,
             },
-            {
-                targetOffset: { x: 0.5, y: 0.02 } as DockviewDragTargetOffset,
-                mouseOptions: {
-                    finalHoverRepeats: 10,
-                    finalHoverDelayMs: 64,
-                    settleDelayMs: 560,
-                },
-                useTopAnchorSnap: true,
+        },
+        {
+            targetOffset: { x: 0.5, y: 0.02 } as DockviewDragTargetOffset,
+            mouseOptions: {
+                finalHoverRepeats: 10,
+                finalHoverDelayMs: 64,
+                settleDelayMs: 560,
             },
-            {
-                targetOffset: { x: 0.5, y: 0.015 } as DockviewDragTargetOffset,
-                mouseOptions: {
-                    finalHoverRepeats: 12,
-                    finalHoverDelayMs: 72,
-                    settleDelayMs: 620,
-                },
-                useTopAnchorSnap: true,
+            useVerticalAnchorSnap: true,
+        },
+        {
+            targetOffset: { x: 0.5, y: 0.015 } as DockviewDragTargetOffset,
+            mouseOptions: {
+                finalHoverRepeats: 12,
+                finalHoverDelayMs: 72,
+                settleDelayMs: 620,
             },
-        ]
-        : [
-            {
-                targetOffset: { x: 0.5, y: 0.04 } as DockviewDragTargetOffset,
-                mouseOptions: {
-                    finalHoverRepeats: 8,
-                    finalHoverDelayMs: 56,
-                    settleDelayMs: 480,
-                },
-            },
-        ];
+            useVerticalAnchorSnap: true,
+        },
+    ];
 
     let lastResult: TopEdgeSwapAttemptResult | null = null;
 
@@ -512,12 +519,14 @@ async function runBottomToTopSwapAuditWithRetry(page: Page): Promise<TopEdgeSwap
             .first();
 
         const audit = await runDockviewAnimationAudit(page, async () => {
-            if (attempt.useTopAnchorSnap) {
-                await dockviewMouseDragPanelToTopEdgeAnchor(
+            if (attempt.useVerticalAnchorSnap) {
+                const approachTarget = attempt.approachTarget === "group" ? targetGroup : targetHeader;
+                await dockviewMouseDragPanelToVerticalEdgeAnchor(
                     page,
                     sourceTab,
-                    targetHeader,
+                    approachTarget,
                     targetGroup,
+                    "top",
                     attempt.mouseOptions,
                 );
                 return;
@@ -567,6 +576,261 @@ async function runBottomToTopSwapAuditWithRetry(page: Page): Promise<TopEdgeSwap
 
     if (!lastResult) {
         throw new Error("runBottomToTopSwapAuditWithRetry: no attempts executed");
+    }
+
+    return lastResult;
+}
+
+/**
+ * @function runHomeToBottomSwapAuditWithRetry
+ * @description 对底部交换场景执行 Linux 专用受限重试，并在后续尝试中吸附到底部 drop anchor。
+ * @param page Playwright 页面对象。
+ * @returns 包含尝试次数的审计摘要。
+ */
+async function runHomeToBottomSwapAuditWithRetry(page: Page): Promise<ManualDragRetryResult> {
+    const attempts: TopEdgeSwapAttempt[] = IS_LINUX
+        ? [
+            {
+                targetOffset: { x: 0.5, y: 0.92 },
+                mouseOptions: {
+                    finalHoverRepeats: 6,
+                    finalHoverDelayMs: 44,
+                    settleDelayMs: 420,
+                },
+            },
+            {
+                targetOffset: { x: 0.5, y: 0.94 },
+                mouseOptions: {
+                    finalHoverRepeats: 10,
+                    finalHoverDelayMs: 64,
+                    settleDelayMs: 560,
+                },
+                useVerticalAnchorSnap: true,
+                approachTarget: "group",
+            },
+            {
+                targetOffset: { x: 0.5, y: 0.96 },
+                mouseOptions: {
+                    finalHoverRepeats: 12,
+                    finalHoverDelayMs: 72,
+                    settleDelayMs: 620,
+                },
+                useVerticalAnchorSnap: true,
+                approachTarget: "group",
+            },
+        ]
+        : [
+            {
+                targetOffset: { x: 0.5, y: 0.92 },
+                mouseOptions: {
+                    finalHoverRepeats: 6,
+                    finalHoverDelayMs: 44,
+                    settleDelayMs: 420,
+                },
+            },
+        ];
+
+    let lastResult: ManualDragRetryResult | null = null;
+
+    for (const [index, attempt] of attempts.entries()) {
+        await waitForDockviewReady(page);
+        await openMockSplitTab(page, {
+            id: "manual-bottom",
+            title: "Manual Bottom",
+            component: "split-demo",
+            position: "bottom",
+        });
+        await waitForDockviewAnimationsToSettle(page);
+
+        const beforeGroups = await readSortedGroups(page);
+        const sourceTab = page.locator(".dv-tab", { hasText: "首页" }).first();
+        const targetGroup = getGroupByTabLabel(page, "Manual Bottom");
+
+        const audit = await runDockviewAnimationAudit(page, async () => {
+            if (attempt.useVerticalAnchorSnap) {
+                await dockviewMouseDragPanelToVerticalEdgeAnchor(
+                    page,
+                    sourceTab,
+                    targetGroup,
+                    targetGroup,
+                    "bottom",
+                    attempt.mouseOptions,
+                );
+                return;
+            }
+
+            await dockviewMouseDragPanel(
+                page,
+                sourceTab,
+                targetGroup,
+                attempt.targetOffset,
+                attempt.mouseOptions,
+            );
+        }, 1200);
+
+        const afterGroups = await readSortedGroups(page);
+        const result: ManualDragRetryResult = {
+            audit,
+            beforeGroups,
+            afterGroups,
+            layoutChanged: createLayoutSignature(beforeGroups) !== createLayoutSignature(afterGroups),
+            attempt: index + 1,
+        };
+        lastResult = result;
+
+        if (result.audit.observations.some((item) => item.phase === "capture" && item.source === "drag")) {
+            return result;
+        }
+
+        console.warn("[dockview-animation-audit-retry]", {
+            scenario: "manual-home-to-bottom-of-bottom",
+            attempt: index + 1,
+            didPlay: audit.didPlay,
+            lastPlayStatus: audit.lastPlayStatus,
+            layoutChanged: result.layoutChanged,
+            groups: afterGroups.map((group) => ({
+                tabLabels: group.tabLabels,
+                left: Math.round(group.left),
+                top: Math.round(group.top),
+            })),
+        });
+    }
+
+    if (!lastResult) {
+        throw new Error("runHomeToBottomSwapAuditWithRetry: no attempts executed");
+    }
+
+    return lastResult;
+}
+
+/**
+ * @function runNestedRightTopToBottomOfLeftColumnAuditWithRetry
+ * @description 对嵌套右上到左列底边场景执行 Linux 专用受限重试，并在后续尝试中吸附到底部 drop anchor。
+ * @param page Playwright 页面对象。
+ * @returns 包含尝试次数的审计摘要。
+ */
+async function runNestedRightTopToBottomOfLeftColumnAuditWithRetry(page: Page): Promise<ManualDragRetryResult> {
+    const setupScenario = async (currentPage: Page): Promise<void> => {
+        await openMockSplitTab(currentPage, {
+            id: "nested-right-base",
+            title: "Nested Right Base",
+            component: "split-demo",
+            position: "right",
+        });
+        await waitForDockviewAnimationsToSettle(currentPage);
+        await activateMockTab(currentPage, "nested-right-base");
+        await openMockSplitTab(currentPage, {
+            id: "nested-bottom-right",
+            title: "Nested Bottom Right",
+            component: "split-demo",
+            position: "bottom",
+        });
+    };
+
+    const attempts = IS_LINUX
+        ? [
+            {
+                mouseOptions: {
+                    finalHoverRepeats: 6,
+                    finalHoverDelayMs: 44,
+                    settleDelayMs: 420,
+                },
+            },
+            {
+                mouseOptions: {
+                    finalHoverRepeats: 10,
+                    finalHoverDelayMs: 64,
+                    settleDelayMs: 560,
+                },
+                settleMs: 1200,
+            },
+            {
+                mouseOptions: {
+                    finalHoverRepeats: 12,
+                    finalHoverDelayMs: 72,
+                    settleDelayMs: 620,
+                },
+                settleMs: 1260,
+            },
+        ]
+        : [
+            {
+                mouseOptions: {
+                    finalHoverRepeats: 6,
+                    finalHoverDelayMs: 44,
+                    settleDelayMs: 420,
+                },
+            },
+        ];
+
+    let lastResult: ManualDragRetryResult | null = null;
+
+    for (const [index, attempt] of attempts.entries()) {
+        await waitForDockviewReady(page);
+        await setupScenario(page);
+        await waitForDockviewAnimationsToSettle(page);
+
+        const beforeGroups = await readSortedGroups(page);
+        const sourceTab = page.locator(".dv-tab", { hasText: "Nested Right Base" }).first();
+        const targetGroup = getGroupByTabLabel(page, "首页");
+
+        const audit = await runDockviewAnimationAudit(page, async () => {
+            if (index > 0 && IS_LINUX) {
+                await dockviewMouseDragPanelToVerticalEdgeAnchor(
+                    page,
+                    sourceTab,
+                    targetGroup,
+                    targetGroup,
+                    "bottom",
+                    attempt.mouseOptions ?? {},
+                );
+                return;
+            }
+
+            await dockviewMouseDragPanel(
+                page,
+                sourceTab,
+                targetGroup,
+                { x: 0.5, y: 0.92 },
+                attempt.mouseOptions,
+            );
+        }, attempt.settleMs ?? 1100);
+
+        const afterGroups = await readSortedGroups(page);
+        const result: ManualDragRetryResult = {
+            audit,
+            beforeGroups,
+            afterGroups,
+            layoutChanged: createLayoutSignature(beforeGroups) !== createLayoutSignature(afterGroups),
+            attempt: index + 1,
+        };
+        lastResult = result;
+
+        if (
+            result.beforeGroups.length === 3
+            && result.afterGroups.length === 3
+            && result.layoutChanged
+            && result.audit.observations.some((item) => item.phase === "capture" && item.source === "drag")
+        ) {
+            return result;
+        }
+
+        console.warn("[dockview-animation-audit-retry]", {
+            scenario: "nested-right-top-to-bottom-of-left-column",
+            attempt: index + 1,
+            didPlay: audit.didPlay,
+            lastPlayStatus: audit.lastPlayStatus,
+            layoutChanged: result.layoutChanged,
+            groups: afterGroups.map((group) => ({
+                tabLabels: group.tabLabels,
+                left: Math.round(group.left),
+                top: Math.round(group.top),
+            })),
+        });
+    }
+
+    if (!lastResult) {
+        throw new Error("runNestedRightTopToBottomOfLeftColumnAuditWithRetry: no attempts executed");
     }
 
     return lastResult;
@@ -901,22 +1165,7 @@ test.describe("Dockview split animation audit", () => {
     });
 
     test("manual drag audit: home tab to bottom edge of bottom group should expose reverse vertical swap", async ({ page }) => {
-        const result = await runManualDragAuditScenario(page, {
-            scenario: "manual-home-to-bottom-of-bottom",
-            setup: async (currentPage) => {
-                await openMockSplitTab(currentPage, {
-                    id: "manual-bottom",
-                    title: "Manual Bottom",
-                    component: "split-demo",
-                    position: "bottom",
-                });
-            },
-            sourceLabel: "首页",
-            targetLabel: "Manual Bottom",
-            targetOffset: { x: 0.5, y: 0.92 },
-            interactionMode: "mouse",
-            settleMs: 1100,
-        });
+        const result = await runHomeToBottomSwapAuditWithRetry(page);
 
         const homeGroup = findGroupByTabLabel(result.afterGroups, "首页");
         const bottomGroup = findGroupByTabLabel(result.afterGroups, "Manual Bottom");
@@ -932,6 +1181,7 @@ test.describe("Dockview split animation audit", () => {
             })),
         }, {
             swapHappened,
+            attempt: result.attempt,
             beforeVertical: isVerticalLayout(result.beforeGroups),
             afterVertical: isVerticalLayout(result.afterGroups),
         });
@@ -1015,57 +1265,7 @@ test.describe("Dockview split animation audit", () => {
     });
 
     test("manual drag audit: nested right-top tab to bottom edge of left column", async ({ page }) => {
-        const result = await runManualDragAuditScenarioWithRetry(
-            page,
-            {
-            scenario: "nested-right-top-to-bottom-of-left-column",
-            setup: async (currentPage) => {
-                await openMockSplitTab(currentPage, {
-                    id: "nested-right-base",
-                    title: "Nested Right Base",
-                    component: "split-demo",
-                    position: "right",
-                });
-                await waitForDockviewAnimationsToSettle(currentPage);
-                await activateMockTab(currentPage, "nested-right-base");
-                await openMockSplitTab(currentPage, {
-                    id: "nested-bottom-right",
-                    title: "Nested Bottom Right",
-                    component: "split-demo",
-                    position: "bottom",
-                });
-            },
-            sourceLabel: "Nested Right Base",
-            targetLabel: "首页",
-            targetOffset: { x: 0.5, y: 0.92 },
-            interactionMode: "mouse",
-            settleMs: 1100,
-            },
-            [
-                {
-                    mouseOptions: {
-                        finalHoverRepeats: 6,
-                        finalHoverDelayMs: 44,
-                        settleDelayMs: 420,
-                    },
-                },
-                {
-                    targetOffset: { x: 0.5, y: 0.9 },
-                    mouseOptions: {
-                        finalHoverRepeats: 8,
-                        finalHoverDelayMs: 56,
-                        settleDelayMs: 520,
-                    },
-                    settleMs: 1200,
-                },
-            ],
-            (currentResult) => {
-                return currentResult.beforeGroups.length === 3
-                    && currentResult.afterGroups.length === 3
-                    && currentResult.layoutChanged
-                    && currentResult.audit.observations.some((item) => item.phase === "capture" && item.source === "drag");
-            },
-        );
+        const result = await runNestedRightTopToBottomOfLeftColumnAuditWithRetry(page);
 
         logAuditResult("nested-right-top-to-bottom-of-left-column", {
             ...result.audit,
