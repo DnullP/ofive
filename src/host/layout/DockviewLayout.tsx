@@ -4106,6 +4106,8 @@ export function DockviewLayout({
             return;
         }
 
+        const windowTarget = window;
+
         const clearPendingDragCleanupTimer = (): void => {
             if (dockviewDragAnimationCleanupTimerRef.current === null) {
                 return;
@@ -4253,6 +4255,10 @@ export function DockviewLayout({
         host.addEventListener("drop", handleDropCapture, { capture: true });
         host.addEventListener("dragend", handleDragEndCapture, { capture: true });
         host.addEventListener("pointerup", handlePointerUpCapture, { capture: true });
+        windowTarget.addEventListener("pointermove", handlePointerMoveCapture, { capture: true });
+        windowTarget.addEventListener("pointerup", handlePointerUpCapture, { capture: true });
+        windowTarget.addEventListener("dragend", handleDragEndCapture, { capture: true });
+        windowTarget.addEventListener("drop", handleDropCapture, { capture: true });
 
         return () => {
             host.removeEventListener("pointerdown", handlePointerDownCapture, { capture: true });
@@ -4261,6 +4267,10 @@ export function DockviewLayout({
             host.removeEventListener("drop", handleDropCapture, { capture: true });
             host.removeEventListener("dragend", handleDragEndCapture, { capture: true });
             host.removeEventListener("pointerup", handlePointerUpCapture, { capture: true });
+            windowTarget.removeEventListener("pointermove", handlePointerMoveCapture, { capture: true });
+            windowTarget.removeEventListener("pointerup", handlePointerUpCapture, { capture: true });
+            windowTarget.removeEventListener("dragend", handleDragEndCapture, { capture: true });
+            windowTarget.removeEventListener("drop", handleDropCapture, { capture: true });
             dockviewTabDragInProgressRef.current = false;
             clearPendingPointerDrag();
             clearPendingDragCleanupTimer();
@@ -4728,6 +4738,15 @@ export function DockviewLayout({
             handleDockviewUnhandledDragOver(dragEvent);
         });
         dockviewLayoutDisposeRef.current = api.onDidLayoutChange(() => {
+            const pendingAnimation = pendingDockviewLayoutAnimationRef.current;
+            if (pendingAnimation?.source === "drag" && pendingAnimation.releasedAt === null) {
+                pendingDockviewLayoutAnimationRef.current = markPendingDockviewLayoutAnimationReleased(
+                    pendingAnimation,
+                    pendingAnimation.id,
+                    Date.now(),
+                );
+            }
+
             const pendingAnimationId = pendingDockviewLayoutAnimationRef.current?.id;
             recordDockviewTimelineEntry("layout-change", {
                 pendingAnimationId: pendingAnimationId ?? null,
