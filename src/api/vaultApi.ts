@@ -16,12 +16,7 @@ import YAML from "yaml";
 import i18n from "../i18n";
 import { detectExcludedLineRanges, isLineExcluded } from "../utils/markdownBlockDetector";
 import { parseTaskBoardLine } from "../utils/taskSyntax";
-import browserMockCodeBlockTest from "/test-resources/notes/code-block-test.md?raw";
-import browserMockGuide from "/test-resources/notes/guide.md?raw";
-import browserMockNetworkSegment from "/test-resources/notes/network-segment.md?raw";
-import browserMockNote1 from "/test-resources/notes/note1.md?raw";
-import browserMockNote2 from "/test-resources/notes/note2.md?raw";
-import browserMockTaskBoardE2E from "/test-resources/notes/task-board-e2e.md?raw";
+import { loadBrowserMockMarkdownContents } from "./vaultBrowserMockFixtures";
 
 /**
  * @constant VAULT_FS_EVENT_NAME
@@ -408,6 +403,20 @@ import {
 
 let browserFallbackVaultPath = "";
 const BROWSER_FALLBACK_VAULT_CONFIG_STORAGE_KEY_PREFIX = "ofive:browser-fallback:vault-config:";
+let browserMockMarkdownContentsPromise: Promise<Record<string, string>> | null = null;
+
+/**
+ * @function getBrowserMockMarkdownContents
+ * @description 按需加载浏览器 mock Markdown 内容，避免在非浏览器运行时导入 Vite 专属原始资源。
+ * @returns Markdown 相对路径到内容的映射。
+ */
+async function getBrowserMockMarkdownContents(): Promise<Record<string, string>> {
+    if (!browserMockMarkdownContentsPromise) {
+        browserMockMarkdownContentsPromise = loadBrowserMockMarkdownContents();
+    }
+
+    return browserMockMarkdownContentsPromise;
+}
 
 function getBrowserFallbackVaultConfigStorageKey(vaultPath: string): string {
     return `${BROWSER_FALLBACK_VAULT_CONFIG_STORAGE_KEY_PREFIX}${vaultPath}`;
@@ -501,69 +510,13 @@ export function isSelfTriggeredVaultConfigEvent(payload: VaultConfigEventPayload
 }
 
 /**
- * @constant BROWSER_MOCK_NOTES_RAW_MODULES
- * @description 浏览器回退模式下，通过 Vite glob 从测试 notes 目录收集 Markdown 原文。
- */
-const BROWSER_MOCK_NOTES_RAW_MODULES: Record<string, string> = (() => {
-    const staticFallbackModules: Record<string, string> = {
-        "/test-resources/notes/code-block-test.md": browserMockCodeBlockTest,
-        "/test-resources/notes/guide.md": browserMockGuide,
-        "/test-resources/notes/network-segment.md": browserMockNetworkSegment,
-        "/test-resources/notes/note1.md": browserMockNote1,
-        "/test-resources/notes/note2.md": browserMockNote2,
-        "/test-resources/notes/task-board-e2e.md": browserMockTaskBoardE2E,
-    };
-
-    const viteImportMeta = import.meta as ImportMeta & {
-        glob?: (
-            pattern: string,
-            options: {
-                query: string;
-                import: string;
-                eager: boolean;
-            },
-        ) => Record<string, string>;
-    };
-
-    if (typeof viteImportMeta.glob !== "function") {
-        return staticFallbackModules;
-    }
-
-    const globbedModules = viteImportMeta.glob("/test-resources/notes/**/*.{md,markdown}", {
-        query: "?raw",
-        import: "default",
-        eager: true,
-    }) as Record<string, string>;
-
-    return Object.keys(globbedModules).length > 0 ? globbedModules : staticFallbackModules;
-})();
-
-/**
- * @constant BROWSER_MOCK_MARKDOWN_CONTENTS
- * @description 浏览器回退模式下的 Markdown 样本：启动时根据 test-resources/notes 自动同步。
- */
-const BROWSER_MOCK_MARKDOWN_CONTENTS: Record<string, string> = Object.entries(
-    BROWSER_MOCK_NOTES_RAW_MODULES,
-).reduce<Record<string, string>>((accumulator, [sourcePath, content]) => {
-    const normalizedSourcePath = sourcePath.replace(/\\/g, "/");
-    const marker = "/test-resources/notes/";
-    const markerIndex = normalizedSourcePath.lastIndexOf(marker);
-    if (markerIndex < 0) {
-        return accumulator;
-    }
-
-    const noteRelativePath = normalizedSourcePath.slice(markerIndex + 1);
-    accumulator[noteRelativePath] = content;
-    return accumulator;
-}, {});
-
-/**
  * @function buildBrowserFallbackTreeEntries
  * @description 基于浏览器回退 mock Markdown 路径集合构建文件树条目。
+ * @param markdownContents 浏览器 mock Markdown 内容映射。
  * @returns 浏览器回退目录树条目。
  */
-function buildBrowserFallbackTreeEntries(): VaultEntry[] {
-    const markdownPaths = Object.keys(BROWSER_MOCK_MARKDOWN_CONTENTS)
+function buildBrowserFallbackTreeEntries(markdownContents: Record<string, string>): VaultEntry[] {
+    const markdownPaths = Object.keys(markdownContents)
         .map((path) => normalizeSlashPath(path))
         .sort((left, right) => left.localeCompare(right));
 
@@ -709,11 +662,13 @@ function toBrowserFallbackFrontmatterMatchValues(value: unknown): string[] {
 /**
  * @function buildBrowserFallbackFrontmatterQuery
  * @description 在浏览器回退模式下查询具有指定 frontmatter 字段的 Markdown 笔记。
+ * @param markdownContents 浏览器 mock Markdown 内容映射。
  * @param fieldName 查询字段名。
  * @param fieldValue 可选字段值过滤。
  * @returns 查询响应。
  */
 function buildBrowserFallbackFrontmatterQuery(
+    markdownContents: Record<string, string>,
     fieldName: string,
     fieldValue?: string,
 ): FrontmatterQueryResponse {
@@ -721,7 +676,7 @@ function buildBrowserFallbackFrontmatterQuery(
     const normalizedFieldValue = fieldValue?.trim();
     const matches: FrontmatterQueryMatchItem[] = [];
 
-    Object.entries(BROWSER_MOCK_MARKDOWN_CONTENTS).forEach(([relativePath, content]) => {
+    Object.entries(markdownContents).forEach(([relativePath, content]) => {
         const frontmatterText = extractBrowserFallbackFrontmatterText(content);
         if (!frontmatterText) {
             return;
@@ -784,10 +739,11 @@ function buildBrowserFallbackFrontmatterQuery(
 /**
  * @function buildBrowserMockMarkdownGraph
  * @description 浏览器回退模式下从 mock Markdown 文本构造图谱结构。
+ * @param markdownContents 浏览器 mock Markdown 内容映射。
  * @returns mock 图谱结构。
  */
-function buildBrowserMockMarkdownGraph(): VaultMarkdownGraphResponse {
-    const paths = Object.keys(BROWSER_MOCK_MARKDOWN_CONTENTS);
+function buildBrowserMockMarkdownGraph(markdownContents: Record<string, string>): VaultMarkdownGraphResponse {
+    const paths = Object.keys(markdownContents);
     const nodes: VaultMarkdownGraphNode[] = paths.map((path) => ({
         path,
         title: path.split("/").pop()?.replace(/\.(md|markdown)$/i, "") ?? path,
@@ -797,7 +753,7 @@ function buildBrowserMockMarkdownGraph(): VaultMarkdownGraphResponse {
     const edgeWeightByKey = new Map<string, number>();
 
     for (const sourcePath of paths) {
-        const content = BROWSER_MOCK_MARKDOWN_CONTENTS[sourcePath] ?? "";
+        const content = markdownContents[sourcePath] ?? "";
 
         const wikiMatches = Array.from(content.matchAll(/\[\[([^\]]+)\]\]/g));
         for (const match of wikiMatches) {
@@ -883,11 +839,15 @@ function getBrowserMockMarkdownGraphOverride(): VaultMarkdownGraphResponse | nul
  * @function extractBrowserFallbackOutline
  * @description 从浏览器回退模式的 Markdown 内容中提取标题列表。
  *   语义与后端 outline 接口保持一致：跳过 frontmatter、代码块、LaTeX 块中的伪标题。
+ * @param markdownContents 浏览器 mock Markdown 内容映射。
  * @param relativePath 目标文件相对路径。
  * @returns 大纲响应。
  */
-function extractBrowserFallbackOutline(relativePath: string): OutlineResponse {
-    const content = BROWSER_MOCK_MARKDOWN_CONTENTS[relativePath] ?? "";
+function extractBrowserFallbackOutline(
+    markdownContents: Record<string, string>,
+    relativePath: string,
+): OutlineResponse {
+    const content = markdownContents[relativePath] ?? "";
     const lines = content.split("\n");
     const excludedRanges = detectExcludedLineRanges(content);
     const headings: OutlineHeading[] = [];
@@ -925,14 +885,18 @@ function extractBrowserFallbackOutline(relativePath: string): OutlineResponse {
 /**
  * @function buildBrowserFallbackBacklinks
  * @description 在浏览器回退模式下，根据 mock Markdown 文本构建指定文件的反向链接列表。
+ * @param markdownContents 浏览器 mock Markdown 内容映射。
  * @param relativePath 目标文件相对路径。
  * @returns 反向链接列表。
  */
-function buildBrowserFallbackBacklinks(relativePath: string): BacklinkItem[] {
+function buildBrowserFallbackBacklinks(
+    markdownContents: Record<string, string>,
+    relativePath: string,
+): BacklinkItem[] {
     const normalizedTargetPath = normalizeSlashPath(relativePath);
     const results: BacklinkItem[] = [];
 
-    for (const [sourcePath, content] of Object.entries(BROWSER_MOCK_MARKDOWN_CONTENTS)) {
+    for (const [sourcePath, content] of Object.entries(markdownContents)) {
         if (normalizeSlashPath(sourcePath) === normalizedTargetPath) {
             continue;
         }
@@ -1034,12 +998,13 @@ function scoreBrowserFallbackQuickSwitch(relativePath: string, query: string): n
 /**
  * @function buildBrowserFallbackTaskItems
  * @description 浏览器 mock 环境下，从内置 Markdown 内容提取任务条目。
+ * @param markdownContents 浏览器 mock Markdown 内容映射。
  * @returns mock 任务列表。
  */
-function buildBrowserFallbackTaskItems(): VaultTaskItem[] {
+function buildBrowserFallbackTaskItems(markdownContents: Record<string, string>): VaultTaskItem[] {
     const items: VaultTaskItem[] = [];
 
-    Object.entries(BROWSER_MOCK_MARKDOWN_CONTENTS).forEach(([relativePath, content]) => {
+    Object.entries(markdownContents).forEach(([relativePath, content]) => {
         const excludedRanges = detectExcludedLineRanges(content);
         const lines = content.split(/\r?\n/);
         const title = relativePath.split("/").pop()?.replace(/\.(md|markdown)$/i, "") ?? relativePath;
@@ -1356,9 +1321,10 @@ export async function setCurrentVault(vaultPath: string): Promise<{ vaultPath: s
  */
 export async function getCurrentVaultTree(): Promise<VaultTreeResponse> {
     if (!isTauriRuntime()) {
+        const markdownContents = await getBrowserMockMarkdownContents();
         return {
             vaultPath: browserFallbackVaultPath,
-            entries: buildBrowserFallbackTreeEntries(),
+            entries: buildBrowserFallbackTreeEntries(markdownContents),
         };
     }
 
@@ -1373,7 +1339,8 @@ export async function getCurrentVaultTree(): Promise<VaultTreeResponse> {
  */
 export async function readVaultMarkdownFile(relativePath: string): Promise<ReadMarkdownResponse> {
     if (!isTauriRuntime()) {
-        const mockContent = BROWSER_MOCK_MARKDOWN_CONTENTS[relativePath] ?? "";
+        const markdownContents = await getBrowserMockMarkdownContents();
+        const mockContent = markdownContents[relativePath] ?? "";
 
         return {
             relativePath,
@@ -1414,12 +1381,13 @@ export async function resolveWikiLinkTarget(
     target: string,
 ): Promise<ResolveWikiLinkTargetResponse | null> {
     if (!isTauriRuntime()) {
+        const markdownContents = await getBrowserMockMarkdownContents();
         const normalizedTarget = normalizeSlashPath(target.trim());
         if (!normalizedTarget) {
             return null;
         }
 
-        const allMockPaths = Object.keys(BROWSER_MOCK_MARKDOWN_CONTENTS);
+        const allMockPaths = Object.keys(markdownContents);
         const stem = normalizedTarget
             .split("/")
             .pop()
@@ -1505,7 +1473,8 @@ export async function getCurrentVaultMarkdownGraph(): Promise<VaultMarkdownGraph
         }
 
         console.info("[vault-api] getCurrentVaultMarkdownGraph fallback to browser mock data");
-        return buildBrowserMockMarkdownGraph();
+        const markdownContents = await getBrowserMockMarkdownContents();
+        return buildBrowserMockMarkdownGraph(markdownContents);
     }
 
     console.info("[vault-api] getCurrentVaultMarkdownGraph invoke start");
@@ -1531,7 +1500,8 @@ export async function searchVaultMarkdownFiles(
     const normalizedLimit = Math.max(1, Math.min(200, Number.isFinite(limit) ? Math.floor(limit) : 80));
 
     if (!isTauriRuntime()) {
-        const fallbackItems = Object.keys(BROWSER_MOCK_MARKDOWN_CONTENTS)
+        const markdownContents = await getBrowserMockMarkdownContents();
+        const fallbackItems = Object.keys(markdownContents)
             .map((relativePath) => {
                 const score = scoreBrowserFallbackQuickSwitch(relativePath, query);
                 if (score === null) {
@@ -1589,10 +1559,11 @@ export async function searchVaultMarkdown(
     const normalizedTag = options?.tag?.trim() ? options.tag.trim() : undefined;
 
     if (!isTauriRuntime()) {
+        const markdownContents = await getBrowserMockMarkdownContents();
         const fallbackItems: VaultSearchMatchItem[] = [];
         const expectedTag = normalizedTag ? normalizeBrowserFallbackTag(normalizedTag) : null;
 
-        Object.entries(BROWSER_MOCK_MARKDOWN_CONTENTS).forEach(([relativePath, content]) => {
+        Object.entries(markdownContents).forEach(([relativePath, content]) => {
             const tags = extractBrowserFallbackSearchTags(content);
             const matchedTag = expectedTag ? tags.includes(expectedTag) : false;
             if (expectedTag && !matchedTag) {
@@ -1690,8 +1661,9 @@ export async function suggestWikiLinkTargets(
     const normalizedLimit = Math.max(1, Math.min(100, Number.isFinite(limit) ? Math.floor(limit) : 20));
 
     if (!isTauriRuntime()) {
+        const markdownContents = await getBrowserMockMarkdownContents();
         // 浏览器回退：复用 mock 数据
-        const fallbackItems = Object.keys(BROWSER_MOCK_MARKDOWN_CONTENTS)
+        const fallbackItems = Object.keys(markdownContents)
             .map((relativePath) => {
                 const score = query.trim()
                     ? scoreBrowserFallbackQuickSwitch(relativePath, query) ?? undefined
@@ -1739,7 +1711,8 @@ export async function suggestWikiLinkTargets(
  */
 export async function getBacklinksForFile(relativePath: string): Promise<BacklinkItem[]> {
     if (!isTauriRuntime()) {
-        return buildBrowserFallbackBacklinks(relativePath);
+        const markdownContents = await getBrowserMockMarkdownContents();
+        return buildBrowserFallbackBacklinks(markdownContents, relativePath);
     }
 
     return invoke<BacklinkItem[]>("get_backlinks_for_file", {
@@ -1755,7 +1728,8 @@ export async function getBacklinksForFile(relativePath: string): Promise<Backlin
  */
 export async function getVaultMarkdownOutline(relativePath: string): Promise<OutlineResponse> {
     if (!isTauriRuntime()) {
-        return extractBrowserFallbackOutline(relativePath);
+        const markdownContents = await getBrowserMockMarkdownContents();
+        return extractBrowserFallbackOutline(markdownContents, relativePath);
     }
 
     return invoke<OutlineResponse>("get_vault_markdown_outline", {
@@ -1775,7 +1749,8 @@ export async function queryVaultMarkdownFrontmatter(
     fieldValue?: string,
 ): Promise<FrontmatterQueryResponse> {
     if (!isTauriRuntime()) {
-        return buildBrowserFallbackFrontmatterQuery(fieldName, fieldValue);
+        const markdownContents = await getBrowserMockMarkdownContents();
+        return buildBrowserFallbackFrontmatterQuery(markdownContents, fieldName, fieldValue);
     }
 
     console.info("[vault-api] queryVaultMarkdownFrontmatter invoke start", {
@@ -1803,7 +1778,8 @@ export async function queryVaultMarkdownFrontmatter(
  */
 export async function queryVaultTasks(): Promise<VaultTaskItem[]> {
     if (!isTauriRuntime()) {
-        return buildBrowserFallbackTaskItems();
+        const markdownContents = await getBrowserMockMarkdownContents();
+        return buildBrowserFallbackTaskItems(markdownContents);
     }
 
     console.info("[vault-api] queryVaultTasks invoke start");
@@ -1826,7 +1802,8 @@ export async function createVaultMarkdownFile(
     content?: string,
 ): Promise<WriteMarkdownResponse> {
     if (!isTauriRuntime()) {
-        BROWSER_MOCK_MARKDOWN_CONTENTS[normalizeSlashPath(relativePath)] = content ?? "";
+        const markdownContents = await getBrowserMockMarkdownContents();
+        markdownContents[normalizeSlashPath(relativePath)] = content ?? "";
         return {
             relativePath,
             created: true,
@@ -1912,7 +1889,8 @@ export async function saveVaultMarkdownFile(
     content: string,
 ): Promise<WriteMarkdownResponse> {
     if (!isTauriRuntime()) {
-        BROWSER_MOCK_MARKDOWN_CONTENTS[normalizeSlashPath(relativePath)] = content;
+        const markdownContents = await getBrowserMockMarkdownContents();
+        markdownContents[normalizeSlashPath(relativePath)] = content;
         return {
             relativePath,
             created: false,
@@ -1981,19 +1959,20 @@ export async function moveVaultMarkdownFileToDirectory(
         : sourceFileName;
 
     if (!isTauriRuntime()) {
-        const sourceContent = BROWSER_MOCK_MARKDOWN_CONTENTS[normalizedFromPath];
+        const markdownContents = await getBrowserMockMarkdownContents();
+        const sourceContent = markdownContents[normalizedFromPath];
         if (typeof sourceContent !== "string") {
             throw new Error(i18n.t("editor.sourceNotExist"));
         }
 
-        const existedTarget = BROWSER_MOCK_MARKDOWN_CONTENTS[targetRelativePath];
+        const existedTarget = markdownContents[targetRelativePath];
         if (typeof existedTarget === "string" && targetRelativePath !== normalizedFromPath) {
             throw new Error(i18n.t("editor.targetExists"));
         }
 
         if (targetRelativePath !== normalizedFromPath) {
-            delete BROWSER_MOCK_MARKDOWN_CONTENTS[normalizedFromPath];
-            BROWSER_MOCK_MARKDOWN_CONTENTS[targetRelativePath] = sourceContent;
+            delete markdownContents[normalizedFromPath];
+            markdownContents[targetRelativePath] = sourceContent;
         }
 
         return {
