@@ -297,6 +297,7 @@ export async function dockviewMouseDragPanel(
 
     await page.mouse.move(tgtX, tgtY, { steps: 4 });
     await page.waitForTimeout(finalHoverDelayMs);
+
     await page.mouse.up();
     await page.waitForTimeout(settleDelayMs);
 }

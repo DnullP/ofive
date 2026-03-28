@@ -560,9 +560,9 @@ test.describe("Dockview split animation audit", () => {
                 targetHeader,
                 { x: 0.5, y: 0.04 },
                 {
-                    finalHoverRepeats: 6,
-                    finalHoverDelayMs: 44,
-                    settleDelayMs: 420,
+                    finalHoverRepeats: 8,
+                    finalHoverDelayMs: 56,
+                    settleDelayMs: 480,
                 },
             );
         }, 1100);
