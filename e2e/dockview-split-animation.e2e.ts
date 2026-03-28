@@ -206,6 +206,12 @@ interface TopEdgeSwapAttemptResult extends ManualDragAuditSummary {
     attempt: number;
 }
 
+interface TopEdgeSwapAttempt {
+    targetOffset: DockviewDragTargetOffset;
+    mouseOptions: DockviewMouseDragOptions;
+    useTopAnchorSnap?: boolean;
+}
+
 interface ManualDragRetryAttempt {
     targetOffset?: DockviewDragTargetOffset;
     mouseOptions?: DockviewMouseDragOptions;
@@ -214,6 +220,125 @@ interface ManualDragRetryAttempt {
 
 interface ManualDragRetryResult extends ManualDragAuditSummary {
     attempt: number;
+}
+
+/**
+ * @function dockviewMouseDragPanelToTopEdgeAnchor
+ * @description 在顶部交换场景中，先把鼠标拖到目标 header 顶边，再在可见时吸附到 Dockview 顶部 drop anchor 中心点释放。
+ * @param page Playwright 页面对象。
+ * @param source 拖拽源 tab。
+ * @param targetHeader 目标 header。
+ * @param targetGroup 目标 group。
+ * @param options 鼠标拖拽节奏控制参数。
+ */
+async function dockviewMouseDragPanelToTopEdgeAnchor(
+    page: Page,
+    source: Locator,
+    targetHeader: Locator,
+    targetGroup: Locator,
+    options: DockviewMouseDragOptions,
+): Promise<void> {
+    await source.waitFor({ state: "visible" });
+    await targetHeader.waitFor({ state: "visible" });
+    await targetGroup.waitFor({ state: "visible" });
+
+    const sourceBox = await source.boundingBox();
+    const headerBox = await targetHeader.boundingBox();
+    const groupBox = await targetGroup.boundingBox();
+    if (!sourceBox || !headerBox || !groupBox) {
+        throw new Error("dockviewMouseDragPanelToTopEdgeAnchor: source or target boundingBox is null");
+    }
+
+    const srcX = sourceBox.x + sourceBox.width / 2;
+    const srcY = sourceBox.y + sourceBox.height / 2;
+    const targetX = headerBox.x + headerBox.width / 2;
+    const targetY = headerBox.y + Math.min(Math.max(headerBox.height * 0.08, 2), 8);
+    const finalHoverRepeats = options.finalHoverRepeats ?? 10;
+    const finalHoverDelayMs = options.finalHoverDelayMs ?? 64;
+    const settleDelayMs = options.settleDelayMs ?? 560;
+    const expectedTopY = groupBox.y + Math.min(Math.max(groupBox.height * 0.03, 4), 18);
+    const waypoints = [0.12, 0.28, 0.48, 0.7, 0.88, 1].map((progress) => ({
+        x: srcX + (targetX - srcX) * progress,
+        y: srcY + (targetY - srcY) * progress,
+    }));
+
+    const resolveTopAnchorPoint = async (): Promise<{ x: number; y: number } | null> => {
+        return page.evaluate(({ expectedLeft, expectedRight, expectedTop, expectedCenterX }) => {
+            const candidates = Array.from(
+                document.querySelectorAll<HTMLElement>(".dv-drop-target-anchor, .dv-drop-target-dropzone"),
+            ).map((element) => {
+                const rect = element.getBoundingClientRect();
+                return {
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2,
+                    top: rect.top,
+                    bottom: rect.bottom,
+                    width: rect.width,
+                    height: rect.height,
+                };
+            }).filter((candidate) => {
+                return candidate.width > 8
+                    && candidate.height > 8
+                    && candidate.x >= expectedLeft + 12
+                    && candidate.x <= expectedRight - 12
+                    && candidate.top <= expectedTop + 28
+                    && candidate.bottom >= expectedTop - 6;
+            });
+
+            if (candidates.length === 0) {
+                return null;
+            }
+
+            candidates.sort((left, right) => {
+                const leftScore = Math.abs(left.x - expectedCenterX) + Math.abs(left.y - expectedTop) * 2;
+                const rightScore = Math.abs(right.x - expectedCenterX) + Math.abs(right.y - expectedTop) * 2;
+                return leftScore - rightScore;
+            });
+
+            const best = candidates[0];
+            return best ? { x: best.x, y: best.y } : null;
+        }, {
+            expectedLeft: groupBox.x,
+            expectedRight: groupBox.x + groupBox.width,
+            expectedTop: expectedTopY,
+            expectedCenterX: groupBox.x + groupBox.width / 2,
+        });
+    };
+
+    await page.mouse.move(srcX, srcY);
+    await page.waitForTimeout(16);
+    await page.mouse.down();
+    await page.mouse.move(srcX + 8, srcY + 4, { steps: 6 });
+    await page.waitForTimeout(24);
+
+    for (const point of waypoints) {
+        await page.mouse.move(point.x, point.y, { steps: 10 });
+        await page.waitForTimeout(20);
+    }
+
+    let snappedAnchorPoint: { x: number; y: number } | null = null;
+    for (let index = 0; index < finalHoverRepeats; index += 1) {
+        const horizontalSweep = index % 3 === 0 ? -6 : index % 3 === 1 ? 0 : 6;
+        const hoverX = targetX + horizontalSweep;
+        const hoverY = targetY + (index % 2 === 0 ? 0 : 2);
+        await page.mouse.move(hoverX, hoverY, { steps: 6 });
+        await page.waitForTimeout(finalHoverDelayMs);
+
+        snappedAnchorPoint = await resolveTopAnchorPoint();
+        if (snappedAnchorPoint) {
+            await page.mouse.move(snappedAnchorPoint.x, snappedAnchorPoint.y, { steps: 6 });
+            await page.waitForTimeout(finalHoverDelayMs + 24);
+            break;
+        }
+    }
+
+    if (!snappedAnchorPoint) {
+        await page.mouse.move(targetX, targetY, { steps: 6 });
+        await page.waitForTimeout(finalHoverDelayMs);
+    }
+
+    await page.mouse.up();
+    await page.waitForTimeout(settleDelayMs);
 }
 
 /**
@@ -327,27 +452,43 @@ async function runManualDragAuditScenarioWithRetry(
  * @returns 包含尝试次数与交换结果的审计摘要。
  */
 async function runBottomToTopSwapAuditWithRetry(page: Page): Promise<TopEdgeSwapAttemptResult> {
-    const attempts = IS_LINUX
+    const attempts: TopEdgeSwapAttempt[] = IS_LINUX
         ? [
             {
                 targetOffset: { x: 0.5, y: 0.04 } as DockviewDragTargetOffset,
-                finalHoverRepeats: 8,
-                finalHoverDelayMs: 56,
-                settleDelayMs: 480,
+                mouseOptions: {
+                    finalHoverRepeats: 8,
+                    finalHoverDelayMs: 56,
+                    settleDelayMs: 480,
+                },
             },
             {
                 targetOffset: { x: 0.5, y: 0.02 } as DockviewDragTargetOffset,
-                finalHoverRepeats: 10,
-                finalHoverDelayMs: 64,
-                settleDelayMs: 560,
+                mouseOptions: {
+                    finalHoverRepeats: 10,
+                    finalHoverDelayMs: 64,
+                    settleDelayMs: 560,
+                },
+                useTopAnchorSnap: true,
+            },
+            {
+                targetOffset: { x: 0.5, y: 0.015 } as DockviewDragTargetOffset,
+                mouseOptions: {
+                    finalHoverRepeats: 12,
+                    finalHoverDelayMs: 72,
+                    settleDelayMs: 620,
+                },
+                useTopAnchorSnap: true,
             },
         ]
         : [
             {
                 targetOffset: { x: 0.5, y: 0.04 } as DockviewDragTargetOffset,
-                finalHoverRepeats: 8,
-                finalHoverDelayMs: 56,
-                settleDelayMs: 480,
+                mouseOptions: {
+                    finalHoverRepeats: 8,
+                    finalHoverDelayMs: 56,
+                    settleDelayMs: 480,
+                },
             },
         ];
 
@@ -365,21 +506,29 @@ async function runBottomToTopSwapAuditWithRetry(page: Page): Promise<TopEdgeSwap
 
         const beforeGroups = await readSortedGroups(page);
         const sourceTab = page.locator(".dv-tab", { hasText: "Manual Bottom" }).first();
+        const targetGroup = getGroupByTabLabel(page, "首页");
         const targetHeader = getGroupByTabLabel(page, "首页")
             .locator(".dv-tabs-and-actions-container")
             .first();
 
         const audit = await runDockviewAnimationAudit(page, async () => {
+            if (attempt.useTopAnchorSnap) {
+                await dockviewMouseDragPanelToTopEdgeAnchor(
+                    page,
+                    sourceTab,
+                    targetHeader,
+                    targetGroup,
+                    attempt.mouseOptions,
+                );
+                return;
+            }
+
             await dockviewMouseDragPanel(
                 page,
                 sourceTab,
                 targetHeader,
                 attempt.targetOffset,
-                {
-                    finalHoverRepeats: attempt.finalHoverRepeats,
-                    finalHoverDelayMs: attempt.finalHoverDelayMs,
-                    settleDelayMs: attempt.settleDelayMs,
-                },
+                attempt.mouseOptions,
             );
         }, 1100);
 
