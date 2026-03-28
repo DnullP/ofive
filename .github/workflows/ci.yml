@@ -61,8 +61,50 @@ jobs:
       - name: Run frontend unit tests
         run: bun run test:ci:unit
 
-  rust-tests:
-    name: Rust Tests
+  rust-tests-core:
+    name: Rust Tests Core
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.22
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run Rust core tests
+        run: bun run test:rust:core
+
+  rust-tests-sidecar:
+    name: Rust Tests Sidecar
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
@@ -108,8 +150,8 @@ jobs:
       - name: Build Go sidecar binary
         run: bun run build:sidecar
 
-      - name: Run Rust tests
-        run: bun run test:rust
+      - name: Run Rust sidecar tests
+        run: bun run test:rust:sidecar
 
   e2e-tests:
     name: Playwright E2E

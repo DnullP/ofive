@@ -21,6 +21,8 @@
     "test": "bun test",
     "test:ci:unit": "node scripts/run-unit-tests-with-summary.mjs",
     "test:rust": "node scripts/run-rust-tests-with-tauri-config.mjs",
+    "test:rust:core": "node scripts/run-rust-tests-with-tauri-config.mjs --profile core",
+    "test:rust:sidecar": "node scripts/run-rust-tests-with-tauri-config.mjs --profile sidecar",
     "test:playwright:install": "bunx playwright install --with-deps chromium",
     "test:workflow": "bun run test:go && bun run build:sidecar && bun run test && bun run test:rust && bun run test:e2e --reporter=line && bun run build",
     "test:full": "bun run test:workflow",
