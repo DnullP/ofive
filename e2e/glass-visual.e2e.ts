@@ -7,6 +7,27 @@
 
 import { expect, test } from "@playwright/test";
 
+/**
+ * @function ensureAiChatPanelVisible
+ * @description 仅在 AI 对话面板尚未展开时触发一次展开，并等待玻璃样式断言所需元素全部可见。
+ * @param page Playwright 页面对象。
+ */
+async function ensureAiChatPanelVisible(page: Parameters<typeof test>[0]["page"]): Promise<void> {
+    const aiChatPanel = page.locator(".ai-chat-panel");
+    const aiChatHeader = page.locator(".ai-chat-header");
+    const aiChatCard = page.locator(
+        ".ai-chat-welcome-card, .ai-chat-conversation-summary, .ai-chat-status",
+    ).first();
+
+    if (!(await aiChatPanel.isVisible().catch(() => false))) {
+        await page.getByTitle("AI 对话").click();
+    }
+
+    await aiChatPanel.waitFor({ state: "visible" });
+    await aiChatHeader.waitFor({ state: "visible" });
+    await aiChatCard.waitFor({ state: "visible" });
+}
+
 function parseAlpha(color: string): number {
     const match = color.match(/rgba?\(([^)]+)\)/i);
     if (!match) {
@@ -26,7 +47,7 @@ test.describe("glass visual reference", () => {
         await page.goto("/web-mock/mock-tauri-test.html");
 
         await page.getByRole("main", { name: "Dockview Main Area" }).waitFor({ state: "visible" });
-        await page.getByTitle("AI 对话").click();
+        await ensureAiChatPanelVisible(page);
 
         const styleSnapshot = await page.evaluate(() => {
             const html = document.documentElement;

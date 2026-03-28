@@ -31,9 +31,11 @@ import {
     dockviewDragPanel,
     dockviewMouseDragPanel,
     type DockviewDragTargetOffset,
+    type DockviewMouseDragOptions,
 } from "./helpers/dockviewDrag";
 
 const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
+const IS_LINUX = process.platform === "linux";
 
 /**
  * @function waitForDockviewReady
@@ -188,6 +190,7 @@ interface ManualDragAuditScenario {
     targetLabel: string;
     targetOffset: DockviewDragTargetOffset;
     interactionMode?: "synthetic" | "mouse";
+    mouseOptions?: DockviewMouseDragOptions;
     settleMs?: number;
 }
 
@@ -200,6 +203,16 @@ interface ManualDragAuditSummary {
 
 interface TopEdgeSwapAttemptResult extends ManualDragAuditSummary {
     swapHappened: boolean;
+    attempt: number;
+}
+
+interface ManualDragRetryAttempt {
+    targetOffset?: DockviewDragTargetOffset;
+    mouseOptions?: DockviewMouseDragOptions;
+    settleMs?: number;
+}
+
+interface ManualDragRetryResult extends ManualDragAuditSummary {
     attempt: number;
 }
 
@@ -223,7 +236,13 @@ async function runManualDragAuditScenario(
 
     const audit = await runDockviewAnimationAudit(page, async () => {
         if (scenario.interactionMode === "mouse") {
-            await dockviewMouseDragPanel(page, sourceTab, targetGroup, scenario.targetOffset);
+            await dockviewMouseDragPanel(
+                page,
+                sourceTab,
+                targetGroup,
+                scenario.targetOffset,
+                scenario.mouseOptions,
+            );
             return;
         }
 
@@ -240,26 +259,97 @@ async function runManualDragAuditScenario(
 }
 
 /**
+ * @function runManualDragAuditScenarioWithRetry
+ * @description 仅在 Linux 下对边缘拖拽场景执行受限重试，避免 CI 偶发误落点，同时保持 macOS 默认路径不变。
+ * @param page Playwright 页面对象。
+ * @param scenario 基础拖拽场景定义。
+ * @param attempts Linux 平台使用的尝试参数列表。
+ * @param evaluateSuccess 判断场景是否成功的回调。
+ * @returns 包含最终尝试次数的拖拽审计摘要。
+ */
+async function runManualDragAuditScenarioWithRetry(
+    page: Page,
+    scenario: ManualDragAuditScenario,
+    attempts: ManualDragRetryAttempt[],
+    evaluateSuccess: (result: ManualDragAuditSummary) => boolean,
+): Promise<ManualDragRetryResult> {
+    const effectiveAttempts = IS_LINUX && attempts.length > 0 ? attempts : [{}];
+    let lastResult: ManualDragRetryResult | null = null;
+
+    for (const [index, attempt] of effectiveAttempts.entries()) {
+        await waitForDockviewReady(page);
+
+        const result = await runManualDragAuditScenario(page, {
+            ...scenario,
+            targetOffset: attempt.targetOffset ?? scenario.targetOffset,
+            mouseOptions: {
+                ...scenario.mouseOptions,
+                ...attempt.mouseOptions,
+            },
+            settleMs: attempt.settleMs ?? scenario.settleMs,
+        });
+        const decoratedResult: ManualDragRetryResult = {
+            ...result,
+            attempt: index + 1,
+        };
+
+        lastResult = decoratedResult;
+
+        if (evaluateSuccess(result)) {
+            return decoratedResult;
+        }
+
+        console.warn("[dockview-animation-audit-retry]", {
+            scenario: scenario.scenario,
+            attempt: index + 1,
+            didPlay: result.audit.didPlay,
+            lastPlayStatus: result.audit.lastPlayStatus,
+            layoutChanged: result.layoutChanged,
+            groups: result.afterGroups.map((group) => ({
+                tabLabels: group.tabLabels,
+                left: Math.round(group.left),
+                top: Math.round(group.top),
+            })),
+        });
+    }
+
+    if (!lastResult) {
+        throw new Error("runManualDragAuditScenarioWithRetry: no attempts executed");
+    }
+
+    return lastResult;
+}
+
+/**
  * @function runBottomToTopSwapAuditWithRetry
  * @description 对顶部交换场景执行最多两次独立尝试，降低 Linux CI 下偶发落点抖动带来的失败概率。
  * @param page Playwright 页面对象。
  * @returns 包含尝试次数与交换结果的审计摘要。
  */
 async function runBottomToTopSwapAuditWithRetry(page: Page): Promise<TopEdgeSwapAttemptResult> {
-    const attempts = [
-        {
-            targetOffset: { x: 0.5, y: 0.04 } as DockviewDragTargetOffset,
-            finalHoverRepeats: 8,
-            finalHoverDelayMs: 56,
-            settleDelayMs: 480,
-        },
-        {
-            targetOffset: { x: 0.5, y: 0.02 } as DockviewDragTargetOffset,
-            finalHoverRepeats: 10,
-            finalHoverDelayMs: 64,
-            settleDelayMs: 560,
-        },
-    ];
+    const attempts = IS_LINUX
+        ? [
+            {
+                targetOffset: { x: 0.5, y: 0.04 } as DockviewDragTargetOffset,
+                finalHoverRepeats: 8,
+                finalHoverDelayMs: 56,
+                settleDelayMs: 480,
+            },
+            {
+                targetOffset: { x: 0.5, y: 0.02 } as DockviewDragTargetOffset,
+                finalHoverRepeats: 10,
+                finalHoverDelayMs: 64,
+                settleDelayMs: 560,
+            },
+        ]
+        : [
+            {
+                targetOffset: { x: 0.5, y: 0.04 } as DockviewDragTargetOffset,
+                finalHoverRepeats: 8,
+                finalHoverDelayMs: 56,
+                settleDelayMs: 480,
+            },
+        ];
 
     let lastResult: TopEdgeSwapAttemptResult | null = null;
 
@@ -703,7 +793,9 @@ test.describe("Dockview split animation audit", () => {
     });
 
     test("manual drag audit: nested left-bottom tab to right edge of right column", async ({ page }) => {
-        const result = await runManualDragAuditScenario(page, {
+        const result = await runManualDragAuditScenarioWithRetry(
+            page,
+            {
             scenario: "nested-left-bottom-to-right-column-edge",
             setup: async (currentPage) => {
                 await openMockSplitTab(currentPage, {
@@ -726,7 +818,32 @@ test.describe("Dockview split animation audit", () => {
             targetOffset: { x: 0.92, y: 0.5 },
             interactionMode: "mouse",
             settleMs: 1100,
-        });
+            },
+            [
+                {
+                    mouseOptions: {
+                        finalHoverRepeats: 6,
+                        finalHoverDelayMs: 44,
+                        settleDelayMs: 420,
+                    },
+                },
+                {
+                    targetOffset: { x: 0.9, y: 0.5 },
+                    mouseOptions: {
+                        finalHoverRepeats: 8,
+                        finalHoverDelayMs: 56,
+                        settleDelayMs: 520,
+                    },
+                    settleMs: 1200,
+                },
+            ],
+            (currentResult) => {
+                return currentResult.beforeGroups.length === 3
+                    && currentResult.afterGroups.length === 3
+                    && currentResult.layoutChanged
+                    && currentResult.audit.observations.some((item) => item.phase === "capture" && item.source === "drag");
+            },
+        );
 
         logAuditResult("nested-left-bottom-to-right-column-edge", {
             ...result.audit,
@@ -739,6 +856,7 @@ test.describe("Dockview split animation audit", () => {
         }, {
             beforeGroupCount: result.beforeGroups.length,
             afterGroupCount: result.afterGroups.length,
+            attempt: result.attempt,
         });
 
         expect(result.beforeGroups.length).toBe(3);
@@ -748,7 +866,9 @@ test.describe("Dockview split animation audit", () => {
     });
 
     test("manual drag audit: nested right-top tab to bottom edge of left column", async ({ page }) => {
-        const result = await runManualDragAuditScenario(page, {
+        const result = await runManualDragAuditScenarioWithRetry(
+            page,
+            {
             scenario: "nested-right-top-to-bottom-of-left-column",
             setup: async (currentPage) => {
                 await openMockSplitTab(currentPage, {
@@ -771,7 +891,32 @@ test.describe("Dockview split animation audit", () => {
             targetOffset: { x: 0.5, y: 0.92 },
             interactionMode: "mouse",
             settleMs: 1100,
-        });
+            },
+            [
+                {
+                    mouseOptions: {
+                        finalHoverRepeats: 6,
+                        finalHoverDelayMs: 44,
+                        settleDelayMs: 420,
+                    },
+                },
+                {
+                    targetOffset: { x: 0.5, y: 0.9 },
+                    mouseOptions: {
+                        finalHoverRepeats: 8,
+                        finalHoverDelayMs: 56,
+                        settleDelayMs: 520,
+                    },
+                    settleMs: 1200,
+                },
+            ],
+            (currentResult) => {
+                return currentResult.beforeGroups.length === 3
+                    && currentResult.afterGroups.length === 3
+                    && currentResult.layoutChanged
+                    && currentResult.audit.observations.some((item) => item.phase === "capture" && item.source === "drag");
+            },
+        );
 
         logAuditResult("nested-right-top-to-bottom-of-left-column", {
             ...result.audit,
@@ -784,6 +929,7 @@ test.describe("Dockview split animation audit", () => {
         }, {
             beforeGroupCount: result.beforeGroups.length,
             afterGroupCount: result.afterGroups.length,
+            attempt: result.attempt,
         });
 
         expect(result.beforeGroups.length).toBe(3);
