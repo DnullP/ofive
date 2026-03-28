@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  full-test:
-    name: Full Test Suite
+  go-sidecar:
+    name: Go Sidecar
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
@@ -30,6 +30,48 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: sidecars/go/ofive-ai-agent/go.mod
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run Go sidecar tests
+        run: bun run test:go
+
+      - name: Build Go sidecar binary
+        run: bun run build:sidecar
+
+      - name: Verify generated Go stubs are up to date
+        run: git diff --exit-code -- sidecars/go/ofive-ai-agent/gen/ofive/aiv1
+
+  frontend-unit:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.22
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run frontend unit tests
+        run: bun run test:ci:unit
+
+  rust-tests:
+    name: Rust Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.22
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -58,26 +100,59 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      - name: Run Go sidecar tests
-        run: bun run test:go
+      - name: Run Rust tests
+        run: bun run test:rust
 
-      - name: Build Go sidecar binary
-        run: bun run build:sidecar
+  e2e-tests:
+    name: Playwright E2E
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Verify generated Go stubs are up to date
-        run: git diff --exit-code -- sidecars/go/ofive-ai-agent/gen/ofive/aiv1
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.22
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
 
       - name: Install Playwright browser
         run: bun run test:playwright:install
 
-      - name: Run frontend unit tests
-        run: bun run test:ci:unit
-
-      - name: Run Rust tests
-        run: bun run test:rust
-
       - name: Run Playwright end-to-end tests
         run: bun run test:e2e --reporter=line
+
+  production-build:
+    name: Production Build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.22
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
 
       - name: Verify production build
         run: bun run build
