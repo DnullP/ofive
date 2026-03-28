@@ -8,9 +8,22 @@
  * - `node scripts/run-unit-tests-with-summary.mjs src/foo.test.ts`
  */
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { spawn } from "node:child_process";
 
 const bunArgs = ["test", ...process.argv.slice(2)];
+
+/**
+ * @function shellEscape
+ * @description 对 shell 参数做单引号转义，用于 Linux script -c 命令字符串。
+ * @param {string} value 参数原始值。
+ * @returns {string} shell 安全字符串。
+ */
+function shellEscape(value) {
+    return `'${String(value).replaceAll("'", `'"'"'`)}'`;
+}
 
 /**
  * @function stripAnsi
@@ -20,6 +33,19 @@ const bunArgs = ["test", ...process.argv.slice(2)];
  */
 function stripAnsi(value) {
     return String(value).replaceAll(/\u001B\[[0-9;]*m/g, "");
+}
+
+/**
+ * @function cleanTranscript
+ * @description 清理 script 命令 transcript 中的包裹元数据。
+ * @param {string} value transcript 原始文本。
+ * @returns {string} 清理后的日志文本。
+ */
+function cleanTranscript(value) {
+    return stripAnsi(value)
+        .replace(/^Script started on.*$/gm, "")
+        .replace(/^Script done on.*$/gm, "")
+        .replace(/\r/g, "");
 }
 
 /**
@@ -78,7 +104,7 @@ function parseFailedCaseName(line) {
  */
 function normalizeReasonLines(blockLines) {
     const lines = blockLines
-        .map((line) => stripAnsi(line).replace(/\r/g, ""))
+        .map((line) => cleanTranscript(line))
         .map((line) => line.replace(/\s+$/, ""));
 
     const filteredLines = lines.filter((line) => {
@@ -129,7 +155,7 @@ function normalizeReasonLines(blockLines) {
  * @returns {{filePath:string,testName:string,reasonLines:string[]}[]} 失败摘要列表。
  */
 function parseFailureSummary(output) {
-    const lines = stripAnsi(output).split(/\r?\n/);
+    const lines = cleanTranscript(output).split(/\r?\n/);
     const failures = [];
     let currentFilePath = null;
     let currentBlock = [];
@@ -187,34 +213,121 @@ function printFailureSummary(failures) {
     console.error(`\n[unit-test-summary] total failed cases: ${String(failures.length)}`);
 }
 
-const child = spawn("bun", bunArgs, {
-    stdio: ["inherit", "pipe", "pipe"],
-    env: process.env,
-});
+/**
+ * @function runViaDirectSpawn
+ * @description 直接运行 bun test，并采集 stdout/stderr 以便失败时追加摘要。
+ * @returns {Promise<{code:number, output:string}>} 退出码与合并输出。
+ */
+function runViaDirectSpawn() {
+    return new Promise((resolve) => {
+        const child = spawn("bun", bunArgs, {
+            stdio: ["inherit", "pipe", "pipe"],
+            env: process.env,
+        });
 
-let combinedOutput = "";
+        let combinedOutput = "";
 
-child.stdout.on("data", (chunk) => {
-    const text = chunk.toString();
-    combinedOutput += text;
-    process.stdout.write(text);
-});
+        child.stdout.on("data", (chunk) => {
+            const text = chunk.toString();
+            combinedOutput += text;
+            process.stdout.write(text);
+        });
 
-child.stderr.on("data", (chunk) => {
-    const text = chunk.toString();
-    combinedOutput += text;
-    process.stderr.write(text);
-});
+        child.stderr.on("data", (chunk) => {
+            const text = chunk.toString();
+            combinedOutput += text;
+            process.stderr.write(text);
+        });
 
-child.on("close", (code, signal) => {
-    if (signal) {
-        console.error(`[unit-test-summary] bun test terminated by signal: ${signal}`);
-        process.exit(1);
+        child.on("close", (code, signal) => {
+            if (signal) {
+                console.error(`[unit-test-summary] bun test terminated by signal: ${signal}`);
+                resolve({ code: 1, output: combinedOutput });
+                return;
+            }
+
+            resolve({ code: code ?? 0, output: combinedOutput });
+        });
+
+        child.on("error", (error) => {
+            console.error(`[unit-test-summary] failed to start bun test: ${error.message}`);
+            resolve({ code: 1, output: combinedOutput });
+        });
+    });
+}
+
+/**
+ * @function buildScriptCommand
+ * @description 构建基于 script(1) 的伪终端命令参数。
+ * @param {string} transcriptPath transcript 文件路径。
+ * @returns {{command:string,args:string[]}} script 命令与参数。
+ */
+function buildScriptCommand(transcriptPath) {
+    if (process.platform === "linux") {
+        const commandText = ["bun", ...bunArgs].map((part) => shellEscape(part)).join(" ");
+        return {
+            command: "script",
+            args: ["-q", "-e", "-c", commandText, transcriptPath],
+        };
     }
 
-    if ((code ?? 0) !== 0) {
-        printFailureSummary(parseFailureSummary(combinedOutput));
-    }
+    return {
+        command: "script",
+        args: ["-q", "-e", transcriptPath, "bun", ...bunArgs],
+    };
+}
 
-    process.exit(code ?? 0);
-});
+/**
+ * @function runViaPseudoTerminal
+ * @description 通过 script(1) 启动伪终端运行 bun test，促使 Bun 输出完整失败细节。
+ * @returns {Promise<{code:number, output:string, usedPseudoTerminal:boolean}>} 退出码、输出与模式标记。
+ */
+function runViaPseudoTerminal() {
+    return new Promise((resolve) => {
+        const transcriptPath = path.join(
+            os.tmpdir(),
+            `ofive-bun-test-${String(process.pid)}-${String(Date.now())}.log`,
+        );
+        const invocation = buildScriptCommand(transcriptPath);
+        const child = spawn(invocation.command, invocation.args, {
+            stdio: "inherit",
+            env: process.env,
+        });
+
+        child.on("close", (code, signal) => {
+            const output = fs.existsSync(transcriptPath)
+                ? fs.readFileSync(transcriptPath, "utf8")
+                : "";
+
+            if (fs.existsSync(transcriptPath)) {
+                fs.rmSync(transcriptPath, { force: true });
+            }
+
+            if (signal) {
+                console.error(`[unit-test-summary] bun test terminated by signal: ${signal}`);
+                resolve({ code: 1, output, usedPseudoTerminal: true });
+                return;
+            }
+
+            resolve({ code: code ?? 0, output, usedPseudoTerminal: true });
+        });
+
+        child.on("error", () => {
+            if (fs.existsSync(transcriptPath)) {
+                fs.rmSync(transcriptPath, { force: true });
+            }
+            resolve({ code: 0, output: "", usedPseudoTerminal: false });
+        });
+    });
+}
+
+const pseudoTerminalResult = await runViaPseudoTerminal();
+const finalResult = pseudoTerminalResult.usedPseudoTerminal
+    ? pseudoTerminalResult
+    : await runViaDirectSpawn();
+
+if (finalResult.code !== 0) {
+    printFailureSummary(parseFailureSummary(finalResult.output));
+}
+
+process.exit(finalResult.code);
