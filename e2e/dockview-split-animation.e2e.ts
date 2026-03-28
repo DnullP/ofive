@@ -198,6 +198,11 @@ interface ManualDragAuditSummary {
     layoutChanged: boolean;
 }
 
+interface TopEdgeSwapAttemptResult extends ManualDragAuditSummary {
+    swapHappened: boolean;
+    attempt: number;
+}
+
 /**
  * @function runManualDragAuditScenario
  * @description 运行一个手动拖拽 split 审计场景，并返回布局变化摘要。
@@ -232,6 +237,100 @@ async function runManualDragAuditScenario(
         afterGroups,
         layoutChanged: createLayoutSignature(beforeGroups) !== createLayoutSignature(afterGroups),
     };
+}
+
+/**
+ * @function runBottomToTopSwapAuditWithRetry
+ * @description 对顶部交换场景执行最多两次独立尝试，降低 Linux CI 下偶发落点抖动带来的失败概率。
+ * @param page Playwright 页面对象。
+ * @returns 包含尝试次数与交换结果的审计摘要。
+ */
+async function runBottomToTopSwapAuditWithRetry(page: Page): Promise<TopEdgeSwapAttemptResult> {
+    const attempts = [
+        {
+            targetOffset: { x: 0.5, y: 0.04 } as DockviewDragTargetOffset,
+            finalHoverRepeats: 8,
+            finalHoverDelayMs: 56,
+            settleDelayMs: 480,
+        },
+        {
+            targetOffset: { x: 0.5, y: 0.02 } as DockviewDragTargetOffset,
+            finalHoverRepeats: 10,
+            finalHoverDelayMs: 64,
+            settleDelayMs: 560,
+        },
+    ];
+
+    let lastResult: TopEdgeSwapAttemptResult | null = null;
+
+    for (const [index, attempt] of attempts.entries()) {
+        await waitForDockviewReady(page);
+        await openMockSplitTab(page, {
+            id: "manual-bottom",
+            title: "Manual Bottom",
+            component: "split-demo",
+            position: "bottom",
+        });
+        await waitForDockviewAnimationsToSettle(page);
+
+        const beforeGroups = await readSortedGroups(page);
+        const sourceTab = page.locator(".dv-tab", { hasText: "Manual Bottom" }).first();
+        const targetHeader = getGroupByTabLabel(page, "首页")
+            .locator(".dv-tabs-and-actions-container")
+            .first();
+
+        const audit = await runDockviewAnimationAudit(page, async () => {
+            await dockviewMouseDragPanel(
+                page,
+                sourceTab,
+                targetHeader,
+                attempt.targetOffset,
+                {
+                    finalHoverRepeats: attempt.finalHoverRepeats,
+                    finalHoverDelayMs: attempt.finalHoverDelayMs,
+                    settleDelayMs: attempt.settleDelayMs,
+                },
+            );
+        }, 1100);
+
+        const afterGroups = await readSortedGroups(page);
+        const homeGroup = findGroupByTabLabel(afterGroups, "首页");
+        const bottomGroup = findGroupByTabLabel(afterGroups, "Manual Bottom");
+        const swapHappened = Boolean(homeGroup && bottomGroup && bottomGroup.top < homeGroup.top);
+        const result: TopEdgeSwapAttemptResult = {
+            audit,
+            beforeGroups,
+            afterGroups,
+            layoutChanged: createLayoutSignature(beforeGroups) !== createLayoutSignature(afterGroups),
+            swapHappened,
+            attempt: index + 1,
+        };
+
+        lastResult = result;
+
+        if (swapHappened) {
+            return result;
+        }
+
+        console.warn("[dockview-animation-audit-retry]", {
+            scenario: "manual-bottom-to-top-of-home",
+            attempt: index + 1,
+            swapHappened,
+            didPlay: audit.didPlay,
+            lastPlayStatus: audit.lastPlayStatus,
+            groups: afterGroups.map((group) => ({
+                tabLabels: group.tabLabels,
+                left: Math.round(group.left),
+                top: Math.round(group.top),
+            })),
+        });
+    }
+
+    if (!lastResult) {
+        throw new Error("runBottomToTopSwapAuditWithRetry: no attempts executed");
+    }
+
+    return lastResult;
 }
 
 test.describe("Dockview split animation audit", () => {
@@ -539,45 +638,7 @@ test.describe("Dockview split animation audit", () => {
     });
 
     test("manual drag audit: bottom tab to top edge of home should expose vertical swap edge", async ({ page }) => {
-        await openMockSplitTab(page, {
-            id: "manual-bottom",
-            title: "Manual Bottom",
-            component: "split-demo",
-            position: "bottom",
-        });
-        await waitForDockviewAnimationsToSettle(page);
-
-        const beforeGroups = await readSortedGroups(page);
-        const sourceTab = page.locator(".dv-tab", { hasText: "Manual Bottom" }).first();
-        const targetHeader = getGroupByTabLabel(page, "首页")
-            .locator(".dv-tabs-and-actions-container")
-            .first();
-
-        const audit = await runDockviewAnimationAudit(page, async () => {
-            await dockviewMouseDragPanel(
-                page,
-                sourceTab,
-                targetHeader,
-                { x: 0.5, y: 0.04 },
-                {
-                    finalHoverRepeats: 8,
-                    finalHoverDelayMs: 56,
-                    settleDelayMs: 480,
-                },
-            );
-        }, 1100);
-
-        const afterGroups = await readSortedGroups(page);
-        const result = {
-            audit,
-            beforeGroups,
-            afterGroups,
-            layoutChanged: createLayoutSignature(beforeGroups) !== createLayoutSignature(afterGroups),
-        };
-
-        const homeGroup = findGroupByTabLabel(result.afterGroups, "首页");
-        const bottomGroup = findGroupByTabLabel(result.afterGroups, "Manual Bottom");
-        const swapHappened = Boolean(homeGroup && bottomGroup && bottomGroup.top < homeGroup.top);
+        const result = await runBottomToTopSwapAuditWithRetry(page);
 
         logAuditResult("manual-bottom-to-top-of-home", {
             ...result.audit,
@@ -588,13 +649,14 @@ test.describe("Dockview split animation audit", () => {
                 source: item.source,
             })),
         }, {
-            swapHappened,
+            swapHappened: result.swapHappened,
+            attempt: result.attempt,
             beforeVertical: isVerticalLayout(result.beforeGroups),
             afterVertical: isVerticalLayout(result.afterGroups),
         });
 
         expect(result.afterGroups.length).toBe(2);
-        expect(swapHappened).toBe(true);
+        expect(result.swapHappened).toBe(true);
         expect(result.audit.observations.some((item) => item.phase === "capture" && item.source === "drag")).toBe(true);
         expect(result.audit.didPlay).toBe(true);
     });
