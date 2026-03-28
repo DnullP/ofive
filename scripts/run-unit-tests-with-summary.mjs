@@ -51,8 +51,8 @@ function parseTestFileFromHeader(line) {
  */
 function isFailedCaseLine(line) {
     const trimmed = line.trim();
-    return /^✗\s+.+\[[^\]]+\]$/.test(trimmed)
-        || /^\(fail\)\s+.+\[[^\]]+\]$/.test(trimmed);
+    return /^✗\s+.+(?:\s+\[[^\]]+\])?$/.test(trimmed)
+        || /^\(fail\)\s+.+(?:\s+\[[^\]]+\])?$/.test(trimmed);
 }
 
 /**
