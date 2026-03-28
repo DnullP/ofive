@@ -47,6 +47,13 @@
     transition: opacity 0.18s ease-out;
 }
 
+/* 模块样式：标签批量绘制画布，覆盖整个图层并由渲染器统一刷新。 */
+.knowledge-graph-tab__labels-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
 /* 模块样式：单个节点标签，提升节点文本可读性。 */
 .knowledge-graph-tab__label {
     position: absolute;

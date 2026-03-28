@@ -19,6 +19,7 @@
     "build": "bun run check:backend-logs && bun run check:theme-colors && bun run check:i18n-copy && tsc && vite build",
     "test:go": "cd sidecars/go/ofive-ai-agent && go test ./...",
     "test": "bun test",
+    "test:ci:unit": "node scripts/run-unit-tests-with-summary.mjs",
     "test:rust": "node scripts/run-with-protoc.mjs cargo test --manifest-path src-tauri/Cargo.toml",
     "test:playwright:install": "bunx playwright install --with-deps chromium",
     "test:workflow": "bun run test:go && bun run build:sidecar && bun run test && bun run test:rust && bun run test:e2e --reporter=line && bun run build",

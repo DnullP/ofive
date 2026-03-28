@@ -21,6 +21,8 @@ import type { IDockviewPanelProps } from "dockview";
 import { getCurrentVaultMarkdownGraph } from "../../../api/vaultApi";
 import { createKnowledgeGraphInteractionCallbacksFor } from "./knowledgeGraphInteractions";
 import { buildKnowledgeGraphConfig } from "./knowledgeGraphSettings";
+import type { GraphLabelItem, VisibleGraphLabel } from "./knowledgeGraphLabelSelector";
+import { KnowledgeGraphCanvasLabelRenderer } from "./knowledgeGraphCanvasLabelRenderer";
 import {
     useGraphSettingsState,
     useGraphSettingsSync,
@@ -42,17 +44,6 @@ interface GraphTabState {
 }
 
 /**
- * @interface GraphLabelItem
- * @description 图谱节点标签数据。
- */
-interface GraphLabelItem {
-    /** 节点索引 */
-    index: number;
-    /** 节点标签文本 */
-    text: string;
-}
-
-/**
  * @interface KnowledgeGraphPerfTestHook
  * @description 图谱性能测试钩子：为前端 perf 场景提供缩放和标签状态读取能力。
  */
@@ -68,7 +59,16 @@ interface KnowledgeGraphPerfTestHook {
         totalLabelCount: number;
         visibleLabelCount: number;
         opacity: number;
+        swapCount: number;
+        maxSwapCount: number;
     };
+}
+
+interface SpaceBounds {
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
 }
 
 declare global {
@@ -107,6 +107,12 @@ const DRAG_MOVE_REHEAT_INTERVAL_MS = 120;
  * @description 标签在节点上方的偏移像素。
  */
 const LABEL_Y_OFFSET_PX = 14;
+
+/**
+ * @constant LABEL_VIEW_PADDING_PX
+ * @description 标签视口裁剪的屏幕外扩距离。
+ */
+const LABEL_VIEW_PADDING_PX = 24;
 
 /**
  * @constant LABEL_FADE_RANGE
@@ -204,6 +210,36 @@ function computeLabelOpacity(currentZoom: number, threshold: number): number {
 }
 
 /**
+ * @function createVisibleSpaceBounds
+ * @description 根据当前屏幕视口生成图谱空间内的可见边界。
+ * @param graph Graph 实例。
+ * @param viewWidth 视口宽度。
+ * @param viewHeight 视口高度。
+ * @returns 当前可见空间边界。
+ */
+function createVisibleSpaceBounds(
+    graph: Graph,
+    viewWidth: number,
+    viewHeight: number,
+): SpaceBounds {
+    const topLeft = graph.screenToSpacePosition([
+        -LABEL_VIEW_PADDING_PX,
+        -LABEL_VIEW_PADDING_PX,
+    ]);
+    const bottomRight = graph.screenToSpacePosition([
+        viewWidth + LABEL_VIEW_PADDING_PX,
+        viewHeight + LABEL_VIEW_PADDING_PX,
+    ]);
+
+    return {
+        minX: Math.min(topLeft[0], bottomRight[0]),
+        maxX: Math.max(topLeft[0], bottomRight[0]),
+        minY: Math.min(topLeft[1], bottomRight[1]),
+        maxY: Math.max(topLeft[1], bottomRight[1]),
+    };
+}
+
+/**
  * @function KnowledgeGraphTab
  * @description 渲染知识图谱并与后端图数据接口同步。
  *   支持缩放级别驱动的标签渐显、单击节点跳转笔记、Cmd+单击在新 Tab 打开笔记。
@@ -221,7 +257,8 @@ export function KnowledgeGraphTab(
     const hostRef = useRef<HTMLDivElement | null>(null);
     const graphRef = useRef<Graph | null>(null);
     const labelLayerRef = useRef<HTMLDivElement | null>(null);
-    const labelElementMapRef = useRef<Map<number, HTMLDivElement>>(new Map());
+    const labelRendererRef = useRef<KnowledgeGraphCanvasLabelRenderer | null>(null);
+    const labelItemsRef = useRef<GraphLabelItem[]>([]);
     const dragTailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const labelRafRef = useRef<number | null>(null);
     const lastDragReheatTimeRef = useRef<number>(0);
@@ -229,7 +266,6 @@ export function KnowledgeGraphTab(
     const nodePathsByIndexRef = useRef<Map<number, string>>(new Map());
     /** 标签显示缩放阈值引用，供交互回调闭包读取最新值 */
     const labelVisibleZoomLevelRef = useRef<number>(graphSettings.labelVisibleZoomLevel);
-    const [labels, setLabels] = useState<GraphLabelItem[]>([]);
     const [state, setState] = useState<GraphTabState>({
         loading: true,
         error: null,
@@ -259,18 +295,12 @@ export function KnowledgeGraphTab(
                 graph.setZoomLevel(zoomLevel, 0);
                 scheduleLabelLayoutUpdate(graph);
             },
-            getLabelStats: () => {
-                const labelLayerElement = labelLayerRef.current;
-                const visibleLabelCount = Array.from(labelElementMapRef.current.values()).filter(
-                    (element) => element.style.display !== "none",
-                ).length;
-                const opacity = Number(labelLayerElement?.style.opacity ?? "0");
-
-                return {
-                    totalLabelCount: labelElementMapRef.current.size,
-                    visibleLabelCount,
-                    opacity: Number.isFinite(opacity) ? opacity : 0,
-                };
+            getLabelStats: () => labelRendererRef.current?.getStats() ?? {
+                totalLabelCount: labelItemsRef.current.length,
+                visibleLabelCount: 0,
+                opacity: 0,
+                swapCount: 0,
+                maxSwapCount: 0,
             },
         };
     };
@@ -307,62 +337,76 @@ export function KnowledgeGraphTab(
                 return;
             }
 
-            /* ── 缩放驱动标签透明度 ── */
+            if (!labelRendererRef.current) {
+                labelRendererRef.current = new KnowledgeGraphCanvasLabelRenderer(labelLayerElement);
+            }
+
+            const labelRenderer = labelRendererRef.current;
+            labelRenderer.setTotalLabelCount(labelItemsRef.current.length);
+
             const currentZoom = graph.getZoomLevel();
             const threshold = labelVisibleZoomLevelRef.current;
             const opacity = computeLabelOpacity(currentZoom, threshold);
-            labelLayerElement.style.opacity = String(opacity);
-            labelLayerElement.style.pointerEvents = opacity <= 0 ? "none" : "none";
 
-            /* 当标签完全不可见时跳过位置计算以节省性能 */
             if (opacity <= 0) {
+                labelRenderer.reset();
                 return;
             }
 
-            const trackedPositions = graph.getTrackedPointPositionsMap();
+            const labelItems = labelItemsRef.current;
+            if (labelItems.length === 0) {
+                labelRenderer.reset();
+                return;
+            }
+
+            const pointPositions = graph.getPointPositions();
             const viewWidth = hostElement.clientWidth;
             const viewHeight = hostElement.clientHeight;
+            const visibleSpaceBounds = createVisibleSpaceBounds(
+                graph,
+                viewWidth,
+                viewHeight,
+            );
+            const nextVisibleLabels: VisibleGraphLabel[] = [];
 
-            const applyLabelLayout = (index: number, spacePosition: [number, number]): void => {
-                const labelElement = labelElementMapRef.current.get(index);
-                if (!labelElement) {
+            labelItems.forEach((item) => {
+                const x = pointPositions[item.index * 2];
+                const y = pointPositions[item.index * 2 + 1];
+                if (x === undefined || y === undefined) {
                     return;
                 }
 
-                const [screenX, screenY] = graph.spaceToScreenPosition(spacePosition);
+                const isInsideVisibleSpace =
+                    x >= visibleSpaceBounds.minX &&
+                    x <= visibleSpaceBounds.maxX &&
+                    y >= visibleSpaceBounds.minY &&
+                    y <= visibleSpaceBounds.maxY;
+                if (!isInsideVisibleSpace) {
+                    return;
+                }
+
+                const [screenX, rawScreenY] = graph.spaceToScreenPosition([x, y]);
+                const screenY = rawScreenY - LABEL_Y_OFFSET_PX;
                 const isInsideView =
                     Number.isFinite(screenX) &&
                     Number.isFinite(screenY) &&
-                    screenX >= -24 &&
-                    screenX <= viewWidth + 24 &&
-                    screenY >= -24 &&
-                    screenY <= viewHeight + 24;
-
+                    screenX >= -LABEL_VIEW_PADDING_PX &&
+                    screenX <= viewWidth + LABEL_VIEW_PADDING_PX &&
+                    screenY >= -LABEL_VIEW_PADDING_PX &&
+                    screenY <= viewHeight + LABEL_VIEW_PADDING_PX;
                 if (!isInsideView) {
-                    labelElement.style.display = "none";
                     return;
                 }
 
-                labelElement.style.display = "block";
-                labelElement.style.transform = `translate(${screenX}px, ${screenY - LABEL_Y_OFFSET_PX}px) translate(-50%, -100%)`;
-            };
-
-            if (trackedPositions.size === 0) {
-                const pointPositions = graph.getPointPositions();
-                labelElementMapRef.current.forEach((_element, index) => {
-                    const x = pointPositions[index * 2];
-                    const y = pointPositions[index * 2 + 1];
-                    if (x === undefined || y === undefined) {
-                        return;
-                    }
-                    applyLabelLayout(index, [x, y]);
+                nextVisibleLabels.push({
+                    index: item.index,
+                    text: item.text,
+                    screenX,
+                    screenY,
                 });
-                return;
-            }
-
-            trackedPositions.forEach((position, index) => {
-                applyLabelLayout(index, position);
             });
+
+            labelRenderer.render(nextVisibleLabels, opacity, viewWidth, viewHeight);
         });
     };
 
@@ -443,6 +487,9 @@ export function KnowledgeGraphTab(
         });
 
         graphRef.current = graph;
+        if (labelLayerRef.current) {
+            labelRendererRef.current = new KnowledgeGraphCanvasLabelRenderer(labelLayerRef.current);
+        }
         registerPerfTestHook(graph);
         console.info("[knowledge-graph] graph instance initialized");
 
@@ -454,6 +501,9 @@ export function KnowledgeGraphTab(
                 window.cancelAnimationFrame(labelRafRef.current);
                 labelRafRef.current = null;
             }
+            labelRendererRef.current?.dispose();
+            labelRendererRef.current = null;
+            labelItemsRef.current = [];
             graph.destroy();
             graphRef.current = null;
             unregisterPerfTestHook();
@@ -471,16 +521,6 @@ export function KnowledgeGraphTab(
         scheduleLabelLayoutUpdate(graph);
         console.info("[knowledge-graph] graph config updated by settings");
     }, [graphConfig]);
-
-    useEffect(() => {
-        const graph = graphRef.current;
-        if (!graph || labels.length === 0) {
-            return;
-        }
-
-        registerPerfTestHook(graph);
-        scheduleLabelLayoutUpdate(graph);
-    }, [labels]);
 
     /* ── 标签阈值变化时同步 ref 并触发重绘 ── */
     useEffect(() => {
@@ -550,11 +590,12 @@ export function KnowledgeGraphTab(
                     index,
                     text: getNodeLabelText(node.path, node.title),
                 }));
+                labelItemsRef.current = nextLabels;
+                labelRendererRef.current?.setTotalLabelCount(nextLabels.length);
 
                 graph.stop();
                 graph.setPointPositions(positions);
                 graph.setLinks(new Float32Array(linksArray));
-                graph.trackPointPositionsByIndices(nextLabels.map((item) => item.index));
                 graph.render(0.12);
                 graph.start(0.12);
                 if (response.nodes.length > 0) {
@@ -563,7 +604,7 @@ export function KnowledgeGraphTab(
                     graph.setZoomLevel(zoomLevelAfterFit * ZOOM_IN_SCALE_AFTER_FIT, 0);
                 }
 
-                setLabels(nextLabels);
+                registerPerfTestHook(graph);
                 scheduleLabelLayoutUpdate(graph);
 
                 setState({
@@ -588,6 +629,9 @@ export function KnowledgeGraphTab(
                 if (canceled) {
                     return;
                 }
+                labelItemsRef.current = [];
+                labelRendererRef.current?.setTotalLabelCount(0);
+                labelRendererRef.current?.reset();
                 setState((previous) => ({
                     ...previous,
                     loading: false,
@@ -619,23 +663,7 @@ export function KnowledgeGraphTab(
             {/* 样式映射：canvas-wrap/canvas-host/empty 用于图画布区域和空态提示。 */}
             <div className="knowledge-graph-tab__canvas-wrap">
                 <div ref={hostRef} className="knowledge-graph-tab__canvas-host" />
-                <div ref={labelLayerRef} className="knowledge-graph-tab__labels-layer">
-                    {labels.map((item) => (
-                        <div
-                            key={item.index}
-                            ref={(element) => {
-                                if (element) {
-                                    labelElementMapRef.current.set(item.index, element);
-                                } else {
-                                    labelElementMapRef.current.delete(item.index);
-                                }
-                            }}
-                            className="knowledge-graph-tab__label"
-                        >
-                            {item.text}
-                        </div>
-                    ))}
-                </div>
+                <div ref={labelLayerRef} className="knowledge-graph-tab__labels-layer" />
                 {state.loading && (
                     <div className="knowledge-graph-tab__empty knowledge-graph-tab__empty--status">
                         {t("graph.loadingGraph")}

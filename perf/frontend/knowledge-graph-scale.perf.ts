@@ -157,6 +157,7 @@ async function measureKnowledgeGraphOpen(
     expectedEdgeCount: number,
 ): Promise<number> {
     return page.evaluate(async ({ nodeCount, edgeCount }) => {
+        const blockingStatusPattern = /loading|加载中|载入中|failed|失败|错误/i;
         const trigger = document.querySelector(
             '[data-testid="activity-bar-item-knowledge-graph"]',
         ) as HTMLElement | null;
@@ -175,7 +176,7 @@ async function measureKnowledgeGraphOpen(
                     ".knowledge-graph-tab__stats",
                 ) as HTMLElement | null;
                 const statusElement = document.querySelector(
-                    ".knowledge-graph-tab__status",
+                    ".knowledge-graph-tab__empty--status",
                 ) as HTMLElement | null;
                 const statsText = statsElement?.textContent?.trim() ?? "";
                 const expectedStats = `nodes: ${String(nodeCount)} | edges: ${String(edgeCount)}`;
@@ -183,8 +184,7 @@ async function measureKnowledgeGraphOpen(
 
                 if (
                     statsText === expectedStats
-                    && statusText.length > 0
-                    && !/loading|加载中|载入中/i.test(statusText)
+                    && !blockingStatusPattern.test(statusText)
                 ) {
                     resolve();
                     return;

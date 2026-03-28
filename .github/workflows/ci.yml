@@ -71,7 +71,7 @@ jobs:
         run: bun run test:playwright:install
 
       - name: Run frontend unit tests
-        run: bun run test
+        run: bun run test:ci:unit
 
       - name: Run Rust tests
         run: bun run test:rust
