@@ -13,10 +13,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
 export const PINNED_PROTOC_VERSION = "33.4";
-const PINNED_PROTOC_MAJOR = Number.parseInt(
-    PINNED_PROTOC_VERSION.split(".")[0] ?? "0",
-    10,
-);
 
 /**
  * @function parseProtocVersion
@@ -42,13 +38,13 @@ function parseProtocVersion(versionOutput) {
 
 /**
  * @function isCompatibleProtocVersion
- * @description 判断给定 protoc 版本是否满足当前仓库允许的兼容策略。
+ * @description 判断给定 protoc 版本是否与仓库固定版本完全一致。
  * @param {string} versionOutput `protoc --version` 输出。
  * @returns {boolean} 是否兼容当前仓库。
  */
 function isCompatibleProtocVersion(versionOutput) {
     const version = parseProtocVersion(versionOutput);
-    return version.major === PINNED_PROTOC_MAJOR;
+    return version.raw === `libprotoc ${PINNED_PROTOC_VERSION}`;
 }
 
 /**
@@ -92,7 +88,7 @@ function resolveCompatibleSystemProtoc() {
         console.warn("[protoc-toolchain] system protoc rejected", {
             systemProtocPath,
             systemProtocVersion,
-            compatibleMajor: PINNED_PROTOC_MAJOR,
+            expectedVersion: PINNED_PROTOC_VERSION,
         });
         return null;
     }
@@ -224,7 +220,7 @@ export async function ensurePinnedProtoc() {
         const configuredVersion = readPinnedProtocVersion(configuredProtocPath);
         if (!isCompatibleProtocVersion(configuredVersion)) {
             throw new Error(
-                `Configured protoc is incompatible: ${configuredVersion}. Expected major ${PINNED_PROTOC_MAJOR}.x`,
+                `Configured protoc is incompatible: ${configuredVersion}. Expected ${PINNED_PROTOC_VERSION}`,
             );
         }
 
