@@ -39,6 +39,7 @@ export type DockviewLayoutAnimationObservationStatus =
 /** Dockview 时序日志事件类型。 */
 export type DockviewLayoutTimelineEntryType =
     | "pointerdown-tab"
+    | "pointerdrag-tab"
     | "dragstart-tab"
     | "drop-host"
     | "dragend-tab"

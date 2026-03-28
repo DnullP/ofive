@@ -173,6 +173,7 @@ const SIDEBAR_PANE_MIN_TOTAL_SIZE = 104;
 const SIDEBAR_EXIT_DURATION_MS = 120;
 const DOCKVIEW_GROUP_REFLOW_DURATION_MS = 320;
 const DOCKVIEW_NEW_GROUP_FADE_DURATION_MS = 240;
+const DOCKVIEW_POINTER_DRAG_CAPTURE_THRESHOLD_PX = 10;
 
 type SidebarMotionState = "hidden" | "entering" | "visible" | "exiting";
 
@@ -762,6 +763,12 @@ export function DockviewLayout({
     const dockviewLayoutAnimationFrameRef = useRef<number | null>(null);
     const dockviewDragAnimationCleanupTimerRef = useRef<number | null>(null);
     const dockviewTabDragInProgressRef = useRef(false);
+    const dockviewPendingPointerDragRef = useRef<{
+        pointerId: number;
+        startX: number;
+        startY: number;
+        targetText: string | null;
+    } | null>(null);
     const dockviewAnimationObservationSequenceRef = useRef(1);
     const dockviewAnimationObservationsRef = useRef<DockviewLayoutAnimationObservation[]>([]);
     const dockviewTimelineSequenceRef = useRef(1);
@@ -4108,6 +4115,10 @@ export function DockviewLayout({
             dockviewDragAnimationCleanupTimerRef.current = null;
         };
 
+        const clearPendingPointerDrag = (): void => {
+            dockviewPendingPointerDragRef.current = null;
+        };
+
         const handleDragStartCapture = (event: DragEvent): void => {
             const target = event.target;
             if (!(target instanceof Element)) {
@@ -4119,10 +4130,16 @@ export function DockviewLayout({
             }
 
             clearPendingDragCleanupTimer();
-            dockviewTabDragInProgressRef.current = true;
+            clearPendingPointerDrag();
             recordDockviewTimelineEntry("dragstart-tab", {
                 targetText: target.textContent?.trim() ?? null,
             });
+
+            if (dockviewTabDragInProgressRef.current) {
+                return;
+            }
+
+            dockviewTabDragInProgressRef.current = true;
             captureDockviewLayoutAnimation("split-entering", "drag");
         };
 
@@ -4143,10 +4160,57 @@ export function DockviewLayout({
             recordDockviewTimelineEntry("pointerdown-tab", {
                 targetText: target.textContent?.trim() ?? null,
             });
+
+            dockviewPendingPointerDragRef.current = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                targetText: target.textContent?.trim() ?? null,
+            };
+        };
+
+        const handlePointerMoveCapture = (event: PointerEvent): void => {
+            const pendingPointerDrag = dockviewPendingPointerDragRef.current;
+            if (!pendingPointerDrag) {
+                return;
+            }
+
+            if (pendingPointerDrag.pointerId !== event.pointerId) {
+                return;
+            }
+
+            if ((event.buttons & 1) === 0) {
+                clearPendingPointerDrag();
+                return;
+            }
+
+            if (dockviewTabDragInProgressRef.current) {
+                return;
+            }
+
+            const deltaX = event.clientX - pendingPointerDrag.startX;
+            const deltaY = event.clientY - pendingPointerDrag.startY;
+            if (
+                Math.abs(deltaX) < DOCKVIEW_POINTER_DRAG_CAPTURE_THRESHOLD_PX
+                && Math.abs(deltaY) < DOCKVIEW_POINTER_DRAG_CAPTURE_THRESHOLD_PX
+            ) {
+                return;
+            }
+
+            clearPendingDragCleanupTimer();
+            dockviewTabDragInProgressRef.current = true;
+            clearPendingPointerDrag();
+            recordDockviewTimelineEntry("pointerdrag-tab", {
+                targetText: pendingPointerDrag.targetText,
+                deltaX: Math.round(deltaX),
+                deltaY: Math.round(deltaY),
+            });
+            captureDockviewLayoutAnimation("split-entering", "drag");
         };
 
         const handleDragEndCapture = (): void => {
             clearPendingDragCleanupTimer();
+            clearPendingPointerDrag();
             const hadDragSession = dockviewTabDragInProgressRef.current;
             dockviewTabDragInProgressRef.current = false;
             recordDockviewTimelineEntry("dragend-tab");
@@ -4158,6 +4222,7 @@ export function DockviewLayout({
 
         const handlePointerUpCapture = (): void => {
             recordDockviewTimelineEntry("pointerup-tab");
+            clearPendingPointerDrag();
             if (!dockviewTabDragInProgressRef.current) {
                 return;
             }
@@ -4183,6 +4248,7 @@ export function DockviewLayout({
         };
 
         host.addEventListener("pointerdown", handlePointerDownCapture, { capture: true });
+        host.addEventListener("pointermove", handlePointerMoveCapture, { capture: true });
         host.addEventListener("dragstart", handleDragStartCapture, { capture: true });
         host.addEventListener("drop", handleDropCapture, { capture: true });
         host.addEventListener("dragend", handleDragEndCapture, { capture: true });
@@ -4190,11 +4256,13 @@ export function DockviewLayout({
 
         return () => {
             host.removeEventListener("pointerdown", handlePointerDownCapture, { capture: true });
+            host.removeEventListener("pointermove", handlePointerMoveCapture, { capture: true });
             host.removeEventListener("dragstart", handleDragStartCapture, { capture: true });
             host.removeEventListener("drop", handleDropCapture, { capture: true });
             host.removeEventListener("dragend", handleDragEndCapture, { capture: true });
             host.removeEventListener("pointerup", handlePointerUpCapture, { capture: true });
             dockviewTabDragInProgressRef.current = false;
+            clearPendingPointerDrag();
             clearPendingDragCleanupTimer();
         };
     }, [dockviewApi]);

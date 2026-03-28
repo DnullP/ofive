@@ -220,11 +220,24 @@ export async function dockviewMouseDragPanel(
 
     const srcX = srcBox.x + srcBox.width / 2;
     const srcY = srcBox.y + srcBox.height / 2;
-    const tgtX = tgtBox.x + tgtBox.width * targetOffset.x;
-    const tgtY = tgtBox.y + tgtBox.height * targetOffset.y;
     const finalHoverRepeats = options.finalHoverRepeats ?? 4;
     const finalHoverDelayMs = options.finalHoverDelayMs ?? 32;
     const settleDelayMs = options.settleDelayMs ?? 320;
+    const insetX = Math.min(Math.max(tgtBox.width * 0.04, 2), 8);
+    const insetY = Math.min(Math.max(tgtBox.height * 0.04, 2), 8);
+    const minX = tgtBox.x + insetX;
+    const maxX = tgtBox.x + tgtBox.width - insetX;
+    const minY = tgtBox.y + insetY;
+    const maxY = tgtBox.y + tgtBox.height - insetY;
+    const clamp = (value: number, minimum: number, maximum: number): number => {
+        return Math.min(maximum, Math.max(minimum, value));
+    };
+    const nearLeftEdge = targetOffset.x <= 0.16;
+    const nearRightEdge = targetOffset.x >= 0.84;
+    const nearTopEdge = targetOffset.y <= 0.16;
+    const nearBottomEdge = targetOffset.y >= 0.84;
+    const tgtX = clamp(tgtBox.x + tgtBox.width * targetOffset.x, minX, maxX);
+    const tgtY = clamp(tgtBox.y + tgtBox.height * targetOffset.y, minY, maxY);
 
     const waypoints = [0.12, 0.28, 0.48, 0.7, 0.88, 1].map((progress) => ({
         x: srcX + (tgtX - srcX) * progress,
@@ -244,11 +257,41 @@ export async function dockviewMouseDragPanel(
         await page.waitForTimeout(20);
     }
 
-    /* 在最终落点附近微调，给 Dockview 足够时间展示边缘 drop zone。 */
+    const buildFinalHoverPoint = (index: number): { x: number; y: number } => {
+        if (nearTopEdge || nearBottomEdge) {
+            const edgeY = nearTopEdge ? minY : maxY;
+            const horizontalSweep = index % 3 === 0 ? -4 : index % 3 === 1 ? 0 : 4;
+            const inwardY = nearTopEdge
+                ? Math.min(edgeY + (index % 2 === 0 ? 0 : 2), maxY)
+                : Math.max(edgeY - (index % 2 === 0 ? 0 : 2), minY);
+            return {
+                x: clamp(tgtX + horizontalSweep, minX, maxX),
+                y: inwardY,
+            };
+        }
+
+        if (nearLeftEdge || nearRightEdge) {
+            const edgeX = nearLeftEdge ? minX : maxX;
+            const verticalSweep = index % 3 === 0 ? -4 : index % 3 === 1 ? 0 : 4;
+            const inwardX = nearLeftEdge
+                ? Math.min(edgeX + (index % 2 === 0 ? 0 : 2), maxX)
+                : Math.max(edgeX - (index % 2 === 0 ? 0 : 2), minX);
+            return {
+                x: inwardX,
+                y: clamp(tgtY + verticalSweep, minY, maxY),
+            };
+        }
+
+        return {
+            x: clamp(tgtX + (index % 2 === 0 ? -3 : 3), minX, maxX),
+            y: clamp(tgtY + (index % 2 === 0 ? -2 : 2), minY, maxY),
+        };
+    };
+
+    /* 边缘场景保持贴边悬停，但始终留在目标元素内部，减少误判到相邻 drop zone。 */
     for (let index = 0; index < finalHoverRepeats; index += 1) {
-        const jitterX = index % 2 === 0 ? -3 : 3;
-        const jitterY = index % 2 === 0 ? -2 : 2;
-        await page.mouse.move(tgtX + jitterX, tgtY + jitterY, { steps: 6 });
+        const hoverPoint = buildFinalHoverPoint(index);
+        await page.mouse.move(hoverPoint.x, hoverPoint.y, { steps: 6 });
         await page.waitForTimeout(finalHoverDelayMs);
     }
 
