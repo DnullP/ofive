@@ -204,6 +204,7 @@
   --graph-link-color: var(--text-tertiary);
   --graph-link-hover-color: var(--accent-primary);
   --graph-label-bg: var(--bg-secondary);
+  --graph-label-shadow-color: var(--chrome-backdrop-shadow);
 
   --architecture-surface-hero: var(--bg-secondary);
   --architecture-surface-card: var(--bg-secondary);
@@ -334,6 +335,7 @@
   --graph-link-color: var(--text-tertiary);
   --graph-link-hover-color: var(--accent-primary);
   --graph-label-bg: var(--bg-secondary);
+  --graph-label-shadow-color: var(--chrome-backdrop-shadow);
 
   --architecture-surface-hero: var(--bg-secondary);
   --architecture-surface-card: var(--bg-secondary);
@@ -499,6 +501,7 @@
   --graph-link-color: var(--text-tertiary);
   --graph-link-hover-color: var(--accent-primary);
   --graph-label-bg: var(--bg-secondary);
+  --graph-label-shadow-color: var(--chrome-backdrop-shadow);
 
   --architecture-surface-hero: var(--bg-secondary);
   --architecture-surface-card: var(--bg-secondary);
@@ -664,6 +667,7 @@
   --graph-link-color: #8f775b;
   --graph-link-hover-color: #6d4c2a;
   --graph-label-bg: var(--bg-secondary);
+  --graph-label-shadow-color: var(--chrome-backdrop-shadow);
 
   --architecture-surface-hero: var(--bg-secondary);
   --architecture-surface-card: var(--bg-secondary);
@@ -819,6 +823,7 @@
   --graph-bg-secondary: rgba(var(--window-glass-elevated-rgb), 0.32);
   --graph-border-color: rgba(var(--window-glass-border-rgb), 0.2);
   --graph-label-bg: rgba(var(--window-glass-elevated-rgb), 0.26);
+  --graph-label-shadow-color: var(--chrome-backdrop-shadow);
   --architecture-surface-hero: rgba(var(--window-glass-elevated-rgb), 0.3);
   --architecture-surface-card: rgba(var(--window-glass-elevated-rgb), 0.28);
   --architecture-surface-card-subtle: rgba(var(--window-glass-bg-rgb), 0.22);

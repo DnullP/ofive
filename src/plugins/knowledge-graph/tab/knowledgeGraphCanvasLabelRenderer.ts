@@ -289,7 +289,9 @@ export class KnowledgeGraphCanvasLabelRenderer {
             font: `${String(fontSizePx)}px ${fontFamily}`,
             textColor: rootStyle.getPropertyValue("--graph-text-color").trim() || "#ffffff",
             backgroundColor: rootStyle.getPropertyValue("--graph-label-bg").trim() || "rgba(0, 0, 0, 0.72)",
-            shadowColor: "rgba(0, 0, 0, 0.18)",
+            shadowColor:
+                rootStyle.getPropertyValue("--graph-label-shadow-color").trim()
+                || rootStyle.getPropertyValue("--chrome-backdrop-shadow").trim(),
             paddingX: 4,
             paddingY: 1,
             borderRadius: 4,

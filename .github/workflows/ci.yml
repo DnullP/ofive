@@ -73,6 +73,11 @@ jobs:
         with:
           bun-version: 1.2.22
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sidecars/go/ofive-ai-agent/go.mod
+
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -99,6 +104,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
+
+      - name: Build Go sidecar binary
+        run: bun run build:sidecar
 
       - name: Run Rust tests
         run: bun run test:rust
