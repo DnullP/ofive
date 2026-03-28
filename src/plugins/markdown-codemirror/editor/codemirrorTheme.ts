@@ -53,6 +53,9 @@ export function createCodeMirrorThemeExtension() {
                 color: "var(--editor-text-color)",
                 backgroundColor: "var(--editor-bg-color)",
             },
+            "&.cm-focused": {
+                outline: "none",
+            },
             ".cm-scroller": {
                 backgroundColor: "var(--editor-bg-color)",
             },

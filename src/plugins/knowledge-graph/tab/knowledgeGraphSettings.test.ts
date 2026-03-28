@@ -48,44 +48,79 @@ describe("knowledgeGraphSettings", () => {
     });
 
     it("构建图谱配置时应直接读取当前主题颜色", () => {
+        const appendedNodes: Array<{ style: Record<string, string> }> = [];
         globalThis.document = {
             documentElement: {},
-        } as Document;
-        globalThis.window = {
-            getComputedStyle: () => ({
-                getPropertyValue: (propertyName: string) => {
-                    switch (propertyName) {
-                        case "--graph-bg-primary":
-                            return "#101820";
-                        case "--graph-point-color":
-                            return "#0b6dff";
-                        case "--graph-point-greyout-color":
-                            return "#6b7280";
-                        case "--graph-point-ring-hover-color":
-                            return "#0b6dff";
-                        case "--graph-point-ring-focus-color":
-                            return "#1f2937";
-                        case "--graph-link-color":
-                            return "#6b7280";
-                        case "--graph-link-hover-color":
-                            return "#0b6dff";
-                        default:
-                            return "";
-                    }
+            body: {
+                appendChild: (node: { style: Record<string, string> }) => {
+                    appendedNodes.push(node);
+                    return node;
                 },
+            },
+            createElement: () => ({
+                style: {},
+                remove: () => { },
             }),
+        } as unknown as Document;
+        globalThis.window = {
+            getComputedStyle: (target?: Element) => {
+                if (target && appendedNodes.includes(target as never)) {
+                    const colorValue = (target as { style?: { color?: string } }).style?.color;
+                    switch (colorValue) {
+                        case "var(--graph-bg-primary)":
+                            return { color: "rgba(0, 0, 0, 0)" };
+                        case "var(--graph-point-color)":
+                            return { color: "rgb(11, 109, 255)" };
+                        case "var(--graph-point-greyout-color)":
+                            return { color: "rgb(107, 114, 128)" };
+                        case "var(--graph-point-ring-hover-color)":
+                            return { color: "rgb(11, 109, 255)" };
+                        case "var(--graph-point-ring-focus-color)":
+                            return { color: "rgb(31, 41, 55)" };
+                        case "var(--graph-link-color)":
+                            return { color: "rgb(107, 114, 128)" };
+                        case "var(--graph-link-hover-color)":
+                            return { color: "rgb(11, 109, 255)" };
+                        default:
+                            return { color: "" };
+                    }
+                }
+
+                return {
+                    getPropertyValue: (propertyName: string) => {
+                        switch (propertyName) {
+                            case "--graph-bg-primary":
+                                return "transparent";
+                            case "--graph-point-color":
+                                return "#0b6dff";
+                            case "--graph-point-greyout-color":
+                                return "#6b7280";
+                            case "--graph-point-ring-hover-color":
+                                return "#0b6dff";
+                            case "--graph-point-ring-focus-color":
+                                return "#1f2937";
+                            case "--graph-link-color":
+                                return "#6b7280";
+                            case "--graph-link-hover-color":
+                                return "#0b6dff";
+                            default:
+                                return "";
+                        }
+                    },
+                };
+            },
         } as unknown as Window & typeof globalThis;
 
         const config = buildKnowledgeGraphConfig({
             ...DEFAULT_KNOWLEDGE_GRAPH_SETTINGS,
         });
 
-        expect(config.backgroundColor).toBe("#101820");
-        expect(config.pointDefaultColor).toBe("#0b6dff");
-        expect(config.pointGreyoutColor).toBe("#6b7280");
-        expect(config.hoveredPointRingColor).toBe("#0b6dff");
-        expect(config.focusedPointRingColor).toBe("#1f2937");
-        expect(config.linkDefaultColor).toBe("#6b7280");
-        expect(config.hoveredLinkColor).toBe("#0b6dff");
+        expect(config.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+        expect(config.pointDefaultColor).toBe("rgb(11, 109, 255)");
+        expect(config.pointGreyoutColor).toBe("rgb(107, 114, 128)");
+        expect(config.hoveredPointRingColor).toBe("rgb(11, 109, 255)");
+        expect(config.focusedPointRingColor).toBe("rgb(31, 41, 55)");
+        expect(config.linkDefaultColor).toBe("rgb(107, 114, 128)");
+        expect(config.hoveredLinkColor).toBe("rgb(11, 109, 255)");
     });
 });

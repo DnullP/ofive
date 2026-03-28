@@ -5,7 +5,8 @@
   height: 100%;
   width: 100%;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 14%, transparent), transparent 10%),
+    radial-gradient(circle at top center, color-mix(in srgb, var(--accent-primary-soft) 36%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--shell-surface-raised) 38%, transparent), transparent 12%),
     var(--surface-base);
   color: var(--text-primary);
 }
@@ -24,10 +25,15 @@
 .main-content-area {
   min-width: 0;
   min-height: 0;
+  position: relative;
+  isolation: isolate;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 32%, transparent), transparent 12%),
+    linear-gradient(180deg, color-mix(in srgb, var(--shell-surface-raised) 44%, transparent), transparent 12%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-primary-soft-weak) 34%, transparent), transparent 24%),
     var(--surface-base);
-  box-shadow: inset 1px 0 0 var(--panel-muted-border);
+  box-shadow:
+    inset 1px 0 0 var(--shell-stroke-soft),
+    inset 0 1px 0 color-mix(in srgb, var(--shell-stroke-soft) 82%, transparent);
 }
 
 /* dockview 官方 React 组件挂载区域 */
@@ -38,8 +44,10 @@
 
 /* 主编辑区挂载容器：提供 DOM 观察入口用于标记 tab 条拖拽区。 */
 .main-dockview-host {
+  position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden;
   background: transparent;
 }
 
@@ -71,7 +79,7 @@
   background-color: var(--accent-primary-soft-weak);
   outline: 2px dashed var(--accent-primary);
   outline-offset: -4px;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
 }
 
 /* dockview 主题变量覆写：增强拖拽预高亮可见性 */
@@ -80,18 +88,18 @@
 .dv-paneview,
 .sidebar-paneview-container {
   --dv-group-view-background-color: var(--surface-base);
-  --dv-tabs-and-actions-container-background-color: color-mix(in srgb, var(--surface-elevated) 92%, transparent);
-  --dv-activegroup-visiblepanel-tab-background-color: color-mix(in srgb, var(--surface-elevated-strong) 90%, transparent);
-  --dv-activegroup-hiddenpanel-tab-background-color: color-mix(in srgb, var(--surface-base) 78%, transparent);
-  --dv-inactivegroup-visiblepanel-tab-background-color: color-mix(in srgb, var(--surface-base) 84%, transparent);
-  --dv-inactivegroup-hiddenpanel-tab-background-color: color-mix(in srgb, var(--surface-base) 74%, transparent);
-  --dv-tab-divider-color: var(--border-color);
+  --dv-tabs-and-actions-container-background-color: var(--chrome-tabstrip-bg);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--chrome-tab-active-bg);
+  --dv-activegroup-hiddenpanel-tab-background-color: color-mix(in srgb, var(--chrome-tabstrip-bg) 72%, transparent);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--chrome-tab-inactive-bg);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: color-mix(in srgb, var(--surface-base) 72%, transparent);
+  --dv-tab-divider-color: var(--chrome-border-soft);
   --dv-activegroup-visiblepanel-tab-color: var(--text-primary);
   --dv-activegroup-hiddenpanel-tab-color: var(--text-secondary);
   --dv-inactivegroup-visiblepanel-tab-color: var(--text-secondary);
   --dv-inactivegroup-hiddenpanel-tab-color: var(--text-tertiary);
-  --dv-separator-border: var(--border-color);
-  --dv-paneview-header-border-color: var(--border-color);
+  --dv-separator-border: var(--chrome-border-soft);
+  --dv-paneview-header-border-color: var(--chrome-border-soft);
   --dv-scrollbar-background-color: var(--scrollbar-thumb-color);
   --dv-icon-hover-background-color: var(--bg-hover);
   --dv-paneview-active-outline-color: var(--accent-primary);
@@ -107,14 +115,51 @@
 .app-runtime--tauri.app-effect--glass .dv-paneview,
 .app-runtime--tauri.app-effect--glass .sidebar-paneview-container {
   --dv-group-view-background-color: transparent;
-  --dv-tabs-and-actions-container-background-color: rgba(var(--window-glass-elevated-rgb), 0.12);
-  --dv-activegroup-visiblepanel-tab-background-color: rgba(var(--window-glass-elevated-rgb), 0.1);
+  --dv-tabs-and-actions-container-background-color: var(--chrome-tabstrip-bg);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--chrome-tab-active-bg);
   --dv-activegroup-hiddenpanel-tab-background-color: transparent;
-  --dv-inactivegroup-visiblepanel-tab-background-color: rgba(var(--window-glass-elevated-rgb), 0.05);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--chrome-tab-inactive-bg);
   --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
-  --dv-tab-divider-color: rgba(var(--window-glass-border-rgb), 0.24);
-  --dv-separator-border: rgba(var(--window-glass-border-rgb), 0.18);
-  --dv-paneview-header-border-color: rgba(var(--window-glass-border-rgb), 0.2);
+  --dv-tab-divider-color: var(--chrome-border-strong);
+  --dv-separator-border: var(--chrome-border-soft);
+  --dv-paneview-header-border-color: var(--chrome-border-soft);
+}
+
+/* dockview 标签与面板头部：统一圆角与动画节奏，建立更轻的高级工具感。 */
+.dv-tab,
+.dv-pane-header,
+.dv-tabs-and-actions-container {
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-default) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.dv-tab {
+  border-radius: var(--radius-sm);
+}
+
+/* Dockview tab 焦点态：替换浏览器默认 outline，避免被 tab strip 裁切后只剩顶部虚线。 */
+.dv-tab:focus,
+.dv-tab:focus-visible {
+  outline: none;
+}
+
+.dv-tab:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--chrome-border-strong) 92%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--accent-primary-soft) 44%, transparent);
+}
+
+.dv-tab:hover {
+  background: var(--surface-hover-accent);
+}
+
+/* 主区 group：为宿主层 FLIP 重排提供稳定的变换原点。 */
+.main-dockview-host .dv-groupview {
+  transform-origin: top left;
+  will-change: transform, opacity, filter;
 }
 
 /* 桌面毛玻璃 Dockview 容器：为 tab 区和 pane 区补充轻度背景模糊。 */
@@ -127,7 +172,7 @@
 .app-runtime--tauri.app-effect--glass.app-platform--macos .dv-dockview,
 .app-runtime--tauri.app-effect--glass.app-platform--macos .dv-paneview,
 .app-runtime--tauri.app-effect--glass.app-platform--macos .sidebar-paneview-container {
-  backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.75)) saturate(1.08);
+  backdrop-filter: none;
 }
 
 /* 桌面毛玻璃主区域：不再给欢迎页和空白工作区额外铺底。 */
@@ -142,7 +187,7 @@
 .dv-drop-target-anchor {
   background-color: var(--accent-primary-soft);
   border: 2px solid var(--accent-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
 }
 
 /* Paneview 拖拽放置区高亮 */
@@ -150,7 +195,7 @@
 .sidebar-paneview-container .dv-drop-target-dropzone {
   background-color: var(--accent-primary-soft-weak);
   border: 2px dashed var(--accent-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
 }
 
 /* Tab 条拖拽区：仅背景可拖拽窗口，tab/按钮仍可点击。 */

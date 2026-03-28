@@ -14,6 +14,25 @@
   --glass-inactive-surface-opacity-soft: 0.13;
   --glass-inactive-surface-opacity-strong: 0.17;
   --glass-blur-radius: 8px;
+  --font-ui: "SF Pro Text", "Avenir Next", "Segoe UI Variable", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-display: "SF Pro Display", "Avenir Next", "Segoe UI Variable", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --window-corner-radius: 16px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --motion-duration-fast: 120ms;
+  --motion-duration-default: 180ms;
+  --motion-duration-slow: 260ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --shell-titlebar-height: 40px;
   --bg-primary: #1f1f1f;
   --bg-secondary: #252526;
   --bg-hover: #2a2d2e;
@@ -26,7 +45,8 @@
   --accent-primary-foreground: #ffffff;
   --accent-primary-soft: rgba(0, 120, 212, 0.22);
   --accent-primary-soft-weak: rgba(0, 120, 212, 0.18);
-  --surface-base: color-mix(in srgb, var(--bg-primary) 94%, black 6%);
+  --text-link-color: #4ea1ff;
+  --surface-base: color-mix(in srgb, var(--bg-secondary) 90%, white 10%);
   --surface-elevated: color-mix(in srgb, var(--bg-secondary) 88%, white 12%);
   --surface-elevated-strong: color-mix(in srgb, var(--bg-secondary) 94%, black 6%);
   --surface-hover-accent: color-mix(in srgb, var(--accent-primary-soft-weak) 54%, var(--bg-hover));
@@ -56,17 +76,61 @@
   --surface-overlay-panel-bg: color-mix(in srgb, var(--surface-card-bg) 94%, transparent);
   --surface-overlay-panel-border: color-mix(in srgb, var(--border-color) 76%, transparent);
   --surface-overlay-panel-shadow: var(--overlay-shadow-strong);
+  --content-material-bg: color-mix(in srgb, var(--surface-card-bg) 94%, transparent);
+  --content-material-bg-muted: color-mix(in srgb, var(--surface-card-bg-muted) 90%, transparent);
+  --content-material-bg-strong: color-mix(in srgb, var(--surface-card-bg) 92%, var(--surface-elevated));
+  --content-material-border: color-mix(in srgb, var(--surface-card-border) 88%, transparent);
+  --content-material-highlight: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --content-material-shadow: var(--surface-card-shadow);
+  --content-material-pill-bg: color-mix(in srgb, var(--surface-chip-bg) 92%, transparent);
+  --content-material-input-bg: color-mix(in srgb, var(--surface-input-bg) 94%, transparent);
+  --content-material-hover-bg: color-mix(in srgb, var(--surface-list-hover-bg) 78%, var(--content-material-bg));
+  --shell-surface-muted: color-mix(in srgb, var(--bg-primary) 92%, black 8%);
+  --shell-surface-raised: color-mix(in srgb, var(--bg-secondary) 78%, black 22%);
+  --shell-stroke-soft: color-mix(in srgb, var(--border-color) 72%, transparent);
+  --shell-stroke-strong: color-mix(in srgb, var(--border-color) 88%, transparent);
+  --shell-shadow-soft: 0 14px 34px rgba(0, 0, 0, 0.12);
+  --shell-shadow-strong: 0 24px 56px rgba(0, 0, 0, 0.18);
+  --chrome-titlebar-bg:
+    linear-gradient(180deg, color-mix(in srgb, var(--shell-surface-raised) 48%, transparent), transparent 100%),
+    var(--shell-surface-muted);
+  --chrome-sidebar-bg:
+    linear-gradient(180deg, color-mix(in srgb, var(--shell-surface-raised) 20%, transparent), transparent 20%),
+    var(--shell-surface-muted);
+  --chrome-sidebar-header-bg: color-mix(in srgb, var(--shell-surface-raised) 82%, transparent);
+  --chrome-activity-bar-bg:
+    linear-gradient(180deg, color-mix(in srgb, var(--shell-surface-raised) 22%, transparent), transparent 18%),
+    var(--shell-surface-muted);
+  --chrome-tabstrip-bg: var(--shell-surface-muted);
+  --chrome-tab-active-bg: var(--shell-surface-raised);
+  --chrome-tab-inactive-bg: color-mix(in srgb, var(--shell-surface-muted) 82%, transparent);
+  --chrome-border-soft: var(--shell-stroke-soft);
+  --chrome-border-strong: var(--shell-stroke-strong);
+  --chrome-inline-highlight: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --chrome-shadow-soft: var(--shell-shadow-soft);
+  --chrome-shadow-strong: var(--shell-shadow-strong);
+  --chrome-backdrop-shadow: rgba(0, 0, 0, 0.16);
+  --chrome-inactive-dim: rgba(0, 0, 0, 0.08);
   --tree-selection-bg: color-mix(in srgb, var(--accent-primary-soft) 68%, transparent);
   --tree-selection-bg-strong: color-mix(in srgb, var(--accent-primary-soft) 84%, var(--bg-hover));
   --tree-drop-bg: color-mix(in srgb, var(--accent-primary-soft) 54%, transparent);
   --tree-drop-bg-muted: color-mix(in srgb, var(--accent-primary-soft) 42%, transparent);
   --shell-background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--accent-primary) 16%, transparent), transparent 32%),
-    radial-gradient(circle at bottom left, color-mix(in srgb, var(--text-primary) 9%, transparent), transparent 28%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent-primary) 12%, transparent), transparent 32%),
+    radial-gradient(circle at bottom left, color-mix(in srgb, var(--text-primary) 6%, transparent), transparent 28%),
     var(--bg-primary);
   --shell-content-background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 18%, transparent), transparent 18%),
-    linear-gradient(135deg, color-mix(in srgb, var(--accent-primary-soft-weak) 40%, transparent), transparent 24%);
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 30%, transparent), transparent 20%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-primary-soft-weak) 24%, transparent), transparent 24%),
+    color-mix(in srgb, var(--surface-base) 94%, white 6%);
+  --shell-atmosphere-overlay:
+    radial-gradient(circle at top center, color-mix(in srgb, var(--accent-primary) 14%, transparent), transparent 34%),
+    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--text-primary) 8%, transparent), transparent 28%);
+  --shell-atmosphere-opacity: 0.8;
+  --shell-content-atmosphere-overlay:
+    radial-gradient(circle at 50% -12%, color-mix(in srgb, var(--accent-primary-soft) 50%, transparent), transparent 40%),
+    linear-gradient(180deg, color-mix(in srgb, var(--shell-surface-muted) 24%, transparent), transparent 18%);
+  --shell-content-atmosphere-opacity: 0.72;
   --scrollbar-thumb-color: rgba(212, 212, 212, 0.38);
   --error-color: #e74c3c;
   --text-warning: #e2a33e;
@@ -82,7 +146,7 @@
   --sidebar-icon-drop-bg: rgba(83, 89, 93, 0.2);
 
   --editor-inline-code-bg: rgba(120, 120, 120, 0.2);
-  --editor-link-color: #4ea1ff;
+  --editor-link-color: var(--text-link-color);
   --editor-bg-color: #1f1f1f;
   --editor-text-color: #d4d4d4;
   --editor-gutter-bg-color: #252526;
@@ -127,9 +191,9 @@
   --editor-warning-text-color: var(--text-warning);
   --editor-warning-bg-color: var(--bg-warning);
 
-  --graph-bg-primary: var(--bg-primary);
-  --graph-bg-secondary: var(--bg-secondary);
-  --graph-border-color: var(--border-color);
+  --graph-bg-primary: color-mix(in srgb, var(--surface-base) 92%, var(--shell-surface-muted) 8%);
+  --graph-bg-secondary: color-mix(in srgb, var(--surface-base) 84%, var(--shell-surface-raised) 16%);
+  --graph-border-color: color-mix(in srgb, var(--shell-stroke-soft) 78%, transparent);
   --graph-status-color: var(--accent-primary);
   --graph-text-color: var(--text-primary);
   --graph-muted-text-color: var(--text-secondary);
@@ -246,7 +310,7 @@
   --sidebar-icon-drop-bg: rgba(83, 89, 93, 0.2);
 
   --editor-inline-code-bg: rgba(120, 120, 120, 0.2);
-  --editor-link-color: #4ea1ff;
+  --editor-link-color: var(--text-link-color);
   --editor-bg-color: #1f1f1f;
   --editor-text-color: #d4d4d4;
   --editor-gutter-bg-color: #252526;
@@ -257,9 +321,9 @@
   --editor-active-line-bg-color: rgba(255, 255, 255, 0.04);
   --editor-active-line-gutter-bg-color: rgba(255, 255, 255, 0.06);
 
-  --graph-bg-primary: var(--bg-primary);
-  --graph-bg-secondary: var(--bg-secondary);
-  --graph-border-color: var(--border-color);
+  --graph-bg-primary: color-mix(in srgb, var(--surface-base) 94%, var(--shell-surface-muted) 6%);
+  --graph-bg-secondary: color-mix(in srgb, var(--surface-base) 86%, var(--shell-surface-raised) 14%);
+  --graph-border-color: color-mix(in srgb, var(--shell-stroke-soft) 74%, transparent);
   --graph-status-color: var(--accent-primary);
   --graph-text-color: var(--text-primary);
   --graph-muted-text-color: var(--text-secondary);
@@ -366,6 +430,7 @@
   --accent-primary-foreground: #ffffff;
   --accent-primary-soft: rgba(11, 109, 255, 0.2);
   --accent-primary-soft-weak: rgba(11, 109, 255, 0.14);
+  --text-link-color: #0a58ca;
   --scrollbar-thumb-color: rgba(71, 85, 105, 0.38);
   --error-color: #dc2626;
   --text-warning: #b45309;
@@ -376,7 +441,7 @@
   --sidebar-icon-drop-bg: rgba(148, 163, 184, 0.16);
 
   --editor-inline-code-bg: rgba(15, 23, 42, 0.08);
-  --editor-link-color: #0a58ca;
+  --editor-link-color: var(--text-link-color);
   --editor-bg-color: #ffffff;
   --editor-text-color: #1f2937;
   --editor-gutter-bg-color: #f5f7fa;
@@ -421,9 +486,9 @@
   --editor-warning-text-color: var(--text-warning);
   --editor-warning-bg-color: var(--bg-warning);
 
-  --graph-bg-primary: var(--bg-primary);
-  --graph-bg-secondary: var(--bg-secondary);
-  --graph-border-color: var(--border-color);
+  --graph-bg-primary: color-mix(in srgb, var(--surface-base) 94%, var(--shell-surface-muted) 6%);
+  --graph-bg-secondary: color-mix(in srgb, var(--surface-base) 86%, var(--shell-surface-raised) 14%);
+  --graph-border-color: color-mix(in srgb, var(--shell-stroke-soft) 72%, transparent);
   --graph-status-color: var(--accent-primary);
   --graph-text-color: var(--text-primary);
   --graph-muted-text-color: var(--text-secondary);
@@ -530,6 +595,7 @@
   --accent-primary-foreground: #fff8ec;
   --accent-primary-soft: rgba(139, 90, 43, 0.2);
   --accent-primary-soft-weak: rgba(139, 90, 43, 0.13);
+  --text-link-color: #6d4c2a;
   --scrollbar-thumb-color: rgba(111, 90, 67, 0.38);
   --error-color: #9f3f2b;
   --text-warning: #9a5d11;
@@ -540,7 +606,7 @@
   --sidebar-icon-drop-bg: rgba(140, 108, 67, 0.16);
 
   --editor-inline-code-bg: rgba(94, 66, 38, 0.08);
-  --editor-link-color: #6d4c2a;
+  --editor-link-color: var(--text-link-color);
   --editor-bg-color: #f7edd4;
   --editor-text-color: #4e3d2b;
   --editor-gutter-bg-color: #efe2c3;
@@ -585,9 +651,9 @@
   --editor-warning-text-color: var(--text-warning);
   --editor-warning-bg-color: var(--bg-warning);
 
-  --graph-bg-primary: var(--bg-primary);
-  --graph-bg-secondary: var(--bg-secondary);
-  --graph-border-color: var(--border-color);
+  --graph-bg-primary: color-mix(in srgb, var(--surface-base) 92%, var(--shell-surface-muted) 8%);
+  --graph-bg-secondary: color-mix(in srgb, var(--surface-base) 84%, var(--shell-surface-raised) 16%);
+  --graph-border-color: color-mix(in srgb, var(--shell-stroke-soft) 76%, transparent);
   --graph-status-color: var(--accent-primary);
   --graph-text-color: var(--text-primary);
   --graph-muted-text-color: var(--text-secondary);
@@ -682,13 +748,22 @@
   --bg-secondary: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-soft));
   --bg-hover: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-strong));
   --border-color: rgba(var(--window-glass-border-rgb), 0.18);
-  --overlay-shadow-floating: 0 10px 28px rgba(0, 0, 0, 0.14);
-  --overlay-shadow-strong: 0 20px 44px rgba(0, 0, 0, 0.2);
+  --overlay-shadow-floating: 0 6px 18px rgba(0, 0, 0, 0.1);
+  --overlay-shadow-strong: 0 12px 28px rgba(0, 0, 0, 0.14);
   --floating-surface-bg: rgba(var(--window-glass-elevated-rgb), 0.72);
   --floating-surface-bg-strong: rgba(var(--window-glass-elevated-rgb), 0.8);
   --floating-surface-border: rgba(var(--window-glass-border-rgb), 0.3);
-  --floating-surface-shadow: 0 24px 52px rgba(0, 0, 0, 0.24);
+  --floating-surface-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
   --floating-backdrop-bg: rgba(var(--window-glass-bg-rgb), 0.24);
+  --content-material-bg: rgba(var(--window-glass-elevated-rgb), 0.16);
+  --content-material-bg-muted: rgba(var(--window-glass-bg-rgb), 0.12);
+  --content-material-bg-strong: rgba(var(--window-glass-elevated-rgb), 0.22);
+  --content-material-border: rgba(var(--window-glass-border-rgb), 0.18);
+  --content-material-highlight: rgba(var(--window-glass-border-rgb), 0.03);
+  --content-material-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  --content-material-pill-bg: rgba(var(--window-glass-elevated-rgb), 0.18);
+  --content-material-input-bg: rgba(var(--window-glass-bg-rgb), 0.16);
+  --content-material-hover-bg: rgba(var(--window-glass-elevated-rgb), 0.22);
   --surface-input-bg: rgba(var(--window-glass-elevated-rgb), 0.18);
   --surface-input-border: rgba(var(--window-glass-border-rgb), 0.26);
   --surface-card-bg: rgba(var(--window-glass-elevated-rgb), 0.24);
@@ -700,6 +775,38 @@
   --surface-overlay-backdrop: rgba(var(--window-glass-bg-rgb), 0.22);
   --surface-overlay-panel-bg: rgba(var(--window-glass-elevated-rgb), 0.3);
   --surface-overlay-panel-border: rgba(var(--window-glass-border-rgb), 0.28);
+  --shell-surface-muted: rgba(var(--window-glass-elevated-rgb), 0.16);
+  --shell-surface-raised: rgba(var(--window-glass-elevated-rgb), 0.24);
+  --shell-stroke-soft: rgba(var(--window-glass-border-rgb), 0.18);
+  --shell-stroke-strong: rgba(var(--window-glass-border-rgb), 0.3);
+  --shell-shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.08);
+  --shell-shadow-strong: 0 14px 32px rgba(0, 0, 0, 0.12);
+  --chrome-titlebar-bg:
+    linear-gradient(180deg, rgba(var(--window-glass-border-rgb), 0.1), rgba(var(--window-glass-border-rgb), 0.02)),
+    rgba(var(--window-glass-elevated-rgb), 0.12);
+  --chrome-sidebar-bg:
+    linear-gradient(180deg, rgba(var(--window-glass-border-rgb), 0.08), rgba(var(--window-glass-border-rgb), 0.015)),
+    rgba(var(--window-glass-elevated-rgb), 0.1);
+  --chrome-sidebar-header-bg:
+    linear-gradient(180deg, rgba(var(--window-glass-border-rgb), 0.06), rgba(var(--window-glass-border-rgb), 0.015)),
+    rgba(var(--window-glass-elevated-rgb), 0.08);
+  --chrome-activity-bar-bg:
+    linear-gradient(180deg, rgba(var(--window-glass-border-rgb), 0.08), rgba(var(--window-glass-border-rgb), 0.015)),
+    rgba(var(--window-glass-elevated-rgb), 0.12);
+  --chrome-tabstrip-bg: rgba(var(--window-glass-elevated-rgb), 0.11);
+  --chrome-tab-active-bg: rgba(var(--window-glass-elevated-rgb), 0.16);
+  --chrome-tab-inactive-bg: rgba(var(--window-glass-elevated-rgb), 0.06);
+  --chrome-border-soft: rgba(var(--window-glass-border-rgb), 0.16);
+  --chrome-border-strong: rgba(var(--window-glass-border-rgb), 0.26);
+  --chrome-inline-highlight: rgba(var(--window-glass-border-rgb), 0.03);
+  --chrome-shadow-soft: 0 8px 18px rgba(0, 0, 0, 0.08);
+  --chrome-shadow-strong: 0 14px 30px rgba(0, 0, 0, 0.12);
+  --chrome-backdrop-shadow: rgba(0, 0, 0, 0.08);
+  --chrome-inactive-dim: rgba(0, 0, 0, 0.08);
+  --shell-atmosphere-overlay: linear-gradient(180deg, rgba(var(--window-glass-bg-rgb), 0.025), rgba(var(--window-glass-bg-rgb), 0.006));
+  --shell-atmosphere-opacity: 0.06;
+  --shell-content-atmosphere-overlay: linear-gradient(180deg, rgba(var(--window-glass-elevated-rgb), 0.02), transparent 18%);
+  --shell-content-atmosphere-opacity: 0.04;
   --tree-drop-bg: rgba(var(--window-glass-elevated-rgb), 0.24);
   --tree-drop-bg-muted: rgba(var(--window-glass-elevated-rgb), 0.18);
   --editor-bg-color: rgba(var(--window-glass-bg-rgb), 0.18);
@@ -708,6 +815,9 @@
   --editor-panel-bg-elevated-color: var(--bg-secondary);
   --editor-panel-bg-soft-color: var(--bg-hover);
   --editor-panel-border-color: var(--border-color);
+  --graph-bg-primary: transparent;
+  --graph-bg-secondary: rgba(var(--window-glass-elevated-rgb), 0.32);
+  --graph-border-color: rgba(var(--window-glass-border-rgb), 0.2);
   --graph-label-bg: rgba(var(--window-glass-elevated-rgb), 0.26);
   --architecture-surface-hero: rgba(var(--window-glass-elevated-rgb), 0.3);
   --architecture-surface-card: rgba(var(--window-glass-elevated-rgb), 0.28);
@@ -721,6 +831,92 @@
   --editor-symbol-shadow-color: color-mix(in srgb, var(--text-primary) 50%, transparent);
   --editor-list-source-marker-color: var(--editor-symbol-color);
   --editor-list-source-marker-shadow-color: var(--editor-symbol-shadow-color);
+  --content-material-bg: rgba(26, 30, 35, 0.18);
+  --content-material-bg-muted: rgba(22, 26, 31, 0.12);
+  --content-material-bg-strong: rgba(31, 36, 42, 0.24);
+  --content-material-border: rgba(255, 255, 255, 0.14);
+  --content-material-highlight: rgba(255, 255, 255, 0.025);
+  --content-material-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+  --content-material-pill-bg: rgba(28, 32, 37, 0.2);
+  --content-material-input-bg: rgba(20, 24, 29, 0.18);
+  --content-material-hover-bg: rgba(39, 45, 52, 0.24);
+  --chrome-titlebar-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01)),
+    rgba(18, 21, 26, 0.27);
+  --chrome-sidebar-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.008)),
+    rgba(17, 20, 24, 0.24);
+  --chrome-sidebar-header-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008)),
+    rgba(22, 25, 30, 0.2);
+  --chrome-activity-bar-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.008)),
+    rgba(16, 19, 23, 0.27);
+  --chrome-tabstrip-bg: rgba(21, 24, 29, 0.17);
+  --chrome-tab-active-bg: rgba(30, 34, 40, 0.24);
+  --chrome-tab-inactive-bg: rgba(21, 24, 29, 0.1);
+  --chrome-border-soft: rgba(255, 255, 255, 0.13);
+  --chrome-border-strong: rgba(255, 255, 255, 0.2);
+  --chrome-inline-highlight: rgba(255, 255, 255, 0.02);
+  --chrome-shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.12);
+  --chrome-shadow-strong: 0 14px 32px rgba(0, 0, 0, 0.18);
+  --chrome-backdrop-shadow: rgba(0, 0, 0, 0.1);
+  --chrome-inactive-dim: rgba(0, 0, 0, 0.12);
+  --shell-atmosphere-overlay: linear-gradient(180deg, rgba(var(--window-glass-bg-rgb), 0.035), rgba(var(--window-glass-bg-rgb), 0.008));
+  --shell-atmosphere-opacity: 0.04;
+  --shell-content-atmosphere-overlay: linear-gradient(180deg, rgba(var(--window-glass-elevated-rgb), 0.022), transparent 18%);
+  --shell-content-atmosphere-opacity: 0.03;
+}
+
+/* 牛皮纸毛玻璃：保留纸面气质，但 chrome 必须更深，避免在振动材质下发白发灰。 */
+:root[data-theme="kraft"].app-runtime--tauri.app-effect--glass {
+  --window-glass-bg: rgba(110, 88, 60, 0.18);
+  --window-glass-elevated: rgba(133, 105, 72, 0.24);
+  --window-glass-border: rgba(255, 244, 224, 0.16);
+  --window-glass-bg-rgb: 110, 88, 60;
+  --window-glass-elevated-rgb: 133, 105, 72;
+  --window-glass-border-rgb: 255, 244, 224;
+  --bg-primary: rgba(110, 88, 60, 0.09);
+  --bg-secondary: rgba(133, 105, 72, 0.14);
+  --bg-hover: rgba(150, 119, 82, 0.22);
+  --border-color: rgba(255, 244, 224, 0.14);
+  --content-material-bg: rgba(126, 99, 69, 0.18);
+  --content-material-bg-muted: rgba(110, 88, 60, 0.12);
+  --content-material-bg-strong: rgba(139, 109, 76, 0.24);
+  --content-material-border: rgba(255, 244, 224, 0.14);
+  --content-material-highlight: rgba(255, 244, 224, 0.025);
+  --content-material-shadow: 0 10px 24px rgba(47, 32, 17, 0.12);
+  --content-material-pill-bg: rgba(129, 102, 71, 0.2);
+  --content-material-input-bg: rgba(112, 88, 59, 0.17);
+  --content-material-hover-bg: rgba(148, 116, 80, 0.24);
+  --chrome-titlebar-bg:
+    linear-gradient(180deg, rgba(255, 244, 224, 0.05), rgba(255, 244, 224, 0.012)),
+    rgba(88, 68, 46, 0.29);
+  --chrome-sidebar-bg:
+    linear-gradient(180deg, rgba(255, 244, 224, 0.04), rgba(255, 244, 224, 0.01)),
+    rgba(93, 72, 49, 0.25);
+  --chrome-sidebar-header-bg:
+    linear-gradient(180deg, rgba(255, 244, 224, 0.035), rgba(255, 244, 224, 0.01)),
+    rgba(101, 78, 52, 0.22);
+  --chrome-activity-bar-bg:
+    linear-gradient(180deg, rgba(255, 244, 224, 0.045), rgba(255, 244, 224, 0.01)),
+    rgba(84, 65, 44, 0.28);
+  --chrome-tabstrip-bg: rgba(102, 79, 55, 0.18);
+  --chrome-tab-active-bg: rgba(126, 98, 68, 0.24);
+  --chrome-tab-inactive-bg: rgba(96, 74, 51, 0.11);
+  --chrome-border-soft: rgba(255, 244, 224, 0.12);
+  --chrome-border-strong: rgba(255, 244, 224, 0.18);
+  --chrome-inline-highlight: rgba(255, 244, 224, 0.02);
+  --chrome-shadow-soft: 0 8px 20px rgba(47, 32, 17, 0.12);
+  --chrome-shadow-strong: 0 14px 32px rgba(47, 32, 17, 0.16);
+  --chrome-backdrop-shadow: rgba(47, 32, 17, 0.08);
+  --chrome-inactive-dim: rgba(55, 38, 21, 0.12);
+  --shell-atmosphere-overlay: linear-gradient(180deg, rgba(110, 88, 60, 0.035), rgba(110, 88, 60, 0.008));
+  --shell-atmosphere-opacity: 0.04;
+  --shell-content-atmosphere-overlay: linear-gradient(180deg, rgba(133, 105, 72, 0.024), transparent 18%);
+  --shell-content-atmosphere-opacity: 0.03;
+  --editor-bg-color: rgba(110, 88, 60, 0.1);
+  --editor-gutter-bg-color: rgba(133, 105, 72, 0.14);
 }
 
 :root.app-runtime--tauri.app-effect--glass.app-window--inactive {}
@@ -751,9 +947,8 @@
   --editor-gutter-bg-color: rgba(37, 41, 47, 0.12);
 }
 
-/* macOS 亮色/牛皮纸毛玻璃：保持更高透光度，避免发灰发脏。 */
-:root[data-theme="light"].app-runtime--tauri.app-effect--glass.app-platform--macos,
-:root[data-theme="kraft"].app-runtime--tauri.app-effect--glass.app-platform--macos {
+/* macOS 亮色毛玻璃：保持更高透光度，避免发灰发脏。 */
+:root[data-theme="light"].app-runtime--tauri.app-effect--glass.app-platform--macos {
   --window-glass-bg: rgba(248, 249, 251, 0.13);
   --window-glass-elevated: rgba(255, 255, 255, 0.2);
   --window-glass-border: rgba(15, 23, 42, 0.16);
@@ -768,6 +963,22 @@
   --editor-gutter-bg-color: rgba(255, 255, 255, 0.1);
 }
 
+/* macOS 牛皮纸毛玻璃：比亮色明显更深，保留暖色而不抬亮 chrome。 */
+:root[data-theme="kraft"].app-runtime--tauri.app-effect--glass.app-platform--macos {
+  --window-glass-bg: rgba(125, 98, 68, 0.16);
+  --window-glass-elevated: rgba(148, 116, 80, 0.22);
+  --window-glass-border: rgba(255, 245, 226, 0.18);
+  --window-glass-bg-rgb: 125, 98, 68;
+  --window-glass-elevated-rgb: 148, 116, 80;
+  --window-glass-border-rgb: 255, 245, 226;
+  --bg-primary: rgba(125, 98, 68, 0.09);
+  --bg-secondary: rgba(148, 116, 80, 0.14);
+  --bg-hover: rgba(164, 129, 91, 0.22);
+  --border-color: rgba(255, 245, 226, 0.14);
+  --editor-bg-color: rgba(125, 98, 68, 0.1);
+  --editor-gutter-bg-color: rgba(148, 116, 80, 0.14);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -779,7 +990,7 @@ body,
   height: 100%;
   margin: 0;
   padding: 0;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
 }
 
 /* 禁止页面级别滚动，避免 macOS 双指滑动触发整窗弹性拖动 */
@@ -804,6 +1015,9 @@ body,
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
+  font-feature-settings: "liga" 1, "kern" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   /* 全局禁用文本选择，UI元素不应被选中 */
   user-select: none;
   -webkit-user-select: none;
@@ -846,6 +1060,18 @@ textarea,
   flex-direction: column;
   background: var(--shell-background);
   overflow: hidden;
+  position: relative;
+  isolation: isolate;
+}
+
+/* 应用壳层背景辉光：用低对比度渐变建立更轻的深度层次。 */
+.app-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--shell-atmosphere-overlay);
+  opacity: var(--shell-atmosphere-opacity);
 }
 
 .app-runtime--tauri.app-effect--glass .app-shell {
@@ -855,7 +1081,9 @@ textarea,
 .app-runtime--tauri.app-effect--glass.app-platform--macos .app-shell {
   background:
     linear-gradient(180deg, rgba(var(--window-glass-bg-rgb), 0.04), rgba(var(--window-glass-bg-rgb), 0.015));
-  backdrop-filter: blur(calc(var(--glass-blur-radius) * 1.35)) saturate(1.18);
+  border-radius: var(--window-corner-radius);
+  background-clip: padding-box;
+  backdrop-filter: blur(calc(var(--glass-blur-radius) * 1.05)) saturate(1.08);
 }
 
 .app-runtime--tauri.app-effect--glass.app-platform--macos.app-window--dragging .app-shell {
@@ -865,35 +1093,51 @@ textarea,
 .app-content {
   flex: 1;
   min-height: 0;
-  background: var(--shell-content-background);
-  box-shadow: inset 0 1px 0 var(--panel-muted-border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--shell-surface-raised) 40%, transparent), transparent 16%),
+    var(--shell-content-background);
+  box-shadow: inset 0 1px 0 var(--shell-stroke-soft);
+  position: relative;
+  isolation: isolate;
 }
 
 .app-runtime--tauri.app-effect--glass .app-content {
   background: transparent;
 }
 
+/* 内容区内层氛围：增加中心区聚焦感，但不影响主内容透明约束。 */
+.app-content::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--shell-content-atmosphere-overlay);
+  opacity: var(--shell-content-atmosphere-opacity);
+}
+
 .app-titlebar {
-  height: 36px;
+  height: var(--shell-titlebar-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  padding: 0 8px;
+  background: var(--chrome-titlebar-bg);
+  border-bottom: 1px solid var(--chrome-border-soft);
+  padding: 0 var(--space-3);
   user-select: none;
-  gap: 8px;
+  gap: var(--space-3);
+  box-shadow:
+    inset 0 1px 0 var(--chrome-inline-highlight),
+    0 1px 0 color-mix(in srgb, var(--bg-primary) 36%, transparent);
 }
 
 .app-runtime--tauri.app-effect--glass .app-titlebar {
-  background: rgba(var(--window-glass-elevated-rgb), 0.12);
-  border-bottom: 1px solid rgba(var(--window-glass-border-rgb), 0.28);
-  backdrop-filter: blur(calc(var(--glass-blur-radius) * 1.15)) saturate(1.14);
-  box-shadow: inset 0 1px 0 rgba(var(--window-glass-border-rgb), 0.14);
+  background: var(--chrome-titlebar-bg);
+  border-bottom: 1px solid var(--chrome-border-strong);
+  box-shadow: inset 0 1px 0 var(--chrome-inline-highlight);
 }
 
 .app-runtime--tauri.app-effect--glass.app-window--inactive .app-titlebar {
-  background: rgba(var(--window-glass-elevated-rgb), 0.16);
+  background: color-mix(in srgb, var(--chrome-titlebar-bg) 88%, rgba(0, 0, 0, 0.08));
 }
 
 .app-runtime--tauri.app-effect--glass.app-window--dragging .app-titlebar {
@@ -903,8 +1147,8 @@ textarea,
 /* 浮层遮罩契约：为 modal/overlay 提供统一的毛玻璃背景衰减，避免内容与桌面纹理直接混叠。 */
 .app-runtime--tauri.app-effect--glass [data-floating-backdrop="true"] {
   background: var(--floating-backdrop-bg);
-  backdrop-filter: blur(calc(var(--glass-blur-radius) * 1.1)) saturate(1.08);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur-radius) * 1.1)) saturate(1.08);
+  backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.8)) saturate(1.04);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.8)) saturate(1.04);
 }
 
 /* 浮层表面契约：为 modal/popover/编辑器补全气泡提供更高不透明度与更稳定边框。 */
@@ -918,8 +1162,8 @@ textarea,
   box-shadow:
     var(--floating-surface-shadow),
     inset 0 1px 0 rgba(var(--window-glass-border-rgb), 0.16);
-  backdrop-filter: blur(calc(var(--glass-blur-radius) * 1.35)) saturate(1.22);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur-radius) * 1.35)) saturate(1.22);
+  backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.95)) saturate(1.08);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.95)) saturate(1.08);
   background-clip: padding-box;
 }
 
@@ -946,22 +1190,63 @@ textarea,
 .app-titlebar__controls {
   display: flex;
   align-items: center;
-  gap: 4px;
-  min-width: 84px;
+  gap: var(--space-1);
+  min-width: 96px;
 }
 
 /* 标题栏控制组占位：保证标题居中，不受左右控件影响。 */
 .app-titlebar__controls-spacer {
-  min-width: 84px;
-  height: 24px;
+  min-width: 96px;
+  height: 28px;
 }
 
 .app-titlebar__title {
   flex: 1;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+/* 标题栏品牌块：建立更稳定的视觉锚点而不引入额外导航复杂度。 */
+.app-titlebar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 12px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--chrome-border-soft) 88%, transparent);
+  background: color-mix(in srgb, var(--chrome-tab-active-bg) 78%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chrome-inline-highlight) 88%, transparent);
+}
+
+/* 品牌标记：使用一枚小型高光圆点增加识别感。 */
+.app-titlebar__brand-mark {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.92), transparent 38%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-primary) 90%, white 10%), color-mix(in srgb, var(--accent-primary) 54%, black 46%));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-primary) 18%, transparent),
+    0 8px 18px color-mix(in srgb, var(--accent-primary-soft) 56%, transparent);
+}
+
+/* 品牌标题：使用 display 字体与更紧的字重节奏表达桌面产品感。 */
+.app-titlebar__brand-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--text-secondary);
 }
 
@@ -970,7 +1255,7 @@ textarea,
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 40px;
 }
 
@@ -979,48 +1264,66 @@ textarea,
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   margin-left: auto;
-  min-width: 84px;
+  min-width: 96px;
 }
 
 /* 标题栏控制按钮基础样式。 */
 .app-titlebar__control {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 0;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-default) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 /* 最小化/最大化按钮悬浮态。 */
 .app-titlebar__control--minimize:hover,
 .app-titlebar__control--maximize:hover {
-  background: var(--bg-hover);
+  background: var(--surface-hover-accent);
+  border-color: var(--nav-item-hover-border);
   color: var(--text-primary);
+  transform: translateY(-1px);
 }
 
 /* 最小化/最大化按钮悬浮态。 */
 .app-titlebar__control--close:hover {
-  background: var(--accent-primary);
-  color: var(--text-primary);
+  background: color-mix(in srgb, var(--error-color) 84%, transparent);
+  color: #ffffff;
 }
 
 /* 右侧栏切换按钮悬浮态：与普通辅助控制一致。 */
 .app-titlebar__control--sidebar:hover {
-  background: var(--bg-hover);
+  background: var(--surface-hover-accent);
+  border-color: var(--nav-item-hover-border);
   color: var(--text-primary);
+  transform: translateY(-1px);
 }
 
 /* 右侧栏切换按钮：比普通窗口控制更大一档，便于点击。 */
 .app-titlebar__control--sidebar {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+}
+
+/* 标题栏按钮焦点态：保证键盘导航时也有清晰状态提示。 */
+.app-titlebar__control:focus-visible {
+  outline: none;
+  border-color: var(--surface-input-border-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary-soft) 46%, transparent);
 }
 
 /* 窗口交互工具类：可拖拽区域（支持 macOS 三指拖拽）。 */
@@ -1044,6 +1347,24 @@ textarea,
 .editor-tab-view h2,
 .editor-tab-view h3 {
   margin: 0 0 10px;
+}
+
+/* 减少动态偏好：保留透明度变化，关闭位移/缩放类动效。 */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .app-titlebar__control:hover,
+  .app-titlebar__control--sidebar:hover {
+    transform: none;
+  }
 }
 
 .panel-placeholder p,

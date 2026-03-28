@@ -9,14 +9,21 @@
  *  - ./MockVaultPanel
  */
 
-import React, { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
-import { Bot, Compass, FolderOpen, Link2, Plus } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { Bot, Compass, FolderOpen, Link2, Orbit, Plus } from "lucide-react";
 import {
     DockviewLayout,
     type TabInstanceDefinition,
 } from "../../src/host/layout";
+import type {
+    DockviewLayoutAnimationObservation,
+    DockviewLayoutDebugApi,
+    DockviewLayoutSnapshot,
+    DockviewLayoutTimelineEntry,
+} from "../../src/host/layout/dockviewLayoutDebugContract";
 import { buildGlassRuntimeStyle } from "../../src/host/layout/glassRuntimeStyle";
 import { CodeMirrorEditorTab } from "../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
+import { KnowledgeGraphTab } from "../../src/plugins/knowledge-graph/tab/KnowledgeGraphTab";
 import { SettingsTab } from "../../src/host/layout/SettingsTab";
 import { useConfigSync } from "../../src/host/store/configStore";
 import { registerActivity } from "../../src/host/registry/activityRegistry";
@@ -29,6 +36,8 @@ import "../../src/plugins/outline/outlinePlugin.css";
 import "../../src/App.css";
 
 const MOCK_VAULT_PATH = "/mock/notes";
+const MOCK_SPLIT_DEMO_COMPONENT_ID = "split-demo";
+const MOCK_SPLIT_DEMO_TAB_ID = "split-demo";
 
 function resolveMockVaultPath(): string {
     if (typeof window === "undefined") {
@@ -41,6 +50,29 @@ function resolveMockVaultPath(): string {
 
 type MockPlatform = "windows" | "macos";
 type MockThemeMode = "dark" | "light" | "kraft";
+
+interface MockDockviewWindowApi {
+    openSplitTab: (options?: {
+        id?: string;
+        title?: string;
+        component?: string;
+        position?: "top" | "bottom" | "left" | "right";
+    }) => void;
+    closeTab: (tabId: string) => void;
+    activateTab: (tabId: string) => void;
+    hasTab: (tabId: string) => boolean;
+    getAnimationObservations: () => DockviewLayoutAnimationObservation[];
+    clearAnimationObservations: () => void;
+    getTimelineEntries: () => DockviewLayoutTimelineEntry[];
+    clearTimelineEntries: () => void;
+    getLayoutSnapshot: () => DockviewLayoutSnapshot;
+}
+
+declare global {
+    interface Window {
+        __OFIVE_MOCK_DOCKVIEW__?: MockDockviewWindowApi;
+    }
+}
 
 /**
  * @function readSearchParam
@@ -145,6 +177,58 @@ function MockHomeTab(): ReactNode {
     );
 }
 
+function MockSplitDemoTab(): ReactNode {
+    return (
+        <div
+            data-testid="mock-split-demo-tab"
+            style={{
+                display: "grid",
+                gap: 14,
+                height: "100%",
+                padding: 20,
+                background: "linear-gradient(135deg, rgba(84, 152, 255, 0.16), rgba(108, 236, 190, 0.12) 52%, rgba(255, 196, 120, 0.14))",
+            }}
+        >
+            <div style={{ fontSize: 24, fontWeight: 700 }}>Split Demo</div>
+            <div style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-secondary)" }}>
+                这个 tab 用来验证 Dockview 主区的 split reflow 动画是否足够明显。
+            </div>
+            <div
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gap: 10,
+                    alignSelf: "start",
+                }}
+            >
+                {[
+                    "capture old rect",
+                    "reflow existing group",
+                    "fade new area",
+                ].map((label) => (
+                    <div
+                        key={label}
+                        style={{
+                            minHeight: 84,
+                            padding: 12,
+                            borderRadius: 14,
+                            background: "rgba(15, 23, 42, 0.2)",
+                            border: "1px solid rgba(255, 255, 255, 0.14)",
+                            boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.08)",
+                            fontSize: 12,
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.08em",
+                        }}
+                    >
+                        {label}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 function MockOutlinePanel(): ReactNode {
     return (
         <div className="outline-panel">
@@ -239,6 +323,8 @@ function MockAiChatPanel(): ReactNode {
 }
 
 let mockRegistered = false;
+const MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID = "knowledgegraph";
+const MOCK_KNOWLEDGE_GRAPH_ACTIVITY_ID = "knowledge-graph";
 
 function ensureMockComponentsRegistered(): void {
     if (mockRegistered) return;
@@ -248,6 +334,7 @@ function ensureMockComponentsRegistered(): void {
     const outlineIcon = React.createElement(Compass, { size: 18, strokeWidth: 1.8 });
     const backlinksIcon = React.createElement(Link2, { size: 18, strokeWidth: 1.8 });
     const aiChatIcon = React.createElement(Bot, { size: 18, strokeWidth: 1.8 });
+    const knowledgeGraphIcon = React.createElement(Orbit, { size: 18, strokeWidth: 1.8 });
 
     registerActivity({
         type: "panel-container",
@@ -275,6 +362,22 @@ function ensureMockComponentsRegistered(): void {
         defaultSection: "top",
         defaultBar: "right",
         defaultOrder: 3,
+    });
+    registerActivity({
+        type: "callback",
+        id: MOCK_KNOWLEDGE_GRAPH_ACTIVITY_ID,
+        title: () => "知识图谱",
+        icon: knowledgeGraphIcon,
+        defaultSection: "top",
+        defaultBar: "left",
+        defaultOrder: 3,
+        onActivate: (context) => {
+            context.openTab({
+                id: MOCK_KNOWLEDGE_GRAPH_ACTIVITY_ID,
+                title: "知识图谱",
+                component: MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID,
+            });
+        },
     });
 
     registerPanel({
@@ -311,7 +414,9 @@ function ensureMockComponentsRegistered(): void {
     });
 
     registerTabComponent({ id: "home", component: MockHomeTab as never });
+    registerTabComponent({ id: MOCK_SPLIT_DEMO_COMPONENT_ID, component: MockSplitDemoTab as never });
     registerTabComponent({ id: "codemirror", component: CodeMirrorEditorTab as never });
+    registerTabComponent({ id: MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID, component: KnowledgeGraphTab as never });
     registerTabComponent({ id: "settings", component: SettingsTab as never });
 
     console.info("[MockApp] mock components registered");
@@ -320,6 +425,7 @@ function ensureMockComponentsRegistered(): void {
 export function MockApp(): ReactNode {
     const mockVaultPath = useMemo(() => resolveMockVaultPath(), []);
     const showControls = useMemo(() => resolveShouldShowControls(), []);
+    const dockviewDebugApiRef = useRef<DockviewLayoutDebugApi | null>(null);
     const [platform, setPlatform] = useState<MockPlatform>(() => resolveInitialMockPlatform());
     const [themeMode, setThemeMode] = useState<MockThemeMode>(() => resolveInitialThemeMode());
     const [glassEnabled, setGlassEnabled] = useState<boolean>(() => resolveInitialBooleanFlag("glass", true));
@@ -328,9 +434,50 @@ export function MockApp(): ReactNode {
     const [glassSurfaceOpacity, setGlassSurfaceOpacity] = useState<number>(() => resolveInitialNumberFlag("surface", 0.18));
     const [glassInactiveSurfaceOpacity, setGlassInactiveSurfaceOpacity] = useState<number>(() => resolveInitialNumberFlag("inactiveSurface", 0.12));
     const [glassBlurRadius, setGlassBlurRadius] = useState<number>(() => resolveInitialNumberFlag("blur", 16));
+    const [isSplitReplayRunning, setIsSplitReplayRunning] = useState(false);
 
     useConfigSync(mockVaultPath, true);
     ensureMockComponentsRegistered();
+
+    useEffect(() => {
+        window.__OFIVE_MOCK_DOCKVIEW__ = {
+            openSplitTab: (options) => {
+                dockviewDebugApiRef.current?.openSplitTab({
+                    id: options?.id ?? MOCK_SPLIT_DEMO_TAB_ID,
+                    title: options?.title ?? "Split Demo",
+                    component: options?.component ?? MOCK_SPLIT_DEMO_COMPONENT_ID,
+                }, options?.position ?? "right");
+            },
+            closeTab: (tabId) => {
+                dockviewDebugApiRef.current?.closeTab(tabId);
+            },
+            activateTab: (tabId) => {
+                dockviewDebugApiRef.current?.activateTab(tabId);
+            },
+            hasTab: (tabId) => {
+                return dockviewDebugApiRef.current?.hasTab(tabId) ?? false;
+            },
+            getAnimationObservations: () => {
+                return dockviewDebugApiRef.current?.getAnimationObservations() ?? [];
+            },
+            clearAnimationObservations: () => {
+                dockviewDebugApiRef.current?.clearAnimationObservations();
+            },
+            getTimelineEntries: () => {
+                return dockviewDebugApiRef.current?.getTimelineEntries() ?? [];
+            },
+            clearTimelineEntries: () => {
+                dockviewDebugApiRef.current?.clearTimelineEntries();
+            },
+            getLayoutSnapshot: () => {
+                return dockviewDebugApiRef.current?.getLayoutSnapshot() ?? { groups: [] };
+            },
+        };
+
+        return () => {
+            delete window.__OFIVE_MOCK_DOCKVIEW__;
+        };
+    }, []);
 
     useEffect(() => {
         const runtimeStyle = buildGlassRuntimeStyle({
@@ -386,6 +533,40 @@ export function MockApp(): ReactNode {
         ],
         [],
     );
+
+    const openSplitDemo = (): void => {
+        dockviewDebugApiRef.current?.openSplitTab({
+            id: MOCK_SPLIT_DEMO_TAB_ID,
+            title: "Split Demo",
+            component: MOCK_SPLIT_DEMO_COMPONENT_ID,
+        }, "right");
+    };
+
+    const closeSplitDemo = (): void => {
+        dockviewDebugApiRef.current?.closeTab(MOCK_SPLIT_DEMO_TAB_ID);
+    };
+
+    const replaySplitDemo = async (): Promise<void> => {
+        if (isSplitReplayRunning) {
+            return;
+        }
+
+        setIsSplitReplayRunning(true);
+        try {
+            if (dockviewDebugApiRef.current?.hasTab(MOCK_SPLIT_DEMO_TAB_ID)) {
+                closeSplitDemo();
+                await new Promise((resolve) => window.setTimeout(resolve, 420));
+            }
+
+            openSplitDemo();
+            await new Promise((resolve) => window.setTimeout(resolve, 900));
+            closeSplitDemo();
+        } finally {
+            window.setTimeout(() => {
+                setIsSplitReplayRunning(false);
+            }, 380);
+        }
+    };
 
     return (
         <div className="app-shell">
@@ -447,12 +628,45 @@ export function MockApp(): ReactNode {
                         <span>Blur radius: {glassBlurRadius}px</span>
                         <input type="range" min="4" max="24" step="1" value={glassBlurRadius} onChange={handleNumberInput(setGlassBlurRadius, 4, 24)} />
                     </label>
+                    <div style={{ display: "grid", gap: 6, fontSize: 12 }}>
+                        <span>Split Motion Demo</span>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
+                            <button
+                                type="button"
+                                data-testid="mock-control-split-open"
+                                onClick={openSplitDemo}
+                                disabled={isSplitReplayRunning}
+                            >
+                                Split Right
+                            </button>
+                            <button
+                                type="button"
+                                data-testid="mock-control-split-close"
+                                onClick={closeSplitDemo}
+                                disabled={isSplitReplayRunning}
+                            >
+                                Close Split
+                            </button>
+                        </div>
+                        <button
+                            type="button"
+                            data-testid="mock-control-split-replay"
+                            onClick={() => { void replaySplitDemo(); }}
+                            disabled={isSplitReplayRunning}
+                        >
+                            {isSplitReplayRunning ? "Replaying..." : "Replay Split Motion"}
+                        </button>
+                        <div style={{ color: "rgba(245, 247, 251, 0.72)", lineHeight: 1.5 }}>
+                            使用这组按钮可以稳定复现 Dockview split 创建与回收动画，不必依赖拖拽操作。
+                        </div>
+                    </div>
                 </div>
             ) : null}
             <div className="app-content">
                 <DockviewLayout
                     initialTabs={initialTabs}
                     initialActivePanelId="files"
+                    debugApiRef={dockviewDebugApiRef}
                 />
             </div>
         </div>

@@ -7,32 +7,68 @@
 .sidebar {
     display: flex;
     flex-direction: column;
-    background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
+    background: var(--chrome-sidebar-bg);
     min-width: 0;
     position: relative;
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--border-color) 46%, transparent);
+    opacity: 1;
+    transform: translateX(0);
+    will-change: opacity, transform;
+    transition:
+        opacity var(--motion-duration-default) var(--motion-ease-emphasized),
+        transform var(--motion-duration-default) var(--motion-ease-emphasized),
+        box-shadow var(--motion-duration-default) var(--motion-ease-standard),
+        border-color var(--motion-duration-fast) var(--motion-ease-standard);
+    box-shadow:
+        inset 0 1px 0 color-mix(in srgb, var(--chrome-inline-highlight) 92%, transparent),
+        0 16px 36px color-mix(in srgb, var(--bg-primary) 12%, transparent);
 }
 
 /* 桌面毛玻璃侧栏：只让边栏本身承载材质，避免整窗一起发灰。 */
 .app-runtime--tauri.app-effect--glass .sidebar {
-    background: rgba(var(--window-glass-elevated-rgb), 0.12);
-    backdrop-filter: blur(calc(var(--glass-blur-radius) * 1.15)) saturate(1.12);
-    box-shadow: inset 0 1px 0 rgba(var(--window-glass-border-rgb), 0.22);
+    background: var(--chrome-sidebar-bg);
+    box-shadow:
+        inset 0 1px 0 var(--chrome-inline-highlight),
+        0 6px 16px var(--chrome-backdrop-shadow);
 }
 
 .app-runtime--tauri.app-effect--glass.app-window--inactive .sidebar {
-    background: rgba(var(--window-glass-elevated-rgb), 0.16);
+    background: color-mix(in srgb, var(--chrome-sidebar-bg) 88%, var(--chrome-inactive-dim));
 }
 
 /* 左侧栏：右侧边框 */
 .sidebar-left {
-    border-right: 1px solid var(--border-color);
+    --sidebar-enter-offset: -18px;
+    --sidebar-exit-offset: -12px;
+    border-right: 1px solid var(--chrome-border-soft);
 }
 
 /* 右侧栏：左侧边框 */
 .sidebar-right {
+    --sidebar-enter-offset: 18px;
+    --sidebar-exit-offset: 12px;
     border-right: 0;
-    border-left: 1px solid var(--border-color);
+    border-left: 1px solid var(--chrome-border-soft);
+}
+
+/* 侧栏进入初始态：以轻微水平位移和透明度变化建立更柔和的进场。 */
+.sidebar[data-motion-state="entering"] {
+    opacity: 0;
+    transform: translateX(var(--sidebar-enter-offset));
+}
+
+/* 侧栏稳定可见态：回到静止位置并恢复完整可交互状态。 */
+.sidebar[data-motion-state="visible"] {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/* 侧栏退出态：保留列宽但短暂禁止交互，等待淡出结束后再卸载。 */
+.sidebar[data-motion-state="exiting"] {
+    opacity: 0;
+    transform: translateX(var(--sidebar-exit-offset));
+    pointer-events: none;
+    transition-duration: var(--motion-duration-fast), var(--motion-duration-fast), var(--motion-duration-fast), var(--motion-duration-fast);
+    transition-timing-function: var(--motion-ease-exit), var(--motion-ease-exit), var(--motion-ease-standard), var(--motion-ease-standard);
 }
 
 /* 侧栏标题栏样式 */
@@ -42,18 +78,19 @@
     justify-content: space-between;
     gap: 8px;
     padding: 12px 14px;
-    font-size: 12px;
+    min-height: 48px;
+    font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.06em;
-    border-bottom: 1px solid var(--panel-muted-border);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--chrome-border-soft);
     color: var(--text-secondary);
     user-select: none;
 }
 
 /* 桌面毛玻璃侧栏标题：再加一层更轻的表面，增强结构层次。 */
 .app-runtime--tauri.app-effect--glass .sidebar-header {
-    background: rgba(var(--window-glass-elevated-rgb), 0.1);
-    backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.9)) saturate(1.08);
+    background: var(--chrome-sidebar-header-bg);
 }
 
 .app-runtime--tauri.app-effect--glass.app-window--dragging .sidebar {
@@ -73,6 +110,7 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     flex: 1;
+    font-family: var(--font-display);
 }
 
 /* 右侧动作区：承载插件注册的图标按钮，禁用窗口拖拽以允许点击。 */
@@ -87,17 +125,23 @@
 
 /* 标题按钮：提供轻量可点击图标入口。 */
 .sidebar-header__action-button {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: 1px solid transparent;
-    border-radius: 8px;
+    border-radius: 10px;
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
     padding: 0;
+    transition:
+        background-color var(--motion-duration-fast) var(--motion-ease-standard),
+        border-color var(--motion-duration-fast) var(--motion-ease-standard),
+        color var(--motion-duration-fast) var(--motion-ease-standard),
+        box-shadow var(--motion-duration-default) var(--motion-ease-standard),
+        transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 /* 标题按钮 hover/focus：突出当前可点击动作。 */
@@ -106,7 +150,9 @@
     background: var(--surface-hover-accent);
     border-color: var(--nav-item-hover-border);
     color: var(--text-primary);
+    transform: translateY(-1px);
     outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary-soft) 42%, transparent);
 }
 
 /* 扩展面板内容区样式 */
@@ -114,7 +160,9 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
-    background: transparent;
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--chrome-tab-active-bg) 16%, transparent), transparent 18%),
+        transparent;
 }
 
 /* 侧栏空状态占位：当无面板时显示提示文字 */
@@ -129,7 +177,9 @@
     text-align: center;
     user-select: none;
     /* 拖入过渡动画 */
-    transition: background-color 0.15s ease, border-color 0.15s ease;
+    transition:
+        background-color var(--motion-duration-fast) var(--motion-ease-standard),
+        border-color var(--motion-duration-fast) var(--motion-ease-standard);
     border: 2px dashed transparent;
 }
 

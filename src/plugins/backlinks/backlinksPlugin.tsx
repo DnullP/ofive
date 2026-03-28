@@ -20,6 +20,7 @@
  */
 
 import React, { useEffect, useState, useCallback, type ReactNode } from "react";
+import { Link2 } from "lucide-react";
 import { registerCommand } from "../../host/commands/commandSystem";
 import { registerPanel } from "../../host/registry/panelRegistry";
 import type { PanelRenderContext } from "../../host/layout/DockviewLayout";
@@ -78,6 +79,29 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
         [context],
     );
 
+    /**
+     * @function renderInactiveEmptyState
+     * @description 渲染未聚焦文章时的反向链接空状态，用简洁图标卡片表达当前上下文缺失。
+     * @returns 空状态 ReactNode。
+     */
+    const renderInactiveEmptyState = (): ReactNode => {
+        return (
+            <div className="backlinks-panel backlinks-panel--empty-state">
+                <div className="backlinks-empty-state">
+                    <div className="backlinks-empty-state-icon" aria-hidden="true">
+                        <Link2 size={18} strokeWidth={1.8} />
+                    </div>
+                    <div className="backlinks-empty-state-title">
+                        {t("backlinks.noFocusedArticle")}
+                    </div>
+                    <div className="backlinks-empty-state-desc">
+                        {t("backlinks.focusArticleHint")}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     /* 当聚焦文章变化时加载反向链接 */
     useEffect(() => {
         if (!activeEditor) {
@@ -131,19 +155,7 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
 
     /* ── 未聚焦文章状态 ── */
     if (!activeEditor) {
-        return (
-            /* backlinks-panel: 面板根容器 */
-            <div className="backlinks-panel">
-                {/* backlinks-panel-header: 面板标题栏 */}
-                <div className="backlinks-panel-header">
-                    {t("backlinks.noFocusedArticle")}
-                </div>
-                {/* backlinks-empty: 空状态提示 */}
-                <div className="backlinks-empty">
-                    {t("backlinks.focusArticleHint")}
-                </div>
-            </div>
-        );
+        return renderInactiveEmptyState();
     }
 
     /* ── 加载中状态 ── */

@@ -25,7 +25,7 @@
  */
 
 import React, { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
-import { Compass } from "lucide-react";
+import { Compass, FileText } from "lucide-react";
 import { registerCommand } from "../../host/commands/commandSystem";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerPanel } from "../../host/registry/panelRegistry";
@@ -89,6 +89,29 @@ function OutlinePanelPlugin(): ReactNode {
             text: heading.text,
         });
     }, [activeEditor]);
+
+    /**
+     * @function renderInactiveEmptyState
+     * @description 渲染未聚焦文章时的大纲空状态，用更明确的图标化占位替代生硬文字。
+     * @returns 空状态 ReactNode。
+     */
+    const renderInactiveEmptyState = (): ReactNode => {
+        return (
+            <div className="outline-panel outline-panel--empty-state">
+                <div className="outline-empty-state">
+                    <div className="outline-empty-state-icon" aria-hidden="true">
+                        <FileText size={18} strokeWidth={1.8} />
+                    </div>
+                    <div className="outline-empty-state-title">
+                        {t("outlinePlugin.noFocusedArticle")}
+                    </div>
+                    <div className="outline-empty-state-desc">
+                        {t("outlinePlugin.focusArticleHint")}
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     /**
      * 加载大纲数据：调用后端 get_vault_markdown_outline 接口。
@@ -172,19 +195,7 @@ function OutlinePanelPlugin(): ReactNode {
 
     /* ── 未聚焦文章状态 ── */
     if (!activeEditor) {
-        return (
-            /* outline-panel: 面板根容器 */
-            <div className="outline-panel">
-                {/* outline-panel-header: 面板标题栏 */}
-                <div className="outline-panel-header">
-                    {t("outlinePlugin.noFocusedArticle")}
-                </div>
-                {/* outline-empty: 空状态提示 */}
-                <div className="outline-empty">
-                    {t("outlinePlugin.focusArticleHint")}
-                </div>
-            </div>
-        );
+        return renderInactiveEmptyState();
     }
 
     /* ── 加载中状态 ── */

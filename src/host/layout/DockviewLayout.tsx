@@ -14,6 +14,7 @@ import {
     useState,
     type CSSProperties,
     type MouseEvent as ReactMouseEvent,
+    type MutableRefObject,
     type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -142,6 +143,25 @@ import {
     decorateTabParamsWithLifecycle,
     shouldCloseTabOnVaultChange,
 } from "./vaultTabScope";
+import {
+    createPendingDockviewLayoutAnimation,
+    hasPendingDockviewLayoutAnimationExpired,
+    isPendingDockviewLayoutAnimationReady,
+    markPendingDockviewLayoutAnimationReleased,
+    type DockviewGroupRectSnapshot,
+    type PendingDockviewLayoutAnimation,
+} from "./dockviewLayoutAnimationState";
+import type {
+    DockviewLayoutAnimationObservation,
+    DockviewLayoutDebugApi,
+    DockviewLayoutTimelineEntry,
+} from "./dockviewLayoutDebugContract";
+export type {
+    DockviewLayoutAnimationObservation,
+    DockviewLayoutDebugApi,
+    DockviewLayoutSnapshot,
+    DockviewLayoutTimelineEntry,
+} from "./dockviewLayoutDebugContract";
 
 const CUSTOM_ACTIVITY_CREATE_COMMAND_ID = "customActivity.create";
 const CUSTOM_ACTIVITY_REGISTRATION_PREFIX = "custom-activity:";
@@ -150,6 +170,11 @@ const SIDEBAR_MAX_WIDTH = 520;
 const SIDEBAR_LAYOUT_SAVE_DEBOUNCE_MS = 300;
 const SIDEBAR_PANE_MIN_BODY_SIZE = 72;
 const SIDEBAR_PANE_MIN_TOTAL_SIZE = 104;
+const SIDEBAR_EXIT_DURATION_MS = 120;
+const DOCKVIEW_GROUP_REFLOW_DURATION_MS = 320;
+const DOCKVIEW_NEW_GROUP_FADE_DURATION_MS = 240;
+
+type SidebarMotionState = "hidden" | "entering" | "visible" | "exiting";
 
 export type PanelPosition = "left" | "right";
 
@@ -226,6 +251,8 @@ interface DockviewLayoutProps {
     initialTabs?: TabInstanceDefinition[];
     /** 初始激活的面板 ID */
     initialActivePanelId?: string;
+    /** mock / 调试环境使用的 Dockview 调试 API 引用。 */
+    debugApiRef?: MutableRefObject<DockviewLayoutDebugApi | null>;
 }
 
 const SETTINGS_TAB_ID = "settings";
@@ -380,6 +407,196 @@ function isRecoverablePaneviewError(error: unknown): boolean {
         || (error instanceof TypeError && error.message.includes("reading 'size'"));
 }
 
+function sortDockviewGroupRects<T extends DockviewGroupRectSnapshot>(items: T[]): T[] {
+    return [...items].sort((left, right) => {
+        if (Math.abs(left.top - right.top) > 6) {
+            return left.top - right.top;
+        }
+
+        return left.left - right.left;
+    });
+}
+
+function computeRectOverlapArea(
+    left: DockviewGroupRectSnapshot,
+    right: DockviewGroupRectSnapshot,
+): number {
+    const overlapWidth = Math.max(
+        0,
+        Math.min(left.left + left.width, right.left + right.width) - Math.max(left.left, right.left),
+    );
+    const overlapHeight = Math.max(
+        0,
+        Math.min(left.top + left.height, right.top + right.height) - Math.max(left.top, right.top),
+    );
+
+    return overlapWidth * overlapHeight;
+}
+
+function countSharedDockviewTabLabels(left: string[], right: string[]): number {
+    if (left.length === 0 || right.length === 0) {
+        return 0;
+    }
+
+    const remaining = new Map<string, number>();
+    right.forEach((label) => {
+        remaining.set(label, (remaining.get(label) ?? 0) + 1);
+    });
+
+    let sharedCount = 0;
+    left.forEach((label) => {
+        const count = remaining.get(label) ?? 0;
+        if (count <= 0) {
+            return;
+        }
+
+        sharedCount += 1;
+        remaining.set(label, count - 1);
+    });
+
+    return sharedCount;
+}
+
+function areDockviewGroupSnapshotsEquivalent<T extends DockviewGroupRectSnapshot>(
+    previousGroups: DockviewGroupRectSnapshot[],
+    currentGroups: T[],
+): boolean {
+    if (previousGroups.length !== currentGroups.length) {
+        return false;
+    }
+
+    return previousGroups.every((previousGroup, index) => {
+        const currentGroup = currentGroups[index];
+        if (!currentGroup) {
+            return false;
+        }
+
+        if (previousGroup.tabLabels.length !== currentGroup.tabLabels.length) {
+            return false;
+        }
+
+        const labelsMatch = previousGroup.tabLabels.every((label, labelIndex) => {
+            return currentGroup.tabLabels[labelIndex] === label;
+        });
+        if (!labelsMatch) {
+            return false;
+        }
+
+        return (
+            Math.abs(previousGroup.left - currentGroup.left) < 0.5
+            && Math.abs(previousGroup.top - currentGroup.top) < 0.5
+            && Math.abs(previousGroup.width - currentGroup.width) < 0.5
+            && Math.abs(previousGroup.height - currentGroup.height) < 0.5
+        );
+    });
+}
+
+function collectDockviewGroupRectSnapshots(host: HTMLElement): DockviewGroupRectSnapshot[] {
+    const hostRect = host.getBoundingClientRect();
+    return sortDockviewGroupRects(
+        Array.from(host.querySelectorAll<HTMLElement>(".dv-groupview")).map((group) => {
+            const rect = group.getBoundingClientRect();
+            return {
+                left: rect.left - hostRect.left,
+                top: rect.top - hostRect.top,
+                width: rect.width,
+                height: rect.height,
+                tabLabels: Array.from(group.querySelectorAll<HTMLElement>(".dv-tab")).map((tab) =>
+                    tab.textContent?.trim() ?? ""
+                ).filter((label) => label.length > 0),
+            };
+        }),
+    );
+}
+
+/**
+ * @function useAnimatedSidebarVisibility
+ * @description 为侧栏提供进入/退出动画状态机，避免业务可见性变化时立即卸载容器。
+ * @param side 侧栏方向，仅用于日志。
+ * @param visible 业务层期望可见性。
+ * @returns 当前动画状态；hidden 表示可安全卸载。
+ */
+function useAnimatedSidebarVisibility(
+    side: PanelPosition,
+    visible: boolean,
+): SidebarMotionState {
+    const [motionState, setMotionState] = useState<SidebarMotionState>(visible ? "visible" : "hidden");
+    const motionStateRef = useRef<SidebarMotionState>(visible ? "visible" : "hidden");
+    const exitTimerRef = useRef<number | null>(null);
+    const enterFrameRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        motionStateRef.current = motionState;
+    }, [motionState]);
+
+    useEffect(() => {
+        const clearExitTimer = (): void => {
+            if (exitTimerRef.current !== null) {
+                window.clearTimeout(exitTimerRef.current);
+                exitTimerRef.current = null;
+            }
+        };
+
+        const clearEnterFrame = (): void => {
+            if (enterFrameRef.current !== null) {
+                window.cancelAnimationFrame(enterFrameRef.current);
+                enterFrameRef.current = null;
+            }
+        };
+
+        if (visible) {
+            clearExitTimer();
+            if (motionStateRef.current === "visible") {
+                return () => {
+                    clearExitTimer();
+                    clearEnterFrame();
+                };
+            }
+
+            setMotionState("entering");
+            enterFrameRef.current = window.requestAnimationFrame(() => {
+                enterFrameRef.current = window.requestAnimationFrame(() => {
+                    setMotionState("visible");
+                });
+            });
+
+            return () => {
+                clearExitTimer();
+                clearEnterFrame();
+            };
+        }
+
+        clearEnterFrame();
+        if (motionStateRef.current === "hidden" || motionStateRef.current === "exiting") {
+            return () => {
+                clearExitTimer();
+                clearEnterFrame();
+            };
+        }
+
+        setMotionState("exiting");
+        exitTimerRef.current = window.setTimeout(() => {
+            setMotionState("hidden");
+            exitTimerRef.current = null;
+        }, SIDEBAR_EXIT_DURATION_MS);
+
+        return () => {
+            clearExitTimer();
+            clearEnterFrame();
+        };
+    }, [side, visible]);
+
+    useEffect(() => {
+        console.info("[layout] sidebar motion state changed", {
+            side,
+            visible,
+            motionState,
+        });
+    }, [motionState, side, visible]);
+
+    return motionState;
+}
+
 /**
  * @function syncActiveEditorFromPanel
  * @description 根据当前激活的 dockview panel 同步活跃 Markdown 编辑器状态。
@@ -437,6 +654,7 @@ function WelcomeTabComponent(): ReactNode {
 export function DockviewLayout({
     initialTabs = [],
     initialActivePanelId,
+    debugApiRef,
 }: DockviewLayoutProps): ReactNode {
     const { t } = useTranslation();
     const currentLanguage = i18n.language;
@@ -538,6 +756,16 @@ export function DockviewLayout({
     const dockviewApiRef = useRef<DockviewApi | null>(null);
     const leftPaneApiRef = useRef<PaneviewApi | null>(null);
     const rightPaneApiRef = useRef<PaneviewApi | null>(null);
+    const dockviewLayoutDisposeRef = useRef<{ dispose: () => void } | null>(null);
+    const pendingDockviewLayoutAnimationRef = useRef<PendingDockviewLayoutAnimation | null>(null);
+    const nextDockviewLayoutAnimationIdRef = useRef(1);
+    const dockviewLayoutAnimationFrameRef = useRef<number | null>(null);
+    const dockviewDragAnimationCleanupTimerRef = useRef<number | null>(null);
+    const dockviewTabDragInProgressRef = useRef(false);
+    const dockviewAnimationObservationSequenceRef = useRef(1);
+    const dockviewAnimationObservationsRef = useRef<DockviewLayoutAnimationObservation[]>([]);
+    const dockviewTimelineSequenceRef = useRef(1);
+    const dockviewTimelineEntriesRef = useRef<DockviewLayoutTimelineEntry[]>([]);
     const leftUnhandledDragDisposeRef = useRef<{ dispose: () => void } | null>(null);
     const rightUnhandledDragDisposeRef = useRef<{ dispose: () => void } | null>(null);
     const leftPaneLayoutDisposeRef = useRef<{ dispose: () => void } | null>(null);
@@ -1228,11 +1456,14 @@ export function DockviewLayout({
 
     const requestPaneviewRelayout = (api: PaneviewApi): void => {
         const runLayout = (): void => {
+            if (api.width <= 0 || api.height <= 0) {
+                return;
+            }
+
             try {
                 api.layout(api.width, api.height);
             } catch (error) {
                 if (isRecoverablePaneviewError(error)) {
-                    console.info("[DockviewLayout] skip relayout for recoverable pane error", { error });
                     return;
                 }
                 throw error;
@@ -2288,6 +2519,7 @@ export function DockviewLayout({
         };
 
         if (options?.referencePanel && options.position && options.position !== "center") {
+            captureDockviewLayoutAnimation("split-entering", "programmatic");
             api.addPanel({
                 ...addPanelOptions,
                 position: {
@@ -2312,8 +2544,64 @@ export function DockviewLayout({
     };
 
     const closeTab = (tabId: string): void => {
+        captureDockviewLayoutAnimation("split-settling", "programmatic");
         dockviewApiRef.current?.getPanel(tabId)?.api.close();
     };
+
+    useEffect(() => {
+        if (!debugApiRef) {
+            return;
+        }
+
+        debugApiRef.current = {
+            openSplitTab: (tab, position = "right") => {
+                const api = dockviewApiRef.current;
+                if (!api) {
+                    return;
+                }
+
+                const referencePanel = (activeTabId ? api.getPanel(activeTabId) : null) ?? api.panels[0] ?? null;
+                if (!referencePanel) {
+                    openTab(tab);
+                    return;
+                }
+
+                openTabAtDropTarget(tab, {
+                    referencePanel,
+                    position,
+                });
+            },
+            closeTab,
+            hasTab: (tabId: string) => Boolean(dockviewApiRef.current?.getPanel(tabId)),
+            activateTab: (tabId: string) => {
+                dockviewApiRef.current?.getPanel(tabId)?.api.setActive();
+            },
+            getAnimationObservations: () => {
+                return [...dockviewAnimationObservationsRef.current];
+            },
+            clearAnimationObservations: () => {
+                dockviewAnimationObservationsRef.current = [];
+            },
+            getTimelineEntries: () => {
+                return [...dockviewTimelineEntriesRef.current];
+            },
+            clearTimelineEntries: () => {
+                dockviewTimelineEntriesRef.current = [];
+            },
+            getLayoutSnapshot: () => {
+                const host = mainDockHostRef.current;
+                return {
+                    groups: host ? collectDockviewGroupRectSnapshots(host) : [],
+                };
+            },
+        };
+
+        return () => {
+            if (debugApiRef.current) {
+                debugApiRef.current = null;
+            }
+        };
+    }, [activeTabId, closeTab, debugApiRef, openTab, openTabAtDropTarget]);
 
     const resolveMovableFocusedArticle = (): MoveSourceSnapshot | null => {
         const activeArticle = activeTabId ? getArticleSnapshotById(activeTabId) : null;
@@ -3762,6 +4050,15 @@ export function DockviewLayout({
             leftUnhandledDragDisposeRef.current?.dispose();
             rightUnhandledDragDisposeRef.current?.dispose();
             dockUnhandledDragDisposeRef.current?.dispose();
+            dockviewLayoutDisposeRef.current?.dispose();
+            if (dockviewLayoutAnimationFrameRef.current !== null) {
+                window.cancelAnimationFrame(dockviewLayoutAnimationFrameRef.current);
+                dockviewLayoutAnimationFrameRef.current = null;
+            }
+            if (dockviewDragAnimationCleanupTimerRef.current !== null) {
+                window.clearTimeout(dockviewDragAnimationCleanupTimerRef.current);
+                dockviewDragAnimationCleanupTimerRef.current = null;
+            }
         },
         [],
     );
@@ -3796,16 +4093,588 @@ export function DockviewLayout({
         };
     }, [dockviewApi]);
 
+    useEffect(() => {
+        const host = mainDockHostRef.current;
+        if (!host) {
+            return;
+        }
+
+        const clearPendingDragCleanupTimer = (): void => {
+            if (dockviewDragAnimationCleanupTimerRef.current === null) {
+                return;
+            }
+
+            window.clearTimeout(dockviewDragAnimationCleanupTimerRef.current);
+            dockviewDragAnimationCleanupTimerRef.current = null;
+        };
+
+        const handleDragStartCapture = (event: DragEvent): void => {
+            const target = event.target;
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            if (!target.closest(".dv-tab")) {
+                return;
+            }
+
+            clearPendingDragCleanupTimer();
+            dockviewTabDragInProgressRef.current = true;
+            recordDockviewTimelineEntry("dragstart-tab", {
+                targetText: target.textContent?.trim() ?? null,
+            });
+            captureDockviewLayoutAnimation("split-entering", "drag");
+        };
+
+        const handlePointerDownCapture = (event: PointerEvent): void => {
+            const target = event.target;
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            if (target.closest(".dv-tab-close, .dv-default-tab-action, .dv-action")) {
+                return;
+            }
+
+            if (!target.closest(".dv-tab")) {
+                return;
+            }
+
+            recordDockviewTimelineEntry("pointerdown-tab", {
+                targetText: target.textContent?.trim() ?? null,
+            });
+        };
+
+        const handleDragEndCapture = (): void => {
+            clearPendingDragCleanupTimer();
+            const hadDragSession = dockviewTabDragInProgressRef.current;
+            dockviewTabDragInProgressRef.current = false;
+            recordDockviewTimelineEntry("dragend-tab");
+            if (!hadDragSession) {
+                return;
+            }
+            releaseDockviewDragAnimation();
+        };
+
+        const handlePointerUpCapture = (): void => {
+            recordDockviewTimelineEntry("pointerup-tab");
+            if (!dockviewTabDragInProgressRef.current) {
+                return;
+            }
+
+            handleDragEndCapture();
+        };
+
+        const handleDropCapture = (event: DragEvent): void => {
+            const target = event.target;
+            const hadDragSession = dockviewTabDragInProgressRef.current;
+            recordDockviewTimelineEntry("drop-host", {
+                targetClassName: target instanceof Element ? target.className : null,
+                hadDragSession,
+            });
+
+            if (!hadDragSession) {
+                return;
+            }
+
+            clearPendingDragCleanupTimer();
+            dockviewTabDragInProgressRef.current = false;
+            releaseDockviewDragAnimation();
+        };
+
+        host.addEventListener("pointerdown", handlePointerDownCapture, { capture: true });
+        host.addEventListener("dragstart", handleDragStartCapture, { capture: true });
+        host.addEventListener("drop", handleDropCapture, { capture: true });
+        host.addEventListener("dragend", handleDragEndCapture, { capture: true });
+        host.addEventListener("pointerup", handlePointerUpCapture, { capture: true });
+
+        return () => {
+            host.removeEventListener("pointerdown", handlePointerDownCapture, { capture: true });
+            host.removeEventListener("dragstart", handleDragStartCapture, { capture: true });
+            host.removeEventListener("drop", handleDropCapture, { capture: true });
+            host.removeEventListener("dragend", handleDragEndCapture, { capture: true });
+            host.removeEventListener("pointerup", handlePointerUpCapture, { capture: true });
+            dockviewTabDragInProgressRef.current = false;
+            clearPendingDragCleanupTimer();
+        };
+    }, [dockviewApi]);
+
+    useEffect(() => {
+        const host = mainDockHostRef.current;
+        if (!host) {
+            return;
+        }
+
+        const handlePointerDownCapture = (event: PointerEvent): void => {
+            const target = event.target;
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            if (!target.closest(".dv-default-tab-action, .dv-tab-close")) {
+                return;
+            }
+
+            captureDockviewLayoutAnimation("split-settling", "programmatic");
+        };
+
+        host.addEventListener("pointerdown", handlePointerDownCapture, { capture: true });
+
+        return () => {
+            host.removeEventListener("pointerdown", handlePointerDownCapture, { capture: true });
+        };
+    }, [dockviewApi]);
+
+    const recordDockviewLayoutAnimationObservation = (
+        observation: Omit<DockviewLayoutAnimationObservation, "sequence" | "timestamp">,
+    ): void => {
+        const nextObservation: DockviewLayoutAnimationObservation = {
+            ...observation,
+            sequence: dockviewAnimationObservationSequenceRef.current++,
+            timestamp: Date.now(),
+        };
+        const nextObservations = [
+            ...dockviewAnimationObservationsRef.current,
+            nextObservation,
+        ].slice(-120);
+        dockviewAnimationObservationsRef.current = nextObservations;
+
+        window.dispatchEvent(new CustomEvent("ofive:dockview-layout-animation", {
+            detail: nextObservation,
+        }));
+    };
+
+    const recordDockviewTimelineEntry = (
+        type: DockviewLayoutTimelineEntry["type"],
+        details?: DockviewLayoutTimelineEntry["details"],
+    ): void => {
+        const host = mainDockHostRef.current;
+        const nextEntry: DockviewLayoutTimelineEntry = {
+            sequence: dockviewTimelineSequenceRef.current++,
+            type,
+            timestamp: Date.now(),
+            pendingAnimationId: pendingDockviewLayoutAnimationRef.current?.id ?? null,
+            activeTabId,
+            groupCount: host ? collectDockviewGroupRectSnapshots(host).length : 0,
+            details,
+        };
+        dockviewTimelineEntriesRef.current = [
+            ...dockviewTimelineEntriesRef.current,
+            nextEntry,
+        ].slice(-200);
+    };
+
+    const captureDockviewLayoutAnimation = (
+        reason: PendingDockviewLayoutAnimation["reason"],
+        source: PendingDockviewLayoutAnimation["source"] = "programmatic",
+    ): void => {
+        const host = mainDockHostRef.current;
+        if (!host) {
+            return;
+        }
+
+        const previousRects = collectDockviewGroupRectSnapshots(host);
+
+        pendingDockviewLayoutAnimationRef.current = previousRects.length > 0
+            ? createPendingDockviewLayoutAnimation({
+                id: nextDockviewLayoutAnimationIdRef.current++,
+                reason,
+                source,
+                previousRects,
+                capturedAt: Date.now(),
+            })
+            : null;
+
+        recordDockviewLayoutAnimationObservation({
+            phase: "capture",
+            status: previousRects.length > 0 ? "captured" : "ignored-no-groups",
+            reason,
+            source,
+            previousGroupCount: previousRects.length,
+            currentGroupCount: previousRects.length,
+            animatedGroupCount: 0,
+            newGroupCount: 0,
+        });
+    };
+
+    const playDockviewLayoutAnimation = (): void => {
+        const host = mainDockHostRef.current;
+        if (!host) {
+            return;
+        }
+
+        const pending = pendingDockviewLayoutAnimationRef.current;
+        if (!pending) {
+            return;
+        }
+
+        recordDockviewTimelineEntry("play-attempt", {
+            source: pending.source,
+            reason: pending.reason,
+        });
+
+        if (!isPendingDockviewLayoutAnimationReady(pending)) {
+            return;
+        }
+
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            recordDockviewLayoutAnimationObservation({
+                phase: "play",
+                status: "skipped-reduced-motion",
+                reason: pending.reason,
+                source: pending.source,
+                previousGroupCount: pending.previousRects.length,
+                currentGroupCount: pending.previousRects.length,
+                animatedGroupCount: 0,
+                newGroupCount: 0,
+            });
+            pendingDockviewLayoutAnimationRef.current = null;
+            return;
+        }
+
+        if (hasPendingDockviewLayoutAnimationExpired(pending, Date.now(), 1200)) {
+            recordDockviewLayoutAnimationObservation({
+                phase: "play",
+                status: "skipped-expired",
+                reason: pending.reason,
+                source: pending.source,
+                previousGroupCount: pending.previousRects.length,
+                currentGroupCount: pending.previousRects.length,
+                animatedGroupCount: 0,
+                newGroupCount: 0,
+            });
+            pendingDockviewLayoutAnimationRef.current = null;
+            return;
+        }
+
+        const currentGroups = sortDockviewGroupRects(
+            Array.from(host.querySelectorAll<HTMLElement>(".dv-groupview")).map((group) => {
+                const hostRect = host.getBoundingClientRect();
+                const rect = group.getBoundingClientRect();
+                return {
+                    left: rect.left - hostRect.left,
+                    top: rect.top - hostRect.top,
+                    width: rect.width,
+                    height: rect.height,
+                    tabLabels: Array.from(group.querySelectorAll<HTMLElement>(".dv-tab")).map((tab) =>
+                        tab.textContent?.trim() ?? ""
+                    ).filter((label) => label.length > 0),
+                    group,
+                };
+            }),
+        );
+
+        if (currentGroups.length === 0) {
+            recordDockviewLayoutAnimationObservation({
+                phase: "play",
+                status: "skipped-empty-layout",
+                reason: pending.reason,
+                source: pending.source,
+                previousGroupCount: pending.previousRects.length,
+                currentGroupCount: 0,
+                animatedGroupCount: 0,
+                newGroupCount: 0,
+            });
+            pendingDockviewLayoutAnimationRef.current = null;
+            return;
+        }
+
+        if (areDockviewGroupSnapshotsEquivalent(pending.previousRects, currentGroups)) {
+            recordDockviewLayoutAnimationObservation({
+                phase: "play",
+                status: "skipped-equivalent-layout",
+                reason: pending.reason,
+                source: pending.source,
+                previousGroupCount: pending.previousRects.length,
+                currentGroupCount: currentGroups.length,
+                animatedGroupCount: 0,
+                newGroupCount: 0,
+            });
+            return;
+        }
+
+        const unmatchedPrevious = [...pending.previousRects];
+        let didAnimateLayoutChange = false;
+        let animatedGroupCount = 0;
+        let newGroupCount = 0;
+
+        currentGroups.forEach((current) => {
+            let bestIndex = -1;
+            let bestSharedTabCount = -1;
+            let bestOverlap = 0;
+
+            unmatchedPrevious.forEach((previous, index) => {
+                const sharedTabCount = countSharedDockviewTabLabels(current.tabLabels, previous.tabLabels);
+                const overlap = computeRectOverlapArea(current, previous);
+
+                if (
+                    sharedTabCount > bestSharedTabCount
+                    || (sharedTabCount === bestSharedTabCount && overlap > bestOverlap)
+                ) {
+                    bestSharedTabCount = sharedTabCount;
+                    bestOverlap = overlap;
+                    bestIndex = index;
+                }
+            });
+
+            const currentArea = current.width * current.height;
+            const matchedPrevious = bestIndex >= 0
+                && (
+                    bestSharedTabCount > 0
+                    || bestOverlap > Math.max(48, currentArea * 0.12)
+                )
+                ? unmatchedPrevious.splice(bestIndex, 1)[0]
+                : null;
+
+            current.group.getAnimations().forEach((animation) => {
+                animation.cancel();
+            });
+
+            if (!matchedPrevious) {
+                if (pending.reason !== "split-entering") {
+                    return;
+                }
+
+                didAnimateLayoutChange = true;
+                animatedGroupCount += 1;
+                newGroupCount += 1;
+
+                current.group.animate(
+                    [
+                        {
+                            opacity: 0,
+                            filter: "saturate(0.82) brightness(1.16)",
+                            transform: "translate(18px, 12px) scale(0.94, 0.97)",
+                            transformOrigin: "top left",
+                        },
+                        {
+                            opacity: 1,
+                            filter: "saturate(1) brightness(1)",
+                            transform: "translate(0px, 0px) scale(1, 1)",
+                            transformOrigin: "top left",
+                        },
+                    ],
+                    {
+                        duration: DOCKVIEW_NEW_GROUP_FADE_DURATION_MS,
+                        easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+                        fill: "both",
+                    },
+                );
+
+                const tabStrip = current.group.querySelector<HTMLElement>(".dv-tabs-and-actions-container");
+                const content = current.group.querySelector<HTMLElement>(".dv-content-container");
+                [tabStrip, content].forEach((element) => {
+                    if (!element) {
+                        return;
+                    }
+
+                    element.getAnimations().forEach((animation) => {
+                        animation.cancel();
+                    });
+                    element.animate(
+                        [
+                            {
+                                opacity: 0,
+                                transform: "translateY(18px)",
+                            },
+                            {
+                                opacity: 1,
+                                transform: "translateY(0px)",
+                            },
+                        ],
+                        {
+                            duration: DOCKVIEW_NEW_GROUP_FADE_DURATION_MS,
+                            easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+                            fill: "both",
+                            delay: element === content ? 40 : 0,
+                        },
+                    );
+                });
+
+                return;
+            }
+
+            const deltaX = matchedPrevious.left - current.left;
+            const deltaY = matchedPrevious.top - current.top;
+            const scaleX = matchedPrevious.width > 1 && current.width > 1
+                ? matchedPrevious.width / current.width
+                : 1;
+            const scaleY = matchedPrevious.height > 1 && current.height > 1
+                ? matchedPrevious.height / current.height
+                : 1;
+
+            if (
+                Math.abs(deltaX) < 0.5
+                && Math.abs(deltaY) < 0.5
+                && Math.abs(scaleX - 1) < 0.01
+                && Math.abs(scaleY - 1) < 0.01
+            ) {
+                return;
+            }
+
+            didAnimateLayoutChange = true;
+            animatedGroupCount += 1;
+
+            current.group.animate(
+                [
+                    {
+                        opacity: pending.reason === "split-entering" ? 0.78 : 0.88,
+                        filter: pending.reason === "split-entering"
+                            ? "saturate(0.82) brightness(1.12)"
+                            : "saturate(0.9) brightness(1.04)",
+                        transform: pending.reason === "split-entering"
+                            ? `translate(${String(deltaX)}px, ${String(deltaY + 10)}px) scale(${String(scaleX)}, ${String(scaleY)})`
+                            : `translate(${String(deltaX)}px, ${String(deltaY)}px) scale(${String(scaleX)}, ${String(scaleY)})`,
+                        transformOrigin: "top left",
+                    },
+                    {
+                        opacity: 1,
+                        filter: "saturate(1) brightness(1)",
+                        transform: "translate(0px, 0px) scale(1, 1)",
+                        transformOrigin: "top left",
+                    },
+                ],
+                {
+                    duration: DOCKVIEW_GROUP_REFLOW_DURATION_MS,
+                    easing: pending.reason === "split-entering"
+                        ? "cubic-bezier(0.16, 1, 0.3, 1)"
+                        : "cubic-bezier(0.2, 0, 0, 1)",
+                    fill: "both",
+                },
+            );
+        });
+
+        if (!didAnimateLayoutChange) {
+            recordDockviewLayoutAnimationObservation({
+                phase: "play",
+                status: "skipped-no-visible-delta",
+                reason: pending.reason,
+                source: pending.source,
+                previousGroupCount: pending.previousRects.length,
+                currentGroupCount: currentGroups.length,
+                animatedGroupCount: 0,
+                newGroupCount: 0,
+            });
+            return;
+        }
+
+        recordDockviewLayoutAnimationObservation({
+            phase: "play",
+            status: "played",
+            reason: pending.reason,
+            source: pending.source,
+            previousGroupCount: pending.previousRects.length,
+            currentGroupCount: currentGroups.length,
+            animatedGroupCount,
+            newGroupCount,
+        });
+
+        pendingDockviewLayoutAnimationRef.current = null;
+    };
+
+    const waitForDockviewLayoutAnimationReady = (animationId: number): void => {
+        if (dockviewLayoutAnimationFrameRef.current !== null) {
+            window.cancelAnimationFrame(dockviewLayoutAnimationFrameRef.current);
+            dockviewLayoutAnimationFrameRef.current = null;
+        }
+
+        const tick = (): void => {
+            const host = mainDockHostRef.current;
+            const pending = pendingDockviewLayoutAnimationRef.current;
+            if (!host || !pending || pending.id !== animationId) {
+                dockviewLayoutAnimationFrameRef.current = null;
+                return;
+            }
+
+            recordDockviewTimelineEntry("wait-layout-ready", {
+                animationId,
+                releasedAt: pending.releasedAt ?? null,
+            });
+
+            if (hasPendingDockviewLayoutAnimationExpired(pending, Date.now(), 1200)) {
+                playDockviewLayoutAnimation();
+                dockviewLayoutAnimationFrameRef.current = null;
+                return;
+            }
+
+            const currentGroups = collectDockviewGroupRectSnapshots(host);
+            if (currentGroups.length > 0 && !areDockviewGroupSnapshotsEquivalent(pending.previousRects, currentGroups)) {
+                playDockviewLayoutAnimation();
+                dockviewLayoutAnimationFrameRef.current = null;
+                return;
+            }
+
+            dockviewLayoutAnimationFrameRef.current = window.requestAnimationFrame(tick);
+        };
+
+        dockviewLayoutAnimationFrameRef.current = window.requestAnimationFrame(tick);
+    };
+
+    const releaseDockviewDragAnimation = (): void => {
+        const pending = pendingDockviewLayoutAnimationRef.current;
+        if (!pending || pending.source !== "drag") {
+            return;
+        }
+
+        pendingDockviewLayoutAnimationRef.current = markPendingDockviewLayoutAnimationReleased(
+            pending,
+            pending.id,
+            Date.now(),
+        );
+
+        const releasedAnimationId = pending.id;
+        waitForDockviewLayoutAnimationReady(releasedAnimationId);
+
+        if (dockviewDragAnimationCleanupTimerRef.current !== null) {
+            window.clearTimeout(dockviewDragAnimationCleanupTimerRef.current);
+        }
+
+        dockviewDragAnimationCleanupTimerRef.current = window.setTimeout(() => {
+            const activePending = pendingDockviewLayoutAnimationRef.current;
+            if (!activePending || activePending.id !== releasedAnimationId) {
+                dockviewDragAnimationCleanupTimerRef.current = null;
+                return;
+            }
+
+            playDockviewLayoutAnimation();
+            if (pendingDockviewLayoutAnimationRef.current?.id === releasedAnimationId) {
+                pendingDockviewLayoutAnimationRef.current = null;
+            }
+
+            dockviewDragAnimationCleanupTimerRef.current = null;
+        }, DOCKVIEW_GROUP_REFLOW_DURATION_MS + 220);
+    };
+
     const handleReady = (event: DockviewReadyEvent): void => {
         const api = event.api;
         setDockviewApi(api);
+        if (dockviewDragAnimationCleanupTimerRef.current !== null) {
+            window.clearTimeout(dockviewDragAnimationCleanupTimerRef.current);
+            dockviewDragAnimationCleanupTimerRef.current = null;
+        }
+        pendingDockviewLayoutAnimationRef.current = null;
 
         dockUnhandledDragDisposeRef.current?.dispose();
+        dockviewLayoutDisposeRef.current?.dispose();
         dockUnhandledDragDisposeRef.current = api.onUnhandledDragOverEvent((dragEvent) => {
             handleDockviewUnhandledDragOver(dragEvent);
         });
+        dockviewLayoutDisposeRef.current = api.onDidLayoutChange(() => {
+            const pendingAnimationId = pendingDockviewLayoutAnimationRef.current?.id;
+            recordDockviewTimelineEntry("layout-change", {
+                pendingAnimationId: pendingAnimationId ?? null,
+            });
+            if (pendingAnimationId === undefined) {
+                return;
+            }
+
+            waitForDockviewLayoutAnimationReady(pendingAnimationId);
+        });
 
         api.onDidActivePanelChange((panel) => {
+            recordDockviewTimelineEntry("active-panel-change", {
+                panelId: panel?.id ?? null,
+            });
             setActiveTabId(panel?.id ?? null);
 
             const activeDockPanel = panel ? api.getPanel(panel.id) : null;
@@ -3865,10 +4734,16 @@ export function DockviewLayout({
             },
         }
         : null;
-    /* 左侧栏在活动栏有选中项且用户未折叠时渲染（即使面板列表为空也保留容器） */
-    const shouldRenderLeftSidebar = isLeftSidebarVisible && activeActivityId !== null;
-    /* 右侧栏只要未被用户 toggle 关闭就始终渲染（空内容时显示占位） */
-    const shouldRenderRightSidebar = isRightSidebarVisible;
+    /* 左侧栏在活动栏有选中项且用户未折叠时视为目标可见（即使面板列表为空也保留容器）。 */
+    const shouldShowLeftSidebar = isLeftSidebarVisible && activeActivityId !== null;
+    /* 右侧栏只要未被用户 toggle 关闭就保持目标可见（空内容时显示占位）。 */
+    const shouldShowRightSidebar = isRightSidebarVisible;
+    const leftSidebarMotionState = useAnimatedSidebarVisibility("left", shouldShowLeftSidebar);
+    const rightSidebarMotionState = useAnimatedSidebarVisibility("right", shouldShowRightSidebar);
+    const previousLeftSidebarMotionStateRef = useRef<SidebarMotionState>(leftSidebarMotionState);
+    const previousRightSidebarMotionStateRef = useRef<SidebarMotionState>(rightSidebarMotionState);
+    const shouldRenderLeftSidebar = leftSidebarMotionState !== "hidden";
+    const shouldRenderRightSidebar = rightSidebarMotionState !== "hidden";
     const gridTemplateColumns = shouldRenderLeftSidebar
         ? (shouldRenderRightSidebar
             ? "48px var(--left-sidebar-width, 280px) 1fr var(--right-sidebar-width, 260px)"
@@ -3877,9 +4752,51 @@ export function DockviewLayout({
             ? "48px 1fr var(--right-sidebar-width, 260px)"
             : "48px 1fr");
 
+    useEffect(() => {
+        const previousMotionState = previousLeftSidebarMotionStateRef.current;
+        previousLeftSidebarMotionStateRef.current = leftSidebarMotionState;
+
+        if (leftSidebarMotionState !== "visible") {
+            return;
+        }
+
+        if (previousMotionState === "visible") {
+            return;
+        }
+
+        const api = leftPaneApiRef.current;
+        if (!api) {
+            return;
+        }
+
+        requestPaneviewRelayout(api);
+    }, [leftSidebarMotionState]);
+
+    useEffect(() => {
+        const previousMotionState = previousRightSidebarMotionStateRef.current;
+        previousRightSidebarMotionStateRef.current = rightSidebarMotionState;
+
+        if (rightSidebarMotionState !== "visible") {
+            return;
+        }
+
+        if (previousMotionState === "visible") {
+            return;
+        }
+
+        const api = rightPaneApiRef.current;
+        if (!api) {
+            return;
+        }
+
+        requestPaneviewRelayout(api);
+    }, [rightSidebarMotionState]);
+
     return (
         <div
             className="dockview-layout"
+            data-left-sidebar-motion-state={leftSidebarMotionState}
+            data-right-sidebar-motion-state={rightSidebarMotionState}
             style={
                 {
                     "--left-sidebar-width": `${String(leftSidebarWidth)}px`,
@@ -3909,6 +4826,7 @@ export function DockviewLayout({
                 <Sidebar
                     side="left"
                     width={leftSidebarWidth}
+                    motionState={leftSidebarMotionState}
                     onBeginResize={(e) => beginResize("left", e)}
                     ariaLabel={t("dockview.leftPanelArea")}
                     header={
@@ -3969,7 +4887,7 @@ export function DockviewLayout({
             )}
 
             <main className="main-content-area" aria-label={t("dockview.mainArea")}>
-                <div ref={mainDockHostRef} className="main-dockview-host">
+                <div ref={mainDockHostRef} className="main-dockview-host" data-testid="main-dockview-host">
                     <DockviewReact
                         className="dockview-theme-abyss main-dockview"
                         components={dockviewComponents}
@@ -3985,6 +4903,7 @@ export function DockviewLayout({
                 <Sidebar
                     side="right"
                     width={rightSidebarWidth}
+                    motionState={rightSidebarMotionState}
                     onBeginResize={(e) => beginResize("right", e)}
                     ariaLabel={t("dockview.rightPanelArea")}
                     header={

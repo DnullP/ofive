@@ -7,15 +7,15 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     min-height: 20px;
     /* 作为拖放目标需禁用窗口拖拽 */
     -webkit-app-region: no-drag;
     app-region: no-drag;
     /* 拖入过渡 */
-    transition: background-color 0.15s ease;
-    border-radius: 10px;
-    padding: 4px 6px;
+    transition: background-color var(--motion-duration-fast) var(--motion-ease-standard);
+    border-radius: 12px;
+    padding: 4px 8px;
 }
 
 /* 图标栏拖入高亮 */
@@ -28,7 +28,7 @@
     width: 28px;
     height: 28px;
     border: 1px solid transparent;
-    border-radius: 8px;
+    border-radius: 10px;
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
@@ -40,6 +40,12 @@
     /* 禁止拖拽窗口 */
     -webkit-app-region: no-drag;
     app-region: no-drag;
+    transition:
+        background-color var(--motion-duration-fast) var(--motion-ease-standard),
+        border-color var(--motion-duration-fast) var(--motion-ease-standard),
+        color var(--motion-duration-fast) var(--motion-ease-standard),
+        box-shadow var(--motion-duration-default) var(--motion-ease-standard),
+        transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 /* 图标尺寸统一 */
@@ -54,6 +60,7 @@
     background: var(--surface-hover-accent);
     border-color: var(--nav-item-hover-border);
     color: var(--text-primary);
+    transform: translateY(-1px);
 }
 
 /* 右侧图标栏激活态：与左侧活动栏保持同一强调语言。 */
@@ -61,6 +68,13 @@
     background: var(--surface-active-accent);
     border-color: var(--nav-item-active-border);
     box-shadow: var(--nav-item-active-shadow);
+}
+
+/* 横向图标按钮焦点态：与左侧活动栏保持统一。 */
+.sidebar-icon-bar-item:focus-visible {
+    outline: none;
+    border-color: var(--surface-input-border-focus);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary-soft) 46%, transparent);
 }
 
 /* 拖拽中 */

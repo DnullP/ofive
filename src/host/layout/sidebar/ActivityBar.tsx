@@ -75,14 +75,14 @@ export interface ActivityBarProps {
 const INDICATOR_GAP = 5;
 
 /**
- * 活动栏单项步距（px）= 项高度(36) + CSS gap(6)。
- * 与 .activity-bar-item { height: 36px } 及
- * .activity-bar-top/bottom { gap: 6px } 对应。
+ * 活动栏单项步距（px）= 项高度(34) + CSS gap(8)。
+ * 与 .activity-bar-item { height: 34px } 及
+ * .activity-bar-top/bottom { gap: 8px } 对应。
  */
 const ITEM_STRIDE = 42;
 
 /** CSS gap 值（px），与 .activity-bar-top/bottom { gap } 对应。 */
-const ITEM_GAP = 6;
+const ITEM_GAP = 8;
 
 /**
  * 计算某区域的拖拽指示器是否应显示及其插入索引。

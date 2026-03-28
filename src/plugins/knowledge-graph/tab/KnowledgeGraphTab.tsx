@@ -607,21 +607,14 @@ export function KnowledgeGraphTab(
         };
     }, []);
 
-    const statusText = state.loading
-        ? t("graph.loadingGraph")
-        : state.error
-            ? t("graph.loadFailed", { message: state.error })
-            : t("graph.graphReady");
-
     return (
         <div className="knowledge-graph-tab">
-            {/* 样式映射：toolbar/status/stats 用于顶部状态和统计信息展示。 */}
-            <header className="knowledge-graph-tab__toolbar">
-                <span className="knowledge-graph-tab__status">{statusText}</span>
+            {/* 样式映射：stats 作为浮动摘要展示节点与边数量，不再占据独立工具栏高度。 */}
+            {(state.nodeCount > 0 || state.edgeCount > 0) && (
                 <span className="knowledge-graph-tab__stats">
                     nodes: {state.nodeCount} | edges: {state.edgeCount}
                 </span>
-            </header>
+            )}
 
             {/* 样式映射：canvas-wrap/canvas-host/empty 用于图画布区域和空态提示。 */}
             <div className="knowledge-graph-tab__canvas-wrap">
@@ -643,6 +636,16 @@ export function KnowledgeGraphTab(
                         </div>
                     ))}
                 </div>
+                {state.loading && (
+                    <div className="knowledge-graph-tab__empty knowledge-graph-tab__empty--status">
+                        {t("graph.loadingGraph")}
+                    </div>
+                )}
+                {state.error && (
+                    <div className="knowledge-graph-tab__empty knowledge-graph-tab__empty--status">
+                        {t("graph.loadFailed", { message: state.error })}
+                    </div>
+                )}
                 {!state.loading && !state.error && state.nodeCount === 0 && (
                     <div className="knowledge-graph-tab__empty">{t("graph.noMarkdownNodes")}</div>
                 )}

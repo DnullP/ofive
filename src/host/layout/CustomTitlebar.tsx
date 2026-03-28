@@ -174,7 +174,10 @@ export function CustomTitlebar(): ReactNode {
             {isMacOS ? controls : <div className="app-titlebar__controls-spacer" data-tauri-drag-region />}
 
             <div className="app-titlebar__title" data-tauri-drag-region>
-                ofive
+                <div className="app-titlebar__brand" data-tauri-drag-region>
+                    <span className="app-titlebar__brand-mark" aria-hidden="true" />
+                    <span className="app-titlebar__brand-title">{t("titlebar.appName")}</span>
+                </div>
             </div>
 
             <div className="app-titlebar__right-slot window-no-drag">

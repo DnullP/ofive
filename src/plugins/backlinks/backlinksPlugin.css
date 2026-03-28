@@ -83,6 +83,54 @@
     user-select: none;
 }
 
+/* 反向链接无文章态根容器：提供空状态卡片的居中布局。 */
+.backlinks-panel--empty-state {
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+/* 反向链接无文章态卡片：承载 icon 与提示说明。 */
+.backlinks-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 220px;
+    padding: 20px 18px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--surface-card-bg-muted) 74%, transparent);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--chrome-backdrop-shadow) 10%, transparent);
+    text-align: center;
+}
+
+/* 反向链接无文章态图标：弱化展示当前缺少聚焦文章。 */
+.backlinks-empty-state-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 999px;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--surface-chip-bg) 86%, transparent);
+}
+
+/* 反向链接无文章态标题：强调当前没有选中文章。 */
+.backlinks-empty-state-title {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* 反向链接无文章态说明：补充下一步操作提示。 */
+.backlinks-empty-state-desc {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
 /* 错误提示文字 */
 .backlinks-error {
     padding: 12px;
@@ -98,6 +146,11 @@
 /* 桌面毛玻璃反向链接头部：用轻度半透明表面表达层次。 */
 .app-runtime--tauri.app-effect--glass .backlinks-panel-header {
     background: rgba(var(--window-glass-elevated-rgb), 0.08);
+}
+
+/* 桌面毛玻璃反向链接空态卡片：保持轻度半透明，不额外叠加泛光。 */
+.app-runtime--tauri.app-effect--glass .backlinks-empty-state {
+    background: rgba(var(--window-glass-elevated-rgb), 0.1);
 }
 
 /* 桌面毛玻璃反向链接徽章：避免变成实心块。 */

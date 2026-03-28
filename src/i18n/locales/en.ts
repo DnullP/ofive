@@ -403,6 +403,7 @@ const en = {
 
     /* ==================== Titlebar ==================== */
     titlebar: {
+        appName: "ofive",
         closeApp: "Close Application",
         toggleFullscreen: "Toggle Fullscreen",
         minimizeWindow: "Minimize Window",

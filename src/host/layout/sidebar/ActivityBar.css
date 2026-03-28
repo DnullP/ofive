@@ -8,22 +8,23 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 10px 0 12px;
-    border-right: 1px solid var(--panel-muted-border);
-    background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
-    box-shadow: inset -1px 0 0 color-mix(in srgb, var(--border-color) 52%, transparent);
+    padding: 12px 0 14px;
+    border-right: 1px solid var(--chrome-border-soft);
+    background: var(--chrome-activity-bar-bg);
+    box-shadow:
+        inset -1px 0 0 color-mix(in srgb, var(--chrome-border-soft) 92%, transparent),
+        1px 0 0 color-mix(in srgb, var(--bg-primary) 22%, transparent);
     user-select: none;
 }
 
 /* 桌面毛玻璃活动栏：保留最明显的材质感和边缘分隔。 */
 .app-runtime--tauri.app-effect--glass .activity-bar {
-    background: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-strong));
-    backdrop-filter: blur(var(--glass-blur-radius)) saturate(1.05);
-    box-shadow: inset -1px 0 0 rgba(var(--window-glass-border-rgb), 0.18);
+    background: var(--chrome-activity-bar-bg);
+    box-shadow: inset -1px 0 0 var(--chrome-border-soft);
 }
 
 .app-runtime--tauri.app-effect--glass.app-window--inactive .activity-bar {
-    background: rgba(var(--window-glass-elevated-rgb), var(--glass-inactive-surface-opacity-soft));
+    background: color-mix(in srgb, var(--chrome-activity-bar-bg) 88%, var(--chrome-inactive-dim));
 }
 
 .app-runtime--tauri.app-effect--glass.app-window--dragging .activity-bar {
@@ -43,15 +44,15 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     position: relative;
 }
 
 /* 活动栏按钮基础样式 */
 .activity-bar-item {
-    width: 36px;
-    height: 36px;
-    border: 1px solid transparent;
+    width: 34px;
+    height: 34px;
+    border: 0;
     border-radius: 10px;
     background: transparent;
     color: var(--text-secondary);
@@ -59,7 +60,11 @@
     user-select: none;
     position: relative;
     /* 拖拽偏移动画：使 transform translateY 平滑过渡 */
-    transition: transform 0.12s ease, background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease;
+    transition:
+        transform var(--motion-duration-fast) var(--motion-ease-standard),
+        background-color var(--motion-duration-fast) var(--motion-ease-standard),
+        box-shadow var(--motion-duration-default) var(--motion-ease-standard),
+        color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 /* 活动栏按钮禁拖拽：保留点击交互，避免误触发窗口移动。 */
@@ -70,36 +75,47 @@
 
 /* 活动栏 SVG 图标样式：统一图标尺寸和对齐 */
 .activity-bar-item svg {
-    width: 18px;
-    height: 18px;
+    width: 17px;
+    height: 17px;
     display: block;
     margin: 0 auto;
+    transition:
+        transform var(--motion-duration-fast) var(--motion-ease-standard),
+        stroke-width var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
-/* 激活和悬浮样式 */
+/* 悬浮态：采用颜色强化 + 横向位移，避免旧的胶囊描边反馈。 */
 .activity-bar-item:hover {
-    background: var(--surface-hover-accent);
-    border-color: var(--nav-item-hover-border);
-    color: var(--text-primary);
+    background: color-mix(in srgb, var(--accent-primary-soft-weak) 54%, transparent);
+    color: var(--accent-primary);
+    transform: translateX(2px);
 }
 
-/* 激活态：使用强调色表面和更清晰的边界。 */
+.activity-bar-item:hover svg {
+    stroke-width: 2.15;
+}
+
+/* 激活态：改为左侧提示线 + 着色区块，不再使用圆角描边。 */
 .activity-bar-item.active {
-    background: var(--surface-active-accent);
-    border-color: var(--nav-item-active-border);
-    color: var(--text-primary);
-    box-shadow: var(--nav-item-active-shadow);
+    background: color-mix(in srgb, var(--accent-primary-soft) 62%, transparent);
+    color: var(--accent-primary);
+    font-weight: 700;
+    transform: translateX(2px);
+}
+
+.activity-bar-item.active svg {
+    stroke-width: 2.25;
 }
 
 /* 激活态内标记：增加垂直导航的视觉锚点。 */
 .activity-bar-item.active::before {
     content: '';
     position: absolute;
-    left: -7px;
-    top: 10px;
-    width: 3px;
-    height: 14px;
-    border-radius: 999px;
+    left: -1px;
+    top: 8px;
+    width: 2px;
+    height: 18px;
+    border-radius: 2px;
     background: var(--accent-primary);
 }
 
@@ -107,6 +123,12 @@
 .activity-bar-item.dragging {
     opacity: 0.3;
     box-shadow: none;
+}
+
+/* 图标按钮焦点态：保持键盘导航时的清晰轮廓。 */
+.activity-bar-item:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary-soft) 46%, transparent);
 }
 
 /* 拖拽放置指示器：绝对定位于视觉间隙中，覆盖整个间隙以捕获 dragover 事件。
@@ -130,7 +152,8 @@
     height: 3px;
     background: var(--accent-primary);
     border-radius: 2px;
-    animation: activity-bar-indicator-fadein 0.12s ease-out;
+    box-shadow: 0 0 14px color-mix(in srgb, var(--accent-primary-soft) 68%, transparent);
+    animation: activity-bar-indicator-fadein var(--motion-duration-fast) var(--motion-ease-emphasized);
 }
 
 /* 放置指示器淡入动画 */

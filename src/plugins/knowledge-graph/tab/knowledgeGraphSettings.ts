@@ -48,8 +48,31 @@ function readKnowledgeGraphThemeColorToken(tokenName: string): string | null {
     }
 
     const rootStyle = window.getComputedStyle(document.documentElement);
-    const value = rootStyle.getPropertyValue(`--${tokenName}`).trim();
-    return value.length > 0 ? value : null;
+    const rawValue = rootStyle.getPropertyValue(`--${tokenName}`).trim();
+    if (rawValue.length === 0) {
+        return null;
+    }
+
+    if (typeof document.createElement !== "function") {
+        return rawValue;
+    }
+
+    const probe = document.createElement("div");
+    probe.style.position = "absolute";
+    probe.style.pointerEvents = "none";
+    probe.style.opacity = "0";
+    probe.style.color = `var(--${tokenName})`;
+
+    const mountTarget = document.body ?? document.documentElement;
+    if (!mountTarget || typeof mountTarget.appendChild !== "function") {
+        return rawValue;
+    }
+
+    mountTarget.appendChild(probe);
+    const resolvedValue = window.getComputedStyle(probe).color.trim();
+    probe.remove();
+
+    return resolvedValue.length > 0 ? resolvedValue : rawValue;
 }
 
 /**

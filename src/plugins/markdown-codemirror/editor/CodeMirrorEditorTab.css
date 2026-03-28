@@ -191,6 +191,16 @@
     text-underline-offset: 2px;
 }
 
+/* Wiki Link 内嵌 token：覆盖 CodeMirror 默认语法色，确保链接文字始终继承链接色。 */
+.cm-tab-editor .cm-rendered-wikilink * {
+    color: inherit !important;
+}
+
+/* Wiki Link 别名 Widget：替代 `target|alias` 源码，只展示可读别名文本 */
+.cm-tab-editor .cm-rendered-wikilink-display {
+    display: inline;
+}
+
 /* Wiki Link 悬浮样式：提示可通过组合键点击导航 */
 .cm-tab-editor .cm-rendered-wikilink:hover {
     cursor: pointer;
@@ -308,6 +318,20 @@
     color: var(--editor-text-color);
 }
 
+/* 列表中的 WikiLink/普通链接：覆盖列表正文色，避免 decoration 合并后被后置规则吞掉。 */
+.cm-tab-editor .cm-rendered-list-item.cm-rendered-wikilink,
+.cm-tab-editor .cm-rendered-list-item .cm-rendered-wikilink,
+.cm-tab-editor .cm-rendered-task-list-item.cm-rendered-wikilink,
+.cm-tab-editor .cm-rendered-task-list-item .cm-rendered-wikilink,
+.cm-tab-editor .cm-rendered-list-item.cm-rendered-link,
+.cm-tab-editor .cm-rendered-list-item .cm-rendered-link,
+.cm-tab-editor .cm-rendered-task-list-item.cm-rendered-link,
+.cm-tab-editor .cm-rendered-task-list-item .cm-rendered-link {
+    color: var(--editor-link-color);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 /* 已完成 task list 内容：降低强调度，帮助快速区分完成项 */
 .cm-tab-editor .cm-rendered-task-list-item-checked {
     opacity: 0.7;
@@ -328,6 +352,11 @@
     color: var(--editor-link-color);
     text-decoration: underline;
     text-underline-offset: 2px;
+}
+
+/* 普通链接内嵌 token：与 Wiki Link 一样保持统一链接色。 */
+.cm-tab-editor .cm-rendered-link * {
+    color: inherit !important;
 }
 
 /* 超链接悬浮样式 */

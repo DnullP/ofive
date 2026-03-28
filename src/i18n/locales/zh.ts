@@ -413,6 +413,7 @@ const zh = {
 
     /* ==================== 标题栏 ==================== */
     titlebar: {
+        appName: "ofive",
         closeApp: "关闭应用",
         toggleFullscreen: "切换全屏",
         minimizeWindow: "最小化窗口",

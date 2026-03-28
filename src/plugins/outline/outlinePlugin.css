@@ -61,6 +61,54 @@
     user-select: none;
 }
 
+/* 大纲无文章态根容器：为空状态卡片提供居中对齐环境。 */
+.outline-panel--empty-state {
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+/* 大纲无文章态卡片：以轻量表面承载 icon 与说明文字。 */
+.outline-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 220px;
+    padding: 20px 18px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--surface-card-bg-muted) 74%, transparent);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--chrome-backdrop-shadow) 10%, transparent);
+    text-align: center;
+}
+
+/* 大纲无文章态图标：用弱化圆形容器表达当前缺少上下文。 */
+.outline-empty-state-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 999px;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--surface-chip-bg) 86%, transparent);
+}
+
+/* 大纲无文章态标题：强调当前未选择文章的状态。 */
+.outline-empty-state-title {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* 大纲无文章态说明：提示需要先聚焦文章。 */
+.outline-empty-state-desc {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
 /* 大纲错误提示文字 */
 .outline-error {
     padding: 12px;
@@ -76,4 +124,9 @@
 /* 桌面毛玻璃大纲面板头部：仅头部承载轻度结构表面。 */
 .app-runtime--tauri.app-effect--glass .outline-panel-header {
     background: rgba(var(--window-glass-elevated-rgb), 0.08);
+}
+
+/* 桌面毛玻璃大纲空态卡片：维持轻量半透明结构感。 */
+.app-runtime--tauri.app-effect--glass .outline-empty-state {
+    background: rgba(var(--window-glass-elevated-rgb), 0.1);
 }

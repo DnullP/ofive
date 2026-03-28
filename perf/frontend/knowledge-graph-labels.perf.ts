@@ -58,6 +58,31 @@ async function waitForLayoutReady(page: Page): Promise<void> {
 }
 
 /**
+ * @function applyMockMacGlassChrome
+ * @description 在浏览器 perf 环境中直接注入 glass 所需的根节点 class 与 CSS 变量，
+ *   避免伪造完整 Tauri runtime 触发原生 API 依赖。
+ * @param page Playwright 页面对象。
+ */
+async function applyMockMacGlassChrome(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        document.documentElement.classList.add(
+            "app-runtime--tauri",
+            "app-platform--macos",
+            "app-effect--glass",
+        );
+
+        document.documentElement.style.setProperty("--glass-blur-radius", "8px");
+        document.documentElement.style.setProperty("--glass-tint-opacity", "0.05");
+        document.documentElement.style.setProperty("--glass-surface-opacity", "0.12");
+        document.documentElement.style.setProperty("--glass-surface-opacity-soft", "0.16");
+        document.documentElement.style.setProperty("--glass-surface-opacity-strong", "0.22");
+        document.documentElement.style.setProperty("--glass-inactive-surface-opacity", "0.09");
+        document.documentElement.style.setProperty("--glass-inactive-surface-opacity-soft", "0.13");
+        document.documentElement.style.setProperty("--glass-inactive-surface-opacity-strong", "0.17");
+    });
+}
+
+/**
  * @function buildDenseMockGraphResponse
  * @description 生成用于标签压力测试的高密度图谱数据集。
  * @returns 图谱 mock 响应。
@@ -279,6 +304,90 @@ test.describe("知识图谱标签性能", () => {
                     },
                 },
             ],
+        });
+    });
+
+    test("应将毛玻璃开启时的大量标签压力纳入性能测试", async ({ page }) => {
+        const graphResponse = buildDenseMockGraphResponse();
+
+        await gotoPerfMockVaultPage(page, "knowledge-graph-labels-glass");
+        await waitForLayoutReady(page);
+        await applyMockMacGlassChrome(page);
+        await installGraphOverride(page, graphResponse);
+        await openKnowledgeGraph(page, graphResponse.nodes.length, graphResponse.edges.length);
+
+        const frameProfile = await profileContinuousZoomUntilLabelsVisible(page);
+
+        expect(frameProfile.visibleLabelCount).toBeGreaterThan(0);
+        expect(frameProfile.labelOpacity).toBeGreaterThan(0.9);
+
+        await writeFrontendPerfReport("frontend-knowledge-graph-labels-glass.json", {
+            schemaVersion: "ofive.perf.report.v1",
+            generatedAt: new Date().toISOString(),
+            suite: "frontend-knowledge-graph-labels-glass",
+            metrics: [],
+            derived: [
+                {
+                    schemaVersion: "ofive.perf.metric.v1",
+                    key: "graph.labelZoom.glass.durationMs",
+                    label: "Knowledge graph label zoom duration with glass",
+                    unit: "ms",
+                    value: frameProfile.durationMs,
+                },
+                {
+                    schemaVersion: "ofive.perf.metric.v1",
+                    key: "graph.labelZoom.glass.averageFrameMs",
+                    label: "Knowledge graph label zoom average frame with glass",
+                    unit: "ms",
+                    value: frameProfile.averageFrameMs,
+                },
+                {
+                    schemaVersion: "ofive.perf.metric.v1",
+                    key: "graph.labelZoom.glass.maxFrameMs",
+                    label: "Knowledge graph label zoom max frame with glass",
+                    unit: "ms",
+                    value: frameProfile.maxFrameMs,
+                },
+                {
+                    schemaVersion: "ofive.perf.metric.v1",
+                    key: "graph.labelZoom.glass.framesOver16Ms",
+                    label: "Knowledge graph label zoom frames over 16ms with glass",
+                    unit: "count",
+                    value: frameProfile.framesOver16Ms,
+                },
+                {
+                    schemaVersion: "ofive.perf.metric.v1",
+                    key: "graph.labelZoom.glass.framesOver32Ms",
+                    label: "Knowledge graph label zoom frames over 32ms with glass",
+                    unit: "count",
+                    value: frameProfile.framesOver32Ms,
+                },
+                {
+                    schemaVersion: "ofive.perf.metric.v1",
+                    key: "graph.labelZoom.glass.framesOver50Ms",
+                    label: "Knowledge graph label zoom frames over 50ms with glass",
+                    unit: "count",
+                    value: frameProfile.framesOver50Ms,
+                },
+                {
+                    schemaVersion: "ofive.perf.metric.v1",
+                    key: "graph.labelZoom.glass.visibleLabelCount",
+                    label: "Visible label count with glass",
+                    unit: "count",
+                    value: frameProfile.visibleLabelCount,
+                },
+            ],
+            attachments: {
+                frameProfile,
+                graph: {
+                    nodeCount: graphResponse.nodes.length,
+                    edgeCount: graphResponse.edges.length,
+                },
+                runtime: {
+                    effect: "glass",
+                    platform: "macos-mock",
+                },
+            },
         });
     });
 });

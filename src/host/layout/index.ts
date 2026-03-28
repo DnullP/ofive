@@ -10,5 +10,11 @@ export type {
     TabInstanceDefinition,
     PanelPosition,
 } from "./DockviewLayout";
+export type {
+    DockviewLayoutAnimationObservation,
+    DockviewLayoutDebugApi,
+    DockviewLayoutSnapshot,
+    DockviewLayoutTimelineEntry,
+} from "./dockviewLayoutDebugContract";
 export { SettingsTab } from "./SettingsTab";
 export { CustomTitlebar } from "./CustomTitlebar";

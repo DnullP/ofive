@@ -8,8 +8,8 @@
 
 /* 设置页左侧栏：分类菜单容器 */
 .settings-tab-sidebar {
-    border-right: 1px solid var(--border-color);
-    background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+    border-right: 1px solid var(--content-material-border);
+    background: var(--content-material-bg-strong);
     padding: 16px 12px;
     display: flex;
     flex-direction: column;
@@ -18,9 +18,8 @@
 
 /* 桌面毛玻璃设置侧栏：比内容面板更实一些，方便做导航。 */
 .app-runtime--tauri.app-effect--glass .settings-tab-sidebar {
-    background: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-strong));
-    backdrop-filter: blur(var(--glass-blur-radius)) saturate(1.04);
-    box-shadow: inset -1px 0 0 rgba(var(--window-glass-border-rgb), 0.12);
+    background: var(--content-material-bg-strong);
+    box-shadow: inset -1px 0 0 color-mix(in srgb, var(--content-material-border) 92%, transparent);
 }
 
 /* 设置页侧栏头部：展示导航标签和命中统计。 */
@@ -52,10 +51,10 @@
     align-items: center;
     gap: 10px;
     padding: 10px 12px;
-    border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+    border: 1px solid var(--content-material-border);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--bg-primary) 78%, var(--bg-secondary));
-    box-shadow: var(--overlay-shadow-floating);
+    background: var(--content-material-input-bg);
+    box-shadow: var(--content-material-shadow);
 }
 
 /* 设置页搜索图标：弱化显示，不抢输入焦点。 */
@@ -98,7 +97,11 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    transition: background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+    transition:
+        background-color var(--motion-duration-fast) var(--motion-ease-standard),
+        border-color var(--motion-duration-fast) var(--motion-ease-standard),
+        transform var(--motion-duration-fast) var(--motion-ease-standard),
+        box-shadow var(--motion-duration-default) var(--motion-ease-standard);
 }
 
 /* 设置页分类标题：强调当前分区名称。 */
@@ -119,15 +122,15 @@
 /* 设置页分类按钮：激活态 */
 .settings-tab-sidebar-item.active,
 .settings-tab-sidebar-item:hover {
-    background: color-mix(in srgb, var(--accent-primary-soft) 52%, var(--bg-hover));
-    border-color: color-mix(in srgb, var(--accent-primary) 36%, transparent);
+    background: color-mix(in srgb, var(--accent-primary-soft) 46%, var(--content-material-hover-bg));
+    border-color: color-mix(in srgb, var(--accent-primary) 34%, var(--content-material-border));
     color: var(--text-primary);
     transform: translateY(-1px);
 }
 
 /* 设置页分类按钮激活态：加强边界与阴影。 */
 .settings-tab-sidebar-item.active {
-    box-shadow: var(--overlay-shadow-floating);
+    box-shadow: none;
 }
 
 /* 设置页右侧内容区容器 */
@@ -136,11 +139,12 @@
     min-height: 0;
     overflow: auto;
     padding: 24px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--content-material-bg-muted) 88%, transparent), transparent 28%);
 }
 
 /* 桌面毛玻璃设置内容区：保持透明，让中心区域不要整块发黑。 */
 .app-runtime--tauri.app-effect--glass .settings-tab-content {
-    background: transparent;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--content-material-bg-muted) 88%, transparent), transparent 28%);
 }
 
 /* 设置页标题 */
@@ -190,9 +194,9 @@
     color: var(--text-secondary);
     font-size: 12px;
     padding: 8px 12px;
-    border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+    border: 1px solid var(--content-material-border);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--bg-secondary) 84%, transparent);
+    background: var(--content-material-pill-bg);
 }
 
 /* 设置页空状态：用于无分区或搜索无结果时的占位说明。 */
@@ -203,9 +207,10 @@
     gap: 8px;
     min-height: 220px;
     padding: 24px;
-    border: 1px dashed color-mix(in srgb, var(--border-color) 78%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--content-material-border) 92%, transparent);
     border-radius: 18px;
-    background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+    background: var(--content-material-bg);
+    box-shadow: var(--content-material-shadow);
 }
 
 /* 设置页空状态标题：突出无结果结论。 */
@@ -227,16 +232,17 @@
     display: flex;
     flex-direction: column;
     gap: 0;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--content-material-border);
     border-radius: 8px;
     overflow: hidden;
+    background: var(--content-material-bg);
+    box-shadow: var(--content-material-shadow);
 }
 
 /* 桌面毛玻璃设置卡片：将玻璃感收敛到卡片层，而不是整页遮罩。 */
 .app-runtime--tauri.app-effect--glass .settings-item-group {
-    background: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-soft));
-    backdrop-filter: blur(var(--glass-blur-radius)) saturate(1.03);
-    box-shadow: inset 0 1px 0 rgba(var(--window-glass-border-rgb), 0.18);
+    background: var(--content-material-bg);
+    box-shadow: var(--content-material-shadow);
 }
 
 .app-runtime--tauri.app-effect--glass.app-window--dragging .settings-tab-sidebar,
@@ -253,9 +259,10 @@
     justify-content: space-between;
     gap: 12px;
     padding: 8px 12px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
+    background: var(--content-material-bg);
+    border-bottom: 1px solid var(--content-material-border);
     cursor: default;
+    transition: background-color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 /* 紧凑设置行堆叠布局：用于带滑块的双层配置项。 */
@@ -276,7 +283,7 @@
 
 /* 紧凑设置行悬浮态 */
 .settings-compact-row:hover {
-    background: var(--bg-hover);
+    background: var(--content-material-hover-bg);
 }
 
 /* 紧凑行纵向布局变体：用于包含子控件区域（如主题按钮、图谱输入） */
@@ -286,8 +293,9 @@
     align-items: stretch;
     gap: 8px;
     padding: 8px 12px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
+    background: var(--content-material-bg);
+    border-bottom: 1px solid var(--content-material-border);
+    transition: background-color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 /* 桌面毛玻璃纵向设置行：保持透明以体现卡片材质。 */
@@ -326,9 +334,9 @@
 /* 紧凑行数值输入框 */
 .settings-compact-number-input {
     width: 64px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--content-material-border);
     border-radius: 4px;
-    background: var(--bg-primary);
+    background: var(--content-material-input-bg);
     color: var(--text-primary);
     padding: 4px 6px;
     font-size: 13px;
@@ -365,9 +373,9 @@
 /* 紧凑行下拉选择框 */
 .settings-compact-select {
     min-width: 80px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--content-material-border);
     border-radius: 4px;
-    background: var(--bg-primary);
+    background: var(--content-material-input-bg);
     color: var(--text-primary);
     padding: 4px 8px;
     font-size: 13px;
@@ -417,9 +425,10 @@
 /* 快捷键设置表格容器：统一圆角边框 */
 .settings-shortcut-table-wrapper {
     width: 100%;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--content-material-border);
     border-radius: 8px;
     overflow: hidden;
+    background: var(--content-material-bg-muted);
 }
 
 /* 快捷键设置表格：仿 VS Code Keyboard Shortcuts 列表风格 */
@@ -436,7 +445,7 @@
     font-weight: 500;
     font-size: 12px;
     padding: 6px 10px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--content-material-border);
     white-space: nowrap;
     user-select: none;
 }
@@ -449,12 +458,12 @@
 
 /* 快捷键表格行默认态 */
 .settings-shortcut-row {
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--content-material-border);
 }
 
 /* 快捷键表格行悬浮态 */
 .settings-shortcut-row:hover {
-    background: var(--bg-hover);
+    background: var(--content-material-hover-bg);
 }
 
 /* 快捷键表格行录制态：轻微高亮 */
@@ -482,8 +491,8 @@
 /* 快捷键键位徽章：仿 VS Code 键位标签 */
 .settings-shortcut-kbd {
     display: inline-block;
-    background: var(--bg-hover);
-    border: 1px solid var(--border-color);
+    background: var(--content-material-pill-bg);
+    border: 1px solid var(--content-material-border);
     border-radius: 4px;
     padding: 2px 6px;
     font-family: inherit;
@@ -497,7 +506,7 @@
     width: 120px;
     border: 1px solid var(--accent-primary);
     border-radius: 4px;
-    background: var(--bg-primary);
+    background: var(--content-material-input-bg);
     color: var(--text-primary);
     padding: 2px 6px;
     font-size: 12px;
@@ -555,10 +564,11 @@
     align-items: center;
     gap: 16px;
     padding: 4px 12px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
+    background: var(--content-material-bg);
+    border-bottom: 1px solid var(--content-material-border);
     cursor: default;
     min-height: 30px;
+    transition: background-color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 /* 密集行最后一项去掉底部分隔线 */
@@ -568,7 +578,7 @@
 
 /* 密集行悬浮态 */
 .settings-dense-row:hover {
-    background: var(--bg-hover);
+    background: var(--content-material-hover-bg);
 }
 
 /* 密集行标题：不截断，允许自然宽度展示 */
@@ -590,9 +600,9 @@
 /* 图谱设置通用输入框：数值/文本输入。 */
 .settings-graph-input {
     min-width: 140px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--content-material-border);
     border-radius: 6px;
-    background: var(--bg-primary);
+    background: var(--content-material-input-bg);
     color: var(--text-primary);
     padding: 6px 8px;
 }
@@ -601,9 +611,9 @@
 .settings-graph-color-input {
     width: 38px;
     height: 30px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--content-material-border);
     border-radius: 6px;
-    background: var(--bg-primary);
+    background: var(--content-material-input-bg);
     padding: 2px;
 }
 
@@ -624,9 +634,9 @@
 
 /* 风格模式按钮：展示主题名称与说明。 */
 .settings-theme-mode-button {
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--content-material-border);
     border-radius: 8px;
-    background: var(--bg-primary);
+    background: var(--content-material-input-bg);
     color: var(--text-primary);
     padding: 10px;
     display: flex;
@@ -634,6 +644,11 @@
     align-items: flex-start;
     gap: 4px;
     cursor: pointer;
+    transition:
+        background-color var(--motion-duration-fast) var(--motion-ease-standard),
+        border-color var(--motion-duration-fast) var(--motion-ease-standard),
+        box-shadow var(--motion-duration-default) var(--motion-ease-standard),
+        transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 /* 风格模式按钮标题：强调主题名称。 */
@@ -651,13 +666,14 @@
 
 /* 风格模式按钮悬浮态：增强可交互反馈。 */
 .settings-theme-mode-button:hover {
-    background: var(--bg-hover);
+    background: var(--content-material-hover-bg);
+    transform: translateY(-1px);
 }
 
 /* 风格模式按钮激活态：标记当前生效主题。 */
 .settings-theme-mode-button.active {
     border-color: var(--accent-primary);
-    background: var(--accent-primary-soft);
+    background: color-mix(in srgb, var(--accent-primary-soft) 54%, var(--content-material-input-bg));
 }
 
 /* 设置页小屏适配：先收窄导航栏，再切为上下布局。 */

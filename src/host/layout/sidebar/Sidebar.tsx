@@ -37,6 +37,8 @@ export interface SidebarProps {
     children: ReactNode;
     /** 当前宽度（px） */
     width: number;
+    /** 动画状态 */
+    motionState: "entering" | "visible" | "exiting";
     /** 拖拽调宽事件回调 */
     onBeginResize: (event: ReactMouseEvent<HTMLDivElement>) => void;
     /** 无障碍标签 */
@@ -63,6 +65,7 @@ export function Sidebar({
     side,
     header,
     children,
+    motionState,
     onBeginResize,
     ariaLabel,
 }: SidebarProps): ReactNode {
@@ -73,6 +76,7 @@ export function Sidebar({
             className={`sidebar sidebar-${side}`}
             aria-label={ariaLabel}
             data-testid={`sidebar-${side}`}
+            data-motion-state={motionState}
         >
             {/* 右侧栏的左边缘调宽手柄 */}
             {side === "right" && (
