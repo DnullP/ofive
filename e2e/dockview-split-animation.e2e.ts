@@ -187,6 +187,7 @@ interface ManualDragAuditScenario {
     sourceLabel: string;
     targetLabel: string;
     targetOffset: DockviewDragTargetOffset;
+    interactionMode?: "synthetic" | "mouse";
     settleMs?: number;
 }
 
@@ -216,6 +217,11 @@ async function runManualDragAuditScenario(
     const targetGroup = getGroupByTabLabel(page, scenario.targetLabel);
 
     const audit = await runDockviewAnimationAudit(page, async () => {
+        if (scenario.interactionMode === "mouse") {
+            await dockviewMouseDragPanel(page, sourceTab, targetGroup, scenario.targetOffset);
+            return;
+        }
+
         await dockviewDragPanel(page, sourceTab, targetGroup, scenario.targetOffset);
     }, scenario.settleMs ?? 900);
 
@@ -505,6 +511,8 @@ test.describe("Dockview split animation audit", () => {
             sourceLabel: "首页",
             targetLabel: "Manual Right",
             targetOffset: { x: 0.92, y: 0.5 },
+            interactionMode: "mouse",
+            settleMs: 1100,
         });
 
         const homeGroup = findGroupByTabLabel(result.afterGroups, "首页");
@@ -546,8 +554,18 @@ test.describe("Dockview split animation audit", () => {
             .first();
 
         const audit = await runDockviewAnimationAudit(page, async () => {
-            await dockviewDragPanel(page, sourceTab, targetHeader, { x: 0.5, y: 0.08 });
-        }, 950);
+            await dockviewMouseDragPanel(
+                page,
+                sourceTab,
+                targetHeader,
+                { x: 0.5, y: 0.04 },
+                {
+                    finalHoverRepeats: 6,
+                    finalHoverDelayMs: 44,
+                    settleDelayMs: 420,
+                },
+            );
+        }, 1100);
 
         const afterGroups = await readSortedGroups(page);
         const result = {
@@ -595,6 +613,8 @@ test.describe("Dockview split animation audit", () => {
             sourceLabel: "首页",
             targetLabel: "Manual Bottom",
             targetOffset: { x: 0.5, y: 0.92 },
+            interactionMode: "mouse",
+            settleMs: 1100,
         });
 
         const homeGroup = findGroupByTabLabel(result.afterGroups, "首页");
@@ -642,7 +662,8 @@ test.describe("Dockview split animation audit", () => {
             sourceLabel: "Nested Bottom Left",
             targetLabel: "Nested Right Base",
             targetOffset: { x: 0.92, y: 0.5 },
-            settleMs: 1000,
+            interactionMode: "mouse",
+            settleMs: 1100,
         });
 
         logAuditResult("nested-left-bottom-to-right-column-edge", {
@@ -686,7 +707,8 @@ test.describe("Dockview split animation audit", () => {
             sourceLabel: "Nested Right Base",
             targetLabel: "首页",
             targetOffset: { x: 0.5, y: 0.92 },
-            settleMs: 1000,
+            interactionMode: "mouse",
+            settleMs: 1100,
         });
 
         logAuditResult("nested-right-top-to-bottom-of-left-column", {
@@ -718,23 +740,23 @@ test.describe("Dockview split animation audit", () => {
         await waitForDockviewAnimationsToSettle(page);
 
         const firstResult = await runDockviewAnimationAudit(page, async () => {
-            await dockviewDragPanel(
+            await dockviewMouseDragPanel(
                 page,
                 page.locator(".dv-tab", { hasText: "首页" }).first(),
                 getGroupByTabLabel(page, "Sequence Right"),
                 { x: 0.92, y: 0.5 },
             );
-        }, 950);
+        }, 1100);
 
         await waitForDockviewAnimationsToSettle(page);
         const secondResult = await runDockviewAnimationAudit(page, async () => {
-            await dockviewDragPanel(
+            await dockviewMouseDragPanel(
                 page,
                 page.locator(".dv-tab", { hasText: "Sequence Right" }).first(),
                 getGroupByTabLabel(page, "首页"),
                 { x: 0.92, y: 0.5 },
             );
-        }, 950);
+        }, 1100);
 
         const finalGroups = await readSortedGroups(page);
         logAuditResult("mixed-horizontal-swap-sequence:first", {
