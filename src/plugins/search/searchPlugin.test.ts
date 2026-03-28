@@ -24,6 +24,8 @@ import {
     unregisterPanel,
 } from "../../host/registry/panelRegistry";
 
+const actualConfigStore = await import("../../host/store/configStore");
+
 mock.module("../../api/vaultApi", () => ({
     searchVaultMarkdown: async () => [],
     isSelfTriggeredVaultFsEvent: () => false,
@@ -40,6 +42,7 @@ mock.module("../../api/vaultApi", () => ({
 }));
 
 mock.module("../../host/store/configStore", () => ({
+    ...actualConfigStore,
     getConfigSnapshot: () => ({
         featureSettings: {
             searchEnabled: false,

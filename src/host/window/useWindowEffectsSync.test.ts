@@ -12,11 +12,14 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { FeatureSettings } from "../store/configStore";
 
+const actualConfigStore = await import("../store/configStore");
+
 mock.module("../../api/windowApi", () => ({
     updateMainWindowAcrylicEffect: async () => undefined,
 }));
 
 mock.module("../store/configStore", () => ({
+    ...actualConfigStore,
     getConfigSnapshot: () => ({
         featureSettings: {
             searchEnabled: true,

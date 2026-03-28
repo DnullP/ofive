@@ -21,6 +21,7 @@ import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
 let savedCalls: Array<{ path: string; content: string }> = [];
 
 const actualAppEventBus = await import("../events/appEventBus");
+const actualConfigStore = await import("./configStore");
 
 mock.module("../../api/vaultApi", () => ({
     saveVaultMarkdownFile: async (path: string, content: string) => {
@@ -71,6 +72,7 @@ mock.module("../events/appEventBus", () => {
 
 mock.module("./configStore", () => {
     return {
+        ...actualConfigStore,
         subscribeConfigChanges: () => {
             return () => { /* noop */ };
         },
