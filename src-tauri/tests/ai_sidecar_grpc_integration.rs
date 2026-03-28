@@ -3,12 +3,15 @@
 //! 验证 Rust 能直接拉起 Go sidecar，并通过 gRPC 接收流式聊天结果。
 
 use std::collections::HashMap;
+use std::fs::File;
 use std::net::TcpListener;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::SystemTime;
 use std::time::Duration;
 
 use axum::extract::State as AxumState;
@@ -264,30 +267,113 @@ fn allocate_port() -> u16 {
     port
 }
 
-fn go_sidecar_dir() -> PathBuf {
+fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("应成功定位工作区根目录")
-        .join("sidecars/go/ofive-ai-agent")
+    .to_path_buf()
 }
 
-fn spawn_sidecar(port: u16) -> Child {
-    Command::new("go")
-        .arg("run")
-        .arg("./cmd/ofive-ai-sidecar")
+fn resolve_prebuilt_sidecar_path() -> PathBuf {
+    let binaries_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries");
+    let candidates = std::fs::read_dir(&binaries_dir)
+        .unwrap_or_else(|error| {
+            panic!(
+                "应成功读取 sidecar 二进制目录: path={} error={error}",
+                binaries_dir.display(),
+            )
+        });
+
+    let mut matches: Vec<PathBuf> = candidates
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.starts_with("ofive-ai-sidecar-"))
+                .unwrap_or(false)
+        })
+        .collect();
+
+    matches.sort();
+    matches.into_iter().next().unwrap_or_else(|| {
+        panic!(
+            "未找到预构建 AI sidecar 二进制: path={}",
+            binaries_dir.display(),
+        )
+    })
+}
+
+fn create_sidecar_log_path(port: u16) -> PathBuf {
+    let timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("系统时间应晚于 Unix epoch")
+        .as_millis();
+    std::env::temp_dir().join(format!(
+        "ofive-ai-sidecar-test-{port}-{timestamp}.log",
+    ))
+}
+
+fn spawn_sidecar(port: u16) -> (Child, PathBuf) {
+    let sidecar_path = resolve_prebuilt_sidecar_path();
+    let log_path = create_sidecar_log_path(port);
+    let stdout_file = File::create(&log_path).unwrap_or_else(|error| {
+        panic!(
+            "应成功创建 sidecar stdout 日志文件: path={} error={error}",
+            log_path.display(),
+        )
+    });
+    let stderr_file = stdout_file.try_clone().unwrap_or_else(|error| {
+        panic!(
+            "应成功克隆 sidecar stderr 日志文件句柄: path={} error={error}",
+            log_path.display(),
+        )
+    });
+
+    let child = Command::new(&sidecar_path)
         .arg("--port")
         .arg(port.to_string())
-        .current_dir(go_sidecar_dir())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .current_dir(workspace_root())
+        .stdout(Stdio::from(stdout_file))
+        .stderr(Stdio::from(stderr_file))
         .spawn()
-        .expect("应成功启动 Go AI sidecar")
+        .unwrap_or_else(|error| {
+            panic!(
+                "应成功启动预构建 Go AI sidecar: path={} error={error}",
+                sidecar_path.display(),
+            )
+        });
+
+    (child, log_path)
+}
+
+fn read_sidecar_log(log_path: &Path) -> String {
+    std::fs::read_to_string(log_path).unwrap_or_else(|error| {
+        format!(
+            "<failed to read sidecar log: path={} error={error}>",
+            log_path.display(),
+        )
+    })
 }
 
 async fn wait_for_health(
     endpoint: &str,
+    child: &mut Child,
+    log_path: &Path,
 ) -> pb::ai_agent_service_client::AiAgentServiceClient<tonic::transport::Channel> {
     for _ in 0..100 {
+        if let Some(status) = child
+            .try_wait()
+            .expect("应成功轮询 sidecar 子进程状态")
+        {
+            panic!(
+                "AI sidecar 在就绪前退出: status={} log={}\n{}",
+                status,
+                log_path.display(),
+                read_sidecar_log(log_path),
+            );
+        }
+
         if let Ok(mut client) =
             pb::ai_agent_service_client::AiAgentServiceClient::connect(endpoint.to_string()).await
         {
@@ -303,17 +389,21 @@ async fn wait_for_health(
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
-    panic!("AI sidecar 在预期时间内未就绪");
+    panic!(
+        "AI sidecar 在预期时间内未就绪: log={}\n{}",
+        log_path.display(),
+        read_sidecar_log(log_path),
+    );
 }
 
 #[tokio::test]
 async fn ai_sidecar_streams_chat_chunks() {
     let port = allocate_port();
     let endpoint = format!("http://127.0.0.1:{port}");
-    let mut child = spawn_sidecar(port);
+    let (mut child, log_path) = spawn_sidecar(port);
 
     async {
-        let mut client = wait_for_health(&endpoint).await;
+        let mut client = wait_for_health(&endpoint, &mut child, &log_path).await;
         let response = client
             .chat(Request::new(pb::ChatRequest {
                 session_id: "integration-session".to_string(),
@@ -361,7 +451,7 @@ async fn ai_sidecar_streams_chat_chunks() {
 async fn ai_sidecar_can_execute_explicit_capability_callback() {
     let port = allocate_port();
     let endpoint = format!("http://127.0.0.1:{port}");
-    let mut child = spawn_sidecar(port);
+    let (mut child, log_path) = spawn_sidecar(port);
     let callback_token = "integration-callback-token".to_string();
     let (callback_url, shutdown_sender, call_count) =
         spawn_mock_callback_server(callback_token.clone())
@@ -369,7 +459,7 @@ async fn ai_sidecar_can_execute_explicit_capability_callback() {
             .expect("应成功启动 mock callback server");
 
     async {
-        let mut client = wait_for_health(&endpoint).await;
+        let mut client = wait_for_health(&endpoint, &mut child, &log_path).await;
         let response = client
             .chat(Request::new(pb::ChatRequest {
                 session_id: "integration-session".to_string(),
@@ -422,7 +512,7 @@ async fn ai_sidecar_can_execute_explicit_capability_callback() {
 async fn ai_sidecar_can_execute_planned_capability_callback_from_natural_language() {
     let port = allocate_port();
     let endpoint = format!("http://127.0.0.1:{port}");
-    let mut child = spawn_sidecar(port);
+    let (mut child, log_path) = spawn_sidecar(port);
     let callback_token = "integration-callback-token".to_string();
     let (callback_url, shutdown_sender, call_count) =
         spawn_mock_callback_server(callback_token.clone())
@@ -430,7 +520,7 @@ async fn ai_sidecar_can_execute_planned_capability_callback_from_natural_languag
             .expect("应成功启动 mock callback server");
 
     async {
-        let mut client = wait_for_health(&endpoint).await;
+        let mut client = wait_for_health(&endpoint, &mut child, &log_path).await;
         let response = client
             .chat(Request::new(pb::ChatRequest {
                 session_id: "integration-session".to_string(),
@@ -480,7 +570,7 @@ async fn ai_sidecar_can_execute_planned_capability_callback_from_natural_languag
 async fn ai_sidecar_can_execute_explicit_persistence_callback() {
     let port = allocate_port();
     let endpoint = format!("http://127.0.0.1:{port}");
-    let mut child = spawn_sidecar(port);
+    let (mut child, log_path) = spawn_sidecar(port);
     let callback_token = "integration-persistence-token".to_string();
     let (callback_url, shutdown_sender, call_count) =
         spawn_mock_persistence_callback_server(callback_token.clone())
@@ -488,7 +578,7 @@ async fn ai_sidecar_can_execute_explicit_persistence_callback() {
             .expect("应成功启动 mock persistence callback server");
 
     async {
-        let mut client = wait_for_health(&endpoint).await;
+        let mut client = wait_for_health(&endpoint, &mut child, &log_path).await;
 
         let save_response = client
             .chat(Request::new(pb::ChatRequest {
@@ -563,7 +653,7 @@ async fn ai_sidecar_can_execute_explicit_persistence_callback() {
 async fn ai_sidecar_can_resume_confirmation_via_host_persistence() {
     let port = allocate_port();
     let endpoint = format!("http://127.0.0.1:{port}");
-    let mut child = spawn_sidecar(port);
+    let (mut child, log_path) = spawn_sidecar(port);
     let callback_token = "integration-confirmation-token".to_string();
     let (callback_url, shutdown_sender, call_count) =
         spawn_mock_persistence_callback_server(callback_token.clone())
@@ -571,7 +661,7 @@ async fn ai_sidecar_can_resume_confirmation_via_host_persistence() {
             .expect("应成功启动 confirmation persistence callback server");
 
     async {
-        let mut client = wait_for_health(&endpoint).await;
+        let mut client = wait_for_health(&endpoint, &mut child, &log_path).await;
         let response = client
             .chat(Request::new(pb::ChatRequest {
                 session_id: "confirmation-session".to_string(),
