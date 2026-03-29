@@ -11,7 +11,7 @@ use tauri::{AppHandle, State};
 
 use crate::infra::fs::fs_helpers::{
     canonicalize_vault_path, collect_tree_entries, detect_mime_type,
-    resolve_existing_vault_file_path, resolve_markdown_path,
+    resolve_canvas_path, resolve_existing_vault_file_path, resolve_markdown_path,
 };
 use crate::infra::fs::watcher;
 use crate::infra::persistence::vault_config_store::{
@@ -159,6 +159,40 @@ pub(crate) fn read_vault_markdown_file(
 ) -> Result<ReadMarkdownResponse, String> {
     let root = get_vault_root(&state)?;
     read_vault_markdown_file_in_root(relative_path, &root)
+}
+
+/// 在指定 vault 根目录下读取 Canvas 文件。
+pub(crate) fn read_vault_canvas_file_in_root(
+    relative_path: String,
+    vault_root: &Path,
+) -> Result<ReadMarkdownResponse, String> {
+    log::info!(
+        "[vault] read_vault_canvas_file start: relative_path={}",
+        relative_path
+    );
+    let target_path = resolve_canvas_path(vault_root, &relative_path)?;
+
+    let content = fs::read_to_string(&target_path)
+        .map_err(|error| format!("读取 Canvas 文件失败 {}: {error}", target_path.display()))?;
+
+    log::info!(
+        "[vault] read_vault_canvas_file success: bytes={}",
+        content.len()
+    );
+
+    Ok(ReadMarkdownResponse {
+        relative_path,
+        content,
+    })
+}
+
+/// 读取当前仓库中的 Canvas 文件。
+pub(crate) fn read_vault_canvas_file(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<ReadMarkdownResponse, String> {
+    let root = get_vault_root(&state)?;
+    read_vault_canvas_file_in_root(relative_path, &root)
 }
 
 /// 在指定 vault 根目录下读取二进制文件。

@@ -27,6 +27,7 @@ import { CornerDownLeft, FileText, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { searchVaultMarkdownFiles, type VaultQuickSwitchItem } from "../../../api/vaultApi";
 import { UI_LANGUAGE } from "../../../i18n/uiLanguage";
+import { modalPlainTextInputProps } from "../../../host/layout/textInputBehaviors";
 import type { OverlayRenderContext } from "../../../host/registry/overlayRegistry";
 import { QUICK_SWITCHER_OPEN_REQUESTED_EVENT } from "../quickSwitcherEvents";
 import "./QuickSwitcherModal.css";
@@ -287,6 +288,7 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
                     <Search size={16} strokeWidth={1.8} className="quick-switcher-input-icon" />
                     <input
                         ref={inputRef}
+                        {...modalPlainTextInputProps}
                         className="quick-switcher-input"
                         type="text"
                         value={query}

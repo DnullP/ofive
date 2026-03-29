@@ -1,7 +1,8 @@
 //! # 宿主引导模块
 //!
-//! 提供主窗口初始化和 `AppState` 构建逻辑，供宿主入口层复用。
+//! 提供主窗口初始化、后台启动任务与 `AppState` 构建逻辑，供宿主入口层复用。
 
+use crate::app::vault::query_app_service;
 use crate::host::window_effects;
 use crate::state::AppState;
 use std::collections::HashMap;
@@ -21,6 +22,16 @@ pub(crate) fn build_app_state() -> AppState {
             window_effects::WindowsAcrylicEffectConfig::default(),
         ),
     }
+}
+
+/// 启动宿主后台预热任务，避免首次用户操作命中重量级冷启动。
+///
+/// 当前仅包含中文分词器预热；任务以后台线程方式执行，不阻塞窗口创建。
+pub(crate) fn spawn_startup_background_tasks() {
+    std::thread::spawn(|| {
+        log::info!("[startup] chinese segmenter warmup scheduled");
+        query_app_service::warmup_chinese_segmenter();
+    });
 }
 
 /// 根据主显示器尺寸按比例初始化主窗口大小，并居中显示。

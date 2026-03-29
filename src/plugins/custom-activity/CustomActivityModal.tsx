@@ -28,6 +28,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { OverlayRenderContext } from "../../host/registry";
+import { modalPlainTextInputProps } from "../../host/layout/textInputBehaviors";
 import { getConfigSnapshot } from "../../host/store/configStore";
 import {
     appendCustomActivityToVaultConfig,
@@ -205,6 +206,7 @@ export function CustomActivityModal(props: OverlayRenderContext): ReactNode {
                             <span className="custom-activity-modal__label">{t("customActivity.nameLabel")}</span>
                             <input
                                 ref={inputRef}
+                                {...modalPlainTextInputProps}
                                 className="custom-activity-modal__input"
                                 type="text"
                                 value={name}

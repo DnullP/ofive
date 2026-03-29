@@ -1,0 +1,418 @@
+/* canvas-tab: Canvas 编辑器根布局，负责纵向分区。 */
+.canvas-tab {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    color-scheme: var(--canvas-color-scheme);
+    background: var(--canvas-surface-background);
+}
+
+/* app-effect--glass 下的 canvas-tab: 让整块 Canvas 直接参与毛玻璃模糊。 */
+:root.app-runtime--tauri.app-effect--glass .canvas-tab {
+    backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.7)) saturate(1.08);
+}
+
+/* canvas-tab__surface: xyflow 画布承载区域。 */
+.canvas-tab__surface {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    overflow: hidden;
+    background: var(--canvas-surface-panel-bg);
+}
+
+/* app-effect--glass 下的 canvas-tab__surface: 画布主平面额外保留一层半透明材质。 */
+:root.app-runtime--tauri.app-effect--glass .canvas-tab__surface {
+    backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.92)) saturate(1.06);
+}
+
+/* canvas-tab__overlay: 加载或错误时覆盖在画布上的状态提示。 */
+.canvas-tab__overlay {
+    position: absolute;
+    z-index: 2;
+    top: 16px;
+    left: 16px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--canvas-overlay-bg);
+    color: var(--canvas-overlay-text);
+}
+
+/* canvas-tab__field: 属性字段纵向排版。 */
+.canvas-tab__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--canvas-field-text);
+}
+
+/* canvas-tab__field input: 文本输入样式。 */
+.canvas-tab__field input {
+    padding: 8px 10px;
+    border: 1px solid var(--canvas-input-border);
+    border-radius: var(--radius-sm);
+    background: var(--canvas-input-bg);
+    color: var(--canvas-input-text);
+}
+
+/* canvas-tab__field textarea: 多行文本输入样式。 */
+.canvas-tab__field textarea {
+    min-height: 120px;
+    padding: 8px 10px;
+    border: 1px solid var(--canvas-input-border);
+    border-radius: var(--radius-sm);
+    resize: vertical;
+    background: var(--canvas-input-bg);
+    color: var(--canvas-input-text);
+}
+
+/* canvas-tab__hint: 辅助说明文本。 */
+.canvas-tab__hint {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--canvas-hint-text);
+}
+
+/* canvas-tab__node: 自定义节点基础容器。 */
+.canvas-tab__node {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    height: 100%;
+    padding: 12px;
+    border: 2px solid var(--canvas-node-border);
+    border-radius: var(--radius-lg);
+    background: var(--canvas-node-bg);
+    box-shadow: var(--canvas-node-shadow);
+}
+
+/* canvas-tab__node--editing: 文本节点进入原位编辑时，去掉内边距和额外间距，让编辑器直接占用原节点框体。 */
+.canvas-tab__node--editing {
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+/* canvas-tab__node--selected: 当前选中节点高亮态。 */
+.canvas-tab__node--selected {
+    box-shadow: var(--canvas-node-shadow-selected);
+}
+
+/* canvas-tab__node--text: 文本节点强调色。 */
+.canvas-tab__node--text {
+    background: var(--canvas-node-text-bg);
+}
+
+/* canvas-tab__node--file: 文件节点强调色。 */
+.canvas-tab__node--file {
+    background: var(--canvas-node-file-bg);
+}
+
+/* canvas-tab__node--group: 分组节点强调色。 */
+.canvas-tab__node--group {
+    background: var(--canvas-node-group-bg);
+}
+
+/* canvas-tab__node-header: 节点标题。 */
+.canvas-tab__node-header {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--canvas-node-title-text);
+}
+
+/* canvas-tab__node-body: 节点正文。 */
+.canvas-tab__node-body {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--canvas-node-body-text);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* canvas-tab__node-body--text: 文本节点正文使用更宽松的排版并承载全部内容。 */
+.canvas-tab__node-body--text {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    font-size: 13px;
+    line-height: 1.38;
+    padding-right: 4px;
+}
+
+/* canvas-tab__markdown: 文本节点的 Markdown 渲染根容器。 */
+.canvas-tab__markdown {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 100%;
+    color: var(--canvas-node-body-text);
+}
+
+/* canvas-tab__markdown--placeholder: 空内容占位文本使用更弱的可见度。 */
+.canvas-tab__markdown--placeholder {
+    color: color-mix(in srgb, var(--canvas-node-body-text) 70%, transparent);
+}
+
+/* canvas-tab__markdown 下常见块元素：清理默认外边距，避免节点内布局松散。 */
+.canvas-tab__markdown :where(p, ul, ol, pre, blockquote, h1, h2, h3, h4, h5, h6) {
+    margin: 0;
+}
+
+/* canvas-tab__markdown 下相邻块元素：使用紧凑但可读的垂直间距。 */
+.canvas-tab__markdown :where(p, ul, ol, pre, blockquote, h1, h2, h3, h4, h5, h6) + :where(p, ul, ol, pre, blockquote, h1, h2, h3, h4, h5, h6) {
+    margin-top: 0.06em;
+}
+
+/* canvas-tab__markdown 下文本块：显式换行沿用更紧凑的行距，不额外扩张段落高度。 */
+.canvas-tab__markdown :where(p, li) {
+    line-height: 1.38;
+}
+
+/* canvas-tab__markdown 下标题：保持节点内层级感，但避免阅读视图那种大标题跳脱。 */
+.canvas-tab__markdown :where(h1, h2, h3, h4, h5, h6) {
+    font-size: 1em;
+    font-weight: 700;
+    line-height: 1.45;
+    color: var(--canvas-node-title-text);
+}
+
+/* canvas-tab__markdown 下列表：保留基础缩进与项目符号。 */
+.canvas-tab__markdown :where(ul, ol) {
+    padding-left: 1.15em;
+}
+
+/* canvas-tab__markdown 下列表项：减少相邻项之间的额外空隙。 */
+.canvas-tab__markdown li + li {
+    margin-top: 0.04em;
+}
+
+/* canvas-tab 下 react-flow__resize-control.handle: 节点缩放手柄使用当前选中描边色。 */
+.canvas-tab .react-flow__resize-control.handle {
+    width: 10px;
+    height: 10px;
+    border: 2px solid rgba(255, 255, 255, 0.92);
+    border-radius: 999px;
+    background: var(--accent-primary);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg-primary) 24%, transparent);
+}
+
+/* canvas-tab 下 react-flow__resize-control.line: 缩放辅助线弱化为半透明描边。 */
+.canvas-tab .react-flow__resize-control.line {
+    border-color: color-mix(in srgb, var(--accent-primary) 82%, transparent);
+    border-width: 2px;
+}
+
+/* canvas-tab__markdown 下引用块：用轻描边突出，不额外引入重背景。 */
+.canvas-tab__markdown blockquote {
+    padding-left: 0.8em;
+    border-left: 2px solid color-mix(in srgb, var(--canvas-node-border) 90%, transparent);
+    color: color-mix(in srgb, var(--canvas-node-body-text) 84%, var(--canvas-node-title-text) 16%);
+}
+
+/* canvas-tab__markdown 下行内代码：提供轻量胶囊感。 */
+.canvas-tab__markdown :where(code):not(pre code) {
+    padding: 0.08em 0.38em;
+    border: 1px solid color-mix(in srgb, var(--canvas-input-border) 72%, transparent);
+    border-radius: 0.45em;
+    background: color-mix(in srgb, var(--canvas-input-bg) 88%, transparent);
+    font-size: 0.92em;
+}
+
+/* canvas-tab__markdown 下代码块：使用更沉稳的背景层，保留可滚动性。 */
+.canvas-tab__markdown pre {
+    overflow: auto;
+    padding: 0.7em 0.8em;
+    border: 1px solid color-mix(in srgb, var(--canvas-input-border) 64%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--canvas-input-bg) 82%, transparent);
+}
+
+/* canvas-tab__markdown 下链接：保留语义强调，但避免过亮跳出节点。 */
+.canvas-tab__markdown a {
+    color: color-mix(in srgb, var(--text-link-color) 82%, var(--canvas-node-title-text) 18%);
+    text-decoration-color: color-mix(in srgb, var(--text-link-color) 60%, transparent);
+}
+
+/* canvas-tab__markdown 下分隔线：弱化为一条柔和分隔。 */
+.canvas-tab__markdown hr {
+    width: 100%;
+    height: 1px;
+    margin: 0.55em 0;
+    border: 0;
+    background: color-mix(in srgb, var(--canvas-node-border) 72%, transparent);
+}
+
+/* canvas-tab__node-text-editor: 文本节点内联编辑器。 */
+.canvas-tab__node-text-editor {
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: inherit;
+    resize: none;
+    background: transparent;
+    color: var(--canvas-input-text);
+    font: inherit;
+    line-height: 1.6;
+    outline: none;
+    box-shadow: none;
+}
+
+/* canvas-tab__actions: 底部居中的轻量操作条，仅负责对齐按钮，不提供额外容器视觉。 */
+.canvas-tab__actions {
+    position: absolute;
+    z-index: 4;
+    left: 50%;
+    bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transform: translateX(-50%);
+}
+
+/* canvas-tab__action-button: 画布底部快捷操作按钮，使用 icon + label 并排布局。 */
+.canvas-tab__action-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px solid var(--canvas-button-border);
+    border-radius: 999px;
+    background: var(--canvas-button-bg);
+    color: var(--canvas-button-text);
+    backdrop-filter: blur(12px);
+    cursor: pointer;
+}
+
+/* canvas-tab__action-button:hover: 快捷操作按钮悬浮层次。 */
+.canvas-tab__action-button:hover {
+    background: var(--canvas-button-bg-hover);
+}
+
+/* canvas-tab__edge-editor: 双击边后的浮层编辑器。 */
+.canvas-tab__edge-editor {
+    position: absolute;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 260px;
+    padding: 12px;
+    border: 1px solid var(--canvas-edge-editor-border);
+    border-radius: var(--radius-md);
+    background: var(--canvas-edge-editor-bg);
+    box-shadow: var(--canvas-edge-editor-shadow);
+    backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.7));
+    transform: translate(-50%, calc(-100% - 10px));
+}
+
+/* canvas-tab__edge-editor-title: 边编辑浮层标题。 */
+.canvas-tab__edge-editor-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--canvas-section-title);
+}
+
+/* canvas-tab__edge-editor-actions: 边编辑浮层底部操作区。 */
+.canvas-tab__edge-editor-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* canvas-tab__edge-editor-actions button: 浮层按钮样式。 */
+.canvas-tab__edge-editor-actions button {
+    padding: 7px 10px;
+    border: 1px solid var(--canvas-button-border);
+    border-radius: var(--radius-sm);
+    background: var(--canvas-button-bg);
+    color: var(--canvas-button-text);
+    cursor: pointer;
+}
+
+/* canvas-tab 下 react-flow__controls: 视图控制器深色容器。 */
+.canvas-tab .react-flow__controls {
+    overflow: hidden;
+    border: 1px solid var(--canvas-controls-border);
+    border-radius: var(--radius-md);
+    background: var(--canvas-controls-bg);
+    box-shadow: var(--canvas-edge-editor-shadow);
+}
+
+/* canvas-tab 下 react-flow__controls-button: 控件按钮深色样式。 */
+.canvas-tab .react-flow__controls-button {
+    border-bottom: 1px solid var(--canvas-controls-border);
+    background: transparent;
+    color: var(--canvas-button-text);
+}
+
+/* canvas-tab 下 react-flow__controls-button:last-child: 去掉最后一个按钮底边。 */
+.canvas-tab .react-flow__controls-button:last-child {
+    border-bottom: none;
+}
+
+/* canvas-tab 下 react-flow__controls-button svg: 控件图标颜色。 */
+.canvas-tab .react-flow__controls-button svg {
+    fill: currentColor;
+}
+
+/* canvas-tab 下 react-flow__minimap: 缩略图深色面板。 */
+.canvas-tab .react-flow__minimap {
+    background: var(--canvas-minimap-bg);
+    border: 1px solid var(--canvas-controls-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+/* canvas-tab 下 react-flow__attribution: 隐藏默认署名区域。 */
+.canvas-tab .react-flow__attribution {
+    display: none;
+}
+
+/* canvas-tab 下 react-flow__edge.selected path: 选中边高亮。 */
+.canvas-tab .react-flow__edge.selected path {
+    stroke: var(--canvas-edge-selected-stroke);
+}
+
+/* canvas-tab 下 react-flow__edge-textwrapper: 为边标签增加轻微景深，避免默认白底贴片感。 */
+.canvas-tab .react-flow__edge-textwrapper {
+    filter: drop-shadow(var(--canvas-edge-label-shadow));
+}
+
+/* canvas-tab 下 react-flow__edge-textbg: 将默认白底改为半透明玻璃底和柔和描边。 */
+.canvas-tab .react-flow__edge-textbg {
+    fill: var(--canvas-edge-label-bg);
+    stroke: var(--canvas-edge-label-border);
+    stroke-width: 1;
+}
+
+/* canvas-tab 下 react-flow__edge-text: 边标签文字改为更柔和的前景色并提升字重。 */
+.canvas-tab .react-flow__edge-text {
+    fill: var(--canvas-edge-label-text);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+/* 响应式布局：窄屏时改为纵向堆叠。 */
+@media (max-width: 900px) {
+    .canvas-tab__actions {
+        bottom: 14px;
+        width: calc(100% - 24px);
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    /* 窄屏下的 edge editor: 改为偏中间显示，避免超出右边界。 */
+    .canvas-tab__edge-editor {
+        width: min(280px, calc(100vw - 32px));
+        transform: translate(-30%, calc(-100% - 10px));
+    }
+}

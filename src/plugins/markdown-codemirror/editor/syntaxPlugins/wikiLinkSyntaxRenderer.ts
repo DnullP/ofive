@@ -34,6 +34,38 @@ interface WikiLinkMatch {
 }
 
 /**
+ * @interface WikiLinkMouseDownEventLike
+ * @description WikiLink 左键导航所需的最小事件接口。
+ */
+export interface WikiLinkMouseDownEventLike {
+    button: number;
+    target: EventTarget | null;
+    clientX: number;
+    clientY: number;
+    preventDefault: () => void;
+}
+
+/**
+ * @interface WikiLinkMouseDownViewLike
+ * @description WikiLink 左键导航所需的最小视图接口。
+ */
+export interface WikiLinkMouseDownViewLike {
+    state: EditorState;
+    posAtCoords: (coords: { x: number; y: number }) => number | null;
+}
+
+interface ClosestCapableTarget {
+    closest: (selector: string) => unknown;
+}
+
+function isClosestCapableTarget(value: EventTarget | null): value is ClosestCapableTarget {
+    return typeof value === "object"
+        && value !== null
+        && "closest" in value
+        && typeof value.closest === "function";
+}
+
+/**
  * @class WikiLinkDisplayWidget
  * @description Wiki link 别名显示 Widget：隐藏源码中的 target，仅展示 displayText。
  */
@@ -170,6 +202,38 @@ function findWikiLinkAtPosition(state: EditorState, position: number): WikiLinkM
 }
 
 /**
+ * @function isRenderedWikiLinkTarget
+ * @description 判断点击目标是否命中了 WikiLink 的渲染态 DOM。
+ * @param eventTarget 鼠标事件目标。
+ * @returns 命中渲染态返回 true。
+ */
+export function isRenderedWikiLinkTarget(eventTarget: EventTarget | null): boolean {
+    if (!isClosestCapableTarget(eventTarget)) {
+        return false;
+    }
+
+    return eventTarget.closest(".cm-rendered-wikilink, .cm-rendered-wikilink-display") !== null;
+}
+
+/**
+ * @function extractWidgetWikiLinkTarget
+ * @description 从别名 widget DOM 中提取 WikiLink 目标。
+ * @param eventTarget 鼠标事件目标。
+ * @returns 命中 alias widget 时返回目标文本。
+ */
+export function extractWidgetWikiLinkTarget(eventTarget: EventTarget | null): string | null {
+    if (!isClosestCapableTarget(eventTarget)) {
+        return null;
+    }
+
+    const widgetTarget = eventTarget.closest(".cm-rendered-wikilink-display") as {
+        dataset?: { wikiLinkTarget?: string };
+    } | null;
+
+    return widgetTarget?.dataset?.wikiLinkTarget?.trim() ?? null;
+}
+
+/**
  * @function createWikiLinkTabId
  * @description 根据 wiki link 目标生成稳定 tab id。
  * @param target wiki 目标文本。
@@ -245,37 +309,54 @@ export function createWikiLinkNavigationExtension(
 ): ReturnType<typeof EditorView.domEventHandlers> {
     return EditorView.domEventHandlers({
         mousedown(event, view) {
-            if (!(event.metaKey || event.ctrlKey) || event.button !== 0) {
-                return false;
-            }
-
-            const eventTarget = event.target;
-            if (eventTarget instanceof Element) {
-                const widgetTarget = eventTarget
-                    .closest<HTMLElement>(".cm-rendered-wikilink-display")
-                    ?.dataset.wikiLinkTarget
-                    ?.trim();
-                if (widgetTarget) {
-                    event.preventDefault();
-                    void openWikiLinkTarget(containerApi, getCurrentFilePath, widgetTarget);
-                    return true;
-                }
-            }
-
-            const position = view.posAtCoords({ x: event.clientX, y: event.clientY });
-            if (position === null) {
-                return false;
-            }
-
-            const wikiLink = findWikiLinkAtPosition(view.state, position);
-            if (!wikiLink) {
-                return false;
-            }
-
-            event.preventDefault();
-            void openWikiLinkTarget(containerApi, getCurrentFilePath, wikiLink.target);
-
-            return true;
+            return handleWikiLinkMouseDown(event, view, (target) => {
+                void openWikiLinkTarget(containerApi, getCurrentFilePath, target);
+            });
         },
     });
+}
+
+/**
+ * @function handleWikiLinkMouseDown
+ * @description 处理渲染态 WikiLink 的普通左键导航，命中后会阻止默认光标移动。
+ * @param event 鼠标事件。
+ * @param view 编辑器视图。
+ * @param openTarget 打开目标的回调。
+ * @returns 若事件被消费则返回 true。
+ */
+export function handleWikiLinkMouseDown(
+    event: WikiLinkMouseDownEventLike,
+    view: WikiLinkMouseDownViewLike,
+    openTarget: (target: string) => void,
+): boolean {
+    if (event.button !== 0) {
+        return false;
+    }
+
+    const widgetTarget = extractWidgetWikiLinkTarget(event.target);
+    const renderedTargetHit = widgetTarget !== null || isRenderedWikiLinkTarget(event.target);
+    if (!renderedTargetHit) {
+        return false;
+    }
+
+    if (widgetTarget) {
+        event.preventDefault();
+        openTarget(widgetTarget);
+        return true;
+    }
+
+    const position = view.posAtCoords({ x: event.clientX, y: event.clientY });
+    if (position === null) {
+        return false;
+    }
+
+    const wikiLink = findWikiLinkAtPosition(view.state, position);
+    if (!wikiLink) {
+        return false;
+    }
+
+    event.preventDefault();
+    openTarget(wikiLink.target);
+
+    return true;
 }

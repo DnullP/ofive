@@ -24,11 +24,15 @@ import type {
 import { buildGlassRuntimeStyle } from "../../src/host/layout/glassRuntimeStyle";
 import { CodeMirrorEditorTab } from "../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
 import { KnowledgeGraphTab } from "../../src/plugins/knowledge-graph/tab/KnowledgeGraphTab";
+import { CanvasTab } from "../../src/plugins/canvas/CanvasTab";
 import { SettingsTab } from "../../src/host/layout/SettingsTab";
 import { useConfigSync } from "../../src/host/store/configStore";
 import { registerActivity } from "../../src/host/registry/activityRegistry";
+import { registerFileOpener } from "../../src/host/registry/fileOpenerRegistry";
 import { registerPanel } from "../../src/host/registry/panelRegistry";
 import { registerTabComponent } from "../../src/host/registry/tabComponentRegistry";
+import { buildFileTabId, normalizeRelativePath } from "../../src/host/layout/openFileService";
+import { readVaultMarkdownFile } from "../../src/api/vaultApi";
 import { MockVaultPanel } from "./MockVaultPanel";
 import "../../src/plugins/ai-chat/aiChatPlugin.css";
 import "../../src/plugins/backlinks/backlinksPlugin.css";
@@ -38,6 +42,17 @@ import "../../src/App.css";
 const MOCK_VAULT_PATH = "/mock/notes";
 const MOCK_SPLIT_DEMO_COMPONENT_ID = "split-demo";
 const MOCK_SPLIT_DEMO_TAB_ID = "split-demo";
+
+/**
+ * @function isMockMarkdownPath
+ * @description 判断 mock 工作区文件是否应交由 CodeMirror Markdown opener 打开。
+ * @param relativePath 工作区相对路径。
+ * @returns 是否为 Markdown 文件。
+ */
+function isMockMarkdownPath(relativePath: string): boolean {
+    const normalizedPath = relativePath.toLowerCase();
+    return normalizedPath.endsWith(".md") || normalizedPath.endsWith(".markdown");
+}
 
 function resolveMockVaultPath(): string {
     if (typeof window === "undefined") {
@@ -416,8 +431,32 @@ function ensureMockComponentsRegistered(): void {
     registerTabComponent({ id: "home", component: MockHomeTab as never });
     registerTabComponent({ id: MOCK_SPLIT_DEMO_COMPONENT_ID, component: MockSplitDemoTab as never });
     registerTabComponent({ id: "codemirror", component: CodeMirrorEditorTab as never });
+    registerTabComponent({ id: "canvas", component: CanvasTab as never });
     registerTabComponent({ id: MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID, component: KnowledgeGraphTab as never });
     registerTabComponent({ id: "settings", component: SettingsTab as never });
+    registerFileOpener({
+        id: "mock.markdown.codemirror",
+        label: "Mock CodeMirror Markdown Editor",
+        kind: "markdown",
+        priority: 100,
+        matches: ({ relativePath }) => isMockMarkdownPath(relativePath),
+        async resolveTab({ relativePath, contentOverride }) {
+            const normalizedPath = normalizeRelativePath(relativePath);
+            const content = typeof contentOverride === "string"
+                ? contentOverride
+                : await readVaultMarkdownFile(normalizedPath).then((result) => result.content);
+
+            return {
+                id: buildFileTabId(normalizedPath),
+                title: normalizedPath.split("/").pop() ?? normalizedPath,
+                component: "codemirror",
+                params: {
+                    path: normalizedPath,
+                    content,
+                },
+            };
+        },
+    });
 
     console.info("[MockApp] mock components registered");
 }

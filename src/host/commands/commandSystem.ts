@@ -10,11 +10,16 @@
  */
 
 import {
+    createVaultCanvasFile,
     createVaultDirectory,
     createVaultMarkdownFile,
     saveVaultMarkdownFile,
 } from "../../api/vaultApi";
 import i18n from "../../i18n";
+import {
+    buildCreatedCanvasInitialContent,
+    resolveCreatedCanvasPath,
+} from "../../utils/canvasFileSpec";
 import {
     getArticleSnapshotById,
     getFocusedArticleSnapshot,
@@ -37,6 +42,7 @@ type BuiltinCommandId =
     | "file.saveFocused"
     | "file.moveFocusedToDirectory"
     | "folder.createInFocusedDirectory"
+    | "canvas.createInFocusedDirectory"
     | "file.renameFocused"
     | "note.createNew"
     | "editor.undo"
@@ -266,6 +272,42 @@ async function executeCreateFileInFocusedDirectory(context: CommandContext): Pro
     });
 }
 
+async function executeCreateCanvasInFocusedDirectory(context: CommandContext): Promise<void> {
+    const baseDirectory = resolveBaseDirectoryForCreateCommand(context);
+    if (!context.requestCreateEntryDraft) {
+        console.warn("[command-system] create canvas command skipped: requestCreateEntryDraft missing");
+        return;
+    }
+
+    const draftName = await context.requestCreateEntryDraft({
+        kind: "file",
+        baseDirectory,
+        title: i18n.t("commands.newCanvasPrompt"),
+        placeholder: i18n.t("fileTree.newCanvasPlaceholder"),
+        initialValue: "untitled-canvas",
+    });
+    if (draftName === null) {
+        return;
+    }
+
+    const relativePath = resolveCreatedCanvasPath(baseDirectory, draftName);
+    if (!relativePath) {
+        return;
+    }
+
+    const initialContent = buildCreatedCanvasInitialContent(relativePath);
+
+    await createVaultCanvasFile(relativePath, initialContent);
+    context.openFileTab(relativePath, initialContent, {
+        autoFocus: true,
+    });
+
+    console.info("[command-system] create canvas command success", {
+        baseDirectory,
+        relativePath,
+    });
+}
+
 /**
  * @interface CommandDefinition
  * @description 指令定义结构。
@@ -448,6 +490,17 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
                 baseDirectory,
                 relativeDirectoryPath,
             });
+        },
+    },
+    "canvas.createInFocusedDirectory": {
+        id: "canvas.createInFocusedDirectory",
+        title: "commands.createCanvasInDir",
+        shortcut: {
+            defaultBinding: "",
+            editableInSettings: true,
+        },
+        async execute(context) {
+            await executeCreateCanvasInFocusedDirectory(context);
         },
     },
     "file.renameFocused": {

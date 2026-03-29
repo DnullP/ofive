@@ -51,6 +51,25 @@
   background: transparent;
 }
 
+/* 主区工作区文件拖拽预览：工作区文件拖拽统一由宿主层接管，并复用 Dockview 原生 drop anchor 的视觉变量。 */
+.main-dockview-workspace-drop-preview {
+  position: absolute;
+  z-index: 9999;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: var(--dv-drag-over-border);
+  background-color: var(--dv-drag-over-background-color);
+  opacity: 1;
+  will-change: left, top, width, height, opacity;
+  contain: layout paint;
+  transition:
+    top 70ms ease-out,
+    left 70ms ease-out,
+    width 70ms ease-out,
+    height 70ms ease-out,
+    opacity 70ms ease-out;
+}
+
 /* 桌面毛玻璃主编辑宿主：避免额外不透明底色覆盖原生材质。 */
 .app-runtime--tauri.app-effect--glass .main-dockview-host {
   background: transparent;
@@ -82,7 +101,9 @@
   border-radius: var(--radius-md);
 }
 
-/* dockview 主题变量覆写：增强拖拽预高亮可见性 */
+/* dockview 主题变量覆写：增强拖拽预高亮可见性，并让宿主层 preview 复用同一套颜色定义。 */
+.main-content-area,
+.main-dockview-host,
 .dockview-theme-abyss,
 .dv-dockview,
 .dv-paneview,
@@ -105,11 +126,14 @@
   --dv-paneview-active-outline-color: var(--accent-primary);
   --dv-sash-color: transparent;
   --dv-active-sash-color: var(--accent-primary-soft);
+  --dv-drag-over-border: 2px solid var(--dv-drag-over-border-color);
   --dv-drag-over-background-color: var(--accent-primary-soft);
   --dv-drag-over-border-color: var(--accent-primary);
 }
 
 /* 桌面毛玻璃 Dockview 变量：主内容区保持透明，tab 条保留轻度结构表面。 */
+.app-runtime--tauri.app-effect--glass .main-content-area,
+.app-runtime--tauri.app-effect--glass .main-dockview-host,
 .app-runtime--tauri.app-effect--glass .dockview-theme-abyss,
 .app-runtime--tauri.app-effect--glass .dv-dockview,
 .app-runtime--tauri.app-effect--glass .dv-paneview,

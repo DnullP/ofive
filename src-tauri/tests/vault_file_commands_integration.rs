@@ -16,12 +16,18 @@ mod support;
 use std::fs;
 
 use ofive_lib::test_support::{
+    create_vault_canvas_file_in_root,
     create_vault_directory_in_root, create_vault_markdown_file_in_root,
     delete_vault_binary_file_in_root, delete_vault_directory_in_root,
+    delete_vault_canvas_file_in_root,
     delete_vault_markdown_file_in_root, get_current_vault_tree_in_root,
     move_vault_directory_to_directory_in_root, move_vault_markdown_file_to_directory_in_root,
+    move_vault_canvas_file_to_directory_in_root,
     read_vault_binary_file_in_root, read_vault_markdown_file_in_root,
+    read_vault_canvas_file_in_root,
     rename_vault_directory_in_root, rename_vault_markdown_file_in_root,
+    rename_vault_canvas_file_in_root,
+    save_vault_canvas_file_in_root,
     save_vault_markdown_file_in_root,
 };
 use serde_json::Value;
@@ -145,6 +151,51 @@ fn create_save_rename_delete_should_mutate_filesystem() {
     delete_vault_markdown_file_in_root("notes/renamed-note.md".to_string(), &vault.root)
         .expect("删除文件应成功");
     assert!(!vault.root.join("notes/renamed-note.md").exists());
+}
+
+#[test]
+fn create_save_rename_move_delete_should_mutate_canvas_filesystem() {
+    let vault = TestVault::new();
+
+    create_vault_canvas_file_in_root(
+        "boards/roadmap.canvas".to_string(),
+        Some("{\n  \"nodes\": [],\n  \"edges\": []\n}\n".to_string()),
+        &vault.root,
+    )
+    .expect("创建 canvas 文件应成功");
+    assert!(vault.root.join("boards/roadmap.canvas").exists());
+
+    save_vault_canvas_file_in_root(
+        "boards/roadmap.canvas".to_string(),
+        "{\n  \"nodes\": [{\n    \"id\": \"n1\",\n    \"type\": \"text\"\n  }],\n  \"edges\": []\n}\n".to_string(),
+        &vault.root,
+    )
+    .expect("保存 canvas 文件应成功");
+
+    let canvas = read_vault_canvas_file_in_root("boards/roadmap.canvas".to_string(), &vault.root)
+        .expect("读取 canvas 文件应成功");
+    assert!(canvas.content.contains("\"id\": \"n1\""));
+
+    rename_vault_canvas_file_in_root(
+        "boards/roadmap.canvas".to_string(),
+        "boards/roadmap-v2.canvas".to_string(),
+        &vault.root,
+    )
+    .expect("重命名 canvas 文件应成功");
+    assert!(vault.root.join("boards/roadmap-v2.canvas").exists());
+
+    let moved = move_vault_canvas_file_to_directory_in_root(
+        "boards/roadmap-v2.canvas".to_string(),
+        "archive/2026".to_string(),
+        &vault.root,
+    )
+    .expect("移动 canvas 文件应成功");
+    assert_eq!(moved.relative_path, "archive/2026/roadmap-v2.canvas");
+    assert!(vault.root.join("archive/2026/roadmap-v2.canvas").exists());
+
+    delete_vault_canvas_file_in_root(moved.relative_path, &vault.root)
+        .expect("删除 canvas 文件应成功");
+    assert!(!vault.root.join("archive/2026/roadmap-v2.canvas").exists());
 }
 
 #[test]

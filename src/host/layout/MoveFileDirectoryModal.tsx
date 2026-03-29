@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { modalPlainTextInputProps } from "./textInputBehaviors";
 import "./MoveFileDirectoryModal.css";
 
 /**
@@ -227,6 +228,7 @@ export function MoveFileDirectoryModal(props: MoveFileDirectoryModalProps): Reac
 
                 <input
                     ref={inputRef}
+                    {...modalPlainTextInputProps}
                     className="move-file-input"
                     type="text"
                     value={query}

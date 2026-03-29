@@ -5,11 +5,34 @@
 use crate::shared::vault_contracts::ChineseSegmentToken;
 use jieba_rs::{Jieba, TokenizeMode};
 use std::sync::OnceLock;
+use std::time::Instant;
 
 static JIEBA_INSTANCE: OnceLock<Jieba> = OnceLock::new();
 
 fn jieba_instance() -> &'static Jieba {
     JIEBA_INSTANCE.get_or_init(Jieba::new)
+}
+
+/// 预热中文分词器实例，避免首次分词请求承担词典加载冷启动开销。
+///
+/// 该函数是幂等的：
+/// - 首次调用会初始化全局 Jieba 实例；
+/// - 后续调用仅复用已缓存实例。
+///
+/// # Side Effects
+/// - 可能触发 `Jieba::new()` 进行词典加载。
+/// - 会写入启动预热日志，便于诊断冷启动耗时。
+pub(crate) fn warmup_chinese_segmenter() {
+    let warmup_started_at = Instant::now();
+    let already_initialized = JIEBA_INSTANCE.get().is_some();
+
+    let _ = jieba_instance();
+
+    log::info!(
+        "[segment] warmup_chinese_segmenter completed: already_initialized={} elapsed={:?}",
+        already_initialized,
+        warmup_started_at.elapsed()
+    );
 }
 
 fn utf16_offset_of_byte_floor(text: &str, byte_index: usize) -> usize {
@@ -135,4 +158,32 @@ pub(crate) fn segment_chinese_text(text: String) -> Result<Vec<ChineseSegmentTok
         result.len()
     );
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{segment_chinese_text, warmup_chinese_segmenter};
+
+    /// 验证分词器预热后仍可正常执行中文分词。
+    #[test]
+    fn warmup_chinese_segmenter_keeps_segmentation_available() {
+        warmup_chinese_segmenter();
+
+        let tokens = segment_chinese_text("市场结构".to_string())
+            .expect("预热后分词能力应保持可用");
+
+        assert!(!tokens.is_empty(), "预热后中文文本应仍能产生 token");
+    }
+
+    /// 验证分词器预热是幂等的，多次调用不会影响后续分词结果。
+    #[test]
+    fn warmup_chinese_segmenter_is_idempotent() {
+        warmup_chinese_segmenter();
+        warmup_chinese_segmenter();
+
+        let tokens = segment_chinese_text("通信协议栈".to_string())
+            .expect("重复预热后分词能力应保持可用");
+
+        assert!(!tokens.is_empty(), "重复预热后中文文本应仍能产生 token");
+    }
 }

@@ -10,6 +10,7 @@ import {
 import { FileText, Folder, FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "./FileTree.css";
+import { writeWorkspaceFileDragPayload } from "../../../host/layout/workspaceFileDragPayload";
 import { showNativeContextMenu } from "../../../host/layout/nativeContextMenu";
 
 export interface FileTreeItem {
@@ -45,6 +46,7 @@ interface FileTreeProps {
     targetDirectoryRelativePath: string,
   ) => void;
   onCreateFileInDirectory?: (targetDirectoryRelativePath: string, draftName: string) => void;
+  onCreateCanvasInDirectory?: (targetDirectoryRelativePath: string, draftName: string) => void;
   onCreateFolderInDirectory?: (targetDirectoryRelativePath: string, draftName: string) => void;
 }
 
@@ -305,7 +307,7 @@ function TreeItem({
   dropTargetDirectoryPath: string | null;
   editingItemPath: string | null;
   renameDraft: string;
-  creatingType: "file" | "folder" | null;
+  creatingType: "file" | "canvas" | "folder" | null;
   creatingParentPath: string | null;
   creatingDraft: string;
   renamingPath: string | null;
@@ -337,6 +339,11 @@ function TreeItem({
   const isSubmittingRename = renamingPath === node.path;
   const shouldRenderCreateInputInsideFolder =
     node.isFolder && creatingParentPath === node.path && Boolean(creatingType);
+  const createPlaceholder = creatingType === "folder"
+    ? t("fileTree.newFolderPlaceholder")
+    : creatingType === "canvas"
+      ? t("fileTree.newCanvasPlaceholder")
+      : t("fileTree.newFilePlaceholder");
 
   if (isEditingName) {
     return (
@@ -490,7 +497,7 @@ function TreeItem({
                     }
                   }}
                   autoFocus
-                  placeholder={creatingType === "folder" ? t("fileTree.newFolderPlaceholder") : t("fileTree.newFilePlaceholder")}
+                  placeholder={createPlaceholder}
                 />
               </div>
             </li>
@@ -524,7 +531,7 @@ function TreeItem({
                   }
                 }}
                 autoFocus
-                placeholder={creatingType === "folder" ? t("fileTree.newFolderPlaceholder") : t("fileTree.newFilePlaceholder")}
+                placeholder={createPlaceholder}
               />
             </div>
           </li>
@@ -546,6 +553,7 @@ export function FileTree({
   onMoveFileByDrop,
   onMoveItemsByDrop,
   onCreateFileInDirectory,
+  onCreateCanvasInDirectory,
   onCreateFolderInDirectory,
 }: FileTreeProps): ReactNode {
   const { t } = useTranslation();
@@ -564,7 +572,7 @@ export function FileTree({
   const [editingItemPath, setEditingItemPath] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState<string>("");
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
-  const [creatingType, setCreatingType] = useState<"file" | "folder" | null>(null);
+  const [creatingType, setCreatingType] = useState<"file" | "canvas" | "folder" | null>(null);
   const [creatingParentPath, setCreatingParentPath] = useState<string | null>(null);
   const [creatingDraft, setCreatingDraft] = useState<string>("");
 
@@ -701,7 +709,7 @@ export function FileTree({
     onOpenFile({ id: node.id, path: node.path, isDir: false });
   };
 
-  const startCreateInDirectory = (type: "file" | "folder", targetDirectoryRelativePath: string): void => {
+  const startCreateInDirectory = (type: "file" | "canvas" | "folder", targetDirectoryRelativePath: string): void => {
     setEditingItemPath(null);
     setRenameDraft("");
     setCreatingType(type);
@@ -732,6 +740,8 @@ export function FileTree({
 
     if (creatingType === "file") {
       onCreateFileInDirectory?.(creatingParentPath, draftName);
+    } else if (creatingType === "canvas") {
+      onCreateCanvasInDirectory?.(creatingParentPath, draftName);
     } else {
       onCreateFolderInDirectory?.(creatingParentPath, draftName);
     }
@@ -754,6 +764,10 @@ export function FileTree({
         text: t("common.newFile"),
       },
       {
+        id: "create-canvas",
+        text: t("common.newCanvas"),
+      },
+      {
         id: "create-folder",
         text: t("common.newFolder"),
       },
@@ -764,6 +778,14 @@ export function FileTree({
         return;
       }
       startCreateInDirectory("file", targetDirectoryRelativePath);
+      return;
+    }
+
+    if (selectedAction === "create-canvas") {
+      if (!onCreateCanvasInDirectory) {
+        return;
+      }
+      startCreateInDirectory("canvas", targetDirectoryRelativePath);
       return;
     }
 
@@ -841,6 +863,10 @@ export function FileTree({
             text: t("common.newFile"),
           },
           {
+            id: "create-canvas",
+            text: t("common.newCanvas"),
+          },
+          {
             id: "create-folder",
             text: t("common.newFolder"),
           },
@@ -867,6 +893,14 @@ export function FileTree({
         return;
       }
       startCreateInDirectory("file", targetDirectory);
+      return;
+    }
+
+    if (selectedAction === "create-canvas") {
+      if (!onCreateCanvasInDirectory) {
+        return;
+      }
+      startCreateInDirectory("canvas", targetDirectory);
       return;
     }
 
@@ -945,13 +979,13 @@ export function FileTree({
     setDraggingPaths(nextDraggingPaths);
     setDropTargetDirectoryPath(null);
 
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData(
-      "text/plain",
-      JSON.stringify(nextDraggingItems.map((item) => ({
+    event.dataTransfer.effectAllowed = "copyMove";
+    writeWorkspaceFileDragPayload(
+      event.dataTransfer,
+      nextDraggingItems.map((item) => ({
         path: item.path,
         isDir: item.isDir,
-      }))),
+      })),
     );
 
     const previewLabel = nextDraggingItems.length > 1

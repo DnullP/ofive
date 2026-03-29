@@ -8,9 +8,10 @@
  *  - ../../src/plugins/file-tree/panel/VaultPanel.css
  */
 
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { FileTree, type FileTreeItem } from "../../src/plugins/file-tree/panel/FileTree";
 import type { TabInstanceDefinition } from "../../src/host/layout/DockviewLayout";
+import { loadBrowserMockMarkdownContents } from "../../src/api/vaultBrowserMockFixtures";
 import "../../src/plugins/file-tree/panel/VaultPanel.css";
 
 const MOCK_VAULT_PATH = "/mock/notes";
@@ -80,10 +81,76 @@ $$
 错误的 LaTeX：$\\invalidcommand{test}$
 `;
 
+const CANVAS_SAMPLE = `{
+    "nodes": [
+        {
+            "id": "group-1",
+            "type": "group",
+            "x": 40,
+            "y": 48,
+            "width": 820,
+            "height": 420,
+            "label": "Glass QA Cluster",
+            "color": "var(--accent-primary)",
+            "background": "color-mix(in srgb, var(--content-material-bg) 74%, transparent)"
+        },
+        {
+            "id": "text-1",
+            "type": "text",
+            "x": 96,
+            "y": 96,
+            "width": 280,
+            "height": 180,
+            "label": "Canvas Glass Check",
+            "color": "var(--accent-primary)",
+            "text": "1. 切换 light / dark / kraft。\\n2. 切换 glass 开关与 blur。\\n3. 检查背景、节点、toolbar、inspector 是否都跟随宿主材质变化。"
+        },
+        {
+            "id": "file-1",
+            "type": "file",
+            "x": 442,
+            "y": 122,
+            "width": 240,
+            "height": 152,
+            "label": "guide.md",
+            "color": "var(--text-link-color)",
+            "file": "test-resources/notes/guide.md"
+        },
+        {
+            "id": "text-2",
+            "type": "text",
+            "x": 240,
+            "y": 316,
+            "width": 320,
+            "height": 120,
+            "label": "Expected Result",
+            "text": "Canvas 不应该维持一块独立的纯深色面板。开启 glass 后，背景层和悬浮面板都应呈现半透明和模糊。"
+        }
+    ],
+    "edges": [
+        {
+            "id": "edge-1",
+            "fromNode": "text-1",
+            "toNode": "file-1",
+            "label": "Open linked note",
+            "color": "var(--text-link-color)"
+        },
+        {
+            "id": "edge-2",
+            "fromNode": "text-1",
+            "toNode": "text-2",
+            "label": "Visual target",
+            "color": "var(--accent-primary)"
+        }
+    ]
+}
+`;
+
 const MOCK_FILE_CONTENTS: Record<string, string> = {
     "test-resources/notes/network-segment.md": NETWORK_SEGMENT_SAMPLE,
     "test-resources/notes/latex-test.md": LATEX_TEST_SAMPLE,
     "test-resources/notes/guide.md": "# Guide\n\n- 系统代理对一般应用程序生效\n- 终端无代理, 需要在`./zshrc`中配置, 或者直接`export \"HTTP_PROXY\"`\n- docker本身不走系统代理和终端代[[Cron1234]]理中的任何一个, 需要单独配置\n\nDocker本身是通过[[Daemon (linux)]]进程启动的, 而deamon默认是没有代理的, 需要在systemd的配置中进行设置.\n",
+        "test-resources/notes/glass-validation.canvas": CANVAS_SAMPLE,
 };
 
 interface MockVaultPanelProps {
@@ -95,7 +162,7 @@ function createFileTab(item: FileTreeItem, content: string): TabInstanceDefiniti
     return {
         id: `file:${item.path}`,
         title: fileName,
-        component: "codemirror",
+        component: item.path.toLowerCase().endsWith(".canvas") ? "canvas" : "codemirror",
         params: {
             path: item.path,
             content,
@@ -103,8 +170,24 @@ function createFileTab(item: FileTreeItem, content: string): TabInstanceDefiniti
     };
 }
 
+/**
+ * @function primeBrowserMockContents
+ * @description 将 mock 文件树中的样例内容注入浏览器侧 vault fixture，保证 Canvas reload/save 在 web mock 中可用。
+ * @returns Promise，在内容注入完成后 resolve。
+ */
+async function primeBrowserMockContents(): Promise<void> {
+    const browserMockContents = await loadBrowserMockMarkdownContents();
+    Object.entries(MOCK_FILE_CONTENTS).forEach(([relativePath, content]) => {
+        browserMockContents[relativePath] = content;
+    });
+}
+
 export function MockVaultPanel(props: MockVaultPanelProps): ReactNode {
     const { openTab } = props;
+
+    useEffect(() => {
+        void primeBrowserMockContents();
+    }, []);
 
     const files = useMemo<FileTreeItem[]>(
         () =>

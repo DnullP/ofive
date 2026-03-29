@@ -26,10 +26,11 @@
  */
 
 import React from "react";
-import { FilePlus2, FolderOpen, FolderPlus } from "lucide-react";
+import { FilePlus2, FolderOpen, FolderPlus, SquarePen } from "lucide-react";
 import {
     copyVaultEntry,
     deleteVaultBinaryFile,
+    deleteVaultCanvasFile,
     deleteVaultDirectory,
     deleteVaultMarkdownFile,
 } from "../../api/vaultApi";
@@ -39,6 +40,7 @@ import { VaultPanel } from "./panel/VaultPanel";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerPanel } from "../../host/registry/panelRegistry";
 import { registerSidebarHeaderAction } from "../../host/registry/sidebarHeaderActionRegistry";
+import { isCanvasPath } from "../../utils/canvasFileSpec";
 import {
     getFileTreeClipboardEntry,
     setFileTreeClipboardEntry,
@@ -107,6 +109,17 @@ export function activatePlugin(): () => void {
         order: 20,
         onClick: (context) => {
             context.executeCommand("folder.createInFocusedDirectory");
+        },
+    });
+
+    const unregisterCreateCanvasAction = registerSidebarHeaderAction({
+        id: "files.create-canvas",
+        activityId: FILE_TREE_ACTIVITY_ID,
+        title: () => i18n.t("common.newCanvas"),
+        icon: React.createElement(SquarePen, { size: 15, strokeWidth: 1.8 }),
+        order: 15,
+        onClick: (context) => {
+            context.executeCommand("canvas.createInFocusedDirectory");
         },
     });
 
@@ -202,6 +215,8 @@ export function activatePlugin(): () => void {
                 try {
                     if (selected.isDir) {
                         await deleteVaultDirectory(selected.path);
+                    } else if (isCanvasPath(selected.path)) {
+                        await deleteVaultCanvasFile(selected.path);
                     } else if (isMarkdownPath(selected.path)) {
                         await deleteVaultMarkdownFile(selected.path);
                     } else {
@@ -227,6 +242,7 @@ export function activatePlugin(): () => void {
 
     return () => {
         unregisterCommands();
+        unregisterCreateCanvasAction();
         unregisterCreateFolderAction();
         unregisterCreateNoteAction();
         unregisterPanel();

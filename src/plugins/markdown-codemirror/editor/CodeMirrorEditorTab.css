@@ -201,7 +201,7 @@
     display: inline;
 }
 
-/* Wiki Link 悬浮样式：提示可通过组合键点击导航 */
+/* Wiki Link 悬浮样式：提示可直接点击导航 */
 .cm-tab-editor .cm-rendered-wikilink:hover {
     cursor: pointer;
 }

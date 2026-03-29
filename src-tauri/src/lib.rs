@@ -48,6 +48,8 @@ pub fn run() {
     )
     .expect("registered host events should remain aligned with backend module contributions");
 
+    host::bootstrap::spawn_startup_background_tasks();
+
     tauri::Builder::default()
         .setup(host::bootstrap::setup_main_window)
         .manage(host::bootstrap::build_app_state())

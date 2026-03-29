@@ -89,6 +89,17 @@ pub(crate) fn segment_chinese_text(text: String) -> Result<Vec<ChineseSegmentTok
     segment::segment_chinese_text(text)
 }
 
+/// 预热中文分词能力，避免首个前端调用承担词典冷启动开销。
+///
+/// 该方法用于应用启动阶段的后台预热，不依赖仓库状态。
+///
+/// # Side Effects
+/// - 可能触发底层分词器实例初始化。
+/// - 会输出预热日志。
+pub(crate) fn warmup_chinese_segmenter() {
+    segment::warmup_chinese_segmenter();
+}
+
 /// 建议 WikiLink 目标。
 pub(crate) fn suggest_wikilink_targets(
     query: String,

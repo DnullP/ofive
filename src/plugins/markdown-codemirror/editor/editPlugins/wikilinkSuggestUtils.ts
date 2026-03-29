@@ -18,6 +18,23 @@
 /** 匹配 `[[queryText` 模式（未闭合的 wikilink） */
 export const OPEN_WIKILINK_PATTERN = /\[\[([^\]\n]*)$/;
 
+/**
+ * @interface OpenWikiLinkMatch
+ * @description 当前光标所在的 WikiLink 编辑区间信息。
+ */
+export interface OpenWikiLinkMatch {
+    /** `[[` 到光标之间的查询文本 */
+    query: string;
+    /** `[[` 后的第一个字符偏移 */
+    anchorPos: number;
+    /** 当前补全应替换到的结束偏移（不含） */
+    replaceTo: number;
+    /** 替换区间后是否保留已有 `]]` */
+    preserveClosingBrackets: boolean;
+    /** `]]` 是否紧贴在替换区间后面，用于决定光标是否跨过闭合标记 */
+    closingBracketsImmediatelyAfterReplaceTo: boolean;
+}
+
 /* ================================================================== */
 /*  检测 wikilink 输入意图                                             */
 /* ================================================================== */
@@ -38,19 +55,20 @@ export const OPEN_WIKILINK_PATTERN = /\[\[([^\]\n]*)$/;
 export function detectOpenWikiLink(
     docText: string,
     cursorPos: number,
-): { query: string; anchorPos: number } | null {
+): OpenWikiLinkMatch | null {
     // 只检查光标所在行（避免跨行误匹配）
     let lineStart = cursorPos;
     while (lineStart > 0 && docText.charAt(lineStart - 1) !== "\n") {
         lineStart--;
     }
 
-    const linePrefix = docText.slice(lineStart, cursorPos);
+    let lineEnd = cursorPos;
+    while (lineEnd < docText.length && docText.charAt(lineEnd) !== "\n") {
+        lineEnd++;
+    }
 
-    // 检查光标后是否已有 `]]`（已闭合则不触发）
-    const afterCursor = docText.slice(cursorPos, cursorPos + 2);
-    // 如果紧接着就是 ]] 说明用户正在已闭合 wikilink 的中间编辑，仍然触发
-    // 做更宽松的判断：只要当前行光标前有 [[ 且 ]] 还没出现在查询段中就触发
+    const linePrefix = docText.slice(lineStart, cursorPos);
+    const lineSuffix = docText.slice(cursorPos, lineEnd);
 
     const match = OPEN_WIKILINK_PATTERN.exec(linePrefix);
     if (!match) {
@@ -67,9 +85,169 @@ export function detectOpenWikiLink(
     const bracketOffset = match.index!;
     const anchorPos = lineStart + bracketOffset + 2; // +2 跳过 `[[`
 
-    // 如果光标后紧接 `]]`，说明在已闭合 link 中编辑 — 仍然触发，以便修改链接目标
-    // queryText 已由正则提取并不含 `]]`
-    void afterCursor; // 仅用于上面的说明
+    const nextPipeOffset = queryText.includes("|")
+        ? -1
+        : lineSuffix.indexOf("|");
+    const nextClosingOffset = lineSuffix.indexOf("]]"
+    );
 
-    return { query: queryText, anchorPos };
+    if (
+        nextPipeOffset >= 0
+        && (nextClosingOffset < 0 || nextPipeOffset < nextClosingOffset)
+    ) {
+        return {
+            query: queryText,
+            anchorPos,
+            replaceTo: cursorPos + nextPipeOffset,
+            preserveClosingBrackets: nextClosingOffset >= 0,
+            closingBracketsImmediatelyAfterReplaceTo: false,
+        };
+    }
+
+    if (nextClosingOffset >= 0) {
+        return {
+            query: queryText,
+            anchorPos,
+            replaceTo: cursorPos + nextClosingOffset,
+            preserveClosingBrackets: true,
+            closingBracketsImmediatelyAfterReplaceTo: true,
+        };
+    }
+
+    return {
+        query: queryText,
+        anchorPos,
+        replaceTo: cursorPos,
+        preserveClosingBrackets: false,
+        closingBracketsImmediatelyAfterReplaceTo: false,
+    };
+}
+
+/**
+ * @interface WikiLinkSuggestionAcceptance
+ * @description 接受 WikiLink 补全建议后应执行的文本替换规格。
+ */
+export interface WikiLinkSuggestionAcceptance {
+    /** 替换起始偏移 */
+    from: number;
+    /** 替换结束偏移（不含） */
+    to: number;
+    /** 插入文本 */
+    insert: string;
+    /** 接受补全后的光标位置 */
+    selectionAnchor: number;
+}
+
+/**
+ * @interface WikiLinkClosingBracketResolution
+ * @description 根据替换区间后缀解析出的闭合括号复用信息。
+ */
+export interface WikiLinkClosingBracketResolution {
+    /** 是否检测到可复用的 `]]` */
+    preserveClosingBrackets: boolean;
+    /** `]]` 是否紧贴在替换区间后面 */
+    closingBracketsImmediatelyAfterReplaceTo: boolean;
+}
+
+/**
+ * @function resolveWikiLinkClosingBracketResolution
+ * @description 从当前替换区间后的文本中判断是否已存在可复用的 `]]`。
+ *   支持两种场景：
+ *   - 替换区间后立即就是 `]]`
+ *   - 替换区间后还有 alias 段，如 `|alias]]`
+ * @param suffixFromReplaceTo 从替换区间末尾开始直到行尾的文本。
+ * @returns 闭合括号复用信息。
+ */
+export function resolveWikiLinkClosingBracketResolution(
+    suffixFromReplaceTo: string,
+): WikiLinkClosingBracketResolution {
+    if (suffixFromReplaceTo.startsWith("]]")) {
+        return {
+            preserveClosingBrackets: true,
+            closingBracketsImmediatelyAfterReplaceTo: true,
+        };
+    }
+
+    if (/^\|[^\]\n]*\]\]/.test(suffixFromReplaceTo)) {
+        return {
+            preserveClosingBrackets: true,
+            closingBracketsImmediatelyAfterReplaceTo: false,
+        };
+    }
+
+    return {
+        preserveClosingBrackets: false,
+        closingBracketsImmediatelyAfterReplaceTo: false,
+    };
+}
+
+function findLineEnd(docText: string, from: number): number {
+    let lineEnd = from;
+    while (lineEnd < docText.length && docText.charAt(lineEnd) !== "\n") {
+        lineEnd++;
+    }
+
+    return lineEnd;
+}
+
+/**
+ * @function resolveWikiLinkSuggestionAcceptanceAtCursor
+ * @description 根据当前文档和光标位置重新计算接受补全时的替换规格，
+ *   避免使用过时弹窗状态导致重复插入 `]]`。
+ * @param docText 当前完整文档文本。
+ * @param cursorPos 当前光标偏移。
+ * @param itemTitle 被接受的建议标题。
+ * @param fallbackMatch 弹窗状态中的兜底编辑区间信息。
+ * @returns 当前文档上下文下的替换规格。
+ */
+export function resolveWikiLinkSuggestionAcceptanceAtCursor(
+    docText: string,
+    cursorPos: number,
+    itemTitle: string,
+    fallbackMatch: Pick<
+        OpenWikiLinkMatch,
+        "anchorPos"
+        | "replaceTo"
+        | "preserveClosingBrackets"
+        | "closingBracketsImmediatelyAfterReplaceTo"
+    >,
+): WikiLinkSuggestionAcceptance {
+    const detected = detectOpenWikiLink(docText, cursorPos);
+    const effectiveMatch = detected ?? fallbackMatch;
+    const lineEnd = findLineEnd(docText, cursorPos);
+    const currentSuffix = docText.slice(effectiveMatch.replaceTo, lineEnd);
+    const closingResolution = resolveWikiLinkClosingBracketResolution(currentSuffix);
+
+    return buildWikiLinkSuggestionAcceptance(itemTitle, {
+        ...effectiveMatch,
+        preserveClosingBrackets: closingResolution.preserveClosingBrackets,
+        closingBracketsImmediatelyAfterReplaceTo:
+            closingResolution.closingBracketsImmediatelyAfterReplaceTo,
+    });
+}
+
+/**
+ * @function buildWikiLinkSuggestionAcceptance
+ * @description 根据当前 WikiLink 编辑区间构建接受补全后的替换规格。
+ * @param itemTitle 被接受的建议标题。
+ * @param match 当前 WikiLink 编辑区间信息。
+ * @returns 可直接用于 CodeMirror dispatch 的替换规格。
+ */
+export function buildWikiLinkSuggestionAcceptance(
+    itemTitle: string,
+    match: Pick<
+        OpenWikiLinkMatch,
+        "anchorPos" | "replaceTo" | "preserveClosingBrackets" | "closingBracketsImmediatelyAfterReplaceTo"
+    >,
+): WikiLinkSuggestionAcceptance {
+    const insert = match.preserveClosingBrackets
+        ? itemTitle
+        : `${itemTitle}]]`;
+
+    return {
+        from: match.anchorPos,
+        to: match.replaceTo,
+        insert,
+        selectionAnchor: match.anchorPos + insert.length + (match.closingBracketsImmediatelyAfterReplaceTo ? 2 : 0),
+    };
 }

@@ -58,6 +58,12 @@
     border-color: var(--accent-primary);
 }
 
+/* 校验提示：在输入非法时展示明确错误信息。 */
+.create-entry-validation {
+    font-size: 12px;
+    color: var(--error-color);
+}
+
 /* 操作按钮区：右对齐确认和取消按钮。 */
 .create-entry-actions {
     display: flex;

@@ -59,6 +59,17 @@ export interface ReadMarkdownResponse {
 }
 
 /**
+ * @interface ReadCanvasFileResponse
+ * @description 读取 Canvas 接口响应。
+ */
+export interface ReadCanvasFileResponse {
+    /** 被读取文件相对路径 */
+    relativePath: string;
+    /** 文件内容 */
+    content: string;
+}
+
+/**
  * @interface ReadBinaryFileResponse
  * @description 读取二进制文件接口响应。
  */
@@ -76,6 +87,17 @@ export interface ReadBinaryFileResponse {
  * @description 写入类文件接口响应。
  */
 export interface WriteMarkdownResponse {
+    /** 被操作文件相对路径 */
+    relativePath: string;
+    /** 是否创建了新文件 */
+    created: boolean;
+}
+
+/**
+ * @interface WriteCanvasFileResponse
+ * @description Canvas 文件写入接口响应。
+ */
+export interface WriteCanvasFileResponse {
     /** 被操作文件相对路径 */
     relativePath: string;
     /** 是否创建了新文件 */
@@ -1354,6 +1376,26 @@ export async function readVaultMarkdownFile(relativePath: string): Promise<ReadM
 }
 
 /**
+ * @function readVaultCanvasFile
+ * @description 以相对路径读取仓库中的 Canvas 文件。
+ * @param relativePath 文件相对路径。
+ * @returns 文件内容。
+ */
+export async function readVaultCanvasFile(relativePath: string): Promise<ReadCanvasFileResponse> {
+    if (!isTauriRuntime()) {
+        const textContents = await getBrowserMockMarkdownContents();
+        return {
+            relativePath,
+            content: textContents[relativePath] ?? "{\n  \"nodes\": [],\n  \"edges\": []\n}\n",
+        };
+    }
+
+    return invoke<ReadCanvasFileResponse>("read_vault_canvas_file", {
+        relativePath,
+    });
+}
+
+/**
  * @function readVaultBinaryFile
  * @description 以相对路径读取仓库中的二进制文件（Base64 返回）。
  * @param relativePath 文件相对路径。
@@ -1821,6 +1863,36 @@ export async function createVaultMarkdownFile(
 }
 
 /**
+ * @function createVaultCanvasFile
+ * @description 在当前仓库创建 Canvas 文件。
+ * @param relativePath 目标文件相对路径。
+ * @param content 可选初始内容。
+ * @returns 创建结果。
+ */
+export async function createVaultCanvasFile(
+    relativePath: string,
+    content?: string,
+): Promise<WriteCanvasFileResponse> {
+    if (!isTauriRuntime()) {
+        const textContents = await getBrowserMockMarkdownContents();
+        textContents[normalizeSlashPath(relativePath)] = content ?? "{\n  \"nodes\": [],\n  \"edges\": []\n}\n";
+        return {
+            relativePath,
+            created: true,
+        };
+    }
+
+    const sourceTraceId = createWriteTraceId();
+    registerLocalWriteTrace(sourceTraceId);
+
+    return invoke<WriteCanvasFileResponse>("create_vault_canvas_file", {
+        relativePath,
+        content: content ?? null,
+        sourceTraceId,
+    });
+}
+
+/**
  * @function createVaultDirectory
  * @description 在当前仓库创建目录。
  * @param relativeDirectoryPath 目标目录相对路径。
@@ -1908,6 +1980,36 @@ export async function saveVaultMarkdownFile(
 }
 
 /**
+ * @function saveVaultCanvasFile
+ * @description 保存当前仓库中的 Canvas 文件。
+ * @param relativePath 目标文件相对路径。
+ * @param content 文件内容。
+ * @returns 保存结果。
+ */
+export async function saveVaultCanvasFile(
+    relativePath: string,
+    content: string,
+): Promise<WriteCanvasFileResponse> {
+    if (!isTauriRuntime()) {
+        const textContents = await getBrowserMockMarkdownContents();
+        textContents[normalizeSlashPath(relativePath)] = content;
+        return {
+            relativePath,
+            created: false,
+        };
+    }
+
+    const sourceTraceId = createWriteTraceId();
+    registerLocalWriteTrace(sourceTraceId);
+
+    return invoke<WriteCanvasFileResponse>("save_vault_canvas_file", {
+        relativePath,
+        content,
+        sourceTraceId,
+    });
+}
+
+/**
  * @function renameVaultMarkdownFile
  * @description 重命名当前仓库中的 Markdown 文件。
  * @param fromRelativePath 原文件相对路径。
@@ -1931,6 +2033,55 @@ export async function renameVaultMarkdownFile(
     return invoke<WriteMarkdownResponse>("rename_vault_markdown_file", {
         fromRelativePath,
         toRelativePath,
+        sourceTraceId,
+    });
+}
+
+/**
+ * @function renameVaultCanvasFile
+ * @description 重命名当前仓库中的 Canvas 文件。
+ * @param fromRelativePath 原文件相对路径。
+ * @param toRelativePath 目标文件相对路径。
+ * @returns 重命名结果。
+ */
+export async function renameVaultCanvasFile(
+    fromRelativePath: string,
+    toRelativePath: string,
+): Promise<WriteCanvasFileResponse> {
+    const normalizedFromPath = normalizeSlashPath(fromRelativePath).trim();
+    const normalizedToPath = normalizeSlashPath(toRelativePath).trim();
+
+    if (!isTauriRuntime()) {
+        const textContents = await getBrowserMockMarkdownContents();
+        const sourceContent = textContents[normalizedFromPath];
+        if (typeof sourceContent !== "string") {
+            throw new Error(i18n.t("editor.sourceNotExist"));
+        }
+
+        if (
+            typeof textContents[normalizedToPath] === "string"
+            && normalizedToPath !== normalizedFromPath
+        ) {
+            throw new Error(i18n.t("editor.targetExists"));
+        }
+
+        if (normalizedToPath !== normalizedFromPath) {
+            delete textContents[normalizedFromPath];
+            textContents[normalizedToPath] = sourceContent;
+        }
+
+        return {
+            relativePath: normalizedToPath,
+            created: false,
+        };
+    }
+
+    const sourceTraceId = createWriteTraceId();
+    registerLocalWriteTrace(sourceTraceId);
+
+    return invoke<WriteCanvasFileResponse>("rename_vault_canvas_file", {
+        fromRelativePath: normalizedFromPath,
+        toRelativePath: normalizedToPath,
         sourceTraceId,
     });
 }
@@ -1985,6 +2136,62 @@ export async function moveVaultMarkdownFileToDirectory(
     registerLocalWriteTrace(sourceTraceId);
 
     return invoke<WriteMarkdownResponse>("move_vault_markdown_file_to_directory", {
+        fromRelativePath: normalizedFromPath,
+        targetDirectoryRelativePath: normalizedTargetDirectory,
+        sourceTraceId,
+    });
+}
+
+/**
+ * @function moveVaultCanvasFileToDirectory
+ * @description 将 Canvas 文件移动到指定目录（文件名保持不变）。
+ * @param fromRelativePath 源文件相对路径。
+ * @param targetDirectoryRelativePath 目标目录相对路径；空字符串表示仓库根目录。
+ * @returns 移动结果。
+ */
+export async function moveVaultCanvasFileToDirectory(
+    fromRelativePath: string,
+    targetDirectoryRelativePath: string,
+): Promise<WriteCanvasFileResponse> {
+    const normalizedFromPath = normalizeSlashPath(fromRelativePath).trim();
+    const normalizedTargetDirectory = normalizeSlashPath(targetDirectoryRelativePath).trim().replace(/^\/+|\/+$/g, "");
+    const sourceFileName = normalizedFromPath.split("/").pop() ?? "";
+
+    if (!sourceFileName) {
+        throw new Error(i18n.t("editor.invalidSourcePath"));
+    }
+
+    const targetRelativePath = normalizedTargetDirectory
+        ? `${normalizedTargetDirectory}/${sourceFileName}`
+        : sourceFileName;
+
+    if (!isTauriRuntime()) {
+        const textContents = await getBrowserMockMarkdownContents();
+        const sourceContent = textContents[normalizedFromPath];
+        if (typeof sourceContent !== "string") {
+            throw new Error(i18n.t("editor.sourceNotExist"));
+        }
+
+        const existedTarget = textContents[targetRelativePath];
+        if (typeof existedTarget === "string" && targetRelativePath !== normalizedFromPath) {
+            throw new Error(i18n.t("editor.targetExists"));
+        }
+
+        if (targetRelativePath !== normalizedFromPath) {
+            delete textContents[normalizedFromPath];
+            textContents[targetRelativePath] = sourceContent;
+        }
+
+        return {
+            relativePath: targetRelativePath,
+            created: false,
+        };
+    }
+
+    const sourceTraceId = createWriteTraceId();
+    registerLocalWriteTrace(sourceTraceId);
+
+    return invoke<WriteCanvasFileResponse>("move_vault_canvas_file_to_directory", {
         fromRelativePath: normalizedFromPath,
         targetDirectoryRelativePath: normalizedTargetDirectory,
         sourceTraceId,
@@ -2091,6 +2298,29 @@ export async function deleteVaultMarkdownFile(relativePath: string): Promise<voi
 
     await invoke<void>("delete_vault_markdown_file", {
         relativePath,
+        sourceTraceId,
+    });
+}
+
+/**
+ * @function deleteVaultCanvasFile
+ * @description 删除当前仓库中的 Canvas 文件。
+ * @param relativePath 目标文件相对路径。
+ */
+export async function deleteVaultCanvasFile(relativePath: string): Promise<void> {
+    const normalizedPath = normalizeSlashPath(relativePath).trim();
+
+    if (!isTauriRuntime()) {
+        const textContents = await getBrowserMockMarkdownContents();
+        delete textContents[normalizedPath];
+        return;
+    }
+
+    const sourceTraceId = createWriteTraceId();
+    registerLocalWriteTrace(sourceTraceId);
+
+    await invoke<void>("delete_vault_canvas_file", {
+        relativePath: normalizedPath,
         sourceTraceId,
     });
 }

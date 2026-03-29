@@ -17,17 +17,27 @@ import type { TabInstanceDefinition } from "../../../host/layout/DockviewLayout"
 import { openFileWithResolver } from "../../../host/layout/openFileService";
 import { MoveFileDirectoryModal } from "../../../host/layout/MoveFileDirectoryModal";
 import {
+    createVaultCanvasFile,
     createVaultDirectory,
     createVaultMarkdownFile,
+    deleteVaultCanvasFile,
     deleteVaultDirectory,
     deleteVaultMarkdownFile,
+    moveVaultCanvasFileToDirectory,
     moveVaultDirectoryToDirectory,
     moveVaultMarkdownFileToDirectory,
+    readVaultCanvasFile,
     readVaultMarkdownFile,
+    renameVaultCanvasFile,
     renameVaultDirectory,
     renameVaultMarkdownFile,
     saveVaultMarkdownFile,
 } from "../../../api/vaultApi";
+import {
+    buildCreatedCanvasInitialContent,
+    isCanvasPath,
+    resolveCreatedCanvasPath,
+} from "../../../utils/canvasFileSpec";
 import { getArticleSnapshotById, useFocusedArticle } from "../../../host/store/editorContextStore";
 import {
     setCurrentVaultPath,
@@ -57,6 +67,16 @@ function isMarkdownPath(path: string): boolean {
 }
 
 /**
+ * @function isEditableFilePath
+ * @description 判断路径是否属于当前前端支持的文本型文档。
+ * @param path 相对路径。
+ * @returns 支持 Markdown 或 Canvas 时返回 true。
+ */
+function isEditableFilePath(path: string): boolean {
+    return isMarkdownPath(path) || isCanvasPath(path);
+}
+
+/**
  * @function resolveRenamedPath
  * @description 根据输入文件名草稿计算重命名目标路径。
  * @param currentPath 当前文件路径。
@@ -71,10 +91,10 @@ function resolveRenamedPath(currentPath: string, draftName: string): string | nu
     }
 
     const currentFileName = normalizedCurrentPath.split("/").pop() ?? normalizedCurrentPath;
-    const hasMarkdownSuffix = /\.(md|markdown)$/i.test(trimmedName);
-    const currentSuffixMatch = currentFileName.match(/(\.md|\.markdown)$/i);
+    const hasEditableSuffix = /\.(md|markdown|canvas)$/i.test(trimmedName);
+    const currentSuffixMatch = currentFileName.match(/(\.md|\.markdown|\.canvas)$/i);
     const currentSuffix = currentSuffixMatch?.[0] ?? ".md";
-    const nextFileName = hasMarkdownSuffix ? trimmedName : `${trimmedName}${currentSuffix}`;
+    const nextFileName = hasEditableSuffix ? trimmedName : `${trimmedName}${currentSuffix}`;
 
     const splitIndex = normalizedCurrentPath.lastIndexOf("/");
     if (splitIndex < 0) {
@@ -91,7 +111,7 @@ function resolveCreatedFilePath(directoryPath: string, draftName: string): strin
         return null;
     }
 
-    const hasSuffix = /\.(md|markdown)$/i.test(trimmedName);
+    const hasSuffix = /\.(md|markdown|canvas)$/i.test(trimmedName);
     const fileName = hasSuffix ? trimmedName : `${trimmedName}.md`;
     const normalizedDirectory = directoryPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
     return normalizedDirectory ? `${normalizedDirectory}/${fileName}` : fileName;
@@ -117,6 +137,22 @@ function buildCreatedMarkdownInitialContent(relativePath: string): string {
     const fileName = relativePath.split("/").pop() ?? relativePath;
     const title = fileName.replace(/\.(md|markdown)$/i, "");
     return `# ${title}\n`;
+}
+
+/**
+ * @function readEditableFileContent
+ * @description 读取当前支持的文本型文档内容。
+ * @param relativePath 文件相对路径。
+ * @returns 文本内容。
+ */
+async function readEditableFileContent(relativePath: string): Promise<string> {
+    if (isCanvasPath(relativePath)) {
+        const response = await readVaultCanvasFile(relativePath);
+        return response.content;
+    }
+
+    const response = await readVaultMarkdownFile(relativePath);
+    return response.content;
 }
 
 function resolveRenamedDirectoryPath(currentPath: string, draftName: string): string | null {
@@ -342,8 +378,8 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             }
         }
 
-        if (!isMarkdownPath(item.path)) {
-            console.warn("[vault-ui] rename skipped: only markdown file is supported", {
+        if (!isEditableFilePath(item.path)) {
+            console.warn("[vault-ui] rename skipped: unsupported file type", {
                 path: item.path,
                 isDir: item.isDir,
             });
@@ -359,9 +395,13 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             const sourceTabId = `file:${item.path}`;
             const sourceSnapshot = getArticleSnapshotById(sourceTabId);
 
-            await renameVaultMarkdownFile(item.path, targetPath);
+            if (isCanvasPath(item.path)) {
+                await renameVaultCanvasFile(item.path, targetPath);
+            } else {
+                await renameVaultMarkdownFile(item.path, targetPath);
+            }
 
-            if (sourceSnapshot) {
+            if (sourceSnapshot && !isCanvasPath(item.path)) {
                 await saveVaultMarkdownFile(targetPath, sourceSnapshot.content);
             }
 
@@ -369,7 +409,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
 
             const latestContent = sourceSnapshot
                 ? sourceSnapshot.content
-                : await readVaultMarkdownFile(targetPath).then((result) => result.content);
+                : await readEditableFileContent(targetPath);
 
             await openFileWithResolver({
                 relativePath: targetPath,
@@ -424,8 +464,8 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             return;
         }
 
-        if (!isMarkdownPath(item.path)) {
-            console.warn("[vault-ui] delete skipped: only markdown file is supported", {
+        if (!isEditableFilePath(item.path)) {
+            console.warn("[vault-ui] delete skipped: unsupported file type", {
                 path: item.path,
                 isDir: item.isDir,
             });
@@ -441,7 +481,11 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
         }
 
         try {
-            await deleteVaultMarkdownFile(item.path);
+            if (isCanvasPath(item.path)) {
+                await deleteVaultCanvasFile(item.path);
+            } else {
+                await deleteVaultMarkdownFile(item.path);
+            }
             closeTab?.(`file:${item.path}`);
             console.info("[vault-ui] delete success", {
                 path: item.path,
@@ -484,8 +528,8 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             return;
         }
 
-        if (!isMarkdownPath(sourceRelativePath)) {
-            console.warn("[vault-ui] drop-move skipped: only markdown file is supported", {
+        if (!isEditableFilePath(sourceRelativePath)) {
+            console.warn("[vault-ui] drop-move skipped: unsupported file type", {
                 sourceRelativePath,
                 targetDirectoryRelativePath,
             });
@@ -493,14 +537,16 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
         }
 
         try {
-            const result = await moveVaultMarkdownFileToDirectory(sourceRelativePath, targetDirectoryRelativePath);
+            const result = isCanvasPath(sourceRelativePath)
+                ? await moveVaultCanvasFileToDirectory(sourceRelativePath, targetDirectoryRelativePath)
+                : await moveVaultMarkdownFileToDirectory(sourceRelativePath, targetDirectoryRelativePath);
             closeTab?.(`file:${sourceRelativePath}`);
 
-            const latest = await readVaultMarkdownFile(result.relativePath);
+            const latestContent = await readEditableFileContent(result.relativePath);
             await openFileWithResolver({
                 relativePath: result.relativePath,
                 currentVaultPath,
-                contentOverride: latest.content,
+                contentOverride: latestContent,
                 openTab,
             });
 
@@ -531,8 +577,8 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             return;
         }
 
-        if (!isMarkdownPath(item.path)) {
-            console.warn("[vault-ui] batch move skipped: only markdown file is supported", {
+        if (!isEditableFilePath(item.path)) {
+            console.warn("[vault-ui] batch move skipped: unsupported file type", {
                 path: item.path,
                 targetDirectoryRelativePath,
             });
@@ -541,16 +587,27 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
 
         const sourceTabId = `file:${item.path}`;
         const sourceSnapshot = getArticleSnapshotById(sourceTabId);
-        const result = await moveVaultMarkdownFileToDirectory(item.path, targetDirectoryRelativePath);
+        const result = isCanvasPath(item.path)
+            ? await moveVaultCanvasFileToDirectory(item.path, targetDirectoryRelativePath)
+            : await moveVaultMarkdownFileToDirectory(item.path, targetDirectoryRelativePath);
         const targetPath = result.relativePath.replace(/\\/g, "/");
 
-        if (sourceSnapshot) {
+        if (sourceSnapshot && !isCanvasPath(item.path)) {
             await saveVaultMarkdownFile(targetPath, sourceSnapshot.content);
             closeTab?.(sourceTabId);
             await openFileWithResolver({
                 relativePath: targetPath,
                 currentVaultPath,
                 contentOverride: sourceSnapshot.content,
+                openTab,
+            });
+        } else {
+            closeTab?.(sourceTabId);
+            const latestContent = await readEditableFileContent(targetPath);
+            await openFileWithResolver({
+                relativePath: targetPath,
+                currentVaultPath,
+                contentOverride: latestContent,
                 openTab,
             });
         }
@@ -605,6 +662,12 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                     console.info("[vault-ui] batch delete directory success", {
                         path: item.path,
                     });
+                } else if (isCanvasPath(item.path)) {
+                    await deleteVaultCanvasFile(item.path);
+                    closeTab?.(`file:${item.path}`);
+                    console.info("[vault-ui] batch delete file success", {
+                        path: item.path,
+                    });
                 } else if (isMarkdownPath(item.path)) {
                     await deleteVaultMarkdownFile(item.path);
                     closeTab?.(`file:${item.path}`);
@@ -656,10 +719,16 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             return;
         }
 
-        const initialContent = buildCreatedMarkdownInitialContent(relativePath);
+        const initialContent = isCanvasPath(relativePath)
+            ? buildCreatedCanvasInitialContent(relativePath)
+            : buildCreatedMarkdownInitialContent(relativePath);
 
         try {
-            await createVaultMarkdownFile(relativePath, initialContent);
+            if (isCanvasPath(relativePath)) {
+                await createVaultCanvasFile(relativePath, initialContent);
+            } else {
+                await createVaultMarkdownFile(relativePath, initialContent);
+            }
             await openFileWithResolver({
                 relativePath,
                 currentVaultPath,
@@ -673,6 +742,44 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
         } catch (error) {
             const message = error instanceof Error ? error.message : t("vault.createFileFailed");
             console.error("[vault-ui] create file failed", {
+                relativePath,
+                targetDirectoryRelativePath,
+                message,
+            });
+        }
+    };
+
+    const handleCreateCanvasInDirectory = async (
+        targetDirectoryRelativePath: string,
+        draftName: string,
+    ): Promise<void> => {
+        console.info("[vault-ui] create canvas request", {
+            targetDirectoryRelativePath,
+            draftName,
+        });
+
+        const relativePath = resolveCreatedCanvasPath(targetDirectoryRelativePath, draftName);
+        if (!relativePath) {
+            return;
+        }
+
+        const initialContent = buildCreatedCanvasInitialContent(relativePath);
+
+        try {
+            await createVaultCanvasFile(relativePath, initialContent);
+            await openFileWithResolver({
+                relativePath,
+                currentVaultPath,
+                contentOverride: initialContent,
+                openTab,
+            });
+            console.info("[vault-ui] create canvas success", {
+                relativePath,
+                targetDirectoryRelativePath,
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t("vault.createFileFailed");
+            console.error("[vault-ui] create canvas failed", {
                 relativePath,
                 targetDirectoryRelativePath,
                 message,
@@ -747,6 +854,9 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                 }}
                 onCreateFileInDirectory={(targetDirectoryRelativePath, draftName) => {
                     void handleCreateFileInDirectory(targetDirectoryRelativePath, draftName);
+                }}
+                onCreateCanvasInDirectory={(targetDirectoryRelativePath, draftName) => {
+                    void handleCreateCanvasInDirectory(targetDirectoryRelativePath, draftName);
                 }}
                 onCreateFolderInDirectory={(targetDirectoryRelativePath, draftName) => {
                     void handleCreateFolderInDirectory(targetDirectoryRelativePath, draftName);

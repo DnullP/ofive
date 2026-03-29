@@ -7,6 +7,7 @@
     "dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
     "web:dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
     "tauri:web:dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
+    "tauri:nostrict": "VITE_DISABLE_STRICT_MODE=true bun run tauri dev",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "proto:generate": "node scripts/build-sidecar.mjs --generate-only",
     "proto:check": "node scripts/build-sidecar.mjs --generate-only && git diff --exit-code -- sidecars/go/ofive-ai-agent/gen/ofive/aiv1",
@@ -56,6 +57,9 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-i18next": "^16.5.4",
+    "react-markdown": "^10.1.0",
+    "remark-breaks": "^4.0.0",
+    "remark-gfm": "^4.0.1",
     "web-vitals": "^5.2.0",
     "yaml": "^2.8.2"
   },

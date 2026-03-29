@@ -51,7 +51,11 @@ import {
     suggestWikiLinkTargets,
     type WikiLinkSuggestionItem,
 } from "../../../../api/vaultApi";
-import { detectOpenWikiLink } from "./wikilinkSuggestUtils";
+import {
+    buildWikiLinkSuggestionAcceptance,
+    detectOpenWikiLink,
+    resolveWikiLinkSuggestionAcceptanceAtCursor,
+} from "./wikilinkSuggestUtils";
 
 /* ================================================================== */
 /*  常量                                                               */
@@ -90,6 +94,12 @@ interface SuggestState {
     selectedIndex: number;
     /** `[[` 之后的文档偏移位置（即查询文本起始位置） */
     anchorPos: number;
+    /** 当前补全替换区间的结束偏移（不含） */
+    replaceTo: number;
+    /** 替换后是否保留已有的 `]]` */
+    preserveClosingBrackets: boolean;
+    /** `]]` 是否紧贴在替换区间后面 */
+    closingBracketsImmediatelyAfterReplaceTo: boolean;
 }
 
 /** 空状态 */
@@ -99,6 +109,9 @@ const INACTIVE_STATE: SuggestState = {
     items: [],
     selectedIndex: 0,
     anchorPos: 0,
+    replaceTo: 0,
+    preserveClosingBrackets: false,
+    closingBracketsImmediatelyAfterReplaceTo: false,
 };
 
 /** 更新补全状态的 StateEffect */
@@ -425,7 +438,10 @@ function createWikiLinkSuggestExtensions(): Extension[] {
                             !(
                                 currentState.active &&
                                 currentState.query === detected.query &&
-                                currentState.anchorPos === detected.anchorPos
+                                currentState.anchorPos === detected.anchorPos &&
+                                currentState.replaceTo === detected.replaceTo &&
+                                currentState.preserveClosingBrackets === detected.preserveClosingBrackets &&
+                                currentState.closingBracketsImmediatelyAfterReplaceTo === detected.closingBracketsImmediatelyAfterReplaceTo
                             )
                         ) {
                             const pendingItems = currentState.active
@@ -440,6 +456,9 @@ function createWikiLinkSuggestExtensions(): Extension[] {
                                         items: pendingItems,
                                         selectedIndex: 0,
                                         anchorPos: detected.anchorPos,
+                                        replaceTo: detected.replaceTo,
+                                        preserveClosingBrackets: detected.preserveClosingBrackets,
+                                        closingBracketsImmediatelyAfterReplaceTo: detected.closingBracketsImmediatelyAfterReplaceTo,
                                     }),
                                 });
                             });
@@ -689,27 +708,22 @@ function acceptSuggestion(
     suggestState: SuggestState,
     item: WikiLinkSuggestionItem,
 ): void {
-    const { anchorPos } = suggestState;
     const cursor = view.state.selection.main.head;
-
-    // 替换 anchorPos..cursor 的文本为 title]]
-    // anchorPos 指向 `[[` 后面的位置
-    const insertText = `${item.title}]]`;
-
-    // 检查光标后是否已有 `]]`，若有则不再追加
-    const afterCursor = view.state.doc.sliceString(cursor, cursor + 2);
-    const alreadyClosed = afterCursor === "]]";
-    const finalInsert = alreadyClosed ? item.title : insertText;
-    const replaceTo = alreadyClosed ? cursor : cursor;
+    const acceptance = resolveWikiLinkSuggestionAcceptanceAtCursor(
+        view.state.doc.toString(),
+        cursor,
+        item.title,
+        suggestState,
+    );
 
     view.dispatch({
         changes: {
-            from: anchorPos,
-            to: replaceTo,
-            insert: finalInsert,
+            from: acceptance.from,
+            to: acceptance.to,
+            insert: acceptance.insert,
         },
         selection: {
-            anchor: anchorPos + finalInsert.length + (alreadyClosed ? 2 : 0),
+            anchor: acceptance.selectionAnchor,
         },
         effects: setSuggestState.of(INACTIVE_STATE),
     });

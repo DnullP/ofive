@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import { Command, CornerDownLeft, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { CommandDefinition } from "../../../host/commands/commandSystem";
+import { modalPlainTextInputProps } from "../../../host/layout/textInputBehaviors";
 import i18n from "../../../i18n";
 import { UI_LANGUAGE } from "../../../i18n/uiLanguage";
 import type { OverlayRenderContext } from "../../../host/registry/overlayRegistry";
@@ -247,6 +248,7 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
                     <Search size={16} strokeWidth={1.8} className="command-palette-input-icon" />
                     <input
                         ref={inputRef}
+                        {...modalPlainTextInputProps}
                         className="command-palette-input"
                         type="text"
                         value={query}

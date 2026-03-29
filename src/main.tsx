@@ -10,6 +10,8 @@ import "./i18n";
 setupFrontendLogBridge();
 setupFrontendPerfMonitoring();
 
+const strictModeEnabled = import.meta.env.VITE_DISABLE_STRICT_MODE !== "true";
+
 /**
  * 插件自动发现与运行时启动：在渲染 App 前先激活全部插件入口，
  * 并由插件运行时接管 HMR 的卸载 / 重载流程。
@@ -27,7 +29,11 @@ if (import.meta.hot) {
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
+  strictModeEnabled ? (
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  ) : (
     <App />
-  </React.StrictMode>,
+  ),
 );

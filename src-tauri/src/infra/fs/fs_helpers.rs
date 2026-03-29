@@ -233,6 +233,105 @@ pub fn resolve_markdown_target_path(
     Ok(vault_root.join(relative))
 }
 
+/// 解析并校验相对路径对应的 Canvas 文件真实路径。
+pub fn resolve_canvas_path(vault_root: &Path, relative_path: &str) -> Result<PathBuf, String> {
+    if relative_path.trim().is_empty() {
+        log::warn!("[vault] read canvas failed: empty relative path");
+        return Err("relative_path 不能为空".to_string());
+    }
+
+    if !is_canvas_file(Path::new(relative_path)) {
+        log::warn!(
+            "[vault] read canvas failed: invalid extension -> {}",
+            relative_path
+        );
+        return Err("仅支持读取 .canvas 文件".to_string());
+    }
+
+    if is_internal_system_relative_path(Path::new(relative_path)) {
+        log::warn!(
+            "[vault] read canvas failed: internal system path blocked -> {}",
+            relative_path
+        );
+        return Err("禁止访问系统目录 .ofive 下的文件".to_string());
+    }
+
+    let raw_path = vault_root.join(relative_path);
+    let canonical_vault_root = vault_root
+        .canonicalize()
+        .map_err(|error| format!("解析 vault 根目录失败 {}: {error}", vault_root.display()))?;
+    let canonical = raw_path
+        .canonicalize()
+        .map_err(|error| format!("读取目标文件路径失败: {error}"))?;
+
+    if !canonical.starts_with(&canonical_vault_root) {
+        log::warn!(
+            "[vault] read canvas failed: path traversal blocked -> {}",
+            relative_path
+        );
+        return Err("禁止访问 vault 目录外的文件".to_string());
+    }
+
+    if !canonical.is_file() {
+        log::warn!(
+            "[vault] read canvas failed: not file -> {}",
+            canonical.display()
+        );
+        return Err("目标路径不是文件".to_string());
+    }
+
+    Ok(canonical)
+}
+
+/// 校验相对路径格式，并返回 vault 内 Canvas 文件目标路径（支持文件尚不存在场景）。
+pub fn resolve_canvas_target_path(
+    vault_root: &Path,
+    relative_path: &str,
+) -> Result<PathBuf, String> {
+    if relative_path.trim().is_empty() {
+        log::warn!("[vault] write canvas failed: empty relative path");
+        return Err("relative_path 不能为空".to_string());
+    }
+
+    if !is_canvas_file(Path::new(relative_path)) {
+        log::warn!(
+            "[vault] write canvas failed: invalid extension -> {}",
+            relative_path
+        );
+        return Err("仅支持操作 .canvas 文件".to_string());
+    }
+
+    let relative = Path::new(relative_path);
+    if relative.is_absolute() {
+        log::warn!(
+            "[vault] write canvas failed: absolute path blocked -> {}",
+            relative_path
+        );
+        return Err("relative_path 必须是相对路径".to_string());
+    }
+
+    let has_parent_escape = relative
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir));
+    if has_parent_escape {
+        log::warn!(
+            "[vault] write canvas failed: parent traversal blocked -> {}",
+            relative_path
+        );
+        return Err("禁止访问 vault 目录外的文件".to_string());
+    }
+
+    if is_internal_system_relative_path(relative) {
+        log::warn!(
+            "[vault] write canvas failed: internal system path blocked -> {}",
+            relative_path
+        );
+        return Err("禁止访问系统目录 .ofive 下的文件".to_string());
+    }
+
+    Ok(vault_root.join(relative))
+}
+
 /// 校验相对路径格式，并返回 vault 内二进制文件目标路径（支持文件尚不存在场景）。
 ///
 /// 与 `resolve_markdown_target_path` 类似，但不限定扩展名为 `.md`/`.markdown`。
@@ -404,6 +503,7 @@ pub fn detect_mime_type(path: &Path) -> &'static str {
         Some("bmp") => "image/bmp",
         Some("svg") => "image/svg+xml",
         Some("ico") => "image/x-icon",
+        Some("canvas") => "application/json",
         _ => "application/octet-stream",
     }
 }
@@ -437,6 +537,13 @@ pub fn is_markdown_file(path: &Path) -> bool {
     path.extension()
         .and_then(|item| item.to_str())
         .is_some_and(|ext| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown"))
+}
+
+/// 判断路径是否为 Canvas 文件。
+pub fn is_canvas_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|item| item.to_str())
+    .is_some_and(|ext| ext.eq_ignore_ascii_case("canvas"))
 }
 
 /// 为路径补全 Markdown 扩展名候选。

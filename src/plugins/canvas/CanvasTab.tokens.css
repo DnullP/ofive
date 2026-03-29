@@ -1,0 +1,97 @@
+/* Canvas tokens: 画布背景与界面层级色票。 */
+:root {
+    --canvas-color-scheme: dark;
+    --canvas-surface-background:
+        radial-gradient(circle at top left, color-mix(in srgb, var(--accent-primary) 18%, transparent), transparent 34%),
+        radial-gradient(circle at bottom right, color-mix(in srgb, var(--text-link-color) 16%, transparent), transparent 32%),
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--content-material-bg) 88%, var(--bg-primary) 12%),
+            color-mix(in srgb, var(--bg-primary) 84%, var(--bg-secondary) 16%) 58%,
+            color-mix(in srgb, var(--bg-primary) 92%, var(--surface-card-bg) 8%)
+        );
+    --canvas-surface-panel-bg: color-mix(in srgb, var(--content-material-bg) 46%, transparent);
+    --canvas-button-border: color-mix(in srgb, var(--surface-input-border) 72%, transparent);
+    --canvas-button-bg: color-mix(in srgb, var(--surface-card-bg) 82%, var(--content-material-bg) 18%);
+    --canvas-button-bg-hover: color-mix(in srgb, var(--canvas-button-bg) 86%, var(--accent-primary) 14%);
+    --canvas-button-text: color-mix(in srgb, var(--text-primary) 94%, var(--accent-primary-foreground) 6%);
+    --canvas-status-text: color-mix(in srgb, var(--text-secondary) 90%, var(--text-primary) 10%);
+    --canvas-overlay-bg: color-mix(in srgb, var(--content-material-bg) 94%, transparent);
+    --canvas-overlay-text: color-mix(in srgb, var(--text-primary) 92%, var(--accent-primary-foreground) 8%);
+    --canvas-inspector-border: color-mix(in srgb, var(--shell-stroke-soft) 76%, transparent);
+    --canvas-inspector-bg: color-mix(in srgb, var(--content-material-bg) 84%, var(--surface-card-bg) 16%);
+    --canvas-card-border: color-mix(in srgb, var(--surface-card-border) 84%, transparent);
+    --canvas-card-bg: color-mix(in srgb, var(--surface-card-bg) 82%, var(--content-material-bg) 18%);
+    --canvas-section-title: color-mix(in srgb, var(--accent-primary) 72%, var(--text-primary) 28%);
+    --canvas-field-text: color-mix(in srgb, var(--text-secondary) 90%, var(--text-primary) 10%);
+    --canvas-input-border: color-mix(in srgb, var(--surface-input-border) 88%, transparent);
+    --canvas-input-bg: color-mix(in srgb, var(--surface-input-bg) 92%, var(--content-material-bg) 8%);
+    --canvas-input-bg-strong: color-mix(in srgb, var(--surface-input-bg) 72%, var(--content-material-bg) 28%);
+    --canvas-input-text: var(--text-primary);
+    --canvas-hint-text: color-mix(in srgb, var(--text-secondary) 92%, var(--text-primary) 8%);
+    --canvas-node-border: color-mix(in srgb, var(--shell-stroke-soft) 80%, transparent);
+    --canvas-node-bg: color-mix(in srgb, var(--surface-card-bg) 76%, var(--content-material-bg) 24%);
+    --canvas-node-shadow: 0 18px 40px color-mix(in srgb, var(--bg-primary) 26%, transparent);
+    --canvas-node-shadow-selected: 0 20px 48px color-mix(in srgb, var(--accent-primary) 22%, transparent);
+    --canvas-node-text-bg:
+        linear-gradient(180deg, color-mix(in srgb, var(--accent-primary) 18%, var(--canvas-node-bg)), color-mix(in srgb, var(--accent-primary) 10%, var(--canvas-node-bg)));
+    --canvas-node-file-bg:
+        linear-gradient(180deg, color-mix(in srgb, var(--text-link-color) 16%, var(--canvas-node-bg)), color-mix(in srgb, var(--text-link-color) 8%, var(--canvas-node-bg)));
+    --canvas-node-group-bg:
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, color-mix(in srgb, var(--text-link-color) 54%, var(--accent-primary) 46%) 12%, var(--canvas-node-bg)),
+            color-mix(in srgb, var(--accent-primary) 10%, var(--canvas-node-bg))
+        );
+    --canvas-node-title-text: color-mix(in srgb, var(--text-primary) 96%, var(--accent-primary-foreground) 4%);
+    --canvas-node-body-text: color-mix(in srgb, var(--text-secondary) 92%, var(--text-primary) 8%);
+    --canvas-node-text-accent: color-mix(in srgb, var(--accent-primary) 78%, var(--text-link-color) 22%);
+    --canvas-node-file-accent: color-mix(in srgb, var(--text-link-color) 82%, var(--accent-primary) 18%);
+    --canvas-node-group-accent: color-mix(in srgb, var(--text-link-color) 54%, var(--accent-primary) 46%);
+    --canvas-node-group-surface: color-mix(in srgb, var(--text-link-color) 16%, transparent);
+    --canvas-edge-stroke: color-mix(in srgb, var(--text-secondary) 68%, var(--text-primary) 32%);
+    --canvas-edge-label-bg: color-mix(in srgb, var(--content-material-bg) 72%, transparent);
+    --canvas-edge-label-border: color-mix(in srgb, var(--surface-card-border) 68%, transparent);
+    --canvas-edge-label-text: color-mix(in srgb, var(--text-primary) 90%, var(--accent-primary-foreground) 10%);
+    --canvas-edge-label-shadow: 0 8px 18px color-mix(in srgb, var(--bg-primary) 22%, transparent);
+    --canvas-edge-editor-border: color-mix(in srgb, var(--surface-card-border) 86%, transparent);
+    --canvas-edge-editor-bg: color-mix(in srgb, var(--content-material-bg) 90%, var(--surface-card-bg) 10%);
+    --canvas-edge-editor-shadow: 0 24px 48px color-mix(in srgb, var(--bg-primary) 30%, transparent);
+    --canvas-edge-selected-stroke: color-mix(in srgb, var(--accent-primary) 78%, var(--text-link-color) 22%);
+    --canvas-minimap-bg: color-mix(in srgb, var(--content-material-bg) 88%, transparent);
+    --canvas-controls-bg: color-mix(in srgb, var(--content-material-bg) 90%, transparent);
+    --canvas-controls-border: color-mix(in srgb, var(--surface-card-border) 76%, transparent);
+}
+
+/* Light and kraft themes: 让 Canvas 跟随宿主亮色材质而不是固定深色。 */
+:root[data-theme="light"],
+:root[data-theme="kraft"] {
+    --canvas-color-scheme: light;
+    --canvas-node-shadow: 0 16px 32px color-mix(in srgb, var(--bg-primary) 18%, transparent);
+    --canvas-edge-editor-shadow: 0 18px 36px color-mix(in srgb, var(--bg-primary) 18%, transparent);
+}
+
+/* Glass runtime tokens: 在毛玻璃模式下进一步提升半透明度，给 Canvas 留出宿主背景透出空间。 */
+:root.app-runtime--tauri.app-effect--glass {
+    --canvas-surface-background:
+        radial-gradient(circle at top left, color-mix(in srgb, var(--accent-primary) 22%, transparent), transparent 34%),
+        radial-gradient(circle at bottom right, color-mix(in srgb, var(--text-link-color) 18%, transparent), transparent 32%),
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--content-material-bg) 82%, transparent),
+            color-mix(in srgb, var(--bg-primary) 42%, transparent) 60%,
+            color-mix(in srgb, var(--surface-card-bg) 58%, transparent)
+        );
+    --canvas-surface-panel-bg: color-mix(in srgb, var(--content-material-bg) 34%, transparent);
+    --canvas-button-bg: color-mix(in srgb, var(--content-material-bg) 70%, transparent);
+    --canvas-overlay-bg: color-mix(in srgb, var(--content-material-bg) 82%, transparent);
+    --canvas-inspector-bg: color-mix(in srgb, var(--content-material-bg) 76%, transparent);
+    --canvas-card-bg: color-mix(in srgb, var(--surface-card-bg) 68%, transparent);
+    --canvas-input-bg: color-mix(in srgb, var(--surface-input-bg) 74%, transparent);
+    --canvas-input-bg-strong: color-mix(in srgb, var(--surface-input-bg) 82%, transparent);
+    --canvas-node-bg: color-mix(in srgb, var(--surface-card-bg) 62%, transparent);
+    --canvas-edge-label-bg: color-mix(in srgb, var(--content-material-bg) 58%, transparent);
+    --canvas-edge-editor-bg: color-mix(in srgb, var(--content-material-bg) 78%, transparent);
+    --canvas-minimap-bg: color-mix(in srgb, var(--content-material-bg) 74%, transparent);
+    --canvas-controls-bg: color-mix(in srgb, var(--content-material-bg) 72%, transparent);
+}

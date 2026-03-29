@@ -13,6 +13,7 @@ import {
     useRef,
     useState,
     type CSSProperties,
+    type DragEvent as ReactDragEvent,
     type MouseEvent as ReactMouseEvent,
     type MutableRefObject,
     type ReactNode,
@@ -29,7 +30,12 @@ import {
     type PaneviewApi,
     type PaneviewReadyEvent,
 } from "dockview";
-import type { DockviewDidDropEvent, PaneviewDndOverlayEvent, PaneviewDropEvent } from "dockview-core";
+import type {
+    DockviewDidDropEvent,
+    DockviewDndOverlayEvent,
+    PaneviewDndOverlayEvent,
+    PaneviewDropEvent,
+} from "dockview-core";
 import { getPaneData, getPanelData, type Direction } from "dockview-core";
 import "dockview/dist/styles/dockview.css";
 import "./DockviewLayout.css";
@@ -94,6 +100,13 @@ import {
 } from "../store/activityBarStore";
 import { useConfigState } from "../store/configStore";
 import { showNativeContextMenu } from "./nativeContextMenu";
+import {
+    hasWorkspaceFileDragPayloadFiles,
+    WORKSPACE_FILE_DRAG_LOCAL_SCOPE_EVENT,
+    readWorkspaceFileDragPayload,
+    type WorkspaceFileDragLocalScopeEventDetail,
+} from "./workspaceFileDragPayload";
+import type { WorkspaceFileDragPayloadItem } from "./workspaceFileDragPayload";
 import type { NativeContextMenuItem } from "./nativeContextMenu";
 import {
     ActivityBar,
@@ -134,7 +147,7 @@ import {
     saveSidebarLayoutSnapshot,
     type SidebarLayoutSnapshot,
 } from "./sidebarLayoutPersistence";
-import { openFileWithResolver } from "./openFileService";
+import { openFileWithResolver, resolveFileTabDefinition } from "./openFileService";
 import {
     setRightSidebarVisibilitySnapshot,
     subscribeRightSidebarToggleRequest,
@@ -172,6 +185,76 @@ const SIDEBAR_PANE_MIN_BODY_SIZE = 72;
 const SIDEBAR_PANE_MIN_TOTAL_SIZE = 104;
 const SIDEBAR_EXIT_DURATION_MS = 120;
 const DOCKVIEW_GROUP_REFLOW_DURATION_MS = 320;
+
+type MainDockWorkspaceDropPosition = "top" | "bottom" | "left" | "right" | "center";
+
+const LOCAL_WORKSPACE_FILE_DROP_SCOPE_SELECTOR = "[data-workspace-file-drop-scope='local']";
+
+interface MainDockWorkspaceDropPreview {
+    referencePanelId: string | null;
+    position: MainDockWorkspaceDropPosition;
+    bounds: {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+    };
+}
+
+function areMainDockWorkspaceDropPreviewsEquivalent(
+    previous: MainDockWorkspaceDropPreview | null,
+    next: MainDockWorkspaceDropPreview | null,
+): boolean {
+    if (previous === next) {
+        return true;
+    }
+
+    if (!previous || !next) {
+        return false;
+    }
+
+    return previous.referencePanelId === next.referencePanelId
+        && previous.position === next.position
+        && Math.abs(previous.bounds.left - next.bounds.left) < 0.5
+        && Math.abs(previous.bounds.top - next.bounds.top) < 0.5
+        && Math.abs(previous.bounds.width - next.bounds.width) < 0.5
+        && Math.abs(previous.bounds.height - next.bounds.height) < 0.5;
+}
+
+function isWorkspaceFileDropHandledByLocalScope(
+    target: EventTarget | null,
+    clientX: number,
+    clientY: number,
+): boolean {
+    if (target instanceof Element && target.closest(LOCAL_WORKSPACE_FILE_DROP_SCOPE_SELECTOR)) {
+        return true;
+    }
+
+    if (typeof document === "undefined") {
+        return false;
+    }
+
+    const localScopes = Array.from(document.querySelectorAll<HTMLElement>(LOCAL_WORKSPACE_FILE_DROP_SCOPE_SELECTOR));
+    return localScopes.some((element) => {
+        const rect = element.getBoundingClientRect();
+        return clientX >= rect.left
+            && clientX <= rect.right
+            && clientY >= rect.top
+            && clientY <= rect.bottom;
+    });
+}
+
+function isPointInsideRect(
+    clientX: number,
+    clientY: number,
+    rect: DOMRect,
+): boolean {
+    return clientX >= rect.left
+        && clientX <= rect.right
+        && clientY >= rect.top
+        && clientY <= rect.bottom;
+}
+
 const DOCKVIEW_NEW_GROUP_FADE_DURATION_MS = 240;
 const DOCKVIEW_POINTER_DRAG_CAPTURE_THRESHOLD_PX = 10;
 
@@ -753,6 +836,7 @@ export function DockviewLayout({
     const [isCollapsedRightSidebarDragOver, setIsCollapsedRightSidebarDragOver] = useState(false);
     /** 右侧图标栏拖入高亮状态：活动图标从 ActivityBar 拖入时为 true */
     const [isRightIconBarDragOver, setIsRightIconBarDragOver] = useState(false);
+    const [mainDockWorkspaceDropPreview, setMainDockWorkspaceDropPreview] = useState<MainDockWorkspaceDropPreview | null>(null);
 
     const dockviewApiRef = useRef<DockviewApi | null>(null);
     const leftPaneApiRef = useRef<PaneviewApi | null>(null);
@@ -793,10 +877,85 @@ export function DockviewLayout({
     const restoredLeftPaneSnapshotVaultPathRef = useRef<string | null>(null);
     const restoredRightPaneSnapshotVaultPathRef = useRef<string | null>(null);
     const previousVaultPathRef = useRef<string | null>(null);
+    const mainDockWorkspaceDropPreviewRef = useRef<MainDockWorkspaceDropPreview | null>(null);
+    const mainDockWorkspaceDragDepthRef = useRef(0);
 
     useEffect(() => {
         dockviewApiRef.current = dockviewApi;
     }, [dockviewApi]);
+
+    useEffect(() => {
+        mainDockWorkspaceDropPreviewRef.current = mainDockWorkspaceDropPreview;
+    }, [mainDockWorkspaceDropPreview]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") {
+            return undefined;
+        }
+
+        const handleLocalWorkspaceFileScopeEvent = (
+            event: Event,
+        ): void => {
+            const customEvent = event as CustomEvent<WorkspaceFileDragLocalScopeEventDetail>;
+            clearMainDockWorkspaceDropPreview();
+            if (customEvent.detail?.action === "drop") {
+                mainDockWorkspaceDragDepthRef.current = 0;
+            }
+        };
+
+        window.addEventListener(
+            WORKSPACE_FILE_DRAG_LOCAL_SCOPE_EVENT,
+            handleLocalWorkspaceFileScopeEvent as EventListener,
+        );
+
+        return () => {
+            window.removeEventListener(
+                WORKSPACE_FILE_DRAG_LOCAL_SCOPE_EVENT,
+                handleLocalWorkspaceFileScopeEvent as EventListener,
+            );
+        };
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === "undefined") {
+            return undefined;
+        }
+
+        const handleWindowWorkspaceFileDragOver = (event: DragEvent): void => {
+            if (!mainDockWorkspaceDropPreviewRef.current || !hasWorkspaceFileDragPayloadFiles(event.dataTransfer)) {
+                return;
+            }
+
+            const host = mainDockHostRef.current;
+            if (!host) {
+                resetMainDockWorkspaceDragState();
+                return;
+            }
+
+            const hostRect = host.getBoundingClientRect();
+            const pointerInsideHost = isPointInsideRect(event.clientX, event.clientY, hostRect);
+            if (!pointerInsideHost || isWorkspaceFileDropHandledByLocalScope(event.target, event.clientX, event.clientY)) {
+                clearMainDockWorkspaceDropPreview();
+                if (!pointerInsideHost) {
+                    mainDockWorkspaceDragDepthRef.current = 0;
+                }
+            }
+        };
+
+        const handleWindowWorkspaceFileDragFinished = (): void => {
+            resetMainDockWorkspaceDragState();
+        };
+
+        window.addEventListener("dragover", handleWindowWorkspaceFileDragOver);
+        window.addEventListener("drop", handleWindowWorkspaceFileDragFinished);
+        window.addEventListener("dragend", handleWindowWorkspaceFileDragFinished);
+
+        return () => {
+            window.removeEventListener("dragover", handleWindowWorkspaceFileDragOver);
+            window.removeEventListener("drop", handleWindowWorkspaceFileDragFinished);
+            window.removeEventListener("dragend", handleWindowWorkspaceFileDragFinished);
+        };
+    }, []);
 
     useEffect(() => {
         setRightSidebarVisibilitySnapshot(isRightSidebarVisible);
@@ -2005,6 +2164,292 @@ export function DockviewLayout({
         return true;
     };
 
+    const openWorkspaceFilesInDockview = async (
+        droppedItems: WorkspaceFileDragPayloadItem[],
+        target?: {
+            referencePanelId?: string | null;
+            position?: MainDockWorkspaceDropPosition;
+        },
+    ): Promise<boolean> => {
+        if (droppedItems.length === 0) {
+            return false;
+        }
+
+        const droppedFiles = droppedItems.filter((item) => !item.isDir);
+        if (droppedFiles.length === 0) {
+            console.info("[DockviewLayout] ignored file tree drop: directories only", {
+                itemCount: droppedItems.length,
+            });
+            return true;
+        }
+
+        let referencePanel = target?.referencePanelId
+            ? (dockviewApiRef.current?.getPanel(target.referencePanelId) ?? null)
+            : (dockviewApiRef.current?.activePanel ?? null);
+        let position: MainDockWorkspaceDropPosition = target?.position ?? "center";
+        let openedCount = 0;
+
+        for (const item of droppedFiles) {
+            const tab = await resolveFileTabDefinition({
+                relativePath: item.path,
+                currentVaultPath,
+            });
+            if (!tab) {
+                continue;
+            }
+
+            openTabAtDropTarget(tab, {
+                referencePanel: referencePanel ?? undefined,
+                position,
+            });
+            referencePanel = dockviewApiRef.current?.getPanel(tab.id)
+                ?? referencePanel;
+            position = "center";
+            openedCount += 1;
+        }
+
+        console.info("[DockviewLayout] opened workspace file drop in dockview", {
+            itemCount: droppedItems.length,
+            openedCount,
+            dropPosition: position,
+            dropTargetPanelId: referencePanel?.id ?? null,
+        });
+        return true;
+    };
+
+    const clearMainDockWorkspaceDropPreview = (): void => {
+        if (mainDockWorkspaceDropPreviewRef.current === null) {
+            return;
+        }
+
+        mainDockWorkspaceDropPreviewRef.current = null;
+        setMainDockWorkspaceDropPreview(null);
+    };
+
+    const resetMainDockWorkspaceDragState = (): void => {
+        mainDockWorkspaceDragDepthRef.current = 0;
+        clearMainDockWorkspaceDropPreview();
+    };
+
+    const resolveMainDockWorkspaceDropPreview = (
+        clientX: number,
+        clientY: number,
+    ): MainDockWorkspaceDropPreview | null => {
+        const host = mainDockHostRef.current;
+        const api = dockviewApiRef.current;
+        if (!host || !api) {
+            return null;
+        }
+
+        const hostRect = host.getBoundingClientRect();
+        if (hostRect.width <= 0 || hostRect.height <= 0) {
+            return null;
+        }
+
+        const dockGroups = api.groups;
+
+        if (dockGroups.length === 0) {
+            return {
+                referencePanelId: null,
+                position: "center",
+                bounds: {
+                    left: 0,
+                    top: 0,
+                    width: hostRect.width,
+                    height: hostRect.height,
+                },
+            };
+        }
+
+        const hoveredGroup = dockGroups.find((group) => {
+            const rect = group.element.getBoundingClientRect();
+            return clientX >= rect.left
+                && clientX <= rect.right
+                && clientY >= rect.top
+                && clientY <= rect.bottom;
+        }) ?? api.activeGroup ?? dockGroups[0];
+
+        if (!hoveredGroup) {
+            return null;
+        }
+
+        const groupRect = hoveredGroup.element.getBoundingClientRect();
+        const normalizedX = (clientX - groupRect.left) / Math.max(groupRect.width, 1);
+        const normalizedY = (clientY - groupRect.top) / Math.max(groupRect.height, 1);
+        const distances: Array<[MainDockWorkspaceDropPosition, number]> = [
+            ["left", normalizedX],
+            ["right", 1 - normalizedX],
+            ["top", normalizedY],
+            ["bottom", 1 - normalizedY],
+        ];
+        distances.sort((left, right) => left[1] - right[1]);
+
+        const position = distances[0]?.[0] ?? "center";
+        const referencePanelId = hoveredGroup.activePanel?.id
+            ?? hoveredGroup.panels[0]?.id
+            ?? api.activePanel?.id
+            ?? null;
+
+        const localLeft = groupRect.left - hostRect.left;
+        const localTop = groupRect.top - hostRect.top;
+        const width = groupRect.width;
+        const height = groupRect.height;
+
+        const bounds = (() => {
+            switch (position) {
+                case "left":
+                    return {
+                        left: localLeft,
+                        top: localTop,
+                        width: width / 2,
+                        height,
+                    };
+                case "right":
+                    return {
+                        left: localLeft + width / 2,
+                        top: localTop,
+                        width: width / 2,
+                        height,
+                    };
+                case "top":
+                    return {
+                        left: localLeft,
+                        top: localTop,
+                        width,
+                        height: height / 2,
+                    };
+                case "bottom":
+                    return {
+                        left: localLeft,
+                        top: localTop + height / 2,
+                        width,
+                        height: height / 2,
+                    };
+                default:
+                    return {
+                        left: localLeft,
+                        top: localTop,
+                        width,
+                        height,
+                    };
+            }
+        })();
+
+        return {
+            referencePanelId,
+            position,
+            bounds,
+        };
+    };
+
+    const updateMainDockWorkspaceDropPreview = (
+        nextPreview: MainDockWorkspaceDropPreview | null,
+    ): void => {
+        if (areMainDockWorkspaceDropPreviewsEquivalent(mainDockWorkspaceDropPreviewRef.current, nextPreview)) {
+            return;
+        }
+
+        mainDockWorkspaceDropPreviewRef.current = nextPreview;
+        setMainDockWorkspaceDropPreview(nextPreview);
+    };
+
+    const handleMainDockHostDragOver = (event: ReactDragEvent<HTMLDivElement>): void => {
+        if (!hasWorkspaceFileDragPayloadFiles(event.dataTransfer)) {
+            clearMainDockWorkspaceDropPreview();
+            return;
+        }
+
+        if (isWorkspaceFileDropHandledByLocalScope(event.target, event.clientX, event.clientY)) {
+            clearMainDockWorkspaceDropPreview();
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = "copy";
+        if (mainDockWorkspaceDragDepthRef.current <= 0) {
+            mainDockWorkspaceDragDepthRef.current = 1;
+        }
+        updateMainDockWorkspaceDropPreview(
+            resolveMainDockWorkspaceDropPreview(event.clientX, event.clientY),
+        );
+    };
+
+    const handleMainDockHostDragEnter = (event: ReactDragEvent<HTMLDivElement>): void => {
+        if (!hasWorkspaceFileDragPayloadFiles(event.dataTransfer)) {
+            return;
+        }
+
+        if (isWorkspaceFileDropHandledByLocalScope(event.target, event.clientX, event.clientY)) {
+            clearMainDockWorkspaceDropPreview();
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        mainDockWorkspaceDragDepthRef.current += 1;
+        updateMainDockWorkspaceDropPreview(
+            resolveMainDockWorkspaceDropPreview(event.clientX, event.clientY),
+        );
+    };
+
+    const handleMainDockHostDragLeave = (event: ReactDragEvent<HTMLDivElement>): void => {
+        const nextTarget = event.relatedTarget;
+        if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+            return;
+        }
+
+        const hostRect = event.currentTarget.getBoundingClientRect();
+        const pointerStillInside = event.clientX >= hostRect.left
+            && event.clientX <= hostRect.right
+            && event.clientY >= hostRect.top
+            && event.clientY <= hostRect.bottom;
+
+        if (pointerStillInside) {
+            return;
+        }
+
+        mainDockWorkspaceDragDepthRef.current = Math.max(0, mainDockWorkspaceDragDepthRef.current - 1);
+        if (mainDockWorkspaceDragDepthRef.current === 0) {
+            clearMainDockWorkspaceDropPreview();
+        }
+    };
+
+    const handleMainDockHostDrop = async (event: ReactDragEvent<HTMLDivElement>): Promise<void> => {
+        const droppedItems = readWorkspaceFileDragPayload(event.dataTransfer);
+        if (!droppedItems.some((item) => !item.isDir)) {
+            clearMainDockWorkspaceDropPreview();
+            return;
+        }
+
+        if (isWorkspaceFileDropHandledByLocalScope(event.target, event.clientX, event.clientY)) {
+            resetMainDockWorkspaceDragState();
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const preview = mainDockWorkspaceDropPreviewRef.current
+            ?? resolveMainDockWorkspaceDropPreview(event.clientX, event.clientY);
+        resetMainDockWorkspaceDragState();
+
+        await openWorkspaceFilesInDockview(droppedItems, {
+            referencePanelId: preview?.referencePanelId ?? dockviewApiRef.current?.activePanel?.id ?? null,
+            position: preview?.position ?? "center",
+        });
+    };
+
+    const handleMainDockviewDrop = async (dropEvent: DockviewDidDropEvent): Promise<void> => {
+        const droppedItems = readWorkspaceFileDragPayload(dropEvent.nativeEvent.dataTransfer);
+        if (droppedItems.some((item) => !item.isDir)) {
+            resetMainDockWorkspaceDragState();
+            return;
+        }
+
+        void convertPanePanelToTab(dropEvent);
+    };
+
     const handleUnhandledDragOver = (targetApi: PaneviewApi, event: PaneviewDndOverlayEvent): void => {
         const data = event.getData();
         if (data) {
@@ -2231,8 +2676,12 @@ export function DockviewLayout({
         });
     };
 
-    const handleDockviewUnhandledDragOver = (event: any): void => {
-        const paneTransfer = event.getData?.() ?? getPaneData();
+    const handleDockviewUnhandledDragOver = (event: DockviewDndOverlayEvent): void => {
+        if (hasWorkspaceFileDragPayloadFiles(event.nativeEvent.dataTransfer)) {
+            return;
+        }
+
+        const paneTransfer = getPaneData();
         if (!paneTransfer) {
             return;
         }
@@ -4974,13 +5423,34 @@ export function DockviewLayout({
             )}
 
             <main className="main-content-area" aria-label={t("dockview.mainArea")}>
-                <div ref={mainDockHostRef} className="main-dockview-host" data-testid="main-dockview-host">
+                <div
+                    ref={mainDockHostRef}
+                    className="main-dockview-host"
+                    data-testid="main-dockview-host"
+                    onDragEnter={handleMainDockHostDragEnter}
+                    onDragOver={handleMainDockHostDragOver}
+                    onDragLeave={handleMainDockHostDragLeave}
+                    onDrop={(event) => {
+                        void handleMainDockHostDrop(event);
+                    }}
+                >
+                    {mainDockWorkspaceDropPreview ? (
+                        <div
+                            className="main-dockview-workspace-drop-preview"
+                            style={{
+                                left: mainDockWorkspaceDropPreview.bounds.left,
+                                top: mainDockWorkspaceDropPreview.bounds.top,
+                                width: mainDockWorkspaceDropPreview.bounds.width,
+                                height: mainDockWorkspaceDropPreview.bounds.height,
+                            }}
+                        />
+                    ) : null}
                     <DockviewReact
                         className="dockview-theme-abyss main-dockview"
                         components={dockviewComponents}
                         onReady={handleReady}
                         onDidDrop={(event) => {
-                            void convertPanePanelToTab(event);
+                            void handleMainDockviewDrop(event);
                         }}
                     />
                 </div>

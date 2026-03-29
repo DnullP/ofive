@@ -5,7 +5,12 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { detectOpenWikiLink } from "./wikilinkSuggestUtils";
+import {
+    buildWikiLinkSuggestionAcceptance,
+    detectOpenWikiLink,
+    resolveWikiLinkClosingBracketResolution,
+    resolveWikiLinkSuggestionAcceptanceAtCursor,
+} from "./wikilinkSuggestUtils";
 
 /* ================================================================== */
 /*  detectOpenWikiLink                                                */
@@ -19,6 +24,7 @@ describe("detectOpenWikiLink", () => {
             expect(result).not.toBeNull();
             expect(result!.query).toBe("");
             expect(result!.anchorPos).toBe(8); // [[ 之后
+            expect(result!.replaceTo).toBe(doc.length);
         });
 
         test("光标在 [[test 后面：检测到 'test' 查询", () => {
@@ -27,6 +33,7 @@ describe("detectOpenWikiLink", () => {
             expect(result).not.toBeNull();
             expect(result!.query).toBe("test");
             expect(result!.anchorPos).toBe(8);
+            expect(result!.replaceTo).toBe(doc.length);
         });
 
         test("光标在 [[中文笔记 后面：检测到中文查询", () => {
@@ -60,6 +67,9 @@ describe("detectOpenWikiLink", () => {
             const result = detectOpenWikiLink(doc, cursorPos);
             expect(result).not.toBeNull();
             expect(result!.query).toBe("te");
+            expect(result!.replaceTo).toBe(12);
+            expect(result!.preserveClosingBrackets).toBe(true);
+            expect(result!.closingBracketsImmediatelyAfterReplaceTo).toBe(true);
         });
     });
 
@@ -95,6 +105,7 @@ describe("detectOpenWikiLink", () => {
             expect(result).not.toBeNull();
             expect(result!.query).toBe("note");
             expect(result!.anchorPos).toBe(2);
+            expect(result!.replaceTo).toBe(doc.length);
         });
 
         test("多个 [[ 取最后一个", () => {
@@ -117,6 +128,153 @@ describe("detectOpenWikiLink", () => {
             const result = detectOpenWikiLink(doc, doc.length);
             expect(result).not.toBeNull();
             expect(result!.query).toBe("target|display");
+        });
+
+        test("光标位于已闭合 wikilink 中间时，替换范围会吞掉右侧尾部", () => {
+            const doc = "[[123456]]";
+            const cursorPos = 5; // [[123|456]]
+            const result = detectOpenWikiLink(doc, cursorPos);
+
+            expect(result).not.toBeNull();
+            expect(result).toEqual({
+                query: "123",
+                anchorPos: 2,
+                replaceTo: 8,
+                preserveClosingBrackets: true,
+                closingBracketsImmediatelyAfterReplaceTo: true,
+            });
+        });
+
+        test("编辑 target 且后面存在 alias 时，替换范围会停在 | 之前", () => {
+            const doc = "[[target|alias]]";
+            const cursorPos = 5; // [[tar|get|alias]]
+            const result = detectOpenWikiLink(doc, cursorPos);
+
+            expect(result).not.toBeNull();
+            expect(result).toEqual({
+                query: "tar",
+                anchorPos: 2,
+                replaceTo: 8,
+                preserveClosingBrackets: true,
+                closingBracketsImmediatelyAfterReplaceTo: false,
+            });
+        });
+    });
+});
+
+describe("buildWikiLinkSuggestionAcceptance", () => {
+    test("中间位置接受补全时会清理右侧残留文本", () => {
+        const acceptance = buildWikiLinkSuggestionAcceptance("Note", {
+            anchorPos: 2,
+            replaceTo: 8,
+            preserveClosingBrackets: true,
+            closingBracketsImmediatelyAfterReplaceTo: true,
+        });
+
+        expect(acceptance).toEqual({
+            from: 2,
+            to: 8,
+            insert: "Note",
+            selectionAnchor: 8,
+        });
+    });
+
+    test("未闭合 wikilink 接受补全时会自动补上 ]]", () => {
+        const acceptance = buildWikiLinkSuggestionAcceptance("Note", {
+            anchorPos: 2,
+            replaceTo: 6,
+            preserveClosingBrackets: false,
+            closingBracketsImmediatelyAfterReplaceTo: false,
+        });
+
+        expect(acceptance).toEqual({
+            from: 2,
+            to: 6,
+            insert: "Note]]",
+            selectionAnchor: 8,
+        });
+    });
+
+    test("target 后存在 alias 时只替换 target 段", () => {
+        const acceptance = buildWikiLinkSuggestionAcceptance("Note", {
+            anchorPos: 2,
+            replaceTo: 8,
+            preserveClosingBrackets: true,
+            closingBracketsImmediatelyAfterReplaceTo: false,
+        });
+
+        expect(acceptance).toEqual({
+            from: 2,
+            to: 8,
+            insert: "Note",
+            selectionAnchor: 6,
+        });
+    });
+});
+
+describe("resolveWikiLinkClosingBracketResolution", () => {
+    test("立即存在 ]] 时应复用闭合括号并跨过它", () => {
+        expect(resolveWikiLinkClosingBracketResolution("]] more")).toEqual({
+            preserveClosingBrackets: true,
+            closingBracketsImmediatelyAfterReplaceTo: true,
+        });
+    });
+
+    test("alias 后存在 ]] 时应复用闭合括号但不额外跨过 alias", () => {
+        expect(resolveWikiLinkClosingBracketResolution("|alias]]")).toEqual({
+            preserveClosingBrackets: true,
+            closingBracketsImmediatelyAfterReplaceTo: false,
+        });
+    });
+
+    test("不存在 ]] 时应要求补全自行补上闭合括号", () => {
+        expect(resolveWikiLinkClosingBracketResolution("|alias")).toEqual({
+            preserveClosingBrackets: false,
+            closingBracketsImmediatelyAfterReplaceTo: false,
+        });
+    });
+});
+
+describe("resolveWikiLinkSuggestionAcceptanceAtCursor", () => {
+    test("自动补全生成的 [[]] 在中间接受补全时不应重复追加 ]]", () => {
+        const acceptance = resolveWikiLinkSuggestionAcceptanceAtCursor(
+            "[[]]",
+            2,
+            "123",
+            {
+                anchorPos: 2,
+                replaceTo: 2,
+                preserveClosingBrackets: false,
+                closingBracketsImmediatelyAfterReplaceTo: false,
+            },
+        );
+
+        expect(acceptance).toEqual({
+            from: 2,
+            to: 2,
+            insert: "123",
+            selectionAnchor: 7,
+        });
+    });
+
+    test("即使弹窗状态滞后，alias 后已有 ]] 时也不应重复追加", () => {
+        const acceptance = resolveWikiLinkSuggestionAcceptanceAtCursor(
+            "[[target|alias]]",
+            5,
+            "Note",
+            {
+                anchorPos: 2,
+                replaceTo: 5,
+                preserveClosingBrackets: false,
+                closingBracketsImmediatelyAfterReplaceTo: false,
+            },
+        );
+
+        expect(acceptance).toEqual({
+            from: 2,
+            to: 8,
+            insert: "Note",
+            selectionAnchor: 6,
         });
     });
 });

@@ -45,6 +45,14 @@ pub(crate) fn read_vault_binary_file(
     vault_runtime::read_vault_binary_file(relative_path, state)
 }
 
+/// 读取当前仓库中的 Canvas 文件。
+pub(crate) fn read_vault_canvas_file(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<ReadMarkdownResponse, String> {
+    vault_runtime::read_vault_canvas_file(relative_path, state)
+}
+
 /// 在当前仓库中创建 Markdown 文件。
 pub(crate) fn create_vault_markdown_file(
     relative_path: String,
@@ -74,6 +82,16 @@ pub(crate) fn create_vault_binary_file(
     write_runtime::create_vault_binary_file(relative_path, base64_content, source_trace_id, state)
 }
 
+/// 在当前仓库中创建 Canvas 文件。
+pub(crate) fn create_vault_canvas_file(
+    relative_path: String,
+    content: Option<String>,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    write_runtime::create_vault_canvas_file(relative_path, content, source_trace_id, state)
+}
+
 /// 保存当前仓库中的 Markdown 文件。
 pub(crate) fn save_vault_markdown_file(
     relative_path: String,
@@ -82,6 +100,16 @@ pub(crate) fn save_vault_markdown_file(
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
     write_runtime::save_vault_markdown_file(relative_path, content, source_trace_id, state)
+}
+
+/// 保存当前仓库中的 Canvas 文件。
+pub(crate) fn save_vault_canvas_file(
+    relative_path: String,
+    content: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    write_runtime::save_vault_canvas_file(relative_path, content, source_trace_id, state)
 }
 
 /// 重命名当前仓库中的 Markdown 文件。
@@ -99,6 +127,21 @@ pub(crate) fn rename_vault_markdown_file(
     )
 }
 
+/// 重命名当前仓库中的 Canvas 文件。
+pub(crate) fn rename_vault_canvas_file(
+    from_relative_path: String,
+    to_relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    write_runtime::rename_vault_canvas_file(
+        from_relative_path,
+        to_relative_path,
+        source_trace_id,
+        state,
+    )
+}
+
 /// 删除当前仓库中的 Markdown 文件。
 pub(crate) fn delete_vault_markdown_file(
     relative_path: String,
@@ -106,6 +149,15 @@ pub(crate) fn delete_vault_markdown_file(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     write_runtime::delete_vault_markdown_file(relative_path, source_trace_id, state)
+}
+
+/// 删除当前仓库中的 Canvas 文件。
+pub(crate) fn delete_vault_canvas_file(
+    relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    write_runtime::delete_vault_canvas_file(relative_path, source_trace_id, state)
 }
 
 /// 删除当前仓库中的二进制文件。
@@ -125,6 +177,21 @@ pub(crate) fn move_vault_markdown_file_to_directory(
     state: State<'_, AppState>,
 ) -> Result<WriteMarkdownResponse, String> {
     write_runtime::move_vault_markdown_file_to_directory(
+        from_relative_path,
+        target_directory_relative_path,
+        source_trace_id,
+        state,
+    )
+}
+
+/// 将当前仓库中的 Canvas 文件移动到目标目录。
+pub(crate) fn move_vault_canvas_file_to_directory(
+    from_relative_path: String,
+    target_directory_relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    write_runtime::move_vault_canvas_file_to_directory(
         from_relative_path,
         target_directory_relative_path,
         source_trace_id,
@@ -208,6 +275,14 @@ pub fn read_vault_markdown_file_in_root(
     vault_runtime::read_vault_markdown_file_in_root(relative_path, vault_root)
 }
 
+/// 在指定仓库根目录下读取 Canvas 文件。
+pub fn read_vault_canvas_file_in_root(
+    relative_path: String,
+    vault_root: &Path,
+) -> Result<ReadMarkdownResponse, String> {
+    vault_runtime::read_vault_canvas_file_in_root(relative_path, vault_root)
+}
+
 /// 在指定仓库根目录下创建 Markdown 文件。
 pub fn create_vault_markdown_file_in_root(
     relative_path: String,
@@ -217,6 +292,15 @@ pub fn create_vault_markdown_file_in_root(
     write_runtime::create_vault_markdown_file_in_root(relative_path, content, vault_root)
 }
 
+/// 在指定仓库根目录下创建 Canvas 文件。
+pub fn create_vault_canvas_file_in_root(
+    relative_path: String,
+    content: Option<String>,
+    vault_root: &Path,
+) -> Result<WriteMarkdownResponse, String> {
+    write_runtime::create_vault_canvas_file_in_root(relative_path, content, vault_root)
+}
+
 /// 在指定仓库根目录下保存 Markdown 文件。
 pub fn save_vault_markdown_file_in_root(
     relative_path: String,
@@ -224,6 +308,15 @@ pub fn save_vault_markdown_file_in_root(
     vault_root: &Path,
 ) -> Result<WriteMarkdownResponse, String> {
     write_runtime::save_vault_markdown_file_in_root(relative_path, content, vault_root)
+}
+
+/// 在指定仓库根目录下保存 Canvas 文件。
+pub fn save_vault_canvas_file_in_root(
+    relative_path: String,
+    content: String,
+    vault_root: &Path,
+) -> Result<WriteMarkdownResponse, String> {
+    write_runtime::save_vault_canvas_file_in_root(relative_path, content, vault_root)
 }
 
 /// 在指定仓库根目录下重命名 Markdown 文件。
@@ -239,12 +332,33 @@ pub fn rename_vault_markdown_file_in_root(
     )
 }
 
+/// 在指定仓库根目录下重命名 Canvas 文件。
+pub fn rename_vault_canvas_file_in_root(
+    from_relative_path: String,
+    to_relative_path: String,
+    vault_root: &Path,
+) -> Result<WriteMarkdownResponse, String> {
+    write_runtime::rename_vault_canvas_file_in_root(
+        from_relative_path,
+        to_relative_path,
+        vault_root,
+    )
+}
+
 /// 在指定仓库根目录下删除 Markdown 文件。
 pub fn delete_vault_markdown_file_in_root(
     relative_path: String,
     vault_root: &Path,
 ) -> Result<(), String> {
     write_runtime::delete_vault_markdown_file_in_root(relative_path, vault_root)
+}
+
+/// 在指定仓库根目录下删除 Canvas 文件。
+pub fn delete_vault_canvas_file_in_root(
+    relative_path: String,
+    vault_root: &Path,
+) -> Result<(), String> {
+    write_runtime::delete_vault_canvas_file_in_root(relative_path, vault_root)
 }
 
 /// 在指定仓库根目录下创建目录。
@@ -292,6 +406,19 @@ pub fn move_vault_markdown_file_to_directory_in_root(
     vault_root: &Path,
 ) -> Result<WriteMarkdownResponse, String> {
     write_runtime::move_vault_markdown_file_to_directory_in_root(
+        from_relative_path,
+        target_directory_relative_path,
+        vault_root,
+    )
+}
+
+/// 在指定仓库根目录下移动 Canvas 文件到目录。
+pub fn move_vault_canvas_file_to_directory_in_root(
+    from_relative_path: String,
+    target_directory_relative_path: String,
+    vault_root: &Path,
+) -> Result<WriteMarkdownResponse, String> {
+    write_runtime::move_vault_canvas_file_to_directory_in_root(
         from_relative_path,
         target_directory_relative_path,
         vault_root,

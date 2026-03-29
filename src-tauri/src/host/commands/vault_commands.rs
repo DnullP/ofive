@@ -14,17 +14,23 @@ pub(crate) const VAULT_COMMAND_IDS: &[&str] = &[
     "set_current_vault",
     "get_current_vault_tree",
     "read_vault_markdown_file",
+    "read_vault_canvas_file",
     "read_vault_binary_file",
     "create_vault_markdown_file",
+    "create_vault_canvas_file",
     "create_vault_directory",
     "create_vault_binary_file",
     "save_vault_markdown_file",
+    "save_vault_canvas_file",
     "rename_vault_markdown_file",
+    "rename_vault_canvas_file",
     "move_vault_markdown_file_to_directory",
+    "move_vault_canvas_file_to_directory",
     "rename_vault_directory",
     "move_vault_directory_to_directory",
     "delete_vault_directory",
     "delete_vault_markdown_file",
+    "delete_vault_canvas_file",
     "delete_vault_binary_file",
     "copy_vault_entry",
     "resolve_wikilink_target",
@@ -94,6 +100,18 @@ pub fn read_vault_markdown_file(
     )
 }
 
+/// 读取 Canvas 文件。
+#[tauri::command]
+pub fn read_vault_canvas_file(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<ReadMarkdownResponse, String> {
+    timed_command!(
+        "read_vault_canvas_file",
+        vault_app_service::read_vault_canvas_file(relative_path, state)
+    )
+}
+
 /// 读取二进制文件。
 #[tauri::command]
 pub fn read_vault_binary_file(
@@ -117,6 +135,25 @@ pub fn create_vault_markdown_file(
     timed_command!(
         "create_vault_markdown_file",
         vault_app_service::create_vault_markdown_file(
+            relative_path,
+            content,
+            source_trace_id,
+            state,
+        )
+    )
+}
+
+/// 创建 Canvas 文件。
+#[tauri::command]
+pub fn create_vault_canvas_file(
+    relative_path: String,
+    content: Option<String>,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    timed_command!(
+        "create_vault_canvas_file",
+        vault_app_service::create_vault_canvas_file(
             relative_path,
             content,
             source_trace_id,
@@ -171,6 +208,20 @@ pub fn save_vault_markdown_file(
     )
 }
 
+/// 保存 Canvas 文件。
+#[tauri::command]
+pub fn save_vault_canvas_file(
+    relative_path: String,
+    content: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    timed_command!(
+        "save_vault_canvas_file",
+        vault_app_service::save_vault_canvas_file(relative_path, content, source_trace_id, state,)
+    )
+}
+
 /// 重命名 Markdown 文件。
 #[tauri::command]
 pub fn rename_vault_markdown_file(
@@ -190,6 +241,25 @@ pub fn rename_vault_markdown_file(
     )
 }
 
+/// 重命名 Canvas 文件。
+#[tauri::command]
+pub fn rename_vault_canvas_file(
+    from_relative_path: String,
+    to_relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    timed_command!(
+        "rename_vault_canvas_file",
+        vault_app_service::rename_vault_canvas_file(
+            from_relative_path,
+            to_relative_path,
+            source_trace_id,
+            state,
+        )
+    )
+}
+
 /// 删除 Markdown 文件。
 #[tauri::command]
 pub fn delete_vault_markdown_file(
@@ -200,6 +270,19 @@ pub fn delete_vault_markdown_file(
     timed_command!(
         "delete_vault_markdown_file",
         vault_app_service::delete_vault_markdown_file(relative_path, source_trace_id, state)
+    )
+}
+
+/// 删除 Canvas 文件。
+#[tauri::command]
+pub fn delete_vault_canvas_file(
+    relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    timed_command!(
+        "delete_vault_canvas_file",
+        vault_app_service::delete_vault_canvas_file(relative_path, source_trace_id, state)
     )
 }
 
@@ -227,6 +310,25 @@ pub fn move_vault_markdown_file_to_directory(
     timed_command!(
         "move_vault_markdown_file_to_directory",
         vault_app_service::move_vault_markdown_file_to_directory(
+            from_relative_path,
+            target_directory_relative_path,
+            source_trace_id,
+            state,
+        )
+    )
+}
+
+/// 移动 Canvas 文件到目录。
+#[tauri::command]
+pub fn move_vault_canvas_file_to_directory(
+    from_relative_path: String,
+    target_directory_relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    timed_command!(
+        "move_vault_canvas_file_to_directory",
+        vault_app_service::move_vault_canvas_file_to_directory(
             from_relative_path,
             target_directory_relative_path,
             source_trace_id,

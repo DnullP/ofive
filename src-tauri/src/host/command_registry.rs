@@ -96,12 +96,20 @@ define_app_commands![
         crate::host::commands::vault_commands::read_vault_markdown_file
     ),
     (
+        "read_vault_canvas_file",
+        crate::host::commands::vault_commands::read_vault_canvas_file
+    ),
+    (
         "read_vault_binary_file",
         crate::host::commands::vault_commands::read_vault_binary_file
     ),
     (
         "create_vault_markdown_file",
         crate::host::commands::vault_commands::create_vault_markdown_file
+    ),
+    (
+        "create_vault_canvas_file",
+        crate::host::commands::vault_commands::create_vault_canvas_file
     ),
     (
         "create_vault_directory",
@@ -116,12 +124,24 @@ define_app_commands![
         crate::host::commands::vault_commands::save_vault_markdown_file
     ),
     (
+        "save_vault_canvas_file",
+        crate::host::commands::vault_commands::save_vault_canvas_file
+    ),
+    (
         "rename_vault_markdown_file",
         crate::host::commands::vault_commands::rename_vault_markdown_file
     ),
     (
+        "rename_vault_canvas_file",
+        crate::host::commands::vault_commands::rename_vault_canvas_file
+    ),
+    (
         "move_vault_markdown_file_to_directory",
         crate::host::commands::vault_commands::move_vault_markdown_file_to_directory
+    ),
+    (
+        "move_vault_canvas_file_to_directory",
+        crate::host::commands::vault_commands::move_vault_canvas_file_to_directory
     ),
     (
         "rename_vault_directory",
@@ -138,6 +158,10 @@ define_app_commands![
     (
         "delete_vault_markdown_file",
         crate::host::commands::vault_commands::delete_vault_markdown_file
+    ),
+    (
+        "delete_vault_canvas_file",
+        crate::host::commands::vault_commands::delete_vault_canvas_file
     ),
     (
         "delete_vault_binary_file",
@@ -272,6 +296,7 @@ pub(crate) use app_commands;
 #[cfg(test)]
 mod tests {
     use super::{validate_registered_app_commands, REGISTERED_APP_COMMAND_IDS};
+    use crate::host::commands::vault_commands::VAULT_COMMAND_IDS;
     use crate::module_contribution::{
         builtin_backend_module_contributions, BackendModuleContribution,
     };
@@ -355,5 +380,26 @@ mod tests {
             .expect_err("空注册命令应被拒绝");
 
         assert!(error.contains("registered command_id must not be empty"));
+    }
+
+    #[test]
+    fn canvas_vault_commands_should_be_declared_and_registered_through_host_boundary() {
+        for command_id in [
+            "read_vault_canvas_file",
+            "create_vault_canvas_file",
+            "save_vault_canvas_file",
+            "rename_vault_canvas_file",
+            "move_vault_canvas_file_to_directory",
+            "delete_vault_canvas_file",
+        ] {
+            assert!(
+                VAULT_COMMAND_IDS.contains(&command_id),
+                "Vault command fact source must declare {command_id}",
+            );
+            assert!(
+                REGISTERED_APP_COMMAND_IDS.contains(&command_id),
+                "Host command registry must register {command_id}",
+            );
+        }
     }
 }

@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { modalPlainTextInputProps } from "./textInputBehaviors";
 import "./CreateEntryModal.css";
 
 /**
@@ -28,6 +29,10 @@ export interface CreateEntryModalProps {
     placeholder: string;
     /** 初始输入值 */
     initialValue: string;
+    /** 确认按钮文案覆盖 */
+    confirmLabel?: string;
+    /** 输入校验提示 */
+    validationMessage?: string;
     /** 关闭浮窗 */
     onClose: () => void;
     /** 确认输入 */
@@ -110,6 +115,7 @@ export function CreateEntryModal(props: CreateEntryModalProps): ReactNode {
                 {/* create-entry-input: 名称输入框 */}
                 <input
                     ref={inputRef}
+                    {...modalPlainTextInputProps}
                     className="create-entry-input"
                     type="text"
                     value={draftName}
@@ -118,13 +124,18 @@ export function CreateEntryModal(props: CreateEntryModalProps): ReactNode {
                         setDraftName(event.target.value);
                     }}
                 />
+                {props.validationMessage ? (
+                    <div className="create-entry-validation" role="alert">
+                        {props.validationMessage}
+                    </div>
+                ) : null}
                 {/* create-entry-actions: 浮窗底部操作区 */}
                 <div className="create-entry-actions">
                     <button type="button" className="create-entry-button" onClick={props.onClose}>
                         {t("common.cancel")}
                     </button>
                     <button type="button" className="create-entry-button primary" onClick={submit}>
-                        {props.kind === "file" ? t("common.newFile") : t("common.newFolder")}
+                        {props.confirmLabel ?? (props.kind === "file" ? t("common.newFile") : t("common.newFolder"))}
                     </button>
                 </div>
             </section>

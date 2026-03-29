@@ -12,8 +12,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
 use crate::infra::fs::fs_helpers::{
-    resolve_binary_target_path, resolve_markdown_path, resolve_markdown_target_path,
-    resolve_vault_directory_path,
+    resolve_binary_target_path, resolve_canvas_path, resolve_canvas_target_path,
+    resolve_markdown_path, resolve_markdown_target_path, resolve_vault_directory_path,
 };
 use crate::infra::persistence::vault_config_store::save_vault_config;
 use crate::infra::query::query_index;
@@ -208,6 +208,57 @@ pub(crate) fn create_vault_markdown_file(
     Ok(created)
 }
 
+/// 在指定 vault 根目录下创建 Canvas 文件。
+pub(crate) fn create_vault_canvas_file_in_root(
+    relative_path: String,
+    content: Option<String>,
+    vault_root: &Path,
+) -> Result<WriteMarkdownResponse, String> {
+    log::info!(
+        "[vault] create_vault_canvas_file start: relative_path={}",
+        relative_path
+    );
+
+    let target_path = resolve_canvas_target_path(vault_root, &relative_path)?;
+
+    if target_path.exists() {
+        return Err("目标文件已存在".to_string());
+    }
+
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("创建父目录失败 {}: {error}", parent.display()))?;
+    }
+
+    let initial_content = content.unwrap_or_else(|| "{\n  \"nodes\": [],\n  \"edges\": []\n}\n".to_string());
+
+    fs::write(&target_path, initial_content.as_bytes())
+        .map_err(|error| format!("创建 Canvas 文件失败 {}: {error}", target_path.display()))?;
+
+    Ok(WriteMarkdownResponse {
+        relative_path,
+        created: true,
+    })
+}
+
+/// 在当前仓库中创建 Canvas 文件并注册写入 trace。
+pub(crate) fn create_vault_canvas_file(
+    relative_path: String,
+    content: Option<String>,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    let root = get_vault_root(&state)?;
+    let created = create_vault_canvas_file_in_root(relative_path, content, &root)?;
+    register_pending_write_trace(
+        &state,
+        source_trace_id,
+        &[created.relative_path.clone()],
+        "create_vault_canvas_file",
+    )?;
+    Ok(created)
+}
+
 /// 在指定 vault 根目录下创建二进制文件。
 pub(crate) fn create_vault_binary_file_in_root(
     relative_path: String,
@@ -336,6 +387,47 @@ pub(crate) fn save_vault_markdown_file(
     Ok(saved)
 }
 
+/// 在指定 vault 根目录下保存 Canvas 文件。
+pub(crate) fn save_vault_canvas_file_in_root(
+    relative_path: String,
+    content: String,
+    vault_root: &Path,
+) -> Result<WriteMarkdownResponse, String> {
+    let target_path = resolve_canvas_target_path(vault_root, &relative_path)?;
+    let existed = target_path.exists();
+
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("创建父目录失败 {}: {error}", parent.display()))?;
+    }
+
+    fs::write(&target_path, content.as_bytes())
+        .map_err(|error| format!("保存 Canvas 文件失败 {}: {error}", target_path.display()))?;
+
+    Ok(WriteMarkdownResponse {
+        relative_path,
+        created: !existed,
+    })
+}
+
+/// 保存当前仓库中的 Canvas 文件并注册写入 trace。
+pub(crate) fn save_vault_canvas_file(
+    relative_path: String,
+    content: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    let root = get_vault_root(&state)?;
+    let saved = save_vault_canvas_file_in_root(relative_path, content, &root)?;
+    register_pending_write_trace(
+        &state,
+        source_trace_id,
+        &[saved.relative_path.clone()],
+        "save_vault_canvas_file",
+    )?;
+    Ok(saved)
+}
+
 pub(crate) fn rename_vault_markdown_file_in_root(
     from_relative_path: String,
     to_relative_path: String,
@@ -395,6 +487,64 @@ pub(crate) fn rename_vault_markdown_file(
         query_index::remove_markdown_file(&reindex_root, &from_path_for_trace)?;
         query_index::reindex_markdown_file(&reindex_root, &reindex_path)
     });
+    Ok(renamed)
+}
+
+/// 在指定 vault 根目录下重命名 Canvas 文件。
+pub(crate) fn rename_vault_canvas_file_in_root(
+    from_relative_path: String,
+    to_relative_path: String,
+    vault_root: &Path,
+) -> Result<WriteMarkdownResponse, String> {
+    let source_path = resolve_canvas_path(vault_root, &from_relative_path)?;
+    let target_path = resolve_canvas_target_path(vault_root, &to_relative_path)?;
+
+    if source_path == target_path {
+        return Ok(WriteMarkdownResponse {
+            relative_path: to_relative_path,
+            created: false,
+        });
+    }
+
+    if target_path.exists() {
+        return Err("目标文件已存在".to_string());
+    }
+
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("创建父目录失败 {}: {error}", parent.display()))?;
+    }
+
+    fs::rename(&source_path, &target_path).map_err(|error| {
+        format!(
+            "重命名 Canvas 文件失败 {} -> {}: {error}",
+            source_path.display(),
+            target_path.display()
+        )
+    })?;
+
+    Ok(WriteMarkdownResponse {
+        relative_path: to_relative_path,
+        created: false,
+    })
+}
+
+/// 重命名当前仓库中的 Canvas 文件并注册写入 trace。
+pub(crate) fn rename_vault_canvas_file(
+    from_relative_path: String,
+    to_relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    let root = get_vault_root(&state)?;
+    let from_path_for_trace = from_relative_path.clone();
+    let renamed = rename_vault_canvas_file_in_root(from_relative_path, to_relative_path, &root)?;
+    register_pending_write_trace(
+        &state,
+        source_trace_id,
+        &[from_path_for_trace, renamed.relative_path.clone()],
+        "rename_vault_canvas_file",
+    )?;
     Ok(renamed)
 }
 
@@ -476,6 +626,83 @@ pub(crate) fn move_vault_markdown_file_to_directory(
         query_index::remove_markdown_file(&reindex_root, &from_path_for_trace)?;
         query_index::reindex_markdown_file(&reindex_root, &reindex_path)
     });
+    Ok(moved)
+}
+
+/// 在指定 vault 根目录下移动 Canvas 文件到目录。
+pub(crate) fn move_vault_canvas_file_to_directory_in_root(
+    from_relative_path: String,
+    target_directory_relative_path: String,
+    vault_root: &Path,
+) -> Result<WriteMarkdownResponse, String> {
+    let source_path = resolve_canvas_path(vault_root, &from_relative_path)?;
+    let source_file_name = source_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "源文件名无效".to_string())?;
+
+    let target_directory_path =
+        resolve_vault_directory_path(vault_root, &target_directory_relative_path)?;
+
+    if target_directory_path.exists() && !target_directory_path.is_dir() {
+        return Err("目标目录路径不是目录".to_string());
+    }
+
+    fs::create_dir_all(&target_directory_path).map_err(|error| {
+        format!(
+            "创建目标目录失败 {}: {error}",
+            target_directory_path.display()
+        )
+    })?;
+
+    let target_path = target_directory_path.join(source_file_name);
+    let target_relative_path = to_vault_relative_path(&target_path, vault_root)?;
+
+    if source_path == target_path {
+        return Ok(WriteMarkdownResponse {
+            relative_path: target_relative_path,
+            created: false,
+        });
+    }
+
+    if target_path.exists() {
+        return Err("目标文件已存在".to_string());
+    }
+
+    fs::rename(&source_path, &target_path).map_err(|error| {
+        format!(
+            "移动 Canvas 文件失败 {} -> {}: {error}",
+            source_path.display(),
+            target_path.display()
+        )
+    })?;
+
+    Ok(WriteMarkdownResponse {
+        relative_path: target_relative_path,
+        created: false,
+    })
+}
+
+/// 将当前仓库中的 Canvas 文件移动到目录并注册写入 trace。
+pub(crate) fn move_vault_canvas_file_to_directory(
+    from_relative_path: String,
+    target_directory_relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    let root = get_vault_root(&state)?;
+    let from_path_for_trace = from_relative_path.clone();
+    let moved = move_vault_canvas_file_to_directory_in_root(
+        from_relative_path,
+        target_directory_relative_path,
+        &root,
+    )?;
+    register_pending_write_trace(
+        &state,
+        source_trace_id,
+        &[from_path_for_trace, moved.relative_path.clone()],
+        "move_vault_canvas_file_to_directory",
+    )?;
     Ok(moved)
 }
 
@@ -756,6 +983,45 @@ pub(crate) fn delete_vault_markdown_file(
     spawn_background_reindex("delete_vault_markdown_file", move || {
         query_index::remove_markdown_file(&reindex_root, &relative_path_for_trace)
     });
+    Ok(())
+}
+
+/// 在指定 vault 根目录下删除 Canvas 文件。
+pub(crate) fn delete_vault_canvas_file_in_root(
+    relative_path: String,
+    vault_root: &Path,
+) -> Result<(), String> {
+    let target_path = resolve_canvas_target_path(vault_root, &relative_path)?;
+
+    if !target_path.exists() {
+        return Err("目标文件不存在".to_string());
+    }
+
+    if !target_path.is_file() {
+        return Err("目标路径不是文件".to_string());
+    }
+
+    fs::remove_file(&target_path)
+        .map_err(|error| format!("删除 Canvas 文件失败 {}: {error}", target_path.display()))?;
+
+    Ok(())
+}
+
+/// 删除当前仓库中的 Canvas 文件并注册写入 trace。
+pub(crate) fn delete_vault_canvas_file(
+    relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = get_vault_root(&state)?;
+    let relative_path_for_trace = relative_path.clone();
+    delete_vault_canvas_file_in_root(relative_path, &root)?;
+    register_pending_write_trace(
+        &state,
+        source_trace_id,
+        &[relative_path_for_trace],
+        "delete_vault_canvas_file",
+    )?;
     Ok(())
 }
 
