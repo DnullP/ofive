@@ -67,11 +67,12 @@ import { showNativeContextMenu } from "../../host/layout/nativeContextMenu";
 import { openFileInDockview } from "../../host/layout/openFileService";
 import {
     createEmptyCanvasDocument,
+    createGroupFromSelection,
     createFileNode,
-    createGroupNode,
     createTextNode,
     parseCanvasDocument,
     serializeCanvasDocument,
+    ungroupCanvasDocument,
     type CanvasDocument,
     type CanvasFlowEdge,
     type CanvasFlowNode,
@@ -190,14 +191,18 @@ function CanvasNodeRenderer(props: CanvasNodeRendererProps): ReactNode {
                 lineClassName="canvas-tab__node-resizer-line"
                 handleClassName="canvas-tab__node-resizer-handle"
             />
-            <Handle type="target" id="top" position={Position.Top} />
-            <Handle type="target" id="right" position={Position.Right} />
-            <Handle type="target" id="bottom" position={Position.Bottom} />
-            <Handle type="target" id="left" position={Position.Left} />
-            <Handle type="source" id="top" position={Position.Top} />
-            <Handle type="source" id="right" position={Position.Right} />
-            <Handle type="source" id="bottom" position={Position.Bottom} />
-            <Handle type="source" id="left" position={Position.Left} />
+            {data.kind !== "group" ? (
+                <>
+                    <Handle type="target" id="top" position={Position.Top} />
+                    <Handle type="target" id="right" position={Position.Right} />
+                    <Handle type="target" id="bottom" position={Position.Bottom} />
+                    <Handle type="target" id="left" position={Position.Left} />
+                    <Handle type="source" id="top" position={Position.Top} />
+                    <Handle type="source" id="right" position={Position.Right} />
+                    <Handle type="source" id="bottom" position={Position.Bottom} />
+                    <Handle type="source" id="left" position={Position.Left} />
+                </>
+            ) : null}
             {data.kind === "text" ? (
                 isEditingText ? (
                     <textarea
@@ -297,15 +302,13 @@ function CanvasNodeRenderer(props: CanvasNodeRendererProps): ReactNode {
             {data.kind === "file" ? (
                 <div className="canvas-tab__node-body">{data.filePath?.trim() || t("canvas.noLinkedFile")}</div>
             ) : null}
-            {data.kind === "group" ? (
-                <div className="canvas-tab__node-body">{t("canvas.groupHint")}</div>
-            ) : null}
         </div>
     );
 }
 
 const CANVAS_NODE_TYPES = {
     ofiveCanvasNode: CanvasNodeRenderer,
+    group: CanvasNodeRenderer,
 } as const;
 
 /**
@@ -537,17 +540,6 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
         console.info("[canvasTab] open file node modal", { path, x, y });
     };
 
-    const addGroupAt = (x: number, y: number): void => {
-        const nextNode = createGroupNode(`group-${Date.now()}`, x, y);
-        updateDocument({
-            ...document,
-            nodes: [...document.nodes, nextNode],
-        });
-        setSelectedNodeId(nextNode.id);
-        setSelectedEdgeId(null);
-        console.info("[canvasTab] add group node", { path, nodeId: nextNode.id, x, y });
-    };
-
     const addDroppedFilesAt = (filePaths: string[], x: number, y: number): void => {
         if (filePaths.length === 0) {
             return;
@@ -576,11 +568,65 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
         });
     };
 
+    const selectedGroupableNodeIds = useMemo(() => document.nodes
+        .filter((node) => node.selected === true)
+        .filter((node) => node.data.kind !== "group" && !node.parentId)
+        .map((node) => node.id), [document.nodes]);
+
+    const canCreateGroupFromSelection = selectedGroupableNodeIds.length >= 2;
+
+    const createGroupFromCurrentSelection = useCallback((): void => {
+        const nextGroupId = `group-${Date.now()}`;
+        const nextDocument = createGroupFromSelection(
+            document,
+            selectedGroupableNodeIds,
+            nextGroupId,
+        );
+
+        if (!nextDocument) {
+            console.warn("[canvasTab] create group blocked: selection does not contain at least two top-level nodes", {
+                path,
+                selectedNodeIds: selectedGroupableNodeIds,
+            });
+            return;
+        }
+
+        closeEdgeEditor();
+        closeFileNodeModal();
+        cancelTextEditing();
+        updateDocument(nextDocument);
+        setSelectedEdgeId(null);
+        console.info("[canvasTab] create group from selection", {
+            path,
+            groupId: nextGroupId,
+            memberIds: selectedGroupableNodeIds,
+        });
+    }, [cancelTextEditing, closeFileNodeModal, document, path, selectedGroupableNodeIds]);
+
+    const ungroupGroupNode = useCallback((groupId: string): void => {
+        const nextDocument = ungroupCanvasDocument(document, groupId);
+        if (nextDocument === document) {
+            console.warn("[canvasTab] ungroup skipped: group not found", { path, groupId });
+            return;
+        }
+
+        closeEdgeEditor();
+        cancelTextEditing();
+        updateDocument(nextDocument);
+        setSelectedNodeId(null);
+        setSelectedEdgeId(null);
+        console.info("[canvasTab] ungroup group node", { path, groupId });
+    }, [cancelTextEditing, document, path]);
+
     const openCanvasCreateMenu = async (clientX: number, clientY: number): Promise<void> => {
         const selectedAction = await showNativeContextMenu([
             { id: "create-text", text: t("canvas.addText") },
             { id: "create-file", text: t("canvas.addFile") },
-            { id: "create-group", text: t("canvas.addGroup") },
+            {
+                id: "group-selection",
+                text: t("canvas.groupSelection"),
+                enabled: canCreateGroupFromSelection,
+            },
         ]);
 
         if (!selectedAction) {
@@ -598,8 +644,21 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
             return;
         }
 
-        if (selectedAction === "create-group") {
-            addGroupAt(position.x, position.y);
+        if (selectedAction === "group-selection") {
+            createGroupFromCurrentSelection();
+        }
+    };
+
+    const openGroupContextMenu = async (groupId: string): Promise<void> => {
+        const selectedAction = await showNativeContextMenu([
+            {
+                id: "ungroup",
+                text: t("canvas.ungroup"),
+            },
+        ]);
+
+        if (selectedAction === "ungroup") {
+            ungroupGroupNode(groupId);
         }
     };
 
@@ -723,10 +782,6 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
         addFileAt(120, 120);
     };
 
-    const addGroup = (): void => {
-        addGroupAt(160, 160);
-    };
-
     const onNodesChange = (changes: NodeChange<CanvasFlowNode>[]): void => {
         const nextNodes = applyNodeChanges<CanvasFlowNode>(changes, document.nodes);
         updateDocument({
@@ -801,6 +856,17 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
 
     const onCanvasContextMenu = (event: MouseEvent | ReactMouseEvent): void => {
         event.preventDefault();
+        void openCanvasCreateMenu(event.clientX, event.clientY);
+    };
+
+    const onNodeContextMenu = (event: MouseEvent | ReactMouseEvent, node: CanvasFlowNode): void => {
+        event.preventDefault();
+
+        if (node.data.kind === "group") {
+            void openGroupContextMenu(node.id);
+            return;
+        }
+
         void openCanvasCreateMenu(event.clientX, event.clientY);
     };
 
@@ -963,10 +1029,15 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
                             closeEdgeEditor();
                         }}
                         onPaneContextMenu={onCanvasContextMenu}
-                        onNodeContextMenu={onCanvasContextMenu}
+                        onNodeContextMenu={onNodeContextMenu}
+                        onSelectionContextMenu={(event) => {
+                            event.preventDefault();
+                            void openCanvasCreateMenu(event.clientX, event.clientY);
+                        }}
                         onEdgeContextMenu={onCanvasContextMenu}
                         onNodeDoubleClick={onNodeDoubleClick}
                         onEdgeDoubleClick={onEdgeDoubleClick}
+                        selectionOnDrag
                         fitView
                     >
                         <Background gap={18} size={1} />
@@ -982,9 +1053,14 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
                             <FilePlus2 size={16} strokeWidth={1.8} aria-hidden="true" />
                             <span>{t("canvas.addFile")}</span>
                         </button>
-                        <button type="button" className="canvas-tab__action-button" onClick={addGroup}>
+                        <button
+                            type="button"
+                            className="canvas-tab__action-button"
+                            onClick={createGroupFromCurrentSelection}
+                            disabled={!canCreateGroupFromSelection}
+                        >
                             <Workflow size={16} strokeWidth={1.8} aria-hidden="true" />
-                            <span>{t("canvas.addGroup")}</span>
+                            <span>{t("canvas.groupSelection")}</span>
                         </button>
                     </div>
                 </div>

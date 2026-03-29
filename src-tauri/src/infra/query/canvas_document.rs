@@ -130,4 +130,50 @@ mod tests {
         assert!(serialized.contains("\"zIndex\": 3"));
         assert!(serialized.contains("\"theme\": \"glass\""));
     }
+
+    #[test]
+    fn serialize_canvas_document_should_roundtrip_group_parent_id_extra_field() {
+        let document = VaultCanvasDocument {
+            nodes: vec![
+                VaultCanvasNode {
+                    id: "group-1".to_string(),
+                    node_type: VaultCanvasNodeKind::Group,
+                    x: 100.0,
+                    y: 200.0,
+                    width: 320.0,
+                    height: 220.0,
+                    text: None,
+                    file: None,
+                    label: Some("Cluster".to_string()),
+                    color: None,
+                    background: None,
+                    extra_fields: BTreeMap::new(),
+                },
+                VaultCanvasNode {
+                    id: "text-1".to_string(),
+                    node_type: VaultCanvasNodeKind::Text,
+                    x: 140.0,
+                    y: 260.0,
+                    width: 180.0,
+                    height: 80.0,
+                    text: Some("kubelet".to_string()),
+                    file: None,
+                    label: None,
+                    color: None,
+                    background: None,
+                    extra_fields: BTreeMap::from([("parentId".to_string(), json!("group-1"))]),
+                },
+            ],
+            edges: vec![],
+            metadata: None,
+            extra_fields: BTreeMap::new(),
+        };
+
+        let serialized = serialize_vault_canvas_document(&document)
+            .expect("序列化 Canvas 文档应成功");
+        let parsed = parse_vault_canvas_document(&serialized).expect("反序列化应成功");
+
+        assert_eq!(parsed, document);
+        assert!(serialized.contains("\"parentId\": \"group-1\""));
+    }
 }

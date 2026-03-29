@@ -373,6 +373,13 @@ fn parse_canvas_document_input(
                 "{}。建议：先调用 vault.get_canvas_document 读取完整 document，再在返回结果上做最小修改后整份保存；不要只发送局部节点片段。每个 node 都必须保留 id、type、x、y、width、height，坐标可以是浮点数。",
                 base
             )
+        } else if message.contains("missing field `fromNode`")
+            || message.contains("missing field `toNode`")
+        {
+            format!(
+                "{}。建议：先调用 vault.get_canvas_document 读取完整 document，再在返回结果上做最小修改后整份保存；不要只发送局部连线片段。每个 edge 都必须保留 id、fromNode、toNode；如果原始 edge 带有 fromSide、toSide、label、color 或其他字段，也应一并保留，除非你明确要删除或修改它们。",
+                base
+            )
         } else {
             base
         }
@@ -605,6 +612,42 @@ mod tests {
         let saved_content = fs::read_to_string(root.join("boards/roadmap.canvas"))
             .expect("应能读取保存后的 Canvas 文件");
         assert!(saved_content.contains("\"id\": \"text-1\""));
+    }
+
+    #[test]
+    fn execute_vault_capability_should_explain_incomplete_canvas_edge_payloads() {
+        let root = create_test_root();
+        write_canvas_file(
+            &root,
+            "boards/roadmap.canvas",
+            "{\n  \"nodes\": [],\n  \"edges\": []\n}\n",
+        );
+        let context = CapabilityExecutionContext { vault_root: &root };
+
+        let save_request = CapabilityExecutionRequest {
+            capability_id: "vault.save_canvas_document".to_string(),
+            consumer: crate::domain::capability::CapabilityConsumer::AiTool,
+            input: json!({
+                "relativePath": "boards/roadmap.canvas",
+                "document": {
+                    "nodes": [],
+                    "edges": [
+                        {
+                            "id": "edge-1",
+                            "toNode": "node-b"
+                        }
+                    ]
+                }
+            }),
+        };
+
+        let error = execute_vault_capability(&save_request, &context)
+            .expect("应由 Vault 模块接管保存 Canvas 能力")
+            .expect_err("局部 edge 片段应触发更明确的诊断信息");
+
+        assert!(error.contains("missing field `fromNode`"));
+        assert!(error.contains("不要只发送局部连线片段"));
+        assert!(error.contains("每个 edge 都必须保留 id、fromNode、toNode"));
     }
 
     #[test]

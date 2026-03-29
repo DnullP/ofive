@@ -296,6 +296,63 @@ func TestBuildAgentInstructionIncludesPatchShapeGuidance(t *testing.T) {
 	if !strings.Contains(instruction, "Do not invent partial node fragments") {
 		t.Fatalf("expected canvas full-document guidance in instruction, got %q", instruction)
 	}
+	if !strings.Contains(instruction, "partial edge fragments") {
+		t.Fatalf("expected canvas edge-fragment guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "Every saved edge must still include id, fromNode, and toNode") {
+		t.Fatalf("expected canvas edge field guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "set fromSide and toSide explicitly") {
+		t.Fatalf("expected explicit edge-side guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "one of top, right, bottom, or left") {
+		t.Fatalf("expected edge-side enum guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "Text nodes need visible content") {
+		t.Fatalf("expected text-node content guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "a text node without text renders as an empty placeholder") {
+		t.Fatalf("expected empty-text-node warning in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "Grouping uses xyflow sub-flows") {
+		t.Fatalf("expected xyflow grouping guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "set parentId on the child node to the group node id") {
+		t.Fatalf("expected parentId grouping guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "Canvas example") {
+		t.Fatalf("expected explicit canvas example guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "\"type\":\"group\"") {
+		t.Fatalf("expected group-node JSON example in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "\"parentId\":\"node-a\"") {
+		t.Fatalf("expected parentId JSON example in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "\"text\":\"kubelet\"") {
+		t.Fatalf("expected text-node JSON example in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "\"fromSide\":\"right\"") {
+		t.Fatalf("expected edge-side JSON example in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "the child node remains the actual edge endpoint") {
+		t.Fatalf("expected grouped-child edge-endpoint guidance in canvas example, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "derive node ordering from edge endpoint topology") {
+		t.Fatalf("expected canvas topology ordering guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "node A's left side to node B's right side") {
+		t.Fatalf("expected canvas directional endpoint example in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "follow the nearest topology direction") {
+		t.Fatalf("expected nearest-topology guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "for a target mainly on the right, prefer source right and target left") {
+		t.Fatalf("expected explicit rightward edge-side example in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "reduce avoidable edge crossings") {
+		t.Fatalf("expected canvas edge-crossing guidance in instruction, got %q", instruction)
+	}
 	if !strings.Contains(instruction, "[[供需原理]]") {
 		t.Fatalf("expected section insertion example in instruction, got %q", instruction)
 	}

@@ -112,9 +112,19 @@
     background: var(--canvas-node-file-bg);
 }
 
-/* canvas-tab__node--group: 分组节点强调色。 */
+/* react-flow__node-group.canvas-tab__group-node: 清理 xyflow group 外层默认白底和描边，避免与自定义节点容器叠出白边。 */
+.react-flow__node-group.canvas-tab__group-node {
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+/* canvas-tab__node--group: 分组节点沿用自定义节点容器，但视觉上弱化为框架。 */
 .canvas-tab__node--group {
+    justify-content: flex-start;
     background: var(--canvas-node-group-bg);
+    border-color: var(--canvas-node-group-accent);
 }
 
 /* canvas-tab__node-header: 节点标题。 */

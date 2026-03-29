@@ -45,6 +45,8 @@ export interface CanvasNodeData extends Record<string, unknown> {
     color?: string;
     /** 分组节点背景色。 */
     background?: string;
+    /** 节点未知字段，序列化时需原样回写。 */
+    extraFields?: Record<string, unknown>;
     /** 仅前端运行时使用：文本节点当前是否处于编辑态。 */
     isEditingText?: boolean;
     /** 仅前端运行时使用：文本节点运行时注册键。 */
@@ -55,7 +57,7 @@ export interface CanvasNodeData extends Record<string, unknown> {
  * @type CanvasFlowNode
  * @description xyflow 运行时节点类型。
  */
-export type CanvasFlowNode = Node<CanvasNodeData, "ofiveCanvasNode">;
+export type CanvasFlowNode = Node<CanvasNodeData, "ofiveCanvasNode" | "group">;
 
 /**
  * @interface CanvasEdgeData
@@ -66,6 +68,8 @@ export interface CanvasEdgeData extends Record<string, unknown> {
     label?: string;
     /** 边颜色。 */
     color?: string;
+    /** 边未知字段，序列化时需原样回写。 */
+    extraFields?: Record<string, unknown>;
 }
 
 /**
@@ -73,6 +77,15 @@ export interface CanvasEdgeData extends Record<string, unknown> {
  * @description xyflow 运行时边类型。
  */
 export type CanvasFlowEdge = Edge<CanvasEdgeData>;
+
+/**
+ * @interface CanvasDocumentMetadata
+ * @description Canvas 文档元信息。
+ */
+export interface CanvasDocumentMetadata extends Record<string, unknown> {
+    /** 文档标题。 */
+    title?: string;
+}
 
 /**
  * @interface CanvasDocument
@@ -84,13 +97,12 @@ export interface CanvasDocument {
     /** 边列表。 */
     edges: CanvasFlowEdge[];
     /** 附加元信息。 */
-    metadata?: {
-        /** 文档标题。 */
-        title?: string;
-    };
+    metadata?: CanvasDocumentMetadata;
+    /** 文档未知字段，序列化时需原样回写。 */
+    extraFields?: Record<string, unknown>;
 }
 
-interface ObsidianCanvasTextNode {
+interface ObsidianCanvasTextNode extends Record<string, unknown> {
     id: string;
     type: "text";
     x: number;
@@ -99,9 +111,10 @@ interface ObsidianCanvasTextNode {
     height: number;
     text?: string;
     color?: string;
+    parentId?: string;
 }
 
-interface ObsidianCanvasFileNode {
+interface ObsidianCanvasFileNode extends Record<string, unknown> {
     id: string;
     type: "file";
     x: number;
@@ -110,9 +123,10 @@ interface ObsidianCanvasFileNode {
     height: number;
     file?: string;
     color?: string;
+    parentId?: string;
 }
 
-interface ObsidianCanvasGroupNode {
+interface ObsidianCanvasGroupNode extends Record<string, unknown> {
     id: string;
     type: "group";
     x: number;
@@ -122,6 +136,7 @@ interface ObsidianCanvasGroupNode {
     label?: string;
     color?: string;
     background?: string;
+    parentId?: string;
 }
 
 type ObsidianCanvasNode =
@@ -129,7 +144,7 @@ type ObsidianCanvasNode =
     | ObsidianCanvasFileNode
     | ObsidianCanvasGroupNode;
 
-interface ObsidianCanvasEdge {
+interface ObsidianCanvasEdge extends Record<string, unknown> {
     id: string;
     fromNode: string;
     toNode: string;
@@ -139,16 +154,23 @@ interface ObsidianCanvasEdge {
     color?: string;
 }
 
-interface ObsidianCanvasDocument {
+interface ObsidianCanvasDocument extends Record<string, unknown> {
     nodes?: ObsidianCanvasNode[];
     edges?: ObsidianCanvasEdge[];
-    metadata?: {
-        title?: string;
-    };
+    metadata?: CanvasDocumentMetadata;
 }
 
 const DEFAULT_NODE_WIDTH = 260;
 const DEFAULT_NODE_HEIGHT = 160;
+const GROUP_SELECTION_PADDING_X = 28;
+const GROUP_SELECTION_PADDING_Y = 24;
+
+interface CanvasRect {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
 
 /**
  * @function createEmptyCanvasDocument
@@ -177,17 +199,33 @@ export function parseCanvasDocument(content: string): CanvasDocument {
         throw new Error("Canvas 文件内容不是有效对象");
     }
 
-    const nodes = Array.isArray(parsed.nodes)
-        ? parsed.nodes.map((node) => toFlowNode(node))
+    const {
+        nodes: rawNodes,
+        edges: rawEdges,
+        metadata: rawMetadata,
+        ...documentExtraFields
+    } = parsed;
+
+    const absolutePositions = new Map<string, { x: number; y: number }>();
+    (Array.isArray(rawNodes) ? rawNodes : []).forEach((node) => {
+        absolutePositions.set(node.id, {
+            x: Number.isFinite(node.x) ? node.x : 0,
+            y: Number.isFinite(node.y) ? node.y : 0,
+        });
+    });
+
+    const nodes = Array.isArray(rawNodes)
+        ? sortNodesForSubFlowRuntime(rawNodes.map((node) => toFlowNode(node, absolutePositions)))
         : [];
-    const edges = Array.isArray(parsed.edges)
-        ? parsed.edges.map((edge) => toFlowEdge(edge))
+    const edges = Array.isArray(rawEdges)
+        ? rawEdges.map((edge) => toFlowEdge(edge))
         : [];
 
     return {
         nodes,
         edges,
-        metadata: parsed.metadata,
+        metadata: rawMetadata ? { ...rawMetadata } : undefined,
+        extraFields: documentExtraFields,
     };
 }
 
@@ -198,14 +236,17 @@ export function parseCanvasDocument(content: string): CanvasDocument {
  * @returns 标准化 JSON 文本。
  */
 export function serializeCanvasDocument(document: CanvasDocument): string {
+    const absolutePositions = buildAbsolutePositionMap(document.nodes);
+    const orderedNodes = sortNodesForSubFlowRuntime(document.nodes);
     const serialized: ObsidianCanvasDocument = {
-        nodes: document.nodes.map((node) => toObsidianNode(node)),
+        ...(document.extraFields ?? {}),
+        nodes: orderedNodes.map((node) => toObsidianNode(node, absolutePositions)),
         edges: document.edges.map((edge) => toObsidianEdge(edge)),
     };
 
-    if (document.metadata?.title) {
+    if (document.metadata) {
         serialized.metadata = {
-            title: document.metadata.title,
+            ...document.metadata,
         };
     }
 
@@ -281,8 +322,9 @@ export function createFileNode(
 export function createGroupNode(id: string, x: number, y: number): CanvasFlowNode {
     return {
         id,
-        type: "ofiveCanvasNode",
+        type: "group",
         position: { x, y },
+        className: "canvas-tab__group-node",
         style: {
             width: 360,
             height: 220,
@@ -292,88 +334,273 @@ export function createGroupNode(id: string, x: number, y: number): CanvasFlowNod
             label: "Group",
             color: "var(--canvas-node-group-accent)",
             background: "var(--canvas-node-group-surface)",
+            extraFields: {},
         },
     };
 }
 
-function toFlowNode(node: ObsidianCanvasNode): CanvasFlowNode {
+/**
+ * @function createGroupFromSelection
+ * @description 为一组顶层节点创建 xyflow sub-flow group，并将成员节点切换为 `parentId` 模式。
+ * @param document 当前运行时文档。
+ * @param selectedNodeIds 当前选中的节点 ID 列表。
+ * @param groupId 新分组节点 ID。
+ * @returns 创建后的文档；若选中项不满足建组条件则返回 null。
+ */
+export function createGroupFromSelection(
+    document: CanvasDocument,
+    selectedNodeIds: string[],
+    groupId: string,
+): CanvasDocument | null {
+    const selectedIdSet = new Set(selectedNodeIds);
+    const memberNodes = document.nodes.filter((node) => {
+        if (!selectedIdSet.has(node.id)) {
+            return false;
+        }
+
+        if (node.data.kind === "group") {
+            return false;
+        }
+
+        return !node.parentId;
+    });
+
+    if (memberNodes.length < 2) {
+        return null;
+    }
+
+    const absolutePositions = buildAbsolutePositionMap(document.nodes);
+    const selectionBounds = getBoundsForNodes(memberNodes, absolutePositions);
+    const groupX = selectionBounds.x - GROUP_SELECTION_PADDING_X;
+    const groupY = selectionBounds.y - GROUP_SELECTION_PADDING_Y;
+    const nextGroupNode = {
+        ...createGroupNode(groupId, groupX, groupY),
+        style: {
+            width: selectionBounds.width + GROUP_SELECTION_PADDING_X * 2,
+            height: selectionBounds.height + GROUP_SELECTION_PADDING_Y * 2,
+        },
+    } satisfies CanvasFlowNode;
+
+    const nextNodes = document.nodes.map((node) => {
+        if (!selectedIdSet.has(node.id) || node.data.kind === "group" || node.parentId) {
+            return node;
+        }
+
+        const absolutePosition = absolutePositions.get(node.id);
+        if (!absolutePosition) {
+            return node;
+        }
+
+        return {
+            ...node,
+            parentId: groupId,
+            extent: "parent",
+            position: {
+                x: absolutePosition.x - groupX,
+                y: absolutePosition.y - groupY,
+            },
+        } satisfies CanvasFlowNode;
+    });
+
+    return {
+        ...document,
+        nodes: sortNodesForSubFlowRuntime([nextGroupNode, ...nextNodes]),
+    };
+}
+
+/**
+ * @function ungroupCanvasDocument
+ * @description 移除一个分组节点，并将其成员节点恢复为顶层节点。
+ * @param document 当前运行时文档。
+ * @param groupId 目标分组 ID。
+ * @returns 更新后的文档。
+ */
+export function ungroupCanvasDocument(document: CanvasDocument, groupId: string): CanvasDocument {
+    const groupNode = document.nodes.find((node) => node.id === groupId && node.data.kind === "group");
+    if (!groupNode) {
+        return document;
+    }
+
+    const groupAbsolutePositions = buildAbsolutePositionMap(document.nodes);
+    const groupAbsolutePosition = groupAbsolutePositions.get(groupId);
+    if (!groupAbsolutePosition) {
+        return document;
+    }
+
+    const nextNodes = document.nodes
+        .filter((node) => node.id !== groupId)
+        .map((node) => {
+            if (node.parentId !== groupId) {
+                return node;
+            }
+
+            return {
+                ...node,
+                parentId: undefined,
+                extent: undefined,
+                position: {
+                    x: groupAbsolutePosition.x + node.position.x,
+                    y: groupAbsolutePosition.y + node.position.y,
+                },
+            } satisfies CanvasFlowNode;
+        });
+
+    return {
+        ...document,
+        nodes: sortNodesForSubFlowRuntime(nextNodes),
+    };
+}
+
+function toFlowNode(
+    node: ObsidianCanvasNode,
+    absolutePositions: Map<string, { x: number; y: number }>,
+): CanvasFlowNode {
+    const parentId = normalizeParentId(node.parentId);
+    const absoluteX = Number.isFinite(node.x) ? node.x : 0;
+    const absoluteY = Number.isFinite(node.y) ? node.y : 0;
+    const parentAbsolutePosition = parentId ? absolutePositions.get(parentId) : undefined;
     const common = {
         id: node.id,
-        type: "ofiveCanvasNode" as const,
+        type: node.type === "group" ? "group" as const : "ofiveCanvasNode" as const,
         position: {
-            x: Number.isFinite(node.x) ? node.x : 0,
-            y: Number.isFinite(node.y) ? node.y : 0,
+            x: parentAbsolutePosition ? absoluteX - parentAbsolutePosition.x : absoluteX,
+            y: parentAbsolutePosition ? absoluteY - parentAbsolutePosition.y : absoluteY,
         },
         style: {
             width: Number.isFinite(node.width) ? node.width : DEFAULT_NODE_WIDTH,
             height: Number.isFinite(node.height) ? node.height : DEFAULT_NODE_HEIGHT,
         },
+        parentId,
+        extent: parentId ? "parent" as const : undefined,
     };
 
     if (node.type === "file") {
-        const filePath = typeof node.file === "string" ? node.file : "";
+        const {
+            id: _id,
+            type: _type,
+            x: _x,
+            y: _y,
+            width: _width,
+            height: _height,
+            file,
+            color,
+            parentId: _parentId,
+            ...extraFields
+        } = node;
+        const filePath = typeof file === "string" ? file : "";
         return {
             ...common,
             data: {
                 kind: "file",
                 label: filePath.split("/").pop() ?? filePath,
                 filePath,
-                color: node.color,
+                color,
+                extraFields,
             },
         };
     }
 
     if (node.type === "group") {
+        const {
+            id: _id,
+            type: _type,
+            x: _x,
+            y: _y,
+            width: _width,
+            height: _height,
+            label,
+            color,
+            background,
+            parentId: _parentId,
+            ...extraFields
+        } = node;
         return {
             ...common,
+            className: "canvas-tab__group-node",
             data: {
                 kind: "group",
-                label: node.label ?? "Group",
-                color: node.color,
-                background: node.background,
+                label: typeof label === "string" && label.trim() ? label : "Group",
+                color,
+                background,
+                extraFields,
             },
         };
     }
+
+    const {
+        id: _id,
+        type: _type,
+        x: _x,
+        y: _y,
+        width: _width,
+        height: _height,
+        text,
+        color,
+        parentId: _parentId,
+        ...extraFields
+    } = node;
 
     return {
         ...common,
         data: {
             kind: "text",
             label: "Text",
-            text: node.text ?? "",
-            color: node.color,
+            text: typeof text === "string" ? text : "",
+            color,
+            extraFields,
         },
     };
 }
 
 function toFlowEdge(edge: ObsidianCanvasEdge): CanvasFlowEdge {
+    const {
+        id,
+        fromNode,
+        toNode,
+        fromSide,
+        toSide,
+        label,
+        color,
+        ...extraFields
+    } = edge;
+
     return {
-        id: edge.id,
-        source: edge.fromNode,
-        target: edge.toNode,
-        sourceHandle: normalizeCanvasSide(edge.fromSide),
-        targetHandle: normalizeCanvasSide(edge.toSide),
-        label: edge.label,
-        style: edge.color ? { stroke: edge.color } : undefined,
+        id,
+        source: fromNode,
+        target: toNode,
+        sourceHandle: normalizeCanvasSide(fromSide),
+        targetHandle: normalizeCanvasSide(toSide),
+        label,
+        style: color ? { stroke: color } : undefined,
         data: {
-            label: edge.label,
-            color: edge.color,
+            label,
+            color,
+            extraFields,
         },
     };
 }
 
-function toObsidianNode(node: CanvasFlowNode): ObsidianCanvasNode {
+function toObsidianNode(
+    node: CanvasFlowNode,
+    absolutePositions: Map<string, { x: number; y: number }>,
+): ObsidianCanvasNode {
     const width = coerceNumericSize(node.style?.width, node.width, DEFAULT_NODE_WIDTH);
     const height = coerceNumericSize(node.style?.height, node.height, DEFAULT_NODE_HEIGHT);
+    const absolutePosition = absolutePositions.get(node.id) ?? node.position;
+    const baseNode = {
+        ...(node.data.extraFields ?? {}),
+        id: node.id,
+        type: node.data.kind,
+        x: absolutePosition.x,
+        y: absolutePosition.y,
+        width,
+        height,
+        parentId: node.parentId,
+    };
 
     if (node.data.kind === "file") {
         return {
-            id: node.id,
-            type: "file",
-            x: node.position.x,
-            y: node.position.y,
-            width,
-            height,
+            ...baseNode,
             file: node.data.filePath,
             color: node.data.color,
         };
@@ -381,12 +608,7 @@ function toObsidianNode(node: CanvasFlowNode): ObsidianCanvasNode {
 
     if (node.data.kind === "group") {
         return {
-            id: node.id,
-            type: "group",
-            x: node.position.x,
-            y: node.position.y,
-            width,
-            height,
+            ...baseNode,
             label: node.data.label,
             color: node.data.color,
             background: node.data.background,
@@ -394,12 +616,7 @@ function toObsidianNode(node: CanvasFlowNode): ObsidianCanvasNode {
     }
 
     return {
-        id: node.id,
-        type: "text",
-        x: node.position.x,
-        y: node.position.y,
-        width,
-        height,
+        ...baseNode,
         text: node.data.text ?? "",
         color: node.data.color,
     };
@@ -407,6 +624,7 @@ function toObsidianNode(node: CanvasFlowNode): ObsidianCanvasNode {
 
 function toObsidianEdge(edge: CanvasFlowEdge): ObsidianCanvasEdge {
     return {
+        ...(edge.data?.extraFields ?? {}),
         id: edge.id,
         fromNode: edge.source,
         toNode: edge.target,
@@ -415,6 +633,98 @@ function toObsidianEdge(edge: CanvasFlowEdge): ObsidianCanvasEdge {
         label: edge.data?.label ?? (typeof edge.label === "string" ? edge.label : undefined),
         color: edge.data?.color,
     };
+}
+
+/**
+ * @function sortNodesForSubFlowRuntime
+ * @description 确保父节点出现在子节点之前，以满足 xyflow sub-flow 的处理顺序要求。
+ * @param nodes 节点列表。
+ * @returns 重新排序后的节点列表。
+ */
+function sortNodesForSubFlowRuntime(nodes: CanvasFlowNode[]): CanvasFlowNode[] {
+    return [...nodes].sort((left, right) => {
+        const leftRank = left.parentId ? 1 : 0;
+        const rightRank = right.parentId ? 1 : 0;
+
+        if (leftRank !== rightRank) {
+            return leftRank - rightRank;
+        }
+
+        return left.id.localeCompare(right.id);
+    });
+}
+
+/**
+ * @function buildAbsolutePositionMap
+ * @description 基于运行时节点构建绝对坐标映射，用于 sub-flow 的读写转换。
+ * @param nodes 节点列表。
+ * @returns 节点绝对坐标表。
+ */
+function buildAbsolutePositionMap(nodes: CanvasFlowNode[]): Map<string, { x: number; y: number }> {
+    const absolutePositions = new Map<string, { x: number; y: number }>();
+
+    sortNodesForSubFlowRuntime(nodes).forEach((node) => {
+        const parentAbsolutePosition = node.parentId
+            ? absolutePositions.get(node.parentId)
+            : undefined;
+
+        absolutePositions.set(node.id, {
+            x: parentAbsolutePosition ? parentAbsolutePosition.x + node.position.x : node.position.x,
+            y: parentAbsolutePosition ? parentAbsolutePosition.y + node.position.y : node.position.y,
+        });
+    });
+
+    return absolutePositions;
+}
+
+/**
+ * @function getBoundsForNodes
+ * @description 计算一组节点在绝对坐标系下的外接矩形。
+ * @param nodes 节点列表。
+ * @param absolutePositions 节点绝对坐标表。
+ * @returns 外接矩形。
+ */
+function getBoundsForNodes(
+    nodes: CanvasFlowNode[],
+    absolutePositions: Map<string, { x: number; y: number }>,
+): CanvasRect {
+    const rects = nodes.map((node) => getAbsoluteNodeRect(node, absolutePositions));
+    const left = Math.min(...rects.map((rect) => rect.x));
+    const top = Math.min(...rects.map((rect) => rect.y));
+    const right = Math.max(...rects.map((rect) => rect.x + rect.width));
+    const bottom = Math.max(...rects.map((rect) => rect.y + rect.height));
+
+    return {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+    };
+}
+
+/**
+ * @function getAbsoluteNodeRect
+ * @description 提取节点在绝对坐标系中的几何矩形。
+ * @param node 运行时节点。
+ * @param absolutePositions 节点绝对坐标表。
+ * @returns 节点矩形。
+ */
+function getAbsoluteNodeRect(
+    node: CanvasFlowNode,
+    absolutePositions: Map<string, { x: number; y: number }>,
+): CanvasRect {
+    const position = absolutePositions.get(node.id) ?? node.position;
+
+    return {
+        x: position.x,
+        y: position.y,
+        width: coerceNumericSize(node.style?.width, node.width, DEFAULT_NODE_WIDTH),
+        height: coerceNumericSize(node.style?.height, node.height, DEFAULT_NODE_HEIGHT),
+    };
+}
+
+function normalizeParentId(parentId: unknown): string | undefined {
+    return typeof parentId === "string" && parentId.trim() ? parentId : undefined;
 }
 
 function normalizeCanvasSide(side: unknown): CanvasSide {

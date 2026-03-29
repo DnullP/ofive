@@ -457,7 +457,7 @@ fn save_canvas_document_capability() -> CapabilityDescriptor {
         id: "vault.save_canvas_document".to_string(),
         api_version: CAPABILITY_API_VERSION.to_string(),
         display_name: "Save Canvas Document".to_string(),
-        description: "Overwrite one canvas file in the current vault using the structured canvas document contract. Always call vault.get_canvas_document first, modify the returned document, and then save the full document back. Each node must remain a complete object including id, type, x, y, width, and height; canvas geometry may use floating-point numbers. Preserve unchanged nodes, edges, metadata, and unknown fields unless you intentionally remove them.".to_string(),
+        description: "Overwrite one canvas file in the current vault using the structured canvas document contract. Always call vault.get_canvas_document first, modify the returned document, and then save the full document back. Each node must remain a complete object including id, type, x, y, width, and height; canvas geometry may use floating-point numbers. Text nodes should set the text field to the visible content you want to render. Grouping uses xyflow sub-flow semantics: when a node belongs to a group, set parentId on the child node to the group node id instead of inferring membership from the group rectangle. Group nodes still need x, y, width, and height because of the canvas contract, but that rectangle is only an initial frame rather than the source of truth for membership. Each edge must remain a complete object including id, fromNode, and toNode, and should preserve fromSide, toSide, label, color, and unknown fields unless you intentionally change them. Use fromSide and toSide to control which anchor point on each node the line uses; valid values are top, right, bottom, and left. Prefer connecting real content nodes instead of treating a group frame as the semantic endpoint of an edge unless the user explicitly requests it. Preserve unchanged nodes, edges, metadata, and unknown fields unless you intentionally remove them. When arranging nodes, prefer the topology implied by edge endpoints: a left-to-right edge should keep the target on the right, a right-to-left edge should keep the target on the left, a top-to-bottom edge should keep the target below, and a bottom-to-top edge should keep the target above. Choose fromSide and toSide to match the nearest topology direction, so the line exits from the side closest to the target and enters on the side closest to the source. Keep siblings aligned on the same flow axis and avoid unnecessary edge crossings when possible.".to_string(),
         kind: CapabilityKind::Write,
         input_schema: json!({
             "type": "object",
@@ -468,8 +468,36 @@ fn save_canvas_document_capability() -> CapabilityDescriptor {
                     "type": "object",
                     "required": ["nodes", "edges"],
                     "properties": {
-                        "nodes": {"type": "array"},
-                        "edges": {"type": "array"},
+                        "nodes": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "type", "x", "y", "width", "height"],
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "type": {"type": "string", "enum": ["text", "file", "group"]},
+                                    "x": {"type": "number"},
+                                    "y": {"type": "number"},
+                                    "width": {"type": "number"},
+                                    "height": {"type": "number"},
+                                    "parentId": {"type": "string"}
+                                }
+                            }
+                        },
+                        "edges": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "fromNode", "toNode"],
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "fromNode": {"type": "string"},
+                                    "toNode": {"type": "string"},
+                                    "fromSide": {"type": "string", "enum": ["top", "right", "bottom", "left"]},
+                                    "toSide": {"type": "string", "enum": ["top", "right", "bottom", "left"]}
+                                }
+                            }
+                        },
                         "metadata": {"type": "object"}
                     }
                 }
