@@ -10,6 +10,7 @@
  */
 
 import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { BookOpen, SquarePen } from "lucide-react";
 import type { IDockviewPanelProps } from "dockview";
 import { EditorView } from "codemirror";
 import { Compartment, EditorState } from "@codemirror/state";
@@ -41,14 +42,12 @@ import { createConditionContext } from "../../../host/conditions/conditionEvalua
 import { useVaultState } from "../../../host/store/vaultStore";
 import {
     createVaultBinaryFile,
-    renameVaultMarkdownFile,
     segmentChineseText,
     type ChineseSegmentToken,
 } from "../../../api/vaultApi";
 import { useConfigState, DEFAULT_EDITOR_FONT_FAMILY } from "../../../host/store/configStore";
 import {
     subscribeEditorCommandRequestedEvent,
-    subscribeEditorRenameRequestedEvent,
     subscribeEditorRevealRequestedEvent,
 } from "../../../host/events/appEventBus";
 import { useActiveEditor } from "../../../host/store/activeEditorStore";
@@ -63,7 +62,6 @@ import { createFrontmatterSyntaxExtension } from "./syntaxPlugins/frontmatterSyn
 import { createCodeBlockHighlightExtension } from "./syntaxPlugins/codeBlockHighlightExtension";
 import { createLatexSyntaxExtension } from "./syntaxPlugins/latexSyntaxExtension";
 import { createTaskCheckboxToggleExtension } from "./syntaxPlugins/listSyntaxRenderer";
-import { resolveParentDirectory } from "./pathUtils";
 import { createCodeMirrorThemeExtension } from "./codemirrorTheme";
 import { collectManagedEditorShortcutCandidates } from "./editorShortcutPolicy";
 import { attachPasteImageHandler } from "./editorPasteImageHandler";
@@ -82,6 +80,19 @@ import {
     resolveChinesePreviousWordBoundary,
     resolveEnglishPreviousWordBoundary,
 } from "./editorWordBoundaries";
+import {
+    canExecuteEditorNativeCommandInMode,
+    canMutateEditorDocument,
+    toggleEditorDisplayMode,
+} from "./editorModePolicy";
+import { MarkdownReadView } from "./MarkdownReadView";
+import {
+    updateEditorDisplayMode,
+    useEditorDisplayModeState,
+    type EditorDisplayMode,
+} from "../../../host/store/editorDisplayModeStore";
+import { evaluateReadModeRenderGuard } from "./readModeRenderGuard";
+import { describeRenderFeature } from "./renderParityContract";
 import {
     registerVimTokenProvider,
     unregisterVimTokenProvider,
@@ -313,8 +324,8 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         collectManagedEditorShortcutCandidates(bindingsRef.current),
     );
     const vimModeEnabledRef = useRef<boolean>(false);
+    const displayModeRef = useRef<EditorDisplayMode>("edit");
     const currentFilePathRef = useRef<string>(String(props.params.path ?? i18n.t("editor.untitledFile")));
-    const fileNameInputRef = useRef<HTMLInputElement | null>(null);
     const segmentationCacheRef = useRef<Map<number, SegmentationCacheItem>>(new Map());
     const segmentationTimerRef = useRef<number | null>(null);
     const vimModeCompartmentRef = useRef<Compartment>(new Compartment());
@@ -340,57 +351,63 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     const editorTabSize = featureSettings.editorTabSize;
     const editorLineWrapping = featureSettings.editorLineWrapping;
     const editorLineNumbers = featureSettings.editorLineNumbers;
+    const currentFilePath = String(props.params.path ?? i18n.t("editor.untitledFile"));
+    const initialDoc = useMemo(() => {
+        const content = props.params.content;
+        if (typeof content === "string") {
+            return content;
+        }
+        return buildDefaultContent(currentFilePath);
+    }, [props.params.content, currentFilePath]);
+    const [readContent, setReadContent] = useState<string>(initialDoc);
 
-    const [currentFilePath, setCurrentFilePath] = useState<string>(
-        String(props.params.path ?? i18n.t("editor.untitledFile")),
-    );
-    const [isEditingFileName, setIsEditingFileName] = useState<boolean>(false);
-    const [fileNameDraft, setFileNameDraft] = useState<string>(
-        String(props.params.path ?? i18n.t("editor.untitledFile")).split("/").pop() ?? i18n.t("editor.untitledFile"),
-    );
-    const [renameError, setRenameError] = useState<string | null>(null);
     const articleId = props.api.id;
     const articleSnapshot = useArticleById(articleId);
     const activeEditor = useActiveEditor();
+    const { displayMode } = useEditorDisplayModeState();
     const isActiveEditor = activeEditor?.articleId === articleId;
+    const readModeGuard = useMemo(
+        () => evaluateReadModeRenderGuard(readContent),
+        [readContent],
+    );
+    const effectiveDisplayMode: EditorDisplayMode =
+        displayMode === "read" && readModeGuard.canRenderReadMode
+            ? "read"
+            : "edit";
+    const isReadModeGuardBlocked = displayMode === "read" && !readModeGuard.canRenderReadMode;
+    const isReadingMode = effectiveDisplayMode === "read";
+    const modeToggleLabel = displayMode === "read"
+        ? i18n.t("editor.switchToEditMode")
+        : i18n.t("editor.switchToReadMode");
+    const readModeGuardMessage = isReadModeGuardBlocked
+        ? i18n.t("editor.readModeGuardBlocked", {
+            features: readModeGuard.unsupportedFeatures
+                .map((feature) => describeRenderFeature(feature))
+                .join(", "),
+        })
+        : null;
 
     useEffect(() => {
         currentFilePathRef.current = currentFilePath;
     }, [currentFilePath]);
 
     useEffect(() => {
-        if (!isEditingFileName) {
-            return;
-        }
+        displayModeRef.current = effectiveDisplayMode;
+    }, [effectiveDisplayMode]);
 
-        const inputElement = fileNameInputRef.current;
-        if (!inputElement) {
-            return;
-        }
-
-        inputElement.focus();
-        const extensionMatch = inputElement.value.match(/\.(md|markdown)$/i);
-        const selectEnd = extensionMatch
-            ? inputElement.value.length - extensionMatch[0].length
-            : inputElement.value.length;
-        inputElement.setSelectionRange(0, Math.max(0, selectEnd));
-    }, [isEditingFileName]);
-
-    /* 订阅事件总线的重命名请求，当 articleId 匹配时进入文件名内联编辑模式 */
     useEffect(() => {
-        const unlisten = subscribeEditorRenameRequestedEvent((payload) => {
-            if (payload.articleId !== articleId) {
-                return;
-            }
-            const fileName = currentFilePathRef.current.split("/").pop() ?? currentFilePathRef.current;
-            setFileNameDraft(fileName);
-            setIsEditingFileName(true);
-            setRenameError(null);
-            console.info("[editor] rename mode activated by command", { articleId });
-        });
+        setReadContent(initialDoc);
+    }, [initialDoc]);
 
-        return unlisten;
-    }, [articleId]);
+    useEffect(() => {
+        if (effectiveDisplayMode !== "edit" || !isActiveEditor) {
+            return;
+        }
+
+        window.requestAnimationFrame(() => {
+            viewRef.current?.focus();
+        });
+    }, [effectiveDisplayMode, isActiveEditor]);
 
     /* 仅当前活跃 editor 订阅定位请求，避免非活跃 tab 响应外部导航事件 */
     useEffect(() => {
@@ -419,7 +436,9 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 selection: { anchor: targetLine.from },
                 scrollIntoView: true,
             });
-            view.focus();
+            if (displayModeRef.current === "edit") {
+                view.focus();
+            }
 
             console.info("[editor] reveal requested event handled", {
                 articleId,
@@ -444,6 +463,15 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     const executeEditorNativeCommand = (commandId: EditorNativeCommandId): boolean => {
         const view = viewRef.current;
         if (!view) {
+            return false;
+        }
+
+        if (!canExecuteEditorNativeCommandInMode(displayModeRef.current, commandId)) {
+            console.info("[editor] native command skipped in current mode", {
+                articleId,
+                commandId,
+                displayMode: displayModeRef.current,
+            });
             return false;
         }
 
@@ -541,7 +569,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
             }
 
             const handled = executeEditorNativeCommand(payload.commandId);
-            if (handled) {
+            if (handled && displayModeRef.current === "edit") {
                 window.requestAnimationFrame(() => {
                     viewRef.current?.focus();
                 });
@@ -708,14 +736,6 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         });
     };
 
-    const initialDoc = useMemo(() => {
-        const content = props.params.content;
-        if (typeof content === "string") {
-            return content;
-        }
-        return buildDefaultContent(currentFilePath);
-    }, [props.params.content, currentFilePath]);
-
     useEffect(() => {
         if (!hostRef.current || viewRef.current) {
             return;
@@ -767,10 +787,12 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 }),
                 EditorView.updateListener.of((update) => {
                     if (update.docChanged) {
+                        const nextContent = update.state.doc.toString();
+                        setReadContent(nextContent);
                         reportArticleContent({
                             articleId,
                             path: currentFilePathRef.current,
-                            content: update.state.doc.toString(),
+                            content: nextContent,
                         });
                     }
 
@@ -825,6 +847,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
             {
                 getCurrentFilePath: () => currentFilePathRef.current,
                 createBinaryFile: createVaultBinaryFile,
+                canMutateDocument: () => canMutateEditorDocument(displayModeRef.current),
             },
         );
 
@@ -898,6 +921,9 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 !event.altKey &&
                 !event.shiftKey;
             if (isCmdBackspace) {
+                if (!canMutateEditorDocument(displayModeRef.current)) {
+                    return;
+                }
                 event.preventDefault();
                 event.stopPropagation();
                 void executeSegmentedDeleteBackward(view);
@@ -1044,67 +1070,6 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         console.info("[editor] line numbers mode changed", { articleId, editorLineNumbers });
     }, [editorLineNumbers, articleId]);
 
-    const currentFileName = currentFilePath.split("/").pop() ?? currentFilePath;
-
-    const commitFileRename = async (): Promise<void> => {
-        const trimmedName = fileNameDraft.trim();
-        if (!trimmedName) {
-            setRenameError(i18n.t("editor.fileNameEmpty"));
-            return;
-        }
-
-        const safeFileName =
-            trimmedName.endsWith(".md") || trimmedName.endsWith(".markdown")
-                ? trimmedName
-                : `${trimmedName}.md`;
-        const parentDirectory = resolveParentDirectory(currentFilePath);
-        const nextRelativePath = parentDirectory
-            ? `${parentDirectory}/${safeFileName}`
-            : safeFileName;
-
-        if (nextRelativePath === currentFilePath) {
-            setIsEditingFileName(false);
-            setRenameError(null);
-            return;
-        }
-
-        try {
-            await renameVaultMarkdownFile(currentFilePath, nextRelativePath);
-            setCurrentFilePath(nextRelativePath);
-            currentFilePathRef.current = nextRelativePath;
-            props.api.setTitle(safeFileName);
-
-            const currentDoc = viewRef.current?.state.doc.toString() ?? "";
-            reportArticleContent({
-                articleId,
-                path: nextRelativePath,
-                content: currentDoc,
-            });
-            reportArticleFocus({
-                articleId,
-                path: nextRelativePath,
-                content: currentDoc,
-            });
-
-            setIsEditingFileName(false);
-            setRenameError(null);
-            console.info("[editor] rename file success", {
-                articleId,
-                from: currentFilePath,
-                to: nextRelativePath,
-            });
-        } catch (error) {
-            const message = error instanceof Error ? error.message : i18n.t("editor.renameFailed");
-            setRenameError(message);
-            console.error("[editor] rename file failed", {
-                articleId,
-                from: currentFilePath,
-                to: nextRelativePath,
-                message,
-            });
-        }
-    };
-
     useEffect(() => {
         const view = viewRef.current;
         if (!view) {
@@ -1123,6 +1088,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 insert: initialDoc,
             },
         });
+        setReadContent(initialDoc);
     }, [initialDoc]);
 
     useEffect(() => {
@@ -1151,6 +1117,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 insert: articleSnapshot.content,
             },
         });
+        setReadContent(articleSnapshot.content);
 
         console.info("[editor] synced content from editor context state", {
             articleId,
@@ -1161,54 +1128,39 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
 
     return (
         <EditorErrorBoundary>
-            <div className="cm-tab">
-                <div className="cm-tab-header" onClick={() => {
-                    setFileNameDraft(currentFileName);
-                    setIsEditingFileName(true);
-                    setRenameError(null);
-                }}>
-                    {isEditingFileName ? (
-                        <input
-                            ref={fileNameInputRef}
-                            className="cm-tab-header-input"
-                            value={fileNameDraft}
-                            onChange={(event) => {
-                                setFileNameDraft(event.target.value);
-                            }}
-                            onClick={(event) => {
-                                event.stopPropagation();
-                            }}
-                            onBlur={() => {
-                                void commitFileRename();
-                            }}
-                            onKeyDown={(event) => {
-                                const nativeEvent = event.nativeEvent;
-                                const isComposing =
-                                    nativeEvent.isComposing ||
-                                    nativeEvent.keyCode === 229;
-                                if (isComposing) {
-                                    return;
-                                }
-
-                                if (event.key === "Enter") {
-                                    event.preventDefault();
-                                    void commitFileRename();
-                                    return;
-                                }
-
-                                if (event.key === "Escape") {
-                                    event.preventDefault();
-                                    setIsEditingFileName(false);
-                                    setRenameError(null);
-                                }
-                            }}
-                        />
-                    ) : (
-                        currentFilePath
-                    )}
-                </div>
-                {renameError ? <div className="cm-tab-header-error">{renameError}</div> : null}
-                <div ref={hostRef} className="cm-tab-editor" />
+            <div className={`cm-tab ${isReadingMode ? "cm-tab-reading" : "cm-tab-editing"}`}>
+                <button
+                    type="button"
+                    className={`cm-tab-mode-toggle ${displayMode === "read" ? "is-reading" : "is-editing"}`}
+                    title={modeToggleLabel}
+                    aria-label={modeToggleLabel}
+                    aria-pressed={displayMode === "read"}
+                    onClick={() => {
+                        updateEditorDisplayMode(toggleEditorDisplayMode(displayMode));
+                    }}
+                >
+                    {displayMode === "read"
+                        ? <SquarePen size={16} strokeWidth={1.8} aria-hidden="true" />
+                        : <BookOpen size={16} strokeWidth={1.8} aria-hidden="true" />}
+                </button>
+                {isReadModeGuardBlocked ? (
+                    <div className="cm-tab-guard-banner" role="status" aria-live="polite">
+                        <div className="cm-tab-guard-title">{i18n.t("editor.readModeGuardTitle")}</div>
+                        <div className="cm-tab-guard-detail">{readModeGuardMessage}</div>
+                    </div>
+                ) : null}
+                <div
+                    ref={hostRef}
+                    className={`cm-tab-editor ${isReadingMode ? "is-hidden" : ""}`}
+                    aria-hidden={isReadingMode}
+                />
+                {isReadingMode ? (
+                    <MarkdownReadView
+                        content={readContent}
+                        currentFilePath={currentFilePath}
+                        containerApi={props.containerApi}
+                    />
+                ) : null}
             </div>
         </EditorErrorBoundary>
     );

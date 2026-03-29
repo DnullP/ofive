@@ -30,6 +30,10 @@ interface TreeNode {
 interface FileTreeProps {
   items: FileTreeItem[];
   activePath?: string | null;
+  renameRequest?: {
+    eventId: string;
+    path: string;
+  } | null;
   onOpenFile?: (item: FileTreeItem) => void;
   onRenameSubmit?: (item: FileTreeItem, draftName: string) => Promise<boolean> | boolean;
   onDeleteItem?: (item: FileTreeItem) => void;
@@ -544,6 +548,7 @@ function TreeItem({
 export function FileTree({
   items,
   activePath,
+  renameRequest,
   onOpenFile,
   onRenameSubmit,
   onDeleteItem,
@@ -558,6 +563,7 @@ export function FileTree({
 }: FileTreeProps): ReactNode {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const handledRenameRequestIdRef = useRef<string | null>(null);
   const tree = useMemo(() => buildTree(items), [items]);
   const itemByPath = useMemo(
     () => new Map(items.map((item) => [item.path.replace(/\\/g, "/"), item])),
@@ -647,7 +653,64 @@ export function FileTree({
     if (selectionAnchorPath && !itemByPath.has(selectionAnchorPath)) {
       setSelectionAnchorPath(null);
     }
-  }, [itemByPath, selectionAnchorPath]);
+
+    if (editingItemPath && !itemByPath.has(editingItemPath)) {
+      setEditingItemPath(null);
+      setRenameDraft("");
+    }
+  }, [editingItemPath, itemByPath, selectionAnchorPath]);
+
+  useEffect(() => {
+    if (!renameRequest) {
+      return;
+    }
+
+    if (handledRenameRequestIdRef.current === renameRequest.eventId) {
+      return;
+    }
+
+    const requestedPath = renameRequest.path.replace(/\\/g, "/");
+    const targetItem = itemByPath.get(requestedPath);
+    if (!targetItem) {
+      console.warn("[file-tree] rename request skipped: target item not found", {
+        path: requestedPath,
+        eventId: renameRequest.eventId,
+      });
+      return;
+    }
+
+    const ancestorPaths = collectAncestorDirectoryPaths(requestedPath);
+    const currentFileName = requestedPath.split("/").pop() ?? requestedPath;
+
+    if (ancestorPaths.length > 0) {
+      setExpandedFolders((previousValue) => {
+        const nextValue = new Set(previousValue);
+        let changed = false;
+
+        ancestorPaths.forEach((ancestorPath) => {
+          if (!nextValue.has(ancestorPath)) {
+            nextValue.add(ancestorPath);
+            changed = true;
+          }
+        });
+
+        return changed ? nextValue : previousValue;
+      });
+    }
+
+    setSelectedPaths(new Set([requestedPath]));
+    setSelectionAnchorPath(requestedPath);
+    setCreatingType(null);
+    setCreatingParentPath(null);
+    setCreatingDraft("");
+    setEditingItemPath(requestedPath);
+    setRenameDraft(currentFileName);
+    handledRenameRequestIdRef.current = renameRequest.eventId;
+    console.info("[file-tree] rename mode activated by request", {
+      path: requestedPath,
+      eventId: renameRequest.eventId,
+    });
+  }, [itemByPath, renameRequest]);
 
   const buildSelectionItems = (paths: Set<string>): FileTreeItem[] =>
     Array.from(paths)

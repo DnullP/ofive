@@ -111,6 +111,7 @@ pub struct AiChatStreamEventPayload {
     pub delta_text: Option<String>,
     pub accumulated_text: Option<String>,
     pub debug_title: Option<String>,
+    pub debug_level: Option<String>,
     pub debug_text: Option<String>,
     pub confirmation_id: Option<String>,
     pub confirmation_hint: Option<String>,

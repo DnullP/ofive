@@ -4,6 +4,7 @@
 //! 文件读取与块级结构过滤等技术细节，不直接依赖 Tauri `State`。
 
 pub(crate) mod backlinks;
+pub(crate) mod canvas_document;
 pub(crate) mod frontmatter_query;
 pub(crate) mod graph;
 pub(crate) mod markdown_ast;

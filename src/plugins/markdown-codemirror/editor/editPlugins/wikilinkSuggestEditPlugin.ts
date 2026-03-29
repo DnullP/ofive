@@ -52,7 +52,6 @@ import {
     type WikiLinkSuggestionItem,
 } from "../../../../api/vaultApi";
 import {
-    buildWikiLinkSuggestionAcceptance,
     detectOpenWikiLink,
     resolveWikiLinkSuggestionAcceptanceAtCursor,
 } from "./wikilinkSuggestUtils";
@@ -364,6 +363,7 @@ function createWikiLinkSuggestExtensions(): Extension[] {
 
                     view.dispatch({
                         effects: setSuggestState.of({
+                            ...currentState,
                             active: true,
                             query,
                             items,

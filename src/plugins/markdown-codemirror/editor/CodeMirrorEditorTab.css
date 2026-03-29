@@ -1,36 +1,45 @@
 /* 编辑器根容器：保证 Tab 内垂直布局占满可用空间 */
 .cm-tab {
+    position: relative;
     height: 100%;
     display: flex;
     flex-direction: column;
 }
 
-/* 编辑器头部：显示当前文件路径 */
-.cm-tab-header {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--editor-panel-border-color);
-    color: var(--editor-muted-text-color);
-    font-size: 12px;
-    user-select: none;
-    cursor: text;
-}
-
-/* 编辑模式文件名输入框：支持重命名当前文件 */
-.cm-tab-header-input {
-    width: 100%;
+/* 编辑器模式切换按钮：固定在右上角，用于切换编辑态与阅读态。 */
+.cm-tab-mode-toggle {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    z-index: 10;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
     border: 1px solid var(--editor-panel-border-color);
-    border-radius: 6px;
-    background: var(--editor-panel-bg-color);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--editor-panel-bg-elevated-color) 86%, transparent);
     color: var(--editor-panel-text-color);
-    font-size: 12px;
-    padding: 4px 8px;
+    box-shadow: var(--editor-panel-shadow-light);
+    cursor: pointer;
 }
 
-/* 文件重命名错误提示：展示校验或后端返回错误 */
-.cm-tab-header-error {
-    padding: 6px 12px;
-    color: var(--editor-panel-muted-text-color);
-    font-size: 12px;
+/* 编辑器模式切换按钮悬浮态：提升图标的可发现性。 */
+.cm-tab-mode-toggle:hover {
+    background: var(--editor-panel-bg-elevated-color);
+    color: var(--editor-link-color);
+}
+
+/* 编辑器模式切换按钮聚焦态：提供清晰的键盘焦点环。 */
+.cm-tab-mode-toggle:focus-visible {
+    outline: 2px solid var(--editor-link-color);
+    outline-offset: 2px;
+}
+
+/* 阅读态按钮：使用链接色提示当前处于阅读模式。 */
+.cm-tab-mode-toggle.is-reading {
+    color: var(--editor-link-color);
 }
 
 /* 错误边界降级 UI 容器：编辑器渲染异常时展示错误信息和重试按钮 */
@@ -66,10 +75,141 @@
     cursor: pointer;
 }
 
+/* 阅读态 guard 提示：当文档包含未对齐渲染特性时，明确阻止错误阅读态。 */
+.cm-tab-guard-banner {
+    margin: 46px 16px 0;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--editor-link-color) 28%, var(--editor-panel-border-color));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--editor-panel-bg-elevated-color) 88%, var(--editor-link-color) 12%);
+    color: var(--editor-panel-text-color);
+}
+
+/* 阅读态 guard 标题：强调当前是被一致性机制主动拦截。 */
+.cm-tab-guard-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--editor-link-color);
+}
+
+/* 阅读态 guard 详情：给出阻止原因，方便用户判断为何未切入阅读态。 */
+.cm-tab-guard-detail {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--editor-panel-muted-text-color);
+}
+
 /* 编辑器挂载容器：承载 CodeMirror DOM */
 .cm-tab-editor {
     min-height: 0;
     flex: 1;
+}
+
+/* 阅读态下隐藏 CodeMirror 宿主，避免显示源码编辑界面。 */
+.cm-tab-editor.is-hidden {
+    display: none;
+}
+
+/* 阅读态容器：复用编辑器内容宽度与留白，保持切换前后的版式稳定。 */
+.cm-tab-reader {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 44px 32px 24px;
+    color: var(--editor-text-color);
+    background: var(--editor-bg-color);
+    line-height: 1.6;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+/* 阅读态正文版心：统一承载所有 Markdown 内容，避免各块元素单独限宽导致不居中。 */
+.cm-tab-reader-content {
+    max-width: 800px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* 阅读态正文内容：覆盖全局 body 的 user-select:none，允许用户选择和复制文本。 */
+.cm-tab-reader-content,
+.cm-tab-reader-content * {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+/* 阅读态文本选区：与编辑态保持一致的选中高亮。 */
+.cm-tab-reader ::selection {
+    background: var(--editor-selection-bg-color);
+    color: var(--editor-selection-text-color);
+}
+
+/* 阅读态段落：使用与编辑器一致的垂直节奏。 */
+.cm-tab-reader p {
+    margin: 0 0 0.9em;
+}
+
+/* 阅读态标题：沿用编辑器标题的排版间距。 */
+.cm-tab-reader h1,
+.cm-tab-reader h2,
+.cm-tab-reader h3,
+.cm-tab-reader h4,
+.cm-tab-reader h5,
+.cm-tab-reader h6 {
+    margin: 0.2em auto 0.45em;
+}
+
+/* 阅读态列表：与编辑器列表密度对齐。 */
+.cm-tab-reader-list {
+    margin: 0 0 0.9em;
+    padding-left: 1.5em;
+}
+
+/* 阅读态列表项：保持可读的行高与间距。 */
+.cm-tab-reader-list-item {
+    margin: 0.18em 0;
+}
+
+/* 阅读态 task list 完成态：降低强调度并加删除线。 */
+.cm-tab-reader-task-list-item.is-checked {
+    opacity: 0.7;
+    text-decoration: line-through;
+}
+
+/* 阅读态代码块外框：复用编辑器的中性色背景与圆角。 */
+.cm-tab-reader-pre {
+    margin: 0 0 1em;
+    padding: 0.8em 1em;
+    overflow: auto;
+    border-radius: 10px;
+    background: var(--editor-inline-code-bg);
+}
+
+/* 阅读态代码块文字：使用等宽字体并保留原始缩进。 */
+.cm-tab-reader-code {
+    font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.92em;
+    white-space: pre;
+}
+
+/* 阅读态表格：使用清晰边框和稳定间距。 */
+.cm-tab-reader table {
+    width: 100%;
+    margin: 0 0 1em;
+    border-collapse: collapse;
+}
+
+/* 阅读态表格单元格：沿用面板边框色。 */
+.cm-tab-reader th,
+.cm-tab-reader td {
+    padding: 0.45em 0.65em;
+    border: 1px solid var(--editor-panel-border-color);
+}
+
+/* 编辑器滚动容器：顶部预留切换按钮空间，避免正文与按钮重叠。 */
+.cm-tab-editor .cm-scroller {
+    padding-top: 44px;
 }
 
 /* 文档居中布局：宽度足够时限制内容最大宽度并居中，营造 Word 文档编辑体验 */
@@ -86,6 +226,17 @@
     height: 100%;
     color: var(--editor-text-color);
     background: var(--editor-bg-color);
+}
+
+/* 阅读态光标层：隐藏插入光标与拖放光标，避免呈现编辑反馈。 */
+.cm-tab-reading .cm-cursorLayer,
+.cm-tab-reading .cm-dropCursor {
+    display: none !important;
+}
+
+/* 阅读态内容区：隐藏 caret，确保不展示编辑态插入位置。 */
+.cm-tab-reading .cm-content {
+    caret-color: transparent;
 }
 
 /* CodeMirror 内容区样式：行高与文本色。
@@ -123,7 +274,8 @@
 }
 
 /* 标题渲染样式：非编辑态下显示为富文本标题，带偏红暗色调及底部装饰线 */
-.cm-tab-editor .cm-rendered-header {
+.cm-tab-editor .cm-rendered-header,
+.cm-tab-reader .cm-rendered-header {
     display: inline-block;
     width: 100%;
     font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -140,12 +292,14 @@
 /* 覆盖 CodeMirror 动态注入的 heading token 下划线
    defaultHighlightStyle 会在子 span（如 .ͼ7）上设置 text-decoration: underline，
    父元素的 text-decoration:none 无法覆盖子元素，需要单独对子 span 重置。 */
-.cm-tab-editor .cm-rendered-header span {
+.cm-tab-editor .cm-rendered-header span,
+.cm-tab-reader .cm-rendered-header span {
     text-decoration: none !important;
 }
 
 /* 标题底部装饰横线：通过伪元素实现，与标题文字保持数像素间距 */
-.cm-tab-editor .cm-rendered-header::after {
+.cm-tab-editor .cm-rendered-header::after,
+.cm-tab-reader .cm-rendered-header::after {
     content: "";
     display: block;
     /* 横线延伸至接近右侧边缘 */
@@ -157,26 +311,30 @@
 }
 
 /* 行内粗体渲染样式：显式 font-style:normal 以覆盖 CodeMirror defaultHighlightStyle 对 Emphasis 标签的斜体 */
-.cm-tab-editor .cm-rendered-bold {
+.cm-tab-editor .cm-rendered-bold,
+.cm-tab-reader .cm-rendered-bold {
     font-weight: 700;
     font-style: normal;
     color: var(--editor-text-color);
 }
 
 /* 行内斜体渲染样式 */
-.cm-tab-editor .cm-rendered-italic {
+.cm-tab-editor .cm-rendered-italic,
+.cm-tab-reader .cm-rendered-italic {
     font-style: italic;
     color: var(--editor-text-color);
 }
 
 /* 行内删除线渲染样式 */
-.cm-tab-editor .cm-rendered-strikethrough {
+.cm-tab-editor .cm-rendered-strikethrough,
+.cm-tab-reader .cm-rendered-strikethrough {
     text-decoration: line-through;
     opacity: 0.85;
 }
 
 /* 行内代码渲染样式 */
-.cm-tab-editor .cm-rendered-inline-code {
+.cm-tab-editor .cm-rendered-inline-code,
+.cm-tab-reader .cm-rendered-inline-code {
     font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 0.92em;
     padding: 1px 6px;
@@ -185,14 +343,16 @@
 }
 
 /* Wiki Link 渲染样式 */
-.cm-tab-editor .cm-rendered-wikilink {
+.cm-tab-editor .cm-rendered-wikilink,
+.cm-tab-reader .cm-rendered-wikilink {
     color: var(--editor-link-color);
     text-decoration: underline;
     text-underline-offset: 2px;
 }
 
 /* Wiki Link 内嵌 token：覆盖 CodeMirror 默认语法色，确保链接文字始终继承链接色。 */
-.cm-tab-editor .cm-rendered-wikilink * {
+.cm-tab-editor .cm-rendered-wikilink *,
+.cm-tab-reader .cm-rendered-wikilink * {
     color: inherit !important;
 }
 
@@ -202,7 +362,8 @@
 }
 
 /* Wiki Link 悬浮样式：提示可直接点击导航 */
-.cm-tab-editor .cm-rendered-wikilink:hover {
+.cm-tab-editor .cm-rendered-wikilink:hover,
+.cm-tab-reader .cm-rendered-wikilink:hover {
     cursor: pointer;
 }
 
@@ -218,7 +379,8 @@
 }
 
 /* 引用块内容渲染样式：左侧竖线 + 次级文本色 */
-.cm-tab-editor .cm-rendered-blockquote {
+.cm-tab-editor .cm-rendered-blockquote,
+.cm-tab-reader .cm-rendered-blockquote {
     border-left: 3px solid var(--editor-blockquote-border-color);
     padding-left: 12px;
     color: var(--editor-blockquote-text-color);
@@ -339,7 +501,8 @@
 }
 
 /* 水平分割线渲染样式：替换 --- / *** / ___ 为可视化分割线 */
-.cm-tab-editor .cm-rendered-horizontal-rule {
+.cm-tab-editor .cm-rendered-horizontal-rule,
+.cm-tab-reader .cm-rendered-horizontal-rule {
     display: inline-block;
     width: 100%;
     font-size: 0;
@@ -348,19 +511,22 @@
 }
 
 /* 超链接渲染样式：与 WikiLink 样式一致 */
-.cm-tab-editor .cm-rendered-link {
+.cm-tab-editor .cm-rendered-link,
+.cm-tab-reader .cm-rendered-link {
     color: var(--editor-link-color);
     text-decoration: underline;
     text-underline-offset: 2px;
 }
 
 /* 普通链接内嵌 token：与 Wiki Link 一样保持统一链接色。 */
-.cm-tab-editor .cm-rendered-link * {
+.cm-tab-editor .cm-rendered-link *,
+.cm-tab-reader .cm-rendered-link * {
     color: inherit !important;
 }
 
 /* 超链接悬浮样式 */
-.cm-tab-editor .cm-rendered-link:hover {
+.cm-tab-editor .cm-rendered-link:hover,
+.cm-tab-reader .cm-rendered-link:hover {
     cursor: pointer;
 }
 

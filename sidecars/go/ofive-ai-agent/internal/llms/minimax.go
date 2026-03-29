@@ -10,6 +10,7 @@ import (
 	"iter"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -71,7 +72,7 @@ func (m *MinimaxLLM) GenerateContent(
 		payload := minimaxChatRequest{
 			Model:     m.resolveRequestModel(req.Model),
 			Messages:  messages,
-			Stream:    false,
+			Stream:    true,
 			MaxTokens: 4096,
 		}
 		if systemPrompt != "" {
@@ -135,6 +136,38 @@ func (m *MinimaxLLM) GenerateContent(
 		}
 		defer resp.Body.Close()
 
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			raw, err := io.ReadAll(resp.Body)
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if err := m.emitTrace("Model HTTP response", string(raw)); err != nil {
+				yield(nil, err)
+				return
+			}
+
+			var parsed minimaxChatResponse
+			if err := json.Unmarshal(raw, &parsed); err == nil && parsed.Error != nil {
+				yield(nil, fmt.Errorf("minimax api error: type=%s message=%s", parsed.Error.Type, parsed.Error.Message))
+				return
+			}
+			yield(nil, fmt.Errorf("minimax api error: status=%d body=%s", resp.StatusCode, string(raw)))
+			return
+		}
+
+		if isEventStreamContentType(resp.Header.Get("Content-Type")) {
+			raw, err := m.streamResponse(resp.Body, yield)
+			if traceErr := m.emitTrace("Model HTTP response", raw); traceErr != nil {
+				yield(nil, traceErr)
+				return
+			}
+			if err != nil {
+				yield(nil, err)
+			}
+			return
+		}
+
 		raw, err := io.ReadAll(resp.Body)
 		if err != nil {
 			yield(nil, err)
@@ -154,33 +187,144 @@ func (m *MinimaxLLM) GenerateContent(
 			yield(nil, fmt.Errorf("minimax api error: type=%s message=%s", parsed.Error.Type, parsed.Error.Message))
 			return
 		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			yield(nil, fmt.Errorf("minimax api error: status=%d body=%s", resp.StatusCode, string(raw)))
-			return
-		}
 
-		parts := buildMinimaxResponseParts(parsed.Content)
-		if len(parts) == 0 {
-			parts = []*genai.Part{genai.NewPartFromText("")}
-		}
-
-		llmResp := &model.LLMResponse{
-			Content: &genai.Content{
-				Role:  genai.RoleModel,
-				Parts: parts,
-			},
-			FinishReason: mapMinimaxFinishReason(parsed.StopReason),
-			UsageMetadata: &genai.GenerateContentResponseUsageMetadata{
-				PromptTokenCount:     int32(parsed.Usage.InputTokens),
-				CandidatesTokenCount: int32(parsed.Usage.OutputTokens),
-				TotalTokenCount: int32(
-					parsed.Usage.InputTokens + parsed.Usage.OutputTokens,
-				),
-			},
-			TurnComplete: true,
-		}
-		yield(llmResp, nil)
+		yield(buildMinimaxLLMResponse(parsed.Content, parsed.StopReason, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, true), nil)
 	}
+}
+
+func (m *MinimaxLLM) streamResponse(
+	body io.Reader,
+	yield func(*model.LLMResponse, error) bool,
+) (string, error) {
+	state := minimaxStreamState{
+		blocks: make(map[int]*minimaxStreamBlock),
+	}
+	var emitted bool
+	var completed bool
+
+	raw, err := consumeSSEStream(body, func(event sseEvent) error {
+		data := strings.TrimSpace(event.Data)
+		if data == "" {
+			return nil
+		}
+
+		var header struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal([]byte(data), &header); err != nil {
+			return err
+		}
+
+		switch header.Type {
+		case "message_start":
+			var payload struct {
+				Message struct {
+					Usage struct {
+						InputTokens  int `json:"input_tokens"`
+						OutputTokens int `json:"output_tokens"`
+					} `json:"usage"`
+				} `json:"message"`
+			}
+			if err := json.Unmarshal([]byte(data), &payload); err != nil {
+				return err
+			}
+			state.inputTokens = payload.Message.Usage.InputTokens
+			state.outputTokens = payload.Message.Usage.OutputTokens
+		case "content_block_start":
+			var payload struct {
+				Index        int                 `json:"index"`
+				ContentBlock minimaxContentBlock `json:"content_block"`
+			}
+			if err := json.Unmarshal([]byte(data), &payload); err != nil {
+				return err
+			}
+			state.ensureBlock(payload.Index).block = payload.ContentBlock
+		case "content_block_delta":
+			var payload struct {
+				Index int `json:"index"`
+				Delta struct {
+					Type        string `json:"type"`
+					Text        string `json:"text"`
+					PartialJSON string `json:"partial_json"`
+				} `json:"delta"`
+			}
+			if err := json.Unmarshal([]byte(data), &payload); err != nil {
+				return err
+			}
+			block := state.ensureBlock(payload.Index)
+			switch payload.Delta.Type {
+			case "text_delta":
+				block.block.Type = "text"
+				block.block.Text += payload.Delta.Text
+				if strings.TrimSpace(block.block.Text) != "" {
+					emitted = true
+					if !yield(buildMinimaxLLMResponse(state.snapshot(), state.stopReason, state.inputTokens, state.outputTokens, false), nil) {
+						return io.EOF
+					}
+				}
+			case "input_json_delta":
+				block.inputJSON.WriteString(payload.Delta.PartialJSON)
+			}
+		case "content_block_stop":
+			var payload struct {
+				Index int `json:"index"`
+			}
+			if err := json.Unmarshal([]byte(data), &payload); err != nil {
+				return err
+			}
+			state.finalizeBlock(payload.Index)
+		case "message_delta":
+			var payload struct {
+				Delta struct {
+					StopReason string `json:"stop_reason"`
+				} `json:"delta"`
+				Usage struct {
+					OutputTokens int `json:"output_tokens"`
+				} `json:"usage"`
+			}
+			if err := json.Unmarshal([]byte(data), &payload); err != nil {
+				return err
+			}
+			if strings.TrimSpace(payload.Delta.StopReason) != "" {
+				state.stopReason = payload.Delta.StopReason
+			}
+			if payload.Usage.OutputTokens > 0 {
+				state.outputTokens = payload.Usage.OutputTokens
+			}
+		case "error":
+			var payload struct {
+				Error struct {
+					Type    string `json:"type"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal([]byte(data), &payload); err != nil {
+				return err
+			}
+			return fmt.Errorf("minimax api error: type=%s message=%s", payload.Error.Type, payload.Error.Message)
+		case "message_stop":
+			state.finalizeAll()
+			if !yield(buildMinimaxLLMResponse(state.snapshot(), state.stopReason, state.inputTokens, state.outputTokens, true), nil) {
+				return io.EOF
+			}
+			emitted = true
+			completed = true
+		}
+
+		return nil
+	})
+	if err != nil && err != io.EOF {
+		return raw, err
+	}
+	if err == io.EOF {
+		return raw, nil
+	}
+
+	state.finalizeAll()
+	if !completed && (!emitted || len(state.snapshot()) > 0) {
+		yield(buildMinimaxLLMResponse(state.snapshot(), state.stopReason, state.inputTokens, state.outputTokens, true), nil)
+	}
+	return raw, nil
 }
 
 func (m *MinimaxLLM) emitTrace(title string, text string) error {
@@ -356,6 +500,99 @@ func mapMinimaxFinishReason(reason string) genai.FinishReason {
 	default:
 		return genai.FinishReasonUnspecified
 	}
+}
+
+func buildMinimaxLLMResponse(
+	content []minimaxContentBlock,
+	stopReason string,
+	inputTokens int,
+	outputTokens int,
+	turnComplete bool,
+) *model.LLMResponse {
+	parts := buildMinimaxResponseParts(content)
+	if len(parts) == 0 {
+		parts = []*genai.Part{genai.NewPartFromText("")}
+	}
+
+	return &model.LLMResponse{
+		Content: &genai.Content{
+			Role:  genai.RoleModel,
+			Parts: parts,
+		},
+		FinishReason: mapMinimaxFinishReason(stopReason),
+		UsageMetadata: &genai.GenerateContentResponseUsageMetadata{
+			PromptTokenCount:     int32(inputTokens),
+			CandidatesTokenCount: int32(outputTokens),
+			TotalTokenCount:      int32(inputTokens + outputTokens),
+		},
+		TurnComplete: turnComplete,
+	}
+}
+
+type minimaxStreamBlock struct {
+	block     minimaxContentBlock
+	inputJSON strings.Builder
+	complete  bool
+}
+
+type minimaxStreamState struct {
+	blocks       map[int]*minimaxStreamBlock
+	stopReason   string
+	inputTokens  int
+	outputTokens int
+}
+
+func (s *minimaxStreamState) ensureBlock(index int) *minimaxStreamBlock {
+	if block, ok := s.blocks[index]; ok {
+		return block
+	}
+	block := &minimaxStreamBlock{}
+	s.blocks[index] = block
+	return block
+}
+
+func (s *minimaxStreamState) finalizeBlock(index int) {
+	block, ok := s.blocks[index]
+	if !ok {
+		return
+	}
+	if block.block.Type == "tool_use" && block.inputJSON.Len() > 0 {
+		var args map[string]any
+		if err := json.Unmarshal([]byte(block.inputJSON.String()), &args); err == nil {
+			block.block.Input = args
+		}
+	}
+	block.complete = true
+}
+
+func (s *minimaxStreamState) finalizeAll() {
+	for index := range s.blocks {
+		s.finalizeBlock(index)
+	}
+}
+
+func (s *minimaxStreamState) snapshot() []minimaxContentBlock {
+	if len(s.blocks) == 0 {
+		return nil
+	}
+	indices := make([]int, 0, len(s.blocks))
+	for index := range s.blocks {
+		indices = append(indices, index)
+	}
+	sort.Ints(indices)
+
+	blocks := make([]minimaxContentBlock, 0, len(indices))
+	for _, index := range indices {
+		block := s.blocks[index]
+		if block == nil {
+			continue
+		}
+		if block.block.Type == "tool_use" && !block.complete {
+			continue
+		}
+		blocks = append(blocks, block.block)
+	}
+	return blocks
 }
 
 type minimaxChatRequest struct {

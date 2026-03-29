@@ -12,7 +12,7 @@ import React, {
     type KeyboardEvent,
     type ReactNode,
 } from "react";
-import { ArrowUp, Bot, Check, Plus, Sparkles, X } from "lucide-react";
+import { ArrowUp, Bot, Check, Copy, Plus, Sparkles, X } from "lucide-react";
 import {
     getAiChatHistory,
     getAiVendorCatalog,
@@ -55,6 +55,13 @@ import {
     type PendingStreamBinding,
     type PendingToolConfirmation,
 } from "./aiChatStreamState";
+import {
+    filterChatDebugEntries,
+    type ChatDebugFilterValue,
+} from "./aiChatDebugFilter";
+import { formatAiChatDebugEntriesForClipboard } from "./aiChatDebugExport";
+import { shouldSubmitAiChatComposer } from "./aiChatInputPolicy";
+import { buildConfirmationPreview } from "./aiChatConfirmationPreview";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerPanel } from "../../host/registry/panelRegistry";
 import { registerSettingsSection } from "../../host/settings/settingsRegistry";
@@ -84,7 +91,11 @@ const QUICK_PROMPTS: QuickPromptDefinition[] = [
  * @returns 消息 ID。
  */
 function nextChatMessageId(): string {
-    const nextId = `ai-chat-message-${String(chatMessageSequence)}`;
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return `ai-chat-message-${crypto.randomUUID()}`;
+    }
+
+    const nextId = `ai-chat-message-${Date.now()}-${String(chatMessageSequence)}`;
     chatMessageSequence += 1;
     return nextId;
 }
@@ -95,7 +106,11 @@ function nextChatMessageId(): string {
  * @returns 调试日志 ID。
  */
 function nextChatDebugEntryId(): string {
-    const nextId = `ai-chat-debug-${String(chatDebugSequence)}`;
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return `ai-chat-debug-${crypto.randomUUID()}`;
+    }
+
+    const nextId = `ai-chat-debug-${Date.now()}-${String(chatDebugSequence)}`;
     chatDebugSequence += 1;
     return nextId;
 }
@@ -111,6 +126,8 @@ function ChatPanel(): ReactNode {
     const [debugEntriesByConversation, setDebugEntriesByConversation] = useState<Record<string, ChatDebugEntry[]>>({});
     const [pendingConfirmations, setPendingConfirmations] = useState<Record<string, PendingToolConfirmation>>({});
     const [activeTab, setActiveTab] = useState<"history" | "chat" | "debug">("chat");
+    const [debugFilter, setDebugFilter] = useState<ChatDebugFilterValue>("all");
+    const [debugCopyState, setDebugCopyState] = useState<"idle" | "copied" | "error">("idle");
     const [conversationQuery, setConversationQuery] = useState("");
     const [draft, setDraft] = useState("");
     const [isStreaming, setIsStreaming] = useState(false);
@@ -227,6 +244,14 @@ function ChatPanel(): ReactNode {
         return debugEntriesByConversation[activeConversation.id] ?? [];
     }, [activeConversation, debugEntriesByConversation]);
 
+    const visibleDebugEntries = useMemo(() => {
+        return filterChatDebugEntries(currentDebugEntries, debugFilter);
+    }, [currentDebugEntries, debugFilter]);
+
+    const allDebugEntriesText = useMemo(() => {
+        return formatAiChatDebugEntriesForClipboard(currentDebugEntries);
+    }, [currentDebugEntries]);
+
     const filteredConversations = useMemo(() => {
         return filterConversations(historyState?.conversations ?? [], conversationQuery);
     }, [conversationQuery, historyState?.conversations]);
@@ -238,18 +263,16 @@ function ChatPanel(): ReactNode {
         return formatAiPanelError(error);
     }, [error]);
 
-    const panelStatusLabel = useMemo(() => {
-        if (!currentVaultPath) {
-            return i18n.t("aiChatPlugin.noVault");
+    const composerModelLabel = useMemo(() => {
+        const configuredModel = settings?.model?.trim() ?? "";
+        if (configuredModel) {
+            return configuredModel;
         }
-        if (!isVendorConfigured) {
-            return i18n.t("aiChatPlugin.missingConfigStatus");
+        if (!currentVaultPath || !isVendorConfigured) {
+            return i18n.t("aiChatPlugin.composerHintMissing");
         }
-        if (isStreaming) {
-            return i18n.t("aiChatPlugin.streamingStatus");
-        }
-        return i18n.t("aiChatPlugin.readyStatus");
-    }, [currentVaultPath, isStreaming, isVendorConfigured]);
+        return "-";
+    }, [currentVaultPath, isVendorConfigured, settings?.model]);
 
     const canSend = Boolean(currentVaultPath && activeConversation && draft.trim() && !isStreaming && isVendorConfigured);
 
@@ -278,6 +301,8 @@ function ChatPanel(): ReactNode {
                 setHistoryState(ensureHistoryState(history));
                 setDebugEntriesByConversation({});
                 setPendingConfirmations({});
+                setDebugFilter("all");
+                setDebugCopyState("idle");
                 historyLoadedRef.current = true;
             })
             .catch((loadError) => {
@@ -454,6 +479,20 @@ function ChatPanel(): ReactNode {
         }
     }, [currentDebugEntries]);
 
+    useEffect(() => {
+        if (debugCopyState === "idle") {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            setDebugCopyState("idle");
+        }, 1600);
+
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [debugCopyState]);
+
     /**
      * @function handleCreateConversation
      * @description 创建并切换到新会话。
@@ -629,7 +668,11 @@ function ChatPanel(): ReactNode {
      * @param event 键盘事件。
      */
     const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
-        if (event.key !== "Enter" || event.shiftKey) {
+        if (!shouldSubmitAiChatComposer({
+            key: event.key,
+            shiftKey: event.shiftKey,
+            nativeEvent: event.nativeEvent,
+        })) {
             return;
         }
 
@@ -639,58 +682,50 @@ function ChatPanel(): ReactNode {
         }
     };
 
+    /**
+     * @function handleCopyAllDebugLogs
+     * @description 将当前会话的全部调试日志复制到系统剪贴板。
+     * @returns Promise<void>
+     */
+    const handleCopyAllDebugLogs = async (): Promise<void> => {
+        if (!allDebugEntriesText) {
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(allDebugEntriesText);
+            setDebugCopyState("copied");
+        } catch (copyError) {
+            setDebugCopyState("error");
+            console.error("[ai-chat] copy debug logs failed", {
+                error: copyError,
+            });
+        }
+    };
+
     return (
         <div className="ai-chat-panel">
             <div className="ai-chat-header">
-                <div className="ai-chat-header-main">
-                    <div className="ai-chat-title">{i18n.t("aiChatPlugin.title")}</div>
-                    <div className="ai-chat-header-badges">
-                        <span className="ai-chat-vendor-badge">
-                            {selectedVendor?.title ?? "-"}
-                            <strong>{settings?.model ?? "-"}</strong>
-                        </span>
-                        <span className={`ai-chat-status-chip ${!isVendorConfigured ? "warning" : ""}`}>
-                            {panelStatusLabel}
-                        </span>
-                    </div>
-                </div>
-
-                <div className="ai-chat-conversation-bar">
-                    <div className="ai-chat-conversation-bar-header">
-                        <span className="ai-chat-section-label">{i18n.t("aiChatPlugin.historySection")}</span>
-                        <div className="ai-chat-conversation-actions">
-                            <button
-                                type="button"
-                                className="ai-chat-conversation-manage"
-                                disabled={isStreaming}
-                                onClick={() => {
-                                    setActiveTab("history");
-                                }}
-                            >
-                                <span>{i18n.t("aiChatPlugin.conversationManager")}</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="ai-chat-conversation-create"
-                                disabled={isStreaming}
-                                onClick={handleCreateConversation}
-                            >
-                                <Plus size={13} strokeWidth={2} />
-                                <span>{i18n.t("aiChatPlugin.newConversation")}</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div className="ai-chat-conversation-summary">
-                        <div className="ai-chat-conversation-summary-meta">
-                            <span className="ai-chat-conversation-summary-label">{i18n.t("aiChatPlugin.conversationActiveLabel")}</span>
-                            <span className="ai-chat-conversation-summary-title">{activeConversation?.title ?? i18n.t("aiChatPlugin.untitledConversation")}</span>
-                        </div>
-                        <div className="ai-chat-conversation-summary-side">
-                            <span className="ai-chat-conversation-time">{activeConversation ? formatConversationTime(activeConversation.updatedAtUnixMs) : "-"}</span>
-                            <span className="ai-chat-conversation-count">{i18n.t("aiChatPlugin.conversationCount", { count: historyState?.conversations.length ?? 0 })}</span>
-                        </div>
-                    </div>
-                    <div className="ai-chat-conversation-hint">{i18n.t("aiChatPlugin.conversationManagerHint")}</div>
+                <div className="ai-chat-header-actions">
+                    <button
+                        type="button"
+                        className="ai-chat-conversation-manage"
+                        disabled={isStreaming}
+                        onClick={() => {
+                            setActiveTab("history");
+                        }}
+                    >
+                        <span>{i18n.t("aiChatPlugin.conversationManager")}</span>
+                    </button>
+                    <button
+                        type="button"
+                        className="ai-chat-conversation-create"
+                        disabled={isStreaming}
+                        onClick={handleCreateConversation}
+                    >
+                        <Plus size={13} strokeWidth={2} />
+                        <span>{i18n.t("aiChatPlugin.newConversation")}</span>
+                    </button>
                 </div>
 
                 {formattedError ? (
@@ -814,6 +849,9 @@ function ChatPanel(): ReactNode {
                     <div ref={threadViewportRef} className="ai-chat-messages">
                         {activeConversation?.messages.map((message) => {
                             const confirmation = pendingConfirmations[message.id];
+                            const confirmationPreview = confirmation
+                                ? buildConfirmationPreview(confirmation)
+                                : null;
 
                             return (
                                 <div key={message.id} className={`ai-chat-message ${message.role}`}>
@@ -836,8 +874,21 @@ function ChatPanel(): ReactNode {
                                                     {confirmation.toolName ? (
                                                         <span>{i18n.t("aiChatPlugin.confirmationToolLabel")}: {confirmation.toolName}</span>
                                                     ) : null}
+                                                    {confirmationPreview?.kind === "markdown-patch" ? (
+                                                        <span>{i18n.t("aiChatPlugin.confirmationTargetLabel")}: {confirmationPreview.relativePath}</span>
+                                                    ) : null}
                                                 </div>
-                                                {confirmation.toolArgsJson && confirmation.toolArgsJson !== "{}" ? (
+                                                {confirmationPreview?.kind === "markdown-patch" ? (
+                                                    <div className="ai-chat-confirmation-preview">
+                                                        <div className="ai-chat-confirmation-preview-label">
+                                                            {i18n.t("aiChatPlugin.confirmationDiffLabel", {
+                                                                count: confirmationPreview.hunkCount,
+                                                            })}
+                                                        </div>
+                                                        <pre className="ai-chat-confirmation-diff">{confirmationPreview.diffText}</pre>
+                                                    </div>
+                                                ) : null}
+                                                {confirmationPreview?.kind === "generic" ? (
                                                     <pre className="ai-chat-confirmation-args">{confirmation.toolArgsJson}</pre>
                                                 ) : null}
                                                 <div className="ai-chat-confirmation-actions">
@@ -878,17 +929,53 @@ function ChatPanel(): ReactNode {
                 </div>
             ) : (
                 <div className="ai-chat-debug-shell" role="tabpanel">
-                    {currentDebugEntries.length === 0 ? (
+                    <div className="ai-chat-debug-toolbar">
+                        <div className="ai-chat-debug-filter-group">
+                            {(["all", "error", "warn", "info", "debug"] as const).map((level) => (
+                                <button
+                                    key={level}
+                                    type="button"
+                                    className={`ai-chat-debug-filter ${debugFilter === level ? "active" : ""}`}
+                                    onClick={() => {
+                                        setDebugFilter(level);
+                                    }}
+                                >
+                                    {i18n.t(`aiChatPlugin.debugFilter${level.charAt(0).toUpperCase()}${level.slice(1)}`)}
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            type="button"
+                            className={`ai-chat-debug-copy-button state-${debugCopyState}`}
+                            disabled={!allDebugEntriesText}
+                            onClick={() => {
+                                void handleCopyAllDebugLogs();
+                            }}
+                        >
+                            <Copy size={13} strokeWidth={1.9} />
+                            <span>{i18n.t(
+                                debugCopyState === "copied"
+                                    ? "aiChatPlugin.debugCopyCopied"
+                                    : debugCopyState === "error"
+                                        ? "aiChatPlugin.debugCopyFailed"
+                                        : "aiChatPlugin.debugCopyAll",
+                            )}</span>
+                        </button>
+                    </div>
+                    {visibleDebugEntries.length === 0 ? (
                         <div className="ai-chat-debug-empty">
                             <div className="ai-chat-debug-empty-title">{i18n.t("aiChatPlugin.debugEmptyTitle")}</div>
-                            <div className="ai-chat-debug-empty-body">{i18n.t("aiChatPlugin.debugEmptyBody")}</div>
+                            <div className="ai-chat-debug-empty-body">{i18n.t("aiChatPlugin.debugEmptyBody", { filter: i18n.t(`aiChatPlugin.debugFilter${debugFilter.charAt(0).toUpperCase()}${debugFilter.slice(1)}`) })}</div>
                         </div>
                     ) : null}
                     <div ref={debugViewportRef} className="ai-chat-debug-list">
-                        {currentDebugEntries.map((entry) => (
-                            <div key={entry.id} className="ai-chat-debug-entry">
+                        {visibleDebugEntries.map((entry) => (
+                            <div key={entry.id} className={`ai-chat-debug-entry level-${entry.level}`}>
                                 <div className="ai-chat-debug-entry-header">
-                                    <span className="ai-chat-debug-entry-title">{entry.title}</span>
+                                    <div className="ai-chat-debug-entry-meta">
+                                        <span className="ai-chat-debug-entry-title">{entry.title}</span>
+                                        <span className={`ai-chat-debug-entry-level level-${entry.level}`}>{entry.level}</span>
+                                    </div>
                                     <span className="ai-chat-debug-entry-stream">{entry.streamId}</span>
                                 </div>
                                 <pre className="ai-chat-debug-entry-body">{entry.text}</pre>
@@ -915,9 +1002,7 @@ function ChatPanel(): ReactNode {
                 />
                 <div className="ai-chat-composer-row">
                     <div className="ai-chat-composer-hint">
-                        {isVendorConfigured
-                            ? i18n.t("aiChatPlugin.composerHint")
-                            : i18n.t("aiChatPlugin.composerHintMissing")}
+                        {composerModelLabel}
                     </div>
                     <button
                         type="button"
@@ -958,6 +1043,16 @@ function AiChatSettingsSection(): ReactNode {
         }
         return resolveVendor(vendorCatalog, settings.vendorId);
     }, [settings, vendorCatalog]);
+
+    const canLoadVendorModels = useMemo(() => {
+        if (!settings || !selectedVendor) {
+            return false;
+        }
+
+        return selectedVendor.fields
+            .filter((field) => field.required)
+            .every((field) => (settings.fieldValues[field.key] ?? "").trim().length > 0);
+    }, [selectedVendor, settings]);
 
     useEffect(() => {
         let disposed = false;
@@ -1066,14 +1161,13 @@ function AiChatSettingsSection(): ReactNode {
             return;
         }
 
-        const authToken = settings.fieldValues.authToken?.trim() ?? "";
-        if (!authToken) {
+        if (!canLoadVendorModels) {
             setAvailableModels([]);
             return;
         }
 
         void loadVendorModels(settings);
-    }, [selectedVendor?.id]);
+    }, [canLoadVendorModels, selectedVendor?.id]);
 
     /**
      * @function updateFieldValue
@@ -1131,7 +1225,20 @@ function AiChatSettingsSection(): ReactNode {
         try {
             const savedSettings = await saveAiChatSettingsToStore(currentVaultPath, settings);
             const vendor = resolveVendor(vendorCatalog, savedSettings.vendorId);
-            setSettings(vendor ? mergeSettingsForVendor(savedSettings, vendor) : savedSettings);
+            const nextSettings = vendor ? mergeSettingsForVendor(savedSettings, vendor) : savedSettings;
+            setSettings(nextSettings);
+
+            if (vendor) {
+                const canRefreshModels = vendor.fields
+                    .filter((field) => field.required)
+                    .every((field) => (nextSettings.fieldValues[field.key] ?? "").trim().length > 0);
+                if (canRefreshModels) {
+                    void loadVendorModels(nextSettings);
+                } else {
+                    setAvailableModels([]);
+                }
+            }
+
             setFeedback(i18n.t("aiChatPlugin.saveSuccess"));
         } catch (saveError) {
             setFeedback(saveError instanceof Error ? saveError.message : String(saveError));
@@ -1187,36 +1294,23 @@ function AiChatSettingsSection(): ReactNode {
             <div className="ai-chat-settings-row">
                 <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.modelLabel")}</div>
                 <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.modelDescription")}</div>
-                <div className="ai-chat-settings-inline-actions">
-                    <select
-                        className="settings-compact-select ai-chat-settings-model-select"
-                        value={settings.model}
-                        onChange={(event) => {
-                            setSettings((currentSettings) => currentSettings ? {
-                                ...currentSettings,
-                                model: event.target.value,
-                            } : currentSettings);
-                        }}
-                    >
-                        {availableModels.length === 0 ? (
-                            <option value={settings.model}>{settings.model || "-"}</option>
-                        ) : availableModels.map((model) => (
-                            <option key={model.id} value={model.id}>{model.id}</option>
-                        ))}
-                    </select>
-                    <button
-                        type="button"
-                        className="ai-chat-settings-refresh"
-                        disabled={isLoadingModels}
-                        onClick={() => {
-                            void loadVendorModels(settings);
-                        }}
-                    >
-                        {isLoadingModels
-                            ? i18n.t("aiChatPlugin.refreshingModels")
-                            : i18n.t("aiChatPlugin.refreshModels")}
-                    </button>
-                </div>
+                <select
+                    className="settings-compact-select ai-chat-settings-model-select"
+                    value={settings.model}
+                    disabled={isLoadingModels}
+                    onChange={(event) => {
+                        setSettings((currentSettings) => currentSettings ? {
+                            ...currentSettings,
+                            model: event.target.value,
+                        } : currentSettings);
+                    }}
+                >
+                    {availableModels.length === 0 ? (
+                        <option value={settings.model}>{settings.model || "-"}</option>
+                    ) : availableModels.map((model) => (
+                        <option key={model.id} value={model.id}>{model.id}</option>
+                    ))}
+                </select>
                 <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.modelLoadHint")}</div>
                 <input
                     className="ai-chat-settings-input"

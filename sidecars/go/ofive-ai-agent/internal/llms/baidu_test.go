@@ -65,6 +65,51 @@ func TestGenerateContentUsesConfiguredVendorModel(t *testing.T) {
 	if len(capturedRequest.Messages) != 1 || capturedRequest.Messages[0].Role != "user" {
 		t.Fatalf("unexpected messages payload: %+v", capturedRequest.Messages)
 	}
+	if !capturedRequest.Stream {
+		t.Fatal("expected baidu adapter to enable vendor streaming")
+	}
+}
+
+func TestGenerateContentStreamsVendorResponseIntoMultipleYields(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: {\"id\":\"as-test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"first part \"},\"finish_reason\":\"\"}]}\n\n"))
+		_, _ = writer.Write([]byte("data: {\"id\":\"as-test\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"second part\"},\"finish_reason\":\"\"}]}\n\n"))
+		_, _ = writer.Write([]byte("data: {\"id\":\"as-test\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}\n\n"))
+		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	llm := NewBaiduLLM("baidu-qianfan", server.URL, "deepseek-v3.1-250821", "", "test-token")
+	request := &model.LLMRequest{
+		Model: "baidu-qianfan",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("你好", genai.RoleUser),
+		},
+	}
+
+	responses := make([]*model.LLMResponse, 0)
+	for response, err := range llm.GenerateContent(context.Background(), request, false) {
+		if err != nil {
+			t.Fatalf("GenerateContent returned error: %v", err)
+		}
+		responses = append(responses, response)
+	}
+
+	if len(responses) != 3 {
+		t.Fatalf("expected two incremental responses plus final completion, got %d", len(responses))
+	}
+	if responses[0].Content.Parts[0].Text != "first part " {
+		t.Fatalf("expected first incremental text, got %+v", responses[0].Content)
+	}
+	if responses[1].Content.Parts[0].Text != "first part second part" {
+		t.Fatalf("expected accumulated text on second chunk, got %+v", responses[1].Content)
+	}
+	if !responses[2].TurnComplete || responses[2].Content.Parts[0].Text != "first part second part" {
+		t.Fatalf("expected final completed response, got %+v", responses[2])
+	}
 }
 
 func TestGenerateContentSendsToolsAndToolMessages(t *testing.T) {
@@ -265,7 +310,7 @@ func TestGenerateContentSynthesizesBlankToolCallIDsInHistory(t *testing.T) {
 	if toolCallID != "tool-call-1" {
 		t.Fatalf("expected deterministic synthesized id, got %q", toolCallID)
 	}
-	}
+}
 
 func TestGenerateContentSynthesizesBlankResponseToolCallIDs(t *testing.T) {
 	t.Parallel()
@@ -316,7 +361,7 @@ func TestBuildToolParametersSanitizesNullableSchemaForBaidu(t *testing.T) {
 			"type": "object",
 			"properties": map[string]any{
 				"relativePath": map[string]any{"type": "string"},
-				"content": map[string]any{"type": []any{"string", "null"}},
+				"content":      map[string]any{"type": []any{"string", "null"}},
 			},
 			"required": []any{"relativePath"},
 		},

@@ -83,12 +83,6 @@ import "./CanvasTab.css";
 
 interface CanvasNodeRendererProps extends NodeProps<CanvasFlowNode> {
     data: CanvasNodeData;
-    isEditingText: boolean;
-    onTextEditChange: (value: string) => void;
-    onTextEditCompositionStart: () => void;
-    onTextEditCompositionEnd: () => void;
-    onTextEditCommit: () => void;
-    onTextEditCancel: () => void;
 }
 
 interface EdgeEditorState {
@@ -113,6 +107,16 @@ const NODE_MIN_SIZE_BY_KIND: Record<CanvasNodeData["kind"], { minWidth: number; 
     group: { minWidth: 280, minHeight: 160 },
 };
 
+interface CanvasTextEditRuntime {
+    onTextEditChange: (value: string) => void;
+    onTextEditCompositionStart: () => void;
+    onTextEditCompositionEnd: () => void;
+    onTextEditCommit: (value: string) => void;
+    onTextEditCancel: () => void;
+}
+
+const canvasTextEditRuntimeRegistry = new Map<string, CanvasTextEditRuntime>();
+
 /**
  * @function CanvasNodeRenderer
  * @description 自定义节点渲染器，统一承载文本、文件与分组节点视觉。
@@ -124,28 +128,48 @@ function CanvasNodeRenderer(props: CanvasNodeRendererProps): ReactNode {
     const {
         id,
         data,
-        isEditingText,
-        onTextEditCancel,
-        onTextEditChange,
-        onTextEditCompositionEnd,
-        onTextEditCompositionStart,
-        onTextEditCommit,
         selected,
     } = props;
+    const isEditingText = data.isEditingText === true;
     const [draftTextValue, setDraftTextValue] = useState<string>(data.text ?? "");
     const pendingLineBreakActionRef = useRef<"commit" | "newline" | null>(null);
     const isComposingRef = useRef(false);
     const lastCompositionEndAtRef = useRef(0);
+    const textEditorRef = useRef<HTMLTextAreaElement | null>(null);
+    const hasClosedEditorRef = useRef(false);
     const kindClassName = `canvas-tab__node canvas-tab__node--${data.kind}`;
     const minimumNodeSize = NODE_MIN_SIZE_BY_KIND[data.kind];
+    const textEditRuntime = data.runtimeKey
+        ? canvasTextEditRuntimeRegistry.get(data.runtimeKey)
+        : undefined;
+    const resolveCurrentDraftValue = (): string => textEditorRef.current?.value ?? draftTextValue;
 
     useEffect(() => {
         if (!isEditingText) {
             return;
         }
 
+        hasClosedEditorRef.current = false;
         setDraftTextValue(data.text ?? "");
     }, [data.text, id, isEditingText]);
+
+    const commitEditor = (): void => {
+        if (hasClosedEditorRef.current) {
+            return;
+        }
+
+        hasClosedEditorRef.current = true;
+        textEditRuntime?.onTextEditCommit(resolveCurrentDraftValue());
+    };
+
+    const cancelEditor = (): void => {
+        if (hasClosedEditorRef.current) {
+            return;
+        }
+
+        hasClosedEditorRef.current = true;
+        textEditRuntime?.onTextEditCancel();
+    };
 
     return (
         <div
@@ -177,6 +201,7 @@ function CanvasNodeRenderer(props: CanvasNodeRendererProps): ReactNode {
             {data.kind === "text" ? (
                 isEditingText ? (
                     <textarea
+                        ref={textEditorRef}
                         className="canvas-tab__node-text-editor nodrag nopan nowheel"
                         value={draftTextValue}
                         onBeforeInput={(event) => {
@@ -202,23 +227,23 @@ function CanvasNodeRenderer(props: CanvasNodeRendererProps): ReactNode {
                             }
 
                             event.preventDefault();
-                            onTextEditCommit();
+                            commitEditor();
                         }}
                         onChange={(event) => {
                             setDraftTextValue(event.target.value);
-                            onTextEditChange(event.target.value);
+                            textEditRuntime?.onTextEditChange(event.target.value);
                         }}
                         onCompositionStart={() => {
                             isComposingRef.current = true;
-                            onTextEditCompositionStart();
+                            textEditRuntime?.onTextEditCompositionStart();
                         }}
                         onCompositionEnd={() => {
                             isComposingRef.current = false;
                             lastCompositionEndAtRef.current = performance.now();
-                            onTextEditCompositionEnd();
+                            textEditRuntime?.onTextEditCompositionEnd();
                         }}
                         onBlur={() => {
-                            onTextEditCommit();
+                            commitEditor();
                         }}
                         onKeyDown={(event) => {
                             const nativeKeyboardEvent = event.nativeEvent as KeyboardEvent;
@@ -244,13 +269,13 @@ function CanvasNodeRenderer(props: CanvasNodeRendererProps): ReactNode {
                             if (event.key === "Enter" && !event.shiftKey) {
                                 pendingLineBreakActionRef.current = null;
                                 event.preventDefault();
-                                onTextEditCommit();
+                                commitEditor();
                                 return;
                             }
 
                             if (event.key === "Escape") {
                                 event.preventDefault();
-                                onTextEditCancel();
+                                cancelEditor();
                             }
                         }}
                         onKeyUp={() => {
@@ -279,6 +304,10 @@ function CanvasNodeRenderer(props: CanvasNodeRendererProps): ReactNode {
     );
 }
 
+const CANVAS_NODE_TYPES = {
+    ofiveCanvasNode: CanvasNodeRenderer,
+} as const;
+
 /**
  * @function CanvasTab
  * @description Dockview Canvas Tab 渲染函数。
@@ -295,7 +324,10 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [dirty, setDirty] = useState<boolean>(false);
+    const [, setSelectedNodeId] = useState<string | null>(null);
+    const [, setSelectedEdgeId] = useState<string | null>(null);
     const [editingTextNodeId, setEditingTextNodeId] = useState<string | null>(null);
+    const [editingTextValue, setEditingTextValue] = useState<string>("");
     const [edgeEditor, setEdgeEditor] = useState<EdgeEditorState | null>(null);
     const [fileNodeModal, setFileNodeModal] = useState<FileNodeModalState | null>(null);
     const [fileNodeValidationMessage, setFileNodeValidationMessage] = useState<string>("");
@@ -305,12 +337,12 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
     const hydratingRef = useRef(false);
     const pendingTextEditCommitRef = useRef(false);
     const isEditingTextComposingRef = useRef(false);
-    const editingTextDraftValueRef = useRef<string>("");
+    const canvasRuntimeIdRef = useRef<string>(`canvas-runtime-${Math.random().toString(36).slice(2)}`);
 
     const cancelTextEditing = useCallback((): void => {
         pendingTextEditCommitRef.current = false;
         isEditingTextComposingRef.current = false;
-        editingTextDraftValueRef.current = "";
+        setEditingTextValue("");
         setEditingTextNodeId(null);
     }, []);
 
@@ -318,16 +350,18 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
         setDirty(true);
     }, []);
 
-    const commitEditingTextNode = useCallback((): void => {
+    const commitEditingTextNode = useCallback((nextValue?: string): void => {
         setEditingTextNodeId((currentEditingNodeId) => {
             if (!currentEditingNodeId) {
                 return currentEditingNodeId;
             }
 
-            const nextTextValue = editingTextDraftValueRef.current;
+            const nextTextValue = typeof nextValue === "string"
+                ? nextValue
+                : editingTextValue;
             pendingTextEditCommitRef.current = false;
             isEditingTextComposingRef.current = false;
-            editingTextDraftValueRef.current = "";
+            setEditingTextValue("");
             setDocument((currentDocument) => ({
                 ...currentDocument,
                 nodes: currentDocument.nodes.map((node) => {
@@ -347,45 +381,84 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
             setDirty(true);
             return null;
         });
-    }, []);
+    }, [editingTextValue]);
 
     const updateEditingTextNode = useCallback((nodeId: string, nextText: string): void => {
         if (editingTextNodeId !== nodeId) {
             return;
         }
 
-        editingTextDraftValueRef.current = nextText;
+        setEditingTextValue(nextText);
     }, [editingTextNodeId]);
 
-    const nodeTypes = useMemo(() => ({
-        ofiveCanvasNode: (nodeProps: NodeProps<CanvasFlowNode>) => (
-            <CanvasNodeRenderer
-                {...nodeProps}
-                isEditingText={editingTextNodeId === nodeProps.id && nodeProps.data.kind === "text"}
-                onTextEditChange={(nextValue) => {
-                    updateEditingTextNode(nodeProps.id, nextValue);
-                }}
-                onTextEditCompositionStart={() => {
+    useEffect(() => {
+        const runtimeKeys = new Set<string>();
+
+        document.nodes.forEach((node) => {
+            if (node.data.kind !== "text") {
+                return;
+            }
+
+            const runtimeKey = `${canvasRuntimeIdRef.current}:${node.id}`;
+            runtimeKeys.add(runtimeKey);
+            canvasTextEditRuntimeRegistry.set(runtimeKey, {
+                onTextEditChange: (nextValue: string) => {
+                    updateEditingTextNode(node.id, nextValue);
+                },
+                onTextEditCompositionStart: () => {
                     isEditingTextComposingRef.current = true;
-                }}
-                onTextEditCompositionEnd={() => {
+                },
+                onTextEditCompositionEnd: () => {
                     isEditingTextComposingRef.current = false;
                     if (pendingTextEditCommitRef.current) {
-                        commitEditingTextNode();
+                        commitEditingTextNode(editingTextValue);
                     }
-                }}
-                onTextEditCommit={() => {
+                },
+                onTextEditCommit: (nextValue: string) => {
+                    setEditingTextValue(nextValue);
                     if (isEditingTextComposingRef.current) {
                         pendingTextEditCommitRef.current = true;
                         return;
                     }
 
-                    commitEditingTextNode();
-                }}
-                onTextEditCancel={cancelTextEditing}
-            />
-        ),
-    }), [cancelTextEditing, commitEditingTextNode, editingTextNodeId, t, updateEditingTextNode]);
+                    commitEditingTextNode(nextValue);
+                },
+                onTextEditCancel: cancelTextEditing,
+            });
+        });
+
+        for (const key of Array.from(canvasTextEditRuntimeRegistry.keys())) {
+            if (!key.startsWith(`${canvasRuntimeIdRef.current}:`)) {
+                continue;
+            }
+
+            if (!runtimeKeys.has(key)) {
+                canvasTextEditRuntimeRegistry.delete(key);
+            }
+        }
+
+        return () => {
+            for (const key of runtimeKeys) {
+                canvasTextEditRuntimeRegistry.delete(key);
+            }
+        };
+    }, [cancelTextEditing, commitEditingTextNode, document.nodes, editingTextValue, updateEditingTextNode]);
+
+    const flowNodes = useMemo(() => document.nodes.map((node) => {
+        if (node.data.kind !== "text") {
+            return node;
+        }
+
+        return {
+            ...node,
+            data: {
+                ...node.data,
+                text: editingTextNodeId === node.id ? editingTextValue : node.data.text,
+                isEditingText: editingTextNodeId === node.id,
+                runtimeKey: `${canvasRuntimeIdRef.current}:${node.id}`,
+            },
+        } satisfies CanvasFlowNode;
+    }), [document.nodes, editingTextNodeId, editingTextValue]);
 
     const closeEdgeEditor = (): void => {
         setEdgeEditor(null);
@@ -691,7 +764,7 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
 
     const onNodeDoubleClick = (_event: ReactMouseEvent, node: CanvasFlowNode): void => {
         if (node.data.kind === "text") {
-            editingTextDraftValueRef.current = node.data.text ?? "";
+            setEditingTextValue(node.data.text ?? "");
             isEditingTextComposingRef.current = false;
             setEditingTextNodeId(node.id);
             closeEdgeEditor();
@@ -770,29 +843,6 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
         cancelTextEditing();
         const position = resolveFlowPosition(event.clientX, event.clientY);
         addDroppedFilesAt(droppedFiles, position.x, position.y);
-    };
-
-    const updateSelectedNode = (partial: Partial<CanvasNodeData>): void => {
-        if (!selectedNode) {
-            return;
-        }
-
-        updateDocument({
-            ...document,
-            nodes: document.nodes.map((node) => {
-                if (node.id !== selectedNode.id) {
-                    return node;
-                }
-
-                return {
-                    ...node,
-                    data: {
-                        ...node.data,
-                        ...partial,
-                    },
-                };
-            }),
-        });
     };
 
     const confirmFileNodeModal = (draftPath: string): void => {
@@ -900,9 +950,9 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
                         </div>
                     ) : null}
                     <ReactFlow<CanvasFlowNode, CanvasFlowEdge>
-                        nodes={document.nodes}
+                        nodes={flowNodes}
                         edges={document.edges}
-                        nodeTypes={nodeTypes}
+                        nodeTypes={CANVAS_NODE_TYPES}
                         onInit={(instance) => {
                             flowRef.current = instance;
                         }}

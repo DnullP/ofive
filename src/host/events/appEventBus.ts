@@ -23,6 +23,8 @@
  *  - subscribeEditorRevealRequestedEvent: 订阅编辑器定位请求事件
  *  - emitEditorCommandRequestedEvent: 发布编辑器原生命令执行请求事件
  *  - subscribeEditorCommandRequestedEvent: 订阅编辑器原生命令执行请求事件
+ *  - emitFileTreeRenameRequestedEvent: 发布文件树重命名请求事件
+ *  - subscribeFileTreeRenameRequestedEvent: 订阅文件树重命名请求事件
  *  - emitPersistedContentUpdatedEvent: 发布持久态内容更新事件
  *  - subscribePersistedContentUpdatedEvent: 订阅持久态内容更新事件
  */
@@ -63,14 +65,14 @@ export interface EditorFocusChangedBusEvent {
 }
 
 /**
- * @interface EditorRenameRequestedBusEvent
- * @description 请求编辑器 Tab 进入文件名内联编辑模式的事件。
+ * @interface FileTreeRenameRequestedBusEvent
+ * @description 请求文件树对指定路径进入重命名编辑态的事件。
  * @field eventId - 事件唯一标识
- * @field articleId - 要进入重命名模式的文章 Tab ID
+ * @field path - 要进入重命名模式的文件或目录相对路径
  */
-export interface EditorRenameRequestedBusEvent {
+export interface FileTreeRenameRequestedBusEvent {
     eventId: string;
-    articleId: string;
+    path: string;
 }
 
 /**
@@ -117,7 +119,7 @@ type AppBusEventMap = {
     "vault.config": VaultConfigEventPayload;
     "editor.content.changed": EditorContentChangedBusEvent;
     "editor.focus.changed": EditorFocusChangedBusEvent;
-    "editor.rename.requested": EditorRenameRequestedBusEvent;
+    "fileTree.rename.requested": FileTreeRenameRequestedBusEvent;
     "editor.reveal.requested": EditorRevealRequestedBusEvent;
     "editor.command.requested": EditorCommandRequestedBusEvent;
     "persisted.content.updated": PersistedContentUpdatedBusEvent;
@@ -343,29 +345,29 @@ export function subscribeEditorFocusBusEvent(
 }
 
 /**
- * @function emitEditorRenameRequestedEvent
- * @description 发布编辑器 Tab 进入文件名内联编辑模式的请求事件。
- * @param payload 事件负载，含目标 articleId。
+ * @function emitFileTreeRenameRequestedEvent
+ * @description 发布文件树进入重命名编辑态的请求事件。
+ * @param payload 事件负载，含目标路径。
  */
-export function emitEditorRenameRequestedEvent(payload: {
-    articleId: string;
+export function emitFileTreeRenameRequestedEvent(payload: {
+    path: string;
 }): void {
-    dispatchBusEvent("editor.rename.requested", {
+    dispatchBusEvent("fileTree.rename.requested", {
         eventId: nextFrontendEventId(),
         ...payload,
     });
 }
 
 /**
- * @function subscribeEditorRenameRequestedEvent
- * @description 订阅编辑器 Tab 重命名请求事件。
+ * @function subscribeFileTreeRenameRequestedEvent
+ * @description 订阅文件树重命名请求事件。
  * @param listener 监听器。
  * @returns 取消订阅函数。
  */
-export function subscribeEditorRenameRequestedEvent(
-    listener: (payload: EditorRenameRequestedBusEvent) => void,
+export function subscribeFileTreeRenameRequestedEvent(
+    listener: (payload: FileTreeRenameRequestedBusEvent) => void,
 ): () => void {
-    return subscribeBusEvent("editor.rename.requested", listener);
+    return subscribeBusEvent("fileTree.rename.requested", listener);
 }
 
 /**

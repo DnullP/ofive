@@ -103,6 +103,10 @@ fn read_markdown_and_binary_should_return_expected_payload() {
         .get("content")
         .and_then(Value::as_str)
         .is_some_and(|content| content.contains("Link to")));
+    assert!(markdown_json
+        .get("numberedContent")
+        .and_then(Value::as_str)
+        .is_some_and(|content| content.contains("1  # Guide")));
 
     let binary = read_vault_binary_file_in_root("assets/icon.png".to_string(), &vault.root)
         .expect("读取二进制应成功");

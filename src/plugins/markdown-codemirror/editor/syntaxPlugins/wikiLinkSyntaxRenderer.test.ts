@@ -9,13 +9,18 @@
  *   bun test src/plugins/markdown-codemirror/editor/syntaxPlugins/wikiLinkSyntaxRenderer.test.ts
  */
 
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { EditorState } from "@codemirror/state";
-import {
+
+mock.module("../../../../api/vaultApi", () => ({
+    resolveWikiLinkTarget: async () => null,
+}));
+
+const {
     extractWidgetWikiLinkTarget,
     handleWikiLinkMouseDown,
     isRenderedWikiLinkTarget,
-} from "./wikiLinkSyntaxRenderer";
+} = await import("./wikiLinkSyntaxRenderer");
 import { parseWikiLinkParts } from "./wikiLinkParser";
 
 function createRenderTarget(options?: {
@@ -44,7 +49,7 @@ function createRenderTarget(options?: {
 
             return null;
         },
-    } as EventTarget;
+    } as unknown as EventTarget;
 }
 
 describe("parseWikiLinkParts", () => {
@@ -96,7 +101,7 @@ describe("wikilink navigation interaction", () => {
         });
 
         let prevented = false;
-        let openedTarget: string | null = null;
+        let openedTarget = "";
 
         const handled = handleWikiLinkMouseDown(
             {
@@ -130,7 +135,7 @@ describe("wikilink navigation interaction", () => {
         });
 
         let prevented = false;
-        let openedTarget: string | null = null;
+        let openedTarget = "";
 
         const handled = handleWikiLinkMouseDown(
             {
@@ -167,7 +172,7 @@ describe("wikilink navigation interaction", () => {
         });
 
         let prevented = false;
-        let openedTarget: string | null = null;
+        let openedTarget = "";
 
         const handled = handleWikiLinkMouseDown(
             {
@@ -192,6 +197,6 @@ describe("wikilink navigation interaction", () => {
 
         expect(handled).toBe(false);
         expect(prevented).toBe(false);
-        expect(openedTarget).toBeNull();
+        expect(openedTarget).toBe("");
     });
 });

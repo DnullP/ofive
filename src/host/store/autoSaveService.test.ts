@@ -30,6 +30,8 @@ mock.module("../../api/vaultApi", () => ({
     },
     isTauriRuntime: () => false,
     searchVaultMarkdown: async () => [],
+    suggestWikiLinkTargets: async () => [],
+    resolveWikiLinkTarget: async () => null,
     isSelfTriggeredVaultFsEvent: () => false,
     readVaultMarkdownFile: async () => ({ content: "# latest" }),
     getCurrentVaultConfig: async () => ({

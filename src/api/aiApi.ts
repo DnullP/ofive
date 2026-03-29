@@ -138,6 +138,7 @@ export interface AiChatStreamEventPayload {
     deltaText: string | null;
     accumulatedText: string | null;
     debugTitle: string | null;
+    debugLevel: string | null;
     debugText: string | null;
     confirmationId: string | null;
     confirmationHint: string | null;

@@ -588,6 +588,7 @@ type ChatChunk struct {
 	ConfirmationHint         string                 `protobuf:"bytes,11,opt,name=confirmation_hint,json=confirmationHint,proto3" json:"confirmation_hint,omitempty"`
 	ConfirmationToolName     string                 `protobuf:"bytes,12,opt,name=confirmation_tool_name,json=confirmationToolName,proto3" json:"confirmation_tool_name,omitempty"`
 	ConfirmationToolArgsJson string                 `protobuf:"bytes,13,opt,name=confirmation_tool_args_json,json=confirmationToolArgsJson,proto3" json:"confirmation_tool_args_json,omitempty"`
+	DebugLevel               string                 `protobuf:"bytes,14,opt,name=debug_level,json=debugLevel,proto3" json:"debug_level,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -713,6 +714,13 @@ func (x *ChatChunk) GetConfirmationToolArgsJson() string {
 	return ""
 }
 
+func (x *ChatChunk) GetDebugLevel() string {
+	if x != nil {
+		return x.DebugLevel
+	}
+	return ""
+}
+
 var File_ai_sidecar_proto protoreflect.FileDescriptor
 
 const file_ai_sidecar_proto_rawDesc = "" +
@@ -778,7 +786,7 @@ const file_ai_sidecar_proto_rawDesc = "" +
 	"\x1apersistence_callback_token\x18\x0e \x01(\tR\x18persistenceCallbackToken\x1a?\n" +
 	"\x11VendorConfigEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe7\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x88\x04\n" +
 	"\tChatChunk\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
@@ -799,7 +807,9 @@ const file_ai_sidecar_proto_rawDesc = "" +
 	" \x01(\tR\x0econfirmationId\x12+\n" +
 	"\x11confirmation_hint\x18\v \x01(\tR\x10confirmationHint\x124\n" +
 	"\x16confirmation_tool_name\x18\f \x01(\tR\x14confirmationToolName\x12=\n" +
-	"\x1bconfirmation_tool_args_json\x18\r \x01(\tR\x18confirmationToolArgsJson2\xe1\x01\n" +
+	"\x1bconfirmation_tool_args_json\x18\r \x01(\tR\x18confirmationToolArgsJson\x12\x1f\n" +
+	"\vdebug_level\x18\x0e \x01(\tR\n" +
+	"debugLevel2\xe1\x01\n" +
 	"\x0eAiAgentService\x12A\n" +
 	"\x06Health\x12\x1a.ofive.ai.v1.HealthRequest\x1a\x1b.ofive.ai.v1.HealthResponse\x12:\n" +
 	"\x04Chat\x12\x18.ofive.ai.v1.ChatRequest\x1a\x16.ofive.ai.v1.ChatChunk0\x01\x12P\n" +

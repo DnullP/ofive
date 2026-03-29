@@ -33,6 +33,8 @@ export interface PasteImageDependencies {
     getCurrentFilePath: () => string;
     /** 创建二进制文件的后端 API 回调 */
     createBinaryFile: (relativePath: string, base64Content: string) => Promise<unknown>;
+    /** 判断当前是否允许修改文档 */
+    canMutateDocument?: () => boolean;
 }
 
 /**
@@ -157,6 +159,13 @@ export function attachPasteImageHandler(
     deps: PasteImageDependencies,
 ): () => void {
     const handlePaste = (event: ClipboardEvent): void => {
+        if (deps.canMutateDocument && !deps.canMutateDocument()) {
+            console.info("[editor-paste] paste image skipped: editor is read-only", {
+                currentFilePath: deps.getCurrentFilePath(),
+            });
+            return;
+        }
+
         const clipboardData = event.clipboardData;
         if (!clipboardData) {
             return;

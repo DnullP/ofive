@@ -9,7 +9,7 @@
  *  - ../api/vaultApi
  */
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { FileTree, type FileTreeItem } from "./FileTree";
@@ -43,6 +43,10 @@ import {
     setCurrentVaultPath,
     useVaultState,
 } from "../../../host/store/vaultStore";
+import {
+    subscribeFileTreeRenameRequestedEvent,
+    type FileTreeRenameRequestedBusEvent,
+} from "../../../host/events/appEventBus";
 import "./VaultPanel.css";
 
 /**
@@ -273,7 +277,14 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
     const { currentVaultPath, files, isLoadingTree, error } = useVaultState();
     const focusedArticle = useFocusedArticle();
     const [moveSelection, setMoveSelection] = useState<FileTreeItem[] | null>(null);
+    const [renameRequest, setRenameRequest] = useState<FileTreeRenameRequestedBusEvent | null>(null);
     const [vaultPathPrefix, vaultPathRootName] = splitVaultDisplayPath(currentVaultPath);
+
+    useEffect(() => {
+        return subscribeFileTreeRenameRequestedEvent((payload) => {
+            setRenameRequest(payload);
+        });
+    }, []);
 
     /**
      * @function resolveErrorMessage
@@ -828,6 +839,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             <FileTree
                 items={files}
                 activePath={focusedArticle?.path ?? null}
+                renameRequest={renameRequest}
                 onOpenFile={(item) => {
                     void handleOpenFile(item);
                 }}

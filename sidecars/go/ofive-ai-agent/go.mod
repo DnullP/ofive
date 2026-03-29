@@ -3,10 +3,10 @@ module ofive/sidecars/go/ofive-ai-agent
 go 1.25.0
 
 require (
-	github.com/modelcontextprotocol/go-sdk v1.4.0
-	google.golang.org/adk v0.6.0
+	github.com/modelcontextprotocol/go-sdk v1.4.1
+	google.golang.org/adk v1.0.0
 	google.golang.org/genai v1.40.0
-	google.golang.org/grpc v1.78.0
+	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 )
 
@@ -27,7 +27,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
-	github.com/segmentio/encoding v0.5.3 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect

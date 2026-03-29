@@ -23,6 +23,8 @@ mock.module("../../api/vaultApi", () => ({
         };
     },
     searchVaultMarkdown: async () => [],
+    suggestWikiLinkTargets: async () => [],
+    resolveWikiLinkTarget: async () => null,
     isSelfTriggeredVaultFsEvent: () => false,
     readVaultMarkdownFile: async () => ({ content: "# latest" }),
     saveVaultMarkdownFile: async () => ({ relativePath: "notes/demo.md", created: false }),
@@ -40,9 +42,11 @@ const {
     emitEditorContentChangedEvent,
     emitEditorFocusChangedEvent,
     emitEditorRevealRequestedEvent,
+    emitFileTreeRenameRequestedEvent,
     subscribeEditorContentBusEvent,
     subscribeEditorFocusBusEvent,
     subscribeEditorRevealRequestedEvent,
+    subscribeFileTreeRenameRequestedEvent,
 } = await import("./appEventBus");
 
 describe("appEventBus editor event flow", () => {
@@ -132,5 +136,29 @@ describe("appEventBus editor event flow", () => {
         expect(capturedArticleId).toBe("file:notes/guide.md");
         expect(capturedPath).toBe("notes/guide.md");
         expect(capturedLine).toBe(12);
+    });
+
+    /**
+     * @function should_publish_file_tree_rename_request_event_with_target_path
+     * @description 发布文件树重命名请求事件后，订阅者应收到目标路径。
+     */
+    it("should publish file tree rename request event with target path", () => {
+        let capturedEventId: string | null = null;
+        let capturedPath = "";
+
+        const unlisten = subscribeFileTreeRenameRequestedEvent((payload) => {
+            capturedEventId = payload.eventId;
+            capturedPath = payload.path;
+        });
+
+        emitFileTreeRenameRequestedEvent({
+            path: "notes/rename-me.md",
+        });
+
+        unlisten();
+
+        expect(capturedEventId).not.toBeNull();
+        expect((capturedEventId ?? "").startsWith("frontend-")).toBe(true);
+        expect(capturedPath).toBe("notes/rename-me.md");
     });
 });

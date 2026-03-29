@@ -24,10 +24,12 @@
  */
 
 import type { AiChatStreamEventPayload } from "../../api/aiApi";
+import { normalizeChatDebugLevel, type ChatDebugLevel } from "./aiChatDebugFilter";
 
 export interface ChatDebugEntry {
     id: string;
     streamId: string;
+    level: ChatDebugLevel;
     title: string;
     text: string;
 }
@@ -147,6 +149,7 @@ export function reduceAiChatStreamEvent(
             nextDebugEntry: {
                 id: debugEntryId,
                 streamId: payload.streamId,
+                level: normalizeChatDebugLevel(payload.debugLevel),
                 title: payload.debugTitle ?? debugFallbackTitle,
                 text: payload.debugText ?? "",
             },

@@ -169,6 +169,15 @@ pub fn search_vault_markdown_files_in_root(
     search::search_vault_markdown_files_in_root(vault_root, query, limit)
 }
 
+/// 在指定仓库根目录下搜索 Canvas 文件。
+pub fn search_vault_canvas_files_in_root(
+    vault_root: &Path,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<VaultQuickSwitchItem>, String> {
+    search::search_vault_canvas_files_in_root(vault_root, query, limit)
+}
+
 /// 在指定仓库根目录下搜索 Markdown 内容。
 pub fn search_vault_markdown_in_root(
     vault_root: &Path,

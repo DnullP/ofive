@@ -22,6 +22,7 @@ func tryHandleExplicitCapabilityCommand(
 	ctx context.Context,
 	message string,
 	bridgeConfig CapabilityBridgeConfig,
+	trace func(DebugTraceEvent) error,
 ) (string, string, bool, error) {
 	command, handled, err := parseExplicitCapabilityCommand(message)
 	if !handled || err != nil {
@@ -44,7 +45,7 @@ func tryHandleExplicitCapabilityCommand(
 		}
 	}
 
-	formattedOutput, _, err := executeCapabilityCall(ctx, client, capabilityID, command.input)
+	formattedOutput, _, err := executeCapabilityCall(ctx, client, capabilityID, command.input, trace)
 	if err != nil {
 		return "", capabilityBridgeAgentName, true, err
 	}
@@ -104,6 +105,7 @@ func executeCapabilityPlanningLoop(
 			client,
 			capabilityID,
 			plannedCall.Input,
+			nil,
 		)
 		if err != nil {
 			return "", err
@@ -125,12 +127,35 @@ func executeCapabilityCall(
 	client capabilityCaller,
 	capabilityID string,
 	input any,
+	trace func(DebugTraceEvent) error,
 ) (string, any, error) {
+	if err := emitDebugTrace(trace, DebugTraceEvent{
+		Level: "info",
+		Title: "Capability call started",
+		Text:  fmt.Sprintf("capability=%s input=%s", capabilityID, marshalCapabilityInput(input)),
+	}); err != nil {
+		return "", nil, err
+	}
+
 	result, err := client.Call(ctx, capabilityID, input)
 	if err != nil {
+		_ = emitDebugTrace(trace, DebugTraceEvent{
+			Level: "error",
+			Title: "Capability call transport failed",
+			Text:  fmt.Sprintf("capability=%s error=%v", capabilityID, err),
+		})
 		return "", nil, err
 	}
 	if !result.Success {
+		failureText := result.Error
+		if strings.TrimSpace(failureText) == "" {
+			failureText = fmt.Sprintf("capability call failed: %s", capabilityID)
+		}
+		_ = emitDebugTrace(trace, DebugTraceEvent{
+			Level: "error",
+			Title: "Capability call failed",
+			Text:  fmt.Sprintf("capability=%s error=%s", capabilityID, failureText),
+		})
 		if result.Error == "" {
 			return "", nil, fmt.Errorf("capability call failed: %s", capabilityID)
 		}
@@ -139,10 +164,30 @@ func executeCapabilityCall(
 
 	formattedOutput, err := json.MarshalIndent(result.Output, "", "  ")
 	if err != nil {
+		_ = emitDebugTrace(trace, DebugTraceEvent{
+			Level: "error",
+			Title: "Capability result encode failed",
+			Text:  fmt.Sprintf("capability=%s error=%v", capabilityID, err),
+		})
 		return "", nil, err
 	}
 
+	_ = emitDebugTrace(trace, DebugTraceEvent{
+		Level: "info",
+		Title: "Capability call completed",
+		Text:  fmt.Sprintf("capability=%s output=%s", capabilityID, string(formattedOutput)),
+	})
+
 	return string(formattedOutput), result.Output, nil
+}
+
+func marshalCapabilityInput(input any) string {
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return "{}"
+	}
+
+	return string(encoded)
 }
 
 func extractPlannedCapabilityCall(text string) (plannedCapabilityCall, bool, error) {

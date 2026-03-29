@@ -26,6 +26,7 @@ function createPayload(
         deltaText: null,
         accumulatedText: null,
         debugTitle: null,
+        debugLevel: null,
         debugText: null,
         confirmationId: null,
         confirmationHint: null,
@@ -43,6 +44,7 @@ describe("aiChatStreamState", () => {
             payload: createPayload("debug", {
                 debugTitle: "trace",
                 debugText: "payload",
+                debugLevel: "error",
             }),
             binding: createPendingStreamBinding("conversation-1", "session-1", "assistant-1"),
             debugEntryId: "debug-1",
@@ -55,6 +57,7 @@ describe("aiChatStreamState", () => {
         expect(transition.nextDebugEntry).toEqual({
             id: "debug-1",
             streamId: "stream-1",
+            level: "error",
             title: "trace",
             text: "payload",
         });

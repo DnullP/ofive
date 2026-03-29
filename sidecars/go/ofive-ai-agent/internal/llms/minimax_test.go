@@ -61,6 +61,61 @@ func TestMinimaxGenerateContentUsesConfiguredVendorModel(t *testing.T) {
 	if got := capturedRequest.Messages[0].Content[0].Text; got != "你好" {
 		t.Fatalf("expected text content to be forwarded, got %q", got)
 	}
+	if !capturedRequest.Stream {
+		t.Fatal("expected minimax adapter to enable vendor streaming")
+	}
+}
+
+func TestMinimaxGenerateContentStreamsVendorResponseIntoMultipleYields(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("event: message_start\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"MiniMax-M2.7\",\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_start\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_delta\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"first part \"}}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_delta\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"second part\"}}\n\n"))
+		_, _ = writer.Write([]byte("event: message_delta\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":2}}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_stop\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_stop\",\"index\":0}\n\n"))
+		_, _ = writer.Write([]byte("event: message_stop\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"message_stop\"}\n\n"))
+	}))
+	defer server.Close()
+
+	llm := NewMinimaxLLM("minimax-anthropic", server.URL, "MiniMax-M2.7", "test-key")
+	request := &model.LLMRequest{
+		Model: "minimax-anthropic",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("你好", genai.RoleUser),
+		},
+	}
+
+	responses := make([]*model.LLMResponse, 0)
+	for response, err := range llm.GenerateContent(context.Background(), request, false) {
+		if err != nil {
+			t.Fatalf("GenerateContent returned error: %v", err)
+		}
+		responses = append(responses, response)
+	}
+
+	if len(responses) != 3 {
+		t.Fatalf("expected two incremental responses plus final completion, got %d", len(responses))
+	}
+	if responses[0].Content.Parts[0].Text != "first part " {
+		t.Fatalf("expected first incremental text, got %+v", responses[0].Content)
+	}
+	if responses[1].Content.Parts[0].Text != "first part second part" {
+		t.Fatalf("expected accumulated text on second chunk, got %+v", responses[1].Content)
+	}
+	if !responses[2].TurnComplete || responses[2].Content.Parts[0].Text != "first part second part" {
+		t.Fatalf("expected final completed response, got %+v", responses[2])
+	}
 }
 
 func TestMinimaxGenerateContentSendsToolsAndToolMessages(t *testing.T) {

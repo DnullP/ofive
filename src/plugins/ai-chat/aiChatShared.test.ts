@@ -51,6 +51,32 @@ const VENDORS: AiVendorDefinition[] = [
             },
         ],
     },
+    {
+        id: "vendor-b",
+        title: "Vendor B",
+        description: "Vendor B desc",
+        defaultModel: "model-b",
+        fields: [
+            {
+                key: "endpoint",
+                label: "Endpoint",
+                description: "Endpoint",
+                fieldType: "text",
+                required: false,
+                placeholder: null,
+                defaultValue: "https://vendor-b.test",
+            },
+            {
+                key: "apiKey",
+                label: "API Key",
+                description: "API Key",
+                fieldType: "password",
+                required: true,
+                placeholder: null,
+                defaultValue: null,
+            },
+        ],
+    },
 ];
 
 function createSettings(): AiChatSettings {
@@ -86,6 +112,24 @@ describe("aiChatShared", () => {
         expect(merged.fieldValues).toEqual({
             token: "secret",
             endpoint: "https://example.test",
+        });
+    });
+
+    it("应在切换 vendor 时回退到新 vendor 的默认模型和默认字段值", () => {
+        const vendor = VENDORS[1]!;
+        const merged = mergeSettingsForVendor({
+            vendorId: "vendor-a",
+            model: "model-a-custom",
+            fieldValues: {
+                token: "secret",
+                endpoint: "",
+            },
+        }, vendor);
+
+        expect(merged.model).toBe("model-b");
+        expect(merged.fieldValues).toEqual({
+            endpoint: "https://vendor-b.test",
+            apiKey: "",
         });
     });
 

@@ -11,82 +11,21 @@
 
 /* ai-chat-header：头部信息区 */
 .ai-chat-header {
-    padding: 10px 10px 8px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     border-bottom: 1px solid var(--border-color);
     background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
 }
 
-/* ai-chat-header-main：头部标题与状态区 */
-.ai-chat-header-main {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-}
-
-/* ai-chat-title：主标题 */
-.ai-chat-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-/* ai-chat-header-badges：头部徽章组 */
-.ai-chat-header-badges {
+/* ai-chat-header-actions：头部操作按钮区 */
+.ai-chat-header-actions {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 6px;
-}
-
-/* ai-chat-vendor-badge：vendor 和 model 徽章 */
-.ai-chat-vendor-badge {
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 4px 9px;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--accent-primary) 24%, var(--border-color));
-    background: color-mix(in srgb, var(--accent-primary) 9%, var(--bg-primary));
-    font-size: 11px;
-    color: var(--text-primary);
-}
-
-/* ai-chat-vendor-badge strong：model 文本 */
-.ai-chat-vendor-badge strong {
-    color: var(--accent-primary);
-    font-weight: 700;
-}
-
-/* ai-chat-status-chip：紧凑状态标签 */
-.ai-chat-status-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 4px 9px;
-    border-radius: 999px;
-    border: 1px solid var(--border-color);
-    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
-    font-size: 11px;
-    color: var(--text-secondary);
-}
-
-/* ai-chat-status-chip.warning：未配置状态 */
-.ai-chat-status-chip.warning {
-    color: var(--text-warning);
-    border-color: color-mix(in srgb, var(--text-warning) 34%, var(--border-color));
-    background: color-mix(in srgb, var(--text-warning) 10%, var(--bg-primary));
-}
-
-/* ai-chat-conversation-bar：会话列表容器 */
-.ai-chat-conversation-bar {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 /* ai-chat-conversation-actions：会话操作按钮组 */
@@ -111,23 +50,6 @@
     cursor: pointer;
 }
 
-/* ai-chat-conversation-bar-header：会话列表标题行 */
-.ai-chat-conversation-bar-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-/* ai-chat-section-label：分区标题 */
-.ai-chat-section-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-}
-
 /* ai-chat-conversation-create：新建会话按钮 */
 .ai-chat-conversation-create {
     border: 1px solid var(--border-color);
@@ -147,57 +69,6 @@
 .ai-chat-conversation-create:disabled {
     opacity: 0.6;
     cursor: not-allowed;
-}
-
-/* ai-chat-conversation-summary：当前会话摘要卡片 */
-.ai-chat-conversation-summary {
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 9px 10px;
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
-}
-
-/* ai-chat-conversation-summary-meta：当前会话摘要主信息 */
-.ai-chat-conversation-summary-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-}
-
-/* ai-chat-conversation-summary-side：当前会话摘要侧信息 */
-.ai-chat-conversation-summary-side {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
-    flex: 0 0 auto;
-}
-
-/* ai-chat-conversation-summary-label：当前会话摘要标签 */
-.ai-chat-conversation-summary-label {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-}
-
-/* ai-chat-conversation-count：会话数量摘要 */
-.ai-chat-conversation-count {
-    font-size: 10px;
-    color: var(--text-tertiary);
-}
-
-/* ai-chat-conversation-hint：会话管理说明 */
-.ai-chat-conversation-hint {
-    font-size: 11px;
-    line-height: 1.5;
-    color: var(--text-secondary);
 }
 
 /* ai-chat-conversation-title：会话标题 */
@@ -544,8 +415,35 @@
     color: var(--text-secondary);
 }
 
+/* ai-chat-confirmation-preview：patch 预览容器 */
+.ai-chat-confirmation-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* ai-chat-confirmation-preview-label：patch 预览标题 */
+.ai-chat-confirmation-preview-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
 /* ai-chat-confirmation-args：确认参数区 */
 .ai-chat-confirmation-args {
+    margin: 0;
+    padding: 10px;
+    border-radius: 10px;
+    overflow: auto;
+    font: 11px/1.55 "SFMono-Regular", "Consolas", "Menlo", monospace;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-primary));
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ai-chat-confirmation-diff：patch diff 预览区 */
+.ai-chat-confirmation-diff {
     margin: 0;
     padding: 10px;
     border-radius: 10px;
@@ -608,6 +506,86 @@
     overflow: hidden;
 }
 
+/* ai-chat-debug-toolbar：调试工具栏 */
+.ai-chat-debug-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+/* ai-chat-debug-filter-group：调试过滤按钮组 */
+.ai-chat-debug-filter-group {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* ai-chat-debug-copy-button：复制全部调试日志按钮 */
+.ai-chat-debug-copy-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+    cursor: pointer;
+}
+
+/* ai-chat-debug-copy-button:hover：复制按钮悬停态 */
+.ai-chat-debug-copy-button:hover {
+    border-color: color-mix(in srgb, var(--accent-primary) 28%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary) 6%, var(--bg-primary));
+}
+
+/* ai-chat-debug-copy-button:disabled：复制按钮禁用态 */
+.ai-chat-debug-copy-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ai-chat-debug-copy-button.state-copied：复制成功态 */
+.ai-chat-debug-copy-button.state-copied {
+    color: var(--accent-primary);
+    border-color: color-mix(in srgb, var(--accent-primary) 28%, var(--border-color));
+}
+
+/* ai-chat-debug-copy-button.state-error：复制失败态 */
+.ai-chat-debug-copy-button.state-error {
+    color: var(--error-color);
+    border-color: color-mix(in srgb, var(--error-color) 28%, var(--border-color));
+}
+
+/* ai-chat-debug-filter：调试等级过滤按钮 */
+.ai-chat-debug-filter {
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 5px 9px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+    cursor: pointer;
+}
+
+/* ai-chat-debug-filter.active：当前激活的过滤按钮 */
+.ai-chat-debug-filter.active {
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--accent-primary) 28%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-primary));
+}
+
+/* ai-chat-debug-filter:hover：调试过滤按钮悬停态 */
+.ai-chat-debug-filter:hover {
+    border-color: color-mix(in srgb, var(--accent-primary) 28%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary) 6%, var(--bg-primary));
+}
+
 /* ai-chat-debug-empty：空调试提示 */
 .ai-chat-debug-empty {
     border: 1px dashed color-mix(in srgb, var(--accent-primary) 20%, var(--border-color));
@@ -643,6 +621,13 @@
     gap: 10px;
 }
 
+/* ai-chat-debug-list：覆盖全局 body 的 user-select:none，允许选择调试日志文本 */
+.ai-chat-debug-list,
+.ai-chat-debug-list * {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
 /* ai-chat-debug-entry：单条调试日志 */
 .ai-chat-debug-entry {
     border: 1px solid var(--border-color);
@@ -662,11 +647,73 @@
     gap: 8px;
 }
 
+/* ai-chat-debug-entry-meta：调试日志主信息 */
+.ai-chat-debug-entry-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
 /* ai-chat-debug-entry-title：调试标题 */
 .ai-chat-debug-entry-title {
     font-size: 12px;
     font-weight: 700;
     color: var(--text-primary);
+}
+
+/* ai-chat-debug-entry-level：调试等级标签 */
+.ai-chat-debug-entry-level {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 3px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: color-mix(in srgb, var(--bg-secondary) 90%, var(--bg-primary));
+    color: var(--text-secondary);
+}
+
+/* ai-chat-debug-entry.level-debug：debug 等级日志边框 */
+.ai-chat-debug-entry.level-debug {
+    border-color: color-mix(in srgb, var(--border-color) 88%, var(--accent-primary) 12%);
+}
+
+/* ai-chat-debug-entry.level-info：info 等级日志边框 */
+.ai-chat-debug-entry.level-info {
+    border-color: color-mix(in srgb, var(--accent-primary) 24%, var(--border-color));
+}
+
+/* ai-chat-debug-entry.level-warn：warn 等级日志边框 */
+.ai-chat-debug-entry.level-warn {
+    border-color: color-mix(in srgb, var(--text-warning) 34%, var(--border-color));
+}
+
+/* ai-chat-debug-entry.level-error：error 等级日志边框 */
+.ai-chat-debug-entry.level-error {
+    border-color: color-mix(in srgb, var(--error-color) 38%, var(--border-color));
+}
+
+/* ai-chat-debug-entry-level.level-debug：debug 等级标签 */
+.ai-chat-debug-entry-level.level-debug {
+    color: var(--text-secondary);
+}
+
+/* ai-chat-debug-entry-level.level-info：info 等级标签 */
+.ai-chat-debug-entry-level.level-info {
+    color: var(--accent-primary);
+}
+
+/* ai-chat-debug-entry-level.level-warn：warn 等级标签 */
+.ai-chat-debug-entry-level.level-warn {
+    color: var(--text-warning);
+}
+
+/* ai-chat-debug-entry-level.level-error：error 等级标签 */
+.ai-chat-debug-entry-level.level-error {
+    color: var(--error-color);
 }
 
 /* ai-chat-debug-entry-stream：stream 标识 */
@@ -731,6 +778,9 @@
     flex: 1 1 auto;
     font-size: 11px;
     color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ai-chat-send-button：发送按钮 */
@@ -828,34 +878,9 @@
     border-color: color-mix(in srgb, var(--accent-primary) 42%, var(--border-color));
 }
 
-/* ai-chat-settings-inline-actions：设置行内按钮区 */
-.ai-chat-settings-inline-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
 /* ai-chat-settings-model-select：模型下拉 */
 .ai-chat-settings-model-select {
-    flex: 1 1 auto;
     min-width: 0;
-}
-
-/* ai-chat-settings-refresh：刷新模型按钮 */
-.ai-chat-settings-refresh {
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 7px 10px;
-    font-size: 12px;
-    color: var(--text-primary);
-    background: var(--bg-primary);
-    cursor: pointer;
-}
-
-/* ai-chat-settings-refresh:disabled：刷新按钮禁用态 */
-.ai-chat-settings-refresh:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
 }
 
 /* ai-chat-settings-actions：设置底部操作区 */
@@ -926,11 +951,7 @@
 
 /* 桌面毛玻璃 AI 面板交互控件：与现有会话列表和输入控件保持一致。 */
 .app-runtime--tauri.app-effect--glass .ai-chat-settings-input,
-.app-runtime--tauri.app-effect--glass .ai-chat-settings-refresh,
 .app-runtime--tauri.app-effect--glass .ai-chat-history-search,
-.app-runtime--tauri.app-effect--glass .ai-chat-vendor-badge,
-.app-runtime--tauri.app-effect--glass .ai-chat-status-chip,
-.app-runtime--tauri.app-effect--glass .ai-chat-conversation-summary,
 .app-runtime--tauri.app-effect--glass .ai-chat-history-item,
 .app-runtime--tauri.app-effect--glass .ai-chat-conversation-create,
 .app-runtime--tauri.app-effect--glass .ai-chat-conversation-manage,
@@ -942,18 +963,9 @@
 
 /* 窄屏布局优化 */
 @media (max-width: 420px) {
-    .ai-chat-header-main {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .ai-chat-header-badges {
-        justify-content: flex-start;
-    }
-
-    .ai-chat-conversation-bar-header,
+    .ai-chat-header-actions,
     .ai-chat-history-toolbar,
-    .ai-chat-conversation-summary {
+    .ai-chat-debug-toolbar {
         flex-direction: column;
         align-items: stretch;
     }

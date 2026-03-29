@@ -13,7 +13,7 @@ use crate::shared::vault_contracts::{
 use serde_yaml::Value as YamlValue;
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// 以子序列方式计算 query 在目标字符串中的模糊匹配得分。
 fn fuzzy_subsequence_score(target: &str, query: &str) -> Option<usize> {
@@ -445,6 +445,132 @@ pub(crate) fn search_vault_markdown_files_in_root(
     );
 
     Ok(scored)
+}
+
+/// 在指定仓库根目录下检索 Canvas 文件。
+pub(crate) fn search_vault_canvas_files_in_root(
+    vault_root: &Path,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<VaultQuickSwitchItem>, String> {
+    let effective_limit = limit.unwrap_or(80).clamp(1, 200);
+    let trimmed_query = query.trim();
+
+    log::info!(
+        "[vault-search] search_vault_canvas_files start: query={} limit={}",
+        trimmed_query,
+        effective_limit
+    );
+
+    let mut relative_paths = collect_canvas_relative_paths(vault_root, vault_root)?;
+    relative_paths.sort();
+
+    if trimmed_query.is_empty() {
+        let results = relative_paths
+            .into_iter()
+            .take(effective_limit)
+            .map(|relative_path| VaultQuickSwitchItem {
+                title: derive_canvas_title(&relative_path),
+                relative_path,
+                score: 0,
+            })
+            .collect::<Vec<_>>();
+
+        log::info!(
+            "[vault-search] search_vault_canvas_files success: query-empty results={}",
+            results.len()
+        );
+        return Ok(results);
+    }
+
+    let mut scored = relative_paths
+        .into_iter()
+        .filter_map(|relative_path| {
+            let score = score_quick_switch_match(&relative_path, trimmed_query)?;
+            Some(VaultQuickSwitchItem {
+                title: derive_canvas_title(&relative_path),
+                relative_path,
+                score,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    scored.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| left.relative_path.len().cmp(&right.relative_path.len()))
+            .then_with(|| left.relative_path.cmp(&right.relative_path))
+    });
+
+    if scored.len() > effective_limit {
+        scored.truncate(effective_limit);
+    }
+
+    log::info!(
+        "[vault-search] search_vault_canvas_files success: query={} results={}",
+        trimmed_query,
+        scored.len()
+    );
+
+    Ok(scored)
+}
+
+/// 递归收集仓库内的 `.canvas` 相对路径。
+fn collect_canvas_relative_paths(
+    vault_root: &Path,
+    current_dir: &Path,
+) -> Result<Vec<String>, String> {
+    let mut paths = Vec::new();
+    let entries = fs::read_dir(current_dir)
+        .map_err(|error| format!("读取目录失败 {}: {error}", current_dir.display()))?;
+
+    let mut child_paths = entries
+        .filter_map(|entry| entry.ok().map(|item| item.path()))
+        .collect::<Vec<PathBuf>>();
+    child_paths.sort();
+
+    for child_path in child_paths {
+        let file_name = child_path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
+
+        if file_name == ".ofive" {
+            continue;
+        }
+
+        if child_path.is_dir() {
+            paths.extend(collect_canvas_relative_paths(vault_root, &child_path)?);
+            continue;
+        }
+
+        let is_canvas = child_path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case("canvas"));
+        if !is_canvas {
+            continue;
+        }
+
+        let relative_path = child_path
+            .strip_prefix(vault_root)
+            .map_err(|error| format!("计算 Canvas 相对路径失败 {}: {error}", child_path.display()))?
+            .to_string_lossy()
+            .replace('\\', "/");
+        paths.push(relative_path);
+    }
+
+    Ok(paths)
+}
+
+/// 从 Canvas 相对路径推导展示标题。
+fn derive_canvas_title(relative_path: &str) -> String {
+    Path::new(relative_path)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(relative_path)
+        .to_string()
 }
 
 /// 在指定仓库根目录下搜索 Markdown 文件名、全文内容与标签。

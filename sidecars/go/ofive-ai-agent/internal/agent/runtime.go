@@ -77,6 +77,7 @@ type StreamChunk struct {
 	DeltaText                string
 	AccumulatedText          string
 	DebugTitle               string
+	DebugLevel               string
 	DebugText                string
 	ConfirmationID           string
 	ConfirmationHint         string
@@ -93,8 +94,15 @@ type pendingToolConfirmation struct {
 	ToolArgsJSON string
 }
 
+type streamADKState struct {
+	responseText string
+	emittedText  string
+	confirmation *pendingToolConfirmation
+}
+
 // DebugTraceEvent represents one raw trace emitted during a model-backed turn.
 type DebugTraceEvent struct {
+	Level string
 	Title string
 	Text  string
 }
@@ -163,6 +171,7 @@ func (r *Runtime) Chat(
 		ctx,
 		message,
 		bridgeConfig,
+		trace,
 	); handled {
 		return responseText, agentDisplayName, err
 	}
@@ -249,6 +258,7 @@ func (r *Runtime) StreamChat(
 	trace := func(event DebugTraceEvent) error {
 		return emit(StreamChunk{
 			EventType:  "debug",
+			DebugLevel: normalizeDebugLevel(event.Level),
 			DebugTitle: event.Title,
 			DebugText:  event.Text,
 		})
@@ -277,6 +287,7 @@ func (r *Runtime) StreamChat(
 		ctx,
 		message,
 		bridgeConfig,
+		trace,
 	); handled {
 		if err != nil {
 			return err
@@ -412,6 +423,7 @@ func (r *Runtime) StreamConfirmation(
 	trace := func(event DebugTraceEvent) error {
 		return emit(StreamChunk{
 			EventType:  "debug",
+			DebugLevel: normalizeDebugLevel(event.Level),
 			DebugTitle: event.Title,
 			DebugText:  event.Text,
 		})
@@ -554,54 +566,114 @@ func streamADKContent(
 	content *genai.Content,
 	emit func(StreamChunk) error,
 ) error {
-	var responseText string
-	var confirmation *pendingToolConfirmation
+	state := streamADKState{}
 
 	for event, err := range runnerInstance.Run(ctx, userID, sessionID, content, agent.RunConfig{}) {
 		if err != nil {
+			_ = emitDebugTrace(emitDebugEvent(emit), DebugTraceEvent{
+				Level: "error",
+				Title: "ADK run failed",
+				Text:  err.Error(),
+			})
 			return fmt.Errorf("run adk turn: %w", err)
 		}
 		if event == nil || event.Author != adkAgent.Name() || event.LLMResponse.Content == nil {
 			continue
 		}
 
-		if pending := extractPendingToolConfirmation(event.LLMResponse.Content); pending != nil {
-			confirmation = pending
-		}
-
-		var parts []string
-		for _, part := range event.LLMResponse.Content.Parts {
-			if part != nil && strings.TrimSpace(part.Text) != "" {
-				parts = append(parts, part.Text)
-			}
-		}
-		if len(parts) > 0 {
-			responseText = strings.Join(parts, "\n")
+		if err := processADKEventContent(
+			agentDisplayName,
+			event.LLMResponse.Content,
+			&state,
+			emit,
+		); err != nil {
+			return err
 		}
 	}
 
-	if confirmation != nil {
-		if err := savePendingConfirmation(ctx, sessionID, *confirmation, bridgeConfig); err != nil {
+	if state.confirmation != nil {
+		if err := savePendingConfirmation(ctx, sessionID, *state.confirmation, bridgeConfig); err != nil {
+			_ = emitDebugTrace(emitDebugEvent(emit), DebugTraceEvent{
+				Level: "error",
+				Title: "Persist pending confirmation failed",
+				Text:  err.Error(),
+			})
 			return err
 		}
 
 		return emit(StreamChunk{
 			EventType:                "confirmation",
 			AgentName:                agentDisplayName,
-			AccumulatedText:          responseText,
-			ConfirmationID:           confirmation.ID,
-			ConfirmationHint:         confirmation.Hint,
-			ConfirmationToolName:     confirmation.ToolName,
-			ConfirmationToolArgsJSON: confirmation.ToolArgsJSON,
+			AccumulatedText:          state.responseText,
+			ConfirmationID:           state.confirmation.ID,
+			ConfirmationHint:         state.confirmation.Hint,
+			ConfirmationToolName:     state.confirmation.ToolName,
+			ConfirmationToolArgsJSON: state.confirmation.ToolArgsJSON,
 			Done:                     true,
 		})
 	}
 
-	if strings.TrimSpace(responseText) == "" {
+	if strings.TrimSpace(state.responseText) == "" {
+		_ = emitDebugTrace(emitDebugEvent(emit), DebugTraceEvent{
+			Level: "error",
+			Title: "ADK returned empty response",
+			Text:  "model stream completed without assistant text",
+		})
 		return fmt.Errorf("adk returned empty response")
 	}
 
-	return emitChunkedTextResponse(responseText, agentDisplayName, emit)
+	return emit(StreamChunk{
+		EventType:       "done",
+		AgentName:       agentDisplayName,
+		DeltaText:       "",
+		AccumulatedText: state.responseText,
+		Done:            true,
+	})
+}
+
+func processADKEventContent(
+	agentDisplayName string,
+	content *genai.Content,
+	state *streamADKState,
+	emit func(StreamChunk) error,
+) error {
+	if content == nil || state == nil {
+		return nil
+	}
+
+	if pending := extractPendingToolConfirmation(content); pending != nil {
+		state.confirmation = pending
+	}
+
+	for _, toolInfo := range extractToolSuccessDebugEvents(content) {
+		if err := emitDebugTrace(emitDebugEvent(emit), toolInfo); err != nil {
+			return err
+		}
+	}
+
+	for _, toolError := range extractToolFailureDebugEvents(content) {
+		if err := emitDebugTrace(emitDebugEvent(emit), toolError); err != nil {
+			return err
+		}
+	}
+
+	var parts []string
+	for _, part := range content.Parts {
+		if part != nil && strings.TrimSpace(part.Text) != "" {
+			parts = append(parts, part.Text)
+		}
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+
+	state.responseText = strings.Join(parts, "\n")
+	return emitStreamTextDelta(
+		agentDisplayName,
+		state.responseText,
+		&state.emittedText,
+		emit,
+	)
 }
 
 func extractPendingToolConfirmation(content *genai.Content) *pendingToolConfirmation {
@@ -699,7 +771,11 @@ func (r *Runtime) buildAgent(
 			vendorConfig.FieldValues["apiKey"],
 		)
 		llm.SetTraceEmitter(func(title string, text string) error {
-			return emitDebugTrace(trace, DebugTraceEvent{Title: title, Text: text})
+			return emitDebugTrace(trace, DebugTraceEvent{
+				Level: inferLLMTraceLevel(title, text),
+				Title: title,
+				Text:  text,
+			})
 		})
 
 		toolsets, err := buildMCPToolsets(bridgeConfig)
@@ -742,7 +818,11 @@ func (r *Runtime) buildAgent(
 			vendorConfig.FieldValues["authToken"],
 		)
 		llm.SetTraceEmitter(func(title string, text string) error {
-			return emitDebugTrace(trace, DebugTraceEvent{Title: title, Text: text})
+			return emitDebugTrace(trace, DebugTraceEvent{
+				Level: inferLLMTraceLevel(title, text),
+				Title: title,
+				Text:  text,
+			})
 		})
 
 		toolsets, err := buildMCPToolsets(bridgeConfig)
@@ -855,7 +935,21 @@ func buildAgentInstruction(bridgeConfig CapabilityBridgeConfig) string {
 	return baseInstruction + "\n\n" +
 		"When the user asks about local vault content, notes, outlines, backlinks, search results, or graph data, you must use the provided tools instead of guessing or claiming you cannot access local files. " +
 		"Never invent tools, parameters, or file contents. If the user's request would require writing, renaming, deleting, or any other modification but no such executable tool is listed, explicitly say that the current assistant session only has non-mutating tools available and do not claim success. " +
-		"After tool results are available, answer directly and stay grounded in those results. Available tools:\n" + strings.Join(toolLines, "\n")
+		"After tool results are available, answer directly and stay grounded in those results. " +
+		"For localized Markdown edits, prefer vault.apply_markdown_patch over whole-file overwrite tools. " +
+		"Always read the target file immediately before building a patch, even if you saw older content earlier in the conversation. " +
+		"For canvas edits, always call vault.get_canvas_document first, modify the returned document object, and then send the full document back with vault.save_canvas_document. Do not invent partial node fragments. Keep every unchanged node and edge unless you intentionally remove it. Every saved node must still include id, type, x, y, width, and height, and canvas geometry may be floating point. " +
+		"If vault.read_markdown_file returns numberedContent, treat it only as a positioning aid; copy exact source lines from content when building unified diffs, and never include line-number prefixes in the patch body. " +
+		"When using vault.apply_markdown_patch, send only relativePath plus a single-file unifiedDiff string. " +
+		"The unified diff must include --- and +++ headers that point to the same markdown file as relativePath, followed by one or more standard @@ hunks. " +
+		"When composing removed or context lines, copy them verbatim from the latest file read instead of rewriting them into your preferred formatting. " +
+		"Preserve blank lines as literal blank lines inside the diff body. For Markdown section edits, adjacent separator lines between a list or paragraph and the next heading or link often matter, so include those blank lines in the hunk when they are part of the edited block. " +
+		"If you are replacing one contiguous block, send one @@ hunk for that block instead of rewriting the full file. " +
+		"Use standard unified diff markers: unchanged lines start with a space, removed lines start with -, and added lines start with +. " +
+		"Valid example: {\"relativePath\":\"notes/guide.md\",\"unifiedDiff\":\"--- a/notes/guide.md\\n+++ b/notes/guide.md\\n@@ -3,3 +3,3 @@\\n alpha\\n-beta\\n+beta patched\\n gamma\"}. " +
+		"Valid section-insertion example: {\"relativePath\":\"notes/guide.md\",\"unifiedDiff\":\"--- a/notes/guide.md\\n+++ b/notes/guide.md\\n@@ -5,4 +5,7 @@\\n ## 影响因素\\n - 价格变化\\n - 需求弹性\\n - 市场结构\\n+\\n+## 具体例子\\n+\\n+示例内容\\n \\n [[供需原理]]\"}. " +
+		"If a patch fails because the context did not match, read the file again and build a new patch from the latest exact lines instead of reusing the failed hunk. " +
+		"Do not switch to vault.save_markdown_file as a fallback unless the user explicitly asked for a whole-file rewrite or explicitly approved replacing the full file content. Available tools:\n" + strings.Join(toolLines, "\n")
 }
 
 func mockToolPlanningResponse(prompt string, bridgeConfig CapabilityBridgeConfig) string {
@@ -933,7 +1027,217 @@ func emitDebugTrace(trace func(DebugTraceEvent) error, event DebugTraceEvent) er
 	if strings.TrimSpace(event.Title) == "" || strings.TrimSpace(event.Text) == "" {
 		return nil
 	}
+	event.Level = normalizeDebugLevel(event.Level)
 	return trace(event)
+}
+
+func emitDebugEvent(emit func(StreamChunk) error) func(DebugTraceEvent) error {
+	return func(event DebugTraceEvent) error {
+		return emit(StreamChunk{
+			EventType:  "debug",
+			DebugLevel: normalizeDebugLevel(event.Level),
+			DebugTitle: event.Title,
+			DebugText:  event.Text,
+		})
+	}
+}
+
+func extractToolFailureDebugEvents(content *genai.Content) []DebugTraceEvent {
+	if content == nil {
+		return nil
+	}
+
+	events := make([]DebugTraceEvent, 0)
+	for _, part := range content.Parts {
+		if part == nil || part.FunctionResponse == nil {
+			continue
+		}
+
+		failureText, ok := extractToolFailureText(part.FunctionResponse.Response)
+		if !ok {
+			continue
+		}
+
+		toolName := strings.TrimSpace(part.FunctionResponse.Name)
+		if toolName == "" {
+			toolName = "unknown-tool"
+		}
+
+		events = append(events, DebugTraceEvent{
+			Level: "error",
+			Title: "Capability call failed",
+			Text:  fmt.Sprintf("capability=%s error=%s", toolName, failureText),
+		})
+	}
+
+	return events
+}
+
+func extractToolSuccessDebugEvents(content *genai.Content) []DebugTraceEvent {
+	if content == nil {
+		return nil
+	}
+
+	events := make([]DebugTraceEvent, 0)
+	for _, part := range content.Parts {
+		if part == nil || part.FunctionResponse == nil {
+			continue
+		}
+
+		toolName := strings.TrimSpace(part.FunctionResponse.Name)
+		if toolName == "" || toolName == toolconfirmation.FunctionCallName {
+			continue
+		}
+		if _, failed := extractToolFailureText(part.FunctionResponse.Response); failed {
+			continue
+		}
+
+		events = append(events, DebugTraceEvent{
+			Level: "info",
+			Title: "Capability call completed",
+			Text: fmt.Sprintf(
+				"capability=%s output=%s",
+				toolName,
+				formatToolResponseForDebug(part.FunctionResponse.Response),
+			),
+		})
+	}
+
+	return events
+}
+
+func extractToolFailureText(response any) (string, bool) {
+	switch value := response.(type) {
+	case map[string]any:
+		if errorValue, ok := value["error"]; ok {
+			if text := stringifyToolFailureValue(errorValue); text != "" {
+				return text, true
+			}
+		}
+		if contentValue, ok := value["content"]; ok {
+			if text := stringifyToolFailureValue(contentValue); text != "" {
+				return text, true
+			}
+		}
+	case string:
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return "", false
+		}
+		if strings.Contains(strings.ToLower(trimmed), "tool execution failed") {
+			return trimmed, true
+		}
+
+		var decoded any
+		if err := json.Unmarshal([]byte(trimmed), &decoded); err == nil {
+			return extractToolFailureText(decoded)
+		}
+	}
+
+	return "", false
+}
+
+func stringifyToolFailureValue(value any) string {
+	switch typed := value.(type) {
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "" {
+			return ""
+		}
+		if strings.Contains(strings.ToLower(trimmed), "tool execution failed") {
+			return trimmed
+		}
+
+		var decoded any
+		if err := json.Unmarshal([]byte(trimmed), &decoded); err == nil {
+			if nested, ok := extractToolFailureText(decoded); ok {
+				return nested
+			}
+		}
+		return ""
+	default:
+		encoded, err := json.Marshal(typed)
+		if err != nil {
+			return ""
+		}
+		return stringifyToolFailureValue(string(encoded))
+	}
+}
+
+func formatToolResponseForDebug(response any) string {
+	if response == nil {
+		return "null"
+	}
+
+	switch value := response.(type) {
+	case string:
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return "\"\""
+		}
+		return trimmed
+	default:
+		encoded, err := json.Marshal(response)
+		if err != nil {
+			return "{}"
+		}
+		return string(encoded)
+	}
+}
+
+func normalizeDebugLevel(level string) string {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "error", "warn", "info", "debug":
+		return strings.ToLower(strings.TrimSpace(level))
+	default:
+		return "debug"
+	}
+}
+
+func inferLLMTraceLevel(title string, text string) string {
+	if strings.TrimSpace(title) != "Model HTTP response" {
+		return "debug"
+	}
+
+	normalizedText := strings.ToLower(text)
+	if strings.Contains(normalizedText, "tool execution failed") {
+		return "error"
+	}
+
+	return "debug"
+}
+
+func emitStreamTextDelta(
+	agentDisplayName string,
+	nextText string,
+	emittedText *string,
+	emit func(StreamChunk) error,
+) error {
+	if emittedText == nil {
+		return fmt.Errorf("emitted text cursor is required")
+	}
+
+	if nextText == *emittedText {
+		return nil
+	}
+
+	deltaText := nextText
+	if strings.HasPrefix(nextText, *emittedText) {
+		deltaText = strings.TrimPrefix(nextText, *emittedText)
+	}
+
+	*emittedText = nextText
+	if deltaText == "" {
+		return nil
+	}
+
+	return emit(StreamChunk{
+		EventType:       "delta",
+		AgentName:       agentDisplayName,
+		DeltaText:       deltaText,
+		AccumulatedText: nextText,
+		Done:            false,
+	})
 }
 
 func formatModelRequest(request *model.LLMRequest) string {

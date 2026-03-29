@@ -89,6 +89,7 @@ pub(crate) async fn start_ai_chat_stream(
             delta_text: None,
             accumulated_text: None,
             debug_title: None,
+            debug_level: None,
             debug_text: None,
             confirmation_id: None,
             confirmation_hint: None,
@@ -162,6 +163,11 @@ pub(crate) async fn start_ai_chat_stream(
                         } else {
                             Some(chunk.debug_title)
                         },
+                        debug_level: if chunk.debug_level.is_empty() {
+                            None
+                        } else {
+                            Some(chunk.debug_level)
+                        },
                         debug_text: if chunk.debug_text.is_empty() {
                             None
                         } else {
@@ -217,6 +223,7 @@ pub(crate) async fn start_ai_chat_stream(
                     delta_text: None,
                     accumulated_text: None,
                     debug_title: None,
+                    debug_level: None,
                     debug_text: None,
                     confirmation_id: None,
                     confirmation_hint: None,
@@ -281,6 +288,7 @@ pub(crate) async fn submit_ai_chat_confirmation(
             delta_text: None,
             accumulated_text: None,
             debug_title: None,
+            debug_level: None,
             debug_text: None,
             confirmation_id: None,
             confirmation_hint: None,
@@ -346,6 +354,11 @@ pub(crate) async fn submit_ai_chat_confirmation(
                         } else {
                             Some(chunk.debug_title)
                         },
+                        debug_level: if chunk.debug_level.is_empty() {
+                            None
+                        } else {
+                            Some(chunk.debug_level)
+                        },
                         debug_text: if chunk.debug_text.is_empty() {
                             None
                         } else {
@@ -401,6 +414,7 @@ pub(crate) async fn submit_ai_chat_confirmation(
                     delta_text: None,
                     accumulated_text: None,
                     debug_title: None,
+                    debug_level: None,
                     debug_text: None,
                     confirmation_id: None,
                     confirmation_hint: None,

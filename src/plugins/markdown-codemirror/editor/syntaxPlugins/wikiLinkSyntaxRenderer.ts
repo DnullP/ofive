@@ -54,7 +54,7 @@ export interface WikiLinkMouseDownViewLike {
     posAtCoords: (coords: { x: number; y: number }) => number | null;
 }
 
-interface ClosestCapableTarget {
+interface ClosestCapableTarget extends EventTarget {
     closest: (selector: string) => unknown;
 }
 
@@ -103,7 +103,7 @@ class WikiLinkDisplayWidget extends WidgetType {
  * @param getCurrentFilePath 获取当前文档路径。
  * @param target wiki 目标文本。
  */
-async function openWikiLinkTarget(
+export async function openWikiLinkTarget(
     containerApi: DockviewApi,
     getCurrentFilePath: () => string,
     target: string,

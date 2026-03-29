@@ -25,7 +25,7 @@ import {
     getFocusedArticleSnapshot,
 } from "../store/editorContextStore";
 import { markContentAsSaved } from "../store/autoSaveService";
-import { emitEditorRenameRequestedEvent } from "../events/appEventBus";
+import { emitFileTreeRenameRequestedEvent } from "../events/appEventBus";
 import type { ShortcutCondition } from "../conditions/conditionEvaluator";
 import type { CommandRouteClass } from "./shortcutGovernance";
 import type { ShortcutBindingPolicy } from "./shortcutPolicies";
@@ -511,35 +511,37 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
             editableInSettings: true,
         },
         /**
-         * @description 请求当前激活 Tab 进入文件名内联编辑模式。
-         * 通过事件总线发布 editor.rename.requested 事件，由对应的
-         * CodeMirrorEditorTab 接收并切换到编辑状态。
+         * @description 请求文件树对当前目标文件进入重命名编辑态。
+         * 优先使用文件树当前选中项；若文件树未聚焦，则回退到当前活动/聚焦文章路径。
          * @param context 指令执行上下文。
-         * @sideEffect 发布 editor.rename.requested 事件。
+         * @sideEffect 激活 files 面板并发布 fileTree.rename.requested 事件。
          */
         execute(context) {
+            const selectedFileTreeItem = context.getFileTreeSelectedItem?.() ?? null;
             const activeArticle = context.activeTabId ? getArticleSnapshotById(context.activeTabId) : null;
             const focusedArticle = getFocusedArticleSnapshot();
-            const targetArticle = activeArticle ?? focusedArticle;
-            const targetPath = targetArticle?.path ?? null;
-            if (!targetPath || !targetArticle) {
+            const targetPath = selectedFileTreeItem?.path ?? activeArticle?.path ?? focusedArticle?.path ?? null;
+            if (!targetPath) {
                 console.warn("[command-system] renameFocused skipped: no focused file");
                 return;
             }
 
             const normalizedPath = targetPath.replace(/\\/g, "/");
-            const isMarkdownPath =
-                normalizedPath.endsWith(".md") || normalizedPath.endsWith(".markdown");
-            if (!isMarkdownPath) {
-                console.warn("[command-system] renameFocused skipped: focused path is not markdown", {
+            const isRenamablePath =
+                normalizedPath.endsWith(".md") ||
+                normalizedPath.endsWith(".markdown") ||
+                normalizedPath.endsWith(".canvas") ||
+                selectedFileTreeItem?.isDir === true;
+            if (!isRenamablePath) {
+                console.warn("[command-system] renameFocused skipped: focused path is not renamable", {
                     path: normalizedPath,
                 });
                 return;
             }
 
-            emitEditorRenameRequestedEvent({ articleId: targetArticle.articleId });
+            context.activatePanel?.("files");
+            emitFileTreeRenameRequestedEvent({ path: normalizedPath });
             console.info("[command-system] renameFocused: emitted rename request", {
-                articleId: targetArticle.articleId,
                 path: normalizedPath,
             });
         },

@@ -10,6 +10,7 @@ import (
 	"iter"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -75,7 +76,7 @@ func (b *BaiduLLM) GenerateContent(
 		payload := baiduChatRequest{
 			Model:    b.resolveRequestModel(req.Model),
 			Messages: msgs,
-			Stream:   false,
+			Stream:   true,
 		}
 		payload.Tools = buildTools(req)
 		if len(payload.Tools) > 0 {
@@ -145,6 +146,43 @@ func (b *BaiduLLM) GenerateContent(
 		}
 		defer resp.Body.Close()
 
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			raw, err := io.ReadAll(resp.Body)
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if err := b.emitTrace("Model HTTP response", string(raw)); err != nil {
+				yield(nil, err)
+				return
+			}
+
+			var parsed baiduChatResponse
+			if err := json.Unmarshal(raw, &parsed); err == nil && (parsed.ErrorCode != "" || parsed.ErrorMessage != "") {
+				yield(nil, fmt.Errorf(
+					"baidu api error: code=%s type=%s message=%s",
+					parsed.ErrorCode,
+					parsed.ErrorType,
+					parsed.ErrorMessage,
+				))
+				return
+			}
+			yield(nil, fmt.Errorf("baidu api error: status=%d body=%s", resp.StatusCode, string(raw)))
+			return
+		}
+
+		if isEventStreamContentType(resp.Header.Get("Content-Type")) {
+			raw, err := b.streamResponse(resp.Body, yield)
+			if traceErr := b.emitTrace("Model HTTP response", raw); traceErr != nil {
+				yield(nil, traceErr)
+				return
+			}
+			if err != nil {
+				yield(nil, err)
+			}
+			return
+		}
+
 		raw, err := io.ReadAll(resp.Body)
 		if err != nil {
 			yield(nil, err)
@@ -170,36 +208,99 @@ func (b *BaiduLLM) GenerateContent(
 			))
 			return
 		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			yield(nil, fmt.Errorf("baidu api error: status=%d body=%s", resp.StatusCode, string(raw)))
-			return
-		}
 
-		parts := []*genai.Part{}
-		finishReason := genai.FinishReasonUnspecified
+		message := baiduChatResponseMessage{}
+		finishReason := ""
 		if len(parsed.Choices) > 0 {
-			parts = buildResponseParts(parsed.Choices[0].Message)
-			finishReason = mapFinishReason(parsed.Choices[0].FinishReason)
+			message = parsed.Choices[0].Message
+			finishReason = parsed.Choices[0].FinishReason
 		}
-		if len(parts) == 0 {
-			parts = []*genai.Part{genai.NewPartFromText("")}
+		yield(buildBaiduLLMResponse(message, finishReason, parsed.Usage.PromptTokens, parsed.Usage.CompletionTokens, parsed.Usage.TotalTokens, true), nil)
+	}
+}
+
+func (b *BaiduLLM) streamResponse(
+	body io.Reader,
+	yield func(*model.LLMResponse, error) bool,
+) (string, error) {
+	state := baiduStreamState{
+		toolCalls: make(map[int]*baiduStreamToolCall),
+	}
+	var emitted bool
+	var completed bool
+
+	raw, err := consumeSSEStream(body, func(event sseEvent) error {
+		data := strings.TrimSpace(event.Data)
+		if data == "" {
+			return nil
+		}
+		if data == "[DONE]" {
+			if !yield(buildBaiduLLMResponse(state.snapshotMessage(), state.finishReason, state.promptTokens, state.completionTokens, state.totalTokens, true), nil) {
+				return io.EOF
+			}
+			emitted = true
+			completed = true
+			return nil
 		}
 
-		llmResp := &model.LLMResponse{
-			Content: &genai.Content{
-				Role:  genai.RoleModel,
-				Parts: parts,
-			},
-			FinishReason: finishReason,
-			UsageMetadata: &genai.GenerateContentResponseUsageMetadata{
-				PromptTokenCount:     int32(parsed.Usage.PromptTokens),
-				CandidatesTokenCount: int32(parsed.Usage.CompletionTokens),
-				TotalTokenCount:      int32(parsed.Usage.TotalTokens),
-			},
-			TurnComplete: true,
+		var chunk baiduChatStreamChunk
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			return err
 		}
-		yield(llmResp, nil)
+		if chunk.ErrorCode != "" || chunk.ErrorMessage != "" {
+			return fmt.Errorf(
+				"baidu api error: code=%s type=%s message=%s",
+				chunk.ErrorCode,
+				chunk.ErrorType,
+				chunk.ErrorMessage,
+			)
+		}
+
+		if strings.TrimSpace(chunk.Result) != "" {
+			state.text.WriteString(chunk.Result)
+		}
+		if chunk.Usage.PromptTokens > 0 {
+			state.promptTokens = chunk.Usage.PromptTokens
+		}
+		if chunk.Usage.CompletionTokens > 0 {
+			state.completionTokens = chunk.Usage.CompletionTokens
+		}
+		if chunk.Usage.TotalTokens > 0 {
+			state.totalTokens = chunk.Usage.TotalTokens
+		}
+
+		textUpdated := strings.TrimSpace(chunk.Result) != ""
+		for _, choice := range chunk.Choices {
+			if strings.TrimSpace(choice.Delta.Content) != "" {
+				state.text.WriteString(choice.Delta.Content)
+				textUpdated = true
+			}
+			state.mergeToolCalls(choice.Delta.ToolCalls)
+			if strings.TrimSpace(choice.FinishReason) != "" {
+				state.finishReason = choice.FinishReason
+			}
+		}
+
+		if textUpdated {
+			emitted = true
+			if !yield(buildBaiduLLMResponse(state.snapshotMessage(), state.finishReason, state.promptTokens, state.completionTokens, state.totalTokens, false), nil) {
+				return io.EOF
+			}
+		}
+
+		return nil
+	})
+	if err != nil && err != io.EOF {
+		return raw, err
 	}
+	if err == io.EOF {
+		return raw, nil
+	}
+
+	if !completed && (!emitted || strings.TrimSpace(state.text.String()) != "" || len(state.toolCalls) > 0) {
+		yield(buildBaiduLLMResponse(state.snapshotMessage(), state.finishReason, state.promptTokens, state.completionTokens, state.totalTokens, true), nil)
+	}
+	return raw, nil
 }
 
 func (b *BaiduLLM) emitTrace(title string, text string) error {
@@ -380,10 +481,10 @@ type baiduChatResponse struct {
 	Created int64  `json:"created"`
 	Model   string `json:"model"`
 	Choices []struct {
-		Index   int `json:"index"`
-		Message baiduChatResponseMessage `json:"message"`
-		FinishReason string `json:"finish_reason"`
-		Flag         int    `json:"flag"`
+		Index        int                      `json:"index"`
+		Message      baiduChatResponseMessage `json:"message"`
+		FinishReason string                   `json:"finish_reason"`
+		Flag         int                      `json:"flag"`
 	} `json:"choices"`
 	Usage struct {
 		PromptTokens     int `json:"prompt_tokens"`
@@ -394,6 +495,40 @@ type baiduChatResponse struct {
 	ErrorCode    string `json:"code"`
 	ErrorMessage string `json:"message"`
 	ErrorType    string `json:"type"`
+}
+
+type baiduChatStreamChunk struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Index        int                    `json:"index"`
+		Delta        baiduChatResponseDelta `json:"delta"`
+		FinishReason string                 `json:"finish_reason"`
+	} `json:"choices"`
+	Usage struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage"`
+	Result       string `json:"result"`
+	ErrorCode    string `json:"code"`
+	ErrorMessage string `json:"message"`
+	ErrorType    string `json:"type"`
+}
+
+type baiduChatResponseDelta struct {
+	Role      string                  `json:"role"`
+	Content   string                  `json:"content"`
+	ToolCalls []baiduToolCallDeltaRef `json:"tool_calls"`
+}
+
+type baiduToolCallDeltaRef struct {
+	Index    *int                    `json:"index,omitempty"`
+	ID       string                  `json:"id,omitempty"`
+	Type     string                  `json:"type,omitempty"`
+	Function baiduToolCallRefPayload `json:"function,omitempty"`
 }
 
 // convertContentsToMessages maps genai contents into Baidu chat messages.
@@ -691,6 +826,109 @@ func buildResponseParts(message baiduChatResponseMessage) []*genai.Part {
 		})
 	}
 	return parts
+}
+
+func buildBaiduLLMResponse(
+	message baiduChatResponseMessage,
+	finishReason string,
+	promptTokens int,
+	completionTokens int,
+	totalTokens int,
+	turnComplete bool,
+) *model.LLMResponse {
+	parts := buildResponseParts(message)
+	if len(parts) == 0 {
+		parts = []*genai.Part{genai.NewPartFromText("")}
+	}
+
+	return &model.LLMResponse{
+		Content: &genai.Content{
+			Role:  genai.RoleModel,
+			Parts: parts,
+		},
+		FinishReason: mapFinishReason(finishReason),
+		UsageMetadata: &genai.GenerateContentResponseUsageMetadata{
+			PromptTokenCount:     int32(promptTokens),
+			CandidatesTokenCount: int32(completionTokens),
+			TotalTokenCount:      int32(totalTokens),
+		},
+		TurnComplete: turnComplete,
+	}
+}
+
+type baiduStreamToolCall struct {
+	id        string
+	typ       string
+	name      string
+	arguments strings.Builder
+}
+
+type baiduStreamState struct {
+	text             strings.Builder
+	toolCalls        map[int]*baiduStreamToolCall
+	finishReason     string
+	promptTokens     int
+	completionTokens int
+	totalTokens      int
+}
+
+func (s *baiduStreamState) mergeToolCalls(toolCalls []baiduToolCallDeltaRef) {
+	for index, toolCall := range toolCalls {
+		resolvedIndex := index
+		if toolCall.Index != nil {
+			resolvedIndex = *toolCall.Index
+		}
+		accumulator, ok := s.toolCalls[resolvedIndex]
+		if !ok {
+			accumulator = &baiduStreamToolCall{}
+			s.toolCalls[resolvedIndex] = accumulator
+		}
+		if strings.TrimSpace(toolCall.ID) != "" {
+			accumulator.id = toolCall.ID
+		}
+		if strings.TrimSpace(toolCall.Type) != "" {
+			accumulator.typ = toolCall.Type
+		}
+		if strings.TrimSpace(toolCall.Function.Name) != "" {
+			accumulator.name = toolCall.Function.Name
+		}
+		if toolCall.Function.Arguments != "" {
+			accumulator.arguments.WriteString(toolCall.Function.Arguments)
+		}
+	}
+}
+
+func (s *baiduStreamState) snapshotMessage() baiduChatResponseMessage {
+	message := baiduChatResponseMessage{
+		Role:    "assistant",
+		Content: s.text.String(),
+	}
+	if len(s.toolCalls) == 0 {
+		return message
+	}
+
+	indices := make([]int, 0, len(s.toolCalls))
+	for index := range s.toolCalls {
+		indices = append(indices, index)
+	}
+	sort.Ints(indices)
+
+	message.ToolCalls = make([]baiduToolCallRef, 0, len(indices))
+	for _, index := range indices {
+		toolCall := s.toolCalls[index]
+		if toolCall == nil || strings.TrimSpace(toolCall.name) == "" {
+			continue
+		}
+		message.ToolCalls = append(message.ToolCalls, baiduToolCallRef{
+			ID:   toolCall.id,
+			Type: ifEmpty(toolCall.typ, "function"),
+			Function: baiduToolCallRefPayload{
+				Name:      toolCall.name,
+				Arguments: toolCall.arguments.String(),
+			},
+		})
+	}
+	return message
 }
 
 func marshalJSONObject(value map[string]any) string {

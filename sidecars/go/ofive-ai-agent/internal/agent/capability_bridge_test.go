@@ -3,13 +3,32 @@ package agentruntime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"ofive/sidecars/go/ofive-ai-agent/internal/capabilities"
 )
+
+type fakeCapabilityCaller struct {
+	result *capabilities.CallResult
+	err    error
+}
+
+func (f *fakeCapabilityCaller) Call(_ context.Context, _ string, _ any) (*capabilities.CallResult, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.result, nil
+}
+
+func (f *fakeCapabilityCaller) Close() error {
+	return nil
+}
 
 func TestTryHandleExplicitCapabilityCommandCallsRustCallback(t *testing.T) {
 	t.Parallel()
@@ -51,6 +70,7 @@ func TestTryHandleExplicitCapabilityCommandCallsRustCallback(t *testing.T) {
 				},
 			},
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("tryHandleExplicitCapabilityCommand returned error: %v", err)
@@ -87,6 +107,7 @@ func TestTryHandleExplicitCapabilityCommandRejectsConfirmationRequiredTool(t *te
 				RequiresConfirmation: true,
 			}},
 		},
+		nil,
 	)
 	if !handled {
 		t.Fatal("expected explicit tool command to be handled")
@@ -165,5 +186,69 @@ func TestExtractPlannedCapabilityCallSupportsCapabilityAlias(t *testing.T) {
 	}
 	if call.Capability != "vault.read_markdown_file" {
 		t.Fatalf("unexpected capability alias: %s", call.Capability)
+	}
+}
+
+func TestExecuteCapabilityCallEmitsErrorTraceOnFailure(t *testing.T) {
+	t.Parallel()
+
+	var traces []DebugTraceEvent
+	_, _, err := executeCapabilityCall(
+		context.Background(),
+		&fakeCapabilityCaller{
+			result: &capabilities.CallResult{
+				Success: false,
+				Error:   "invalid canvas payload",
+			},
+		},
+		"vault.save_canvas_document",
+		map[string]any{"relativePath": "boards/demo.canvas"},
+		func(event DebugTraceEvent) error {
+			traces = append(traces, event)
+			return nil
+		},
+	)
+	if err == nil {
+		t.Fatal("expected executeCapabilityCall to fail")
+	}
+	if !strings.Contains(err.Error(), "invalid canvas payload") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(traces) < 2 {
+		t.Fatalf("expected start and failure traces, got %d", len(traces))
+	}
+	if traces[len(traces)-1].Level != "error" {
+		t.Fatalf("expected error level trace, got %s", traces[len(traces)-1].Level)
+	}
+	if !strings.Contains(traces[len(traces)-1].Text, "invalid canvas payload") {
+		t.Fatalf("unexpected failure trace text: %s", traces[len(traces)-1].Text)
+	}
+}
+
+func TestExecuteCapabilityCallEmitsTransportFailureTrace(t *testing.T) {
+	t.Parallel()
+
+	var traces []DebugTraceEvent
+	_, _, err := executeCapabilityCall(
+		context.Background(),
+		&fakeCapabilityCaller{err: errors.New("callback offline")},
+		"vault.read_markdown_file",
+		map[string]any{"relativePath": "Notes/A.md"},
+		func(event DebugTraceEvent) error {
+			traces = append(traces, event)
+			return nil
+		},
+	)
+	if err == nil {
+		t.Fatal("expected executeCapabilityCall to fail")
+	}
+	if len(traces) < 2 {
+		t.Fatalf("expected start and transport failure traces, got %d", len(traces))
+	}
+	if traces[len(traces)-1].Level != "error" {
+		t.Fatalf("expected error level trace, got %s", traces[len(traces)-1].Level)
+	}
+	if !strings.Contains(traces[len(traces)-1].Text, "callback offline") {
+		t.Fatalf("unexpected transport trace text: %s", traces[len(traces)-1].Text)
 	}
 }

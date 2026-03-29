@@ -83,4 +83,5 @@ message ChatChunk {
   string confirmation_hint = 11;
   string confirmation_tool_name = 12;
   string confirmation_tool_args_json = 13;
+  string debug_level = 14;
 }

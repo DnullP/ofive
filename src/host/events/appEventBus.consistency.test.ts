@@ -28,6 +28,8 @@ mock.module("../../api/vaultApi", () => ({
         };
     },
     searchVaultMarkdown: async () => [],
+    suggestWikiLinkTargets: async () => [],
+    resolveWikiLinkTarget: async () => null,
     isSelfTriggeredVaultFsEvent: () => false,
     readVaultMarkdownFile: async () => ({ content: "# latest" }),
     saveVaultMarkdownFile: async () => ({ relativePath: "notes/demo.md", created: false }),

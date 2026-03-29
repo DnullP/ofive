@@ -45,6 +45,10 @@ export interface CanvasNodeData extends Record<string, unknown> {
     color?: string;
     /** 分组节点背景色。 */
     background?: string;
+    /** 仅前端运行时使用：文本节点当前是否处于编辑态。 */
+    isEditingText?: boolean;
+    /** 仅前端运行时使用：文本节点运行时注册键。 */
+    runtimeKey?: string;
 }
 
 /**

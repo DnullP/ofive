@@ -85,15 +85,23 @@ export function mergeSettingsForVendor(
     currentSettings: AiChatSettings,
     vendor: AiVendorDefinition,
 ): AiChatSettings {
+    const isSameVendor = currentSettings.vendorId === vendor.id;
     const nextFieldValues: Record<string, string> = {};
     vendor.fields.forEach((field) => {
         const currentValue = currentSettings.fieldValues[field.key];
-        nextFieldValues[field.key] = currentValue ?? field.defaultValue ?? "";
+        if (isSameVendor && currentValue !== undefined) {
+            nextFieldValues[field.key] = currentValue;
+            return;
+        }
+
+        nextFieldValues[field.key] = field.defaultValue ?? "";
     });
 
     return {
         vendorId: vendor.id,
-        model: currentSettings.model || vendor.defaultModel,
+        model: isSameVendor
+            ? currentSettings.model || vendor.defaultModel
+            : vendor.defaultModel,
         fieldValues: nextFieldValues,
     };
 }

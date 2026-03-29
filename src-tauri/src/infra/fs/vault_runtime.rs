@@ -145,10 +145,12 @@ pub(crate) fn read_vault_markdown_file_in_root(
         "[vault] read_vault_markdown_file success: bytes={}",
         content.len()
     );
+    let numbered_content = build_numbered_content(&content);
 
     Ok(ReadMarkdownResponse {
         relative_path,
         content,
+        numbered_content,
     })
 }
 
@@ -179,11 +181,26 @@ pub(crate) fn read_vault_canvas_file_in_root(
         "[vault] read_vault_canvas_file success: bytes={}",
         content.len()
     );
+    let numbered_content = build_numbered_content(&content);
 
     Ok(ReadMarkdownResponse {
         relative_path,
         content,
+        numbered_content,
     })
+}
+
+fn build_numbered_content(content: &str) -> String {
+    if content.is_empty() {
+        return String::new();
+    }
+
+    content
+        .split('\n')
+        .enumerate()
+        .map(|(index, line)| format!("{}  {}", index + 1, line))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// 读取当前仓库中的 Canvas 文件。

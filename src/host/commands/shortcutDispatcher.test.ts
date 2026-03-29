@@ -9,6 +9,8 @@ import {
     type ShortcutCondition,
 } from "../conditions/conditionEvaluator";
 
+const actualCommandSystem = await import("./commandSystem");
+
 /**
  * @function createKeyboardEventLike
  * @description 创建满足快捷键调度所需字段的键盘事件测试替身。
@@ -71,6 +73,7 @@ function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {
 }
 
 mock.module("./commandSystem", () => ({
+    ...actualCommandSystem,
     getCommandConditions(commandId: string): ShortcutCondition[] {
         const meta = mockCommandRegistry.get(commandId);
         if (!meta) {

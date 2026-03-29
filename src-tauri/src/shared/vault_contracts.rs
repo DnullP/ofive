@@ -47,6 +47,7 @@ pub struct VaultTreeResponse {
 pub struct ReadMarkdownResponse {
     pub relative_path: String,
     pub content: String,
+    pub numbered_content: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -69,6 +70,109 @@ pub struct WriteMarkdownResponse {
 pub struct WriteBinaryFileResponse {
     pub relative_path: String,
     pub created: bool,
+}
+
+/// Markdown 增量修改结果。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyMarkdownPatchResponse {
+    pub relative_path: String,
+    pub applied_block_count: usize,
+}
+
+/// Canvas 节点种类。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum VaultCanvasNodeKind {
+    Text,
+    File,
+    Group,
+}
+
+/// Canvas 连线连接侧。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum VaultCanvasEdgeSide {
+    Top,
+    Right,
+    Bottom,
+    Left,
+}
+
+/// Canvas 文档元信息。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultCanvasDocumentMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(flatten)]
+    pub extra_fields: BTreeMap<String, Value>,
+}
+
+/// Canvas 节点稳定契约。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultCanvasNode {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub node_type: VaultCanvasNodeKind,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background: Option<String>,
+    #[serde(flatten)]
+    pub extra_fields: BTreeMap<String, Value>,
+}
+
+/// Canvas 边稳定契约。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultCanvasEdge {
+    pub id: String,
+    pub from_node: String,
+    pub to_node: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_side: Option<VaultCanvasEdgeSide>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to_side: Option<VaultCanvasEdgeSide>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(flatten)]
+    pub extra_fields: BTreeMap<String, Value>,
+}
+
+/// Canvas 文档稳定契约。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultCanvasDocument {
+    #[serde(default)]
+    pub nodes: Vec<VaultCanvasNode>,
+    #[serde(default)]
+    pub edges: Vec<VaultCanvasEdge>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<VaultCanvasDocumentMetadata>,
+    #[serde(flatten)]
+    pub extra_fields: BTreeMap<String, Value>,
+}
+
+/// 结构化读取 Canvas 文件的响应。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadCanvasDocumentResponse {
+    pub relative_path: String,
+    pub document: VaultCanvasDocument,
 }
 
 #[derive(Debug, Clone, Serialize)]
