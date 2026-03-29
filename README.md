@@ -255,6 +255,7 @@ bun run build:sidecar
 ## 文档
 
 - [插件开发教程](docs/plugin-development-guide.md)
+- [测试体系与测试手册](docs/testing-handbook.md)
 
 ## Release 构建
 
