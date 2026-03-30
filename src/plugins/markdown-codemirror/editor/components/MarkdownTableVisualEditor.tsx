@@ -55,6 +55,7 @@ import {
 import { shouldSkipWikiLinkNavigationForSelection } from "../readModeSelectionPolicy";
 import { openWikiLinkTarget } from "../syntaxPlugins/wikiLinkSyntaxRenderer";
 import { parseWikiLinkParts } from "../syntaxPlugins/wikiLinkParser";
+import { isImeComposing } from "../../../../utils/imeInputGuard";
 import "./MarkdownTableVisualEditor.css";
 
 const TABLE_WIDGET_EDITOR_FOCUS_CLASS = "cm-table-widget-focused";
@@ -729,6 +730,10 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         event: KeyboardEvent<HTMLInputElement>,
         position: MarkdownTableCellPosition,
     ): void => {
+        if (isImeComposing(event.nativeEvent)) {
+            return;
+        }
+
         const cellKey = buildCellKey(position);
         const hasActiveWikiLinkSuggest =
             wikiLinkSuggestState.active

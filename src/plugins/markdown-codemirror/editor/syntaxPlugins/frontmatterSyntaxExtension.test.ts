@@ -6,7 +6,7 @@
 
 import { EditorState } from "@codemirror/state";
 import { describe, expect, test } from "bun:test";
-import { parseFrontmatterBlock } from "./frontmatterSyntaxExtension";
+import { isFrontmatterBlockSelected, parseFrontmatterBlock } from "./frontmatterSyntaxExtension";
 
 /**
  * @function createState
@@ -41,5 +41,24 @@ describe("parseFrontmatterBlock", () => {
         expect(block).not.toBeNull();
         expect(block?.to).toBe(state.doc.line(3).to);
         expect(block?.endLineNumber).toBe(3);
+    });
+});
+
+describe("isFrontmatterBlockSelected", () => {
+    test("非空选区与 frontmatter 区块相交时应返回 true", () => {
+        expect(isFrontmatterBlockSelected(
+            { from: 0, to: 18 },
+            [{ from: 0, to: 32, empty: false }],
+        )).toBe(true);
+    });
+
+    test("空光标或不相交选区不应触发 frontmatter 选中态", () => {
+        expect(isFrontmatterBlockSelected(
+            { from: 0, to: 18 },
+            [
+                { from: 6, to: 6, empty: true },
+                { from: 18, to: 24, empty: false },
+            ],
+        )).toBe(false);
     });
 });

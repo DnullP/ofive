@@ -710,6 +710,7 @@ const en = {
 
     /* ==================== Frontmatter ==================== */
     frontmatter: {
+        readModeTitle: "Frontmatter",
         clickToEdit: "Click to edit",
         addField: "Add Field",
         docSynced: "Document synced, save is handled by unified scheduler",

@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { shouldSubmitPlainEnter } from "../../utils/imeInputGuard";
 import { modalPlainTextInputProps } from "./textInputBehaviors";
 import "./CreateEntryModal.css";
 
@@ -77,7 +78,10 @@ export function CreateEntryModal(props: CreateEntryModalProps): ReactNode {
             return;
         }
 
-        if (event.key === "Enter") {
+        if (shouldSubmitPlainEnter({
+            key: event.key,
+            nativeEvent: event.nativeEvent,
+        })) {
             event.preventDefault();
             submit();
         }

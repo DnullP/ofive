@@ -17,17 +17,11 @@ describe("readModeRenderGuard", () => {
         expect(evaluateReadModeRenderGuard("# Title\n\n- item\n\n[[Note]]").canRenderReadMode).toBe(true);
     });
 
-    test("should block read mode when markdown uses unmatched enhanced features", () => {
+    test("should allow read mode when markdown uses all registered enhanced features", () => {
         const result = evaluateReadModeRenderGuard("---\ntitle: demo\n---\n\n==highlight==\n\n#tag\n\n$E=mc^2$\n\n![[demo.png]]\n");
 
-        expect(result.canRenderReadMode).toBe(false);
-        expect(result.unsupportedFeatures).toEqual([
-            "frontmatter",
-            "inline-highlight",
-            "inline-tag",
-            "latex-inline",
-            "image-embed",
-        ]);
+        expect(result.canRenderReadMode).toBe(true);
+        expect(result.unsupportedFeatures).toEqual([]);
     });
 
     test("should detect block latex and ignore inline tokens inside code fences", () => {

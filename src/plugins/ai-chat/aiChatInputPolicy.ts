@@ -2,7 +2,7 @@
  * @module plugins/ai-chat/aiChatInputPolicy
  * @description AI 聊天输入策略模块：负责判断输入框键盘事件是否应触发发送，避免输入法组合态下误发消息。
  * @dependencies
- *   - none
+ *   - ../../utils/imeInputGuard
  *
  * @example
  *   const shouldSubmit = shouldSubmitAiChatComposer({
@@ -11,6 +11,8 @@
  *       nativeEvent: { isComposing: false, keyCode: 13 },
  *   });
  */
+
+import { shouldSubmitPlainEnter } from "../../utils/imeInputGuard";
 
 interface NativeKeyboardEventLike {
     isComposing?: boolean;
@@ -30,10 +32,9 @@ export interface AiChatComposerKeydownInput {
  * @returns `true` 表示应发送；`false` 表示应忽略或交给其他输入行为处理。
  */
 export function shouldSubmitAiChatComposer(input: AiChatComposerKeydownInput): boolean {
-    if (input.key !== "Enter" || input.shiftKey) {
-        return false;
-    }
-
-    const isComposing = input.nativeEvent.isComposing || input.nativeEvent.keyCode === 229;
-    return !isComposing;
+    return shouldSubmitPlainEnter({
+        key: input.key,
+        shiftKey: input.shiftKey,
+        nativeEvent: input.nativeEvent,
+    });
 }

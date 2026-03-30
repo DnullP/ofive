@@ -42,6 +42,8 @@ import { createConditionContext } from "../../../host/conditions/conditionEvalua
 import { useVaultState } from "../../../host/store/vaultStore";
 import {
     createVaultBinaryFile,
+    renameVaultMarkdownFile,
+    saveVaultMarkdownFile,
     segmentChineseText,
     type ChineseSegmentToken,
 } from "../../../api/vaultApi";
@@ -50,7 +52,7 @@ import {
     subscribeEditorCommandRequestedEvent,
     subscribeEditorRevealRequestedEvent,
 } from "../../../host/events/appEventBus";
-import { useActiveEditor } from "../../../host/store/activeEditorStore";
+import { reportActiveEditor, useActiveEditor } from "../../../host/store/activeEditorStore";
 import i18n from "../../../i18n";
 import { createRegisteredLineSyntaxRenderExtension } from "./syntaxRenderRegistry";
 import { ensureBuiltinSyntaxRenderersRegistered } from "./registerBuiltinSyntaxRenderers";
@@ -107,6 +109,15 @@ import {
     flushFocusedMarkdownTableEditor,
     isMarkdownTableEditorFocused,
 } from "./markdownTableWidgetRegistry";
+import {
+    resolveMarkdownNoteTitle,
+    resolveRenamedMarkdownPath,
+} from "./noteTitleUtils";
+import { resolveEditorBodyAnchor } from "./editorBodyAnchor";
+import {
+    shouldDeferBlurCommitAfterComposition,
+    shouldSubmitPlainEnter,
+} from "../../../utils/imeInputGuard";
 
 ensureBuiltinSyntaxRenderersRegistered();
 ensureBuiltinEditPluginsRegistered();
@@ -144,6 +155,12 @@ function buildLineNumbersExtension(
     }
 }
 
+/**
+ * @function isWholeDocumentSelected
+ * @description 判断当前是否处于整篇文档被非空选区完全覆盖的状态。
+ * @param state 编辑器状态。
+ * @returns 若任一选区覆盖从 0 到文档末尾，返回 true。
+ */
 /**
  * @function safeDestroyEditorView
  * @description 安全销毁 EditorView 实例。
@@ -288,6 +305,22 @@ function buildDefaultContent(filePath: string): string {
 }
 
 /**
+ * @function resolveDisplayFilePath
+ * @description 解析当前编辑器应使用的 Markdown 路径，优先采用 editor context 中的最新路径。
+ * @param articlePath editor context 中记录的路径。
+ * @param fallbackPath 打开 tab 时传入的初始路径。
+ * @returns 当前有效的 Markdown 相对路径。
+ */
+function resolveDisplayFilePath(
+    articlePath: string | undefined,
+    fallbackPath: string,
+): string {
+    return (articlePath ?? fallbackPath).replace(/\\/g, "/");
+}
+
+type TitleSubmitReason = "blur" | "enter";
+
+/**
  * @function CodeMirrorEditorTab
  * @description Dockview Tab 渲染函数，挂载并管理 CodeMirror 实例生命周期。
  * @param props Dockview 面板参数，支持 params.path 与 params.content。
@@ -372,6 +405,16 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
 
     const articleId = props.api.id;
     const articleSnapshot = useArticleById(articleId);
+    const displayFilePath = resolveDisplayFilePath(articleSnapshot?.path, currentFilePath);
+    const displayTitle = useMemo(
+        () => resolveMarkdownNoteTitle(displayFilePath),
+        [displayFilePath],
+    );
+    const [titleDraft, setTitleDraft] = useState<string>(displayTitle);
+    const [isTitleRenaming, setIsTitleRenaming] = useState<boolean>(false);
+    const titleRenameInFlightRef = useRef<boolean>(false);
+    const isTitleInputComposingRef = useRef<boolean>(false);
+    const lastTitleInputCompositionEndAtRef = useRef<number>(0);
     const activeEditor = useActiveEditor();
     const { displayMode } = useEditorDisplayModeState();
     const isActiveEditor = activeEditor?.articleId === articleId;
@@ -397,8 +440,45 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         : null;
 
     useEffect(() => {
-        currentFilePathRef.current = currentFilePath;
-    }, [currentFilePath]);
+        currentFilePathRef.current = displayFilePath;
+    }, [displayFilePath]);
+
+    useEffect(() => {
+        setTitleDraft(displayTitle);
+    }, [displayTitle]);
+
+    /**
+     * @function focusEditorBodyStart
+     * @description 将编辑器焦点移动到正文首个可编辑位置；若存在 frontmatter，则跳至其后第一行。
+     */
+    const focusEditorBodyStart = (): void => {
+        window.requestAnimationFrame(() => {
+            const liveView = viewRef.current;
+            if (!liveView) {
+                return;
+            }
+
+            const anchor = resolveEditorBodyAnchor(liveView.state);
+            liveView.dispatch({
+                selection: { anchor },
+                scrollIntoView: true,
+            });
+            liveView.focus();
+        });
+    };
+
+    /**
+     * @function shouldDeferTitleBlurCommit
+     * @description 判断标题输入框 blur 是否应在输入法组合结束附近的短窗口内延后，避免误提交。
+     * @returns `true` 表示本次 blur 应跳过自动提交。
+     */
+    const shouldDeferTitleBlurCommit = (): boolean => {
+        return shouldDeferBlurCommitAfterComposition({
+            isComposing: isTitleInputComposingRef.current,
+            lastCompositionEndAt: lastTitleInputCompositionEndAtRef.current,
+            now: performance.now(),
+        });
+    };
 
     useEffect(() => {
         displayModeRef.current = effectiveDisplayMode;
@@ -493,6 +573,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         }
 
         if (commandId === "editor.selectAll") {
+            view.focus();
             return selectAll(view);
         }
 
@@ -1168,23 +1249,235 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         });
     }, [articleSnapshot?.updatedAt, articleSnapshot?.content, articleSnapshot?.path, articleId]);
 
+    /**
+     * @function commitTitleRename
+     * @description 将顶部标题输入栏的值提交为真实文件名，并按触发来源协调后续焦点行为。
+     * @param submitReason 触发提交的来源；`enter` 需要在成功后将焦点送回正文编辑区。
+     * @returns Promise<void>
+     */
+    const commitTitleRename = async (submitReason: TitleSubmitReason): Promise<void> => {
+        if (titleRenameInFlightRef.current) {
+            return;
+        }
+
+        const sourcePath = currentFilePathRef.current;
+        const sourceTitle = resolveMarkdownNoteTitle(sourcePath);
+        const trimmedDraft = titleDraft.trim();
+
+        if (!trimmedDraft) {
+            console.warn("[editor] rename title skipped: empty draft", {
+                articleId,
+                path: sourcePath,
+                submitReason,
+            });
+            setTitleDraft(sourceTitle);
+            if (submitReason === "enter" && displayModeRef.current === "edit") {
+                focusEditorBodyStart();
+            }
+            return;
+        }
+
+        const targetPath = resolveRenamedMarkdownPath(sourcePath, trimmedDraft);
+        if (!targetPath) {
+            setTitleDraft(sourceTitle);
+            if (submitReason === "enter" && displayModeRef.current === "edit") {
+                focusEditorBodyStart();
+            }
+            return;
+        }
+
+        if (targetPath === sourcePath) {
+            setTitleDraft(resolveMarkdownNoteTitle(targetPath));
+            if (submitReason === "enter" && displayModeRef.current === "edit") {
+                focusEditorBodyStart();
+            }
+            return;
+        }
+
+        const latestContent = viewRef.current?.state.doc.toString()
+            ?? articleSnapshot?.content
+            ?? readContent;
+        const currentPanel = props.containerApi.getPanel(articleId);
+        const panelApi = currentPanel?.api as {
+            setTitle(title: string): void;
+            updateParameters?: (params: Record<string, unknown>) => void;
+            setActive(): void;
+        } | undefined;
+        const nextPanelParams = {
+            ...(props.params ?? {}),
+            path: targetPath,
+            content: latestContent,
+        };
+        const previousPanelParams = currentPanel?.params && typeof currentPanel.params === "object"
+            ? { ...(currentPanel.params as Record<string, unknown>) }
+            : null;
+        const previousPanelTitle = resolveMarkdownNoteTitle(sourcePath);
+        const nextPanelTitle = resolveMarkdownNoteTitle(targetPath);
+
+        titleRenameInFlightRef.current = true;
+        setIsTitleRenaming(true);
+
+        console.info("[editor] rename title requested", {
+            articleId,
+            from: sourcePath,
+            to: targetPath,
+            submitReason,
+        });
+
+        if (currentPanel && panelApi) {
+            panelApi.setTitle(nextPanelTitle);
+            if (currentPanel.params && typeof currentPanel.params === "object") {
+                Object.assign(currentPanel.params as Record<string, unknown>, nextPanelParams);
+            }
+            panelApi.updateParameters?.(nextPanelParams);
+
+            console.info("[editor] rename title applied optimistic panel path", {
+                articleId,
+                from: sourcePath,
+                to: targetPath,
+                submitReason,
+            });
+        }
+
+        try {
+            await renameVaultMarkdownFile(sourcePath, targetPath);
+            await saveVaultMarkdownFile(targetPath, latestContent);
+
+            currentFilePathRef.current = targetPath;
+            setTitleDraft(resolveMarkdownNoteTitle(targetPath));
+            reportArticleContent({
+                articleId,
+                path: targetPath,
+                content: latestContent,
+            });
+
+            if (isActiveEditor) {
+                reportActiveEditor({
+                    articleId,
+                    path: targetPath,
+                });
+                reportArticleFocus({
+                    articleId,
+                    path: targetPath,
+                    content: latestContent,
+                });
+            }
+
+            if (currentPanel && panelApi) {
+                panelApi.setTitle(nextPanelTitle);
+                panelApi.updateParameters?.(nextPanelParams);
+            } else {
+                await openFileInDockview({
+                    containerApi: props.containerApi,
+                    currentVaultPath,
+                    relativePath: targetPath,
+                    contentOverride: latestContent,
+                    tabParams: {
+                        autoFocus: submitReason === "enter",
+                    },
+                });
+            }
+
+            if (submitReason === "enter" && displayModeRef.current === "edit") {
+                focusEditorBodyStart();
+            }
+
+            console.info("[editor] rename title success", {
+                articleId,
+                from: sourcePath,
+                to: targetPath,
+                submitReason,
+            });
+        } catch (error) {
+            if (currentPanel && panelApi) {
+                panelApi.setTitle(previousPanelTitle);
+                if (currentPanel.params && typeof currentPanel.params === "object" && previousPanelParams) {
+                    Object.assign(currentPanel.params as Record<string, unknown>, previousPanelParams);
+                }
+                if (previousPanelParams) {
+                    panelApi.updateParameters?.(previousPanelParams);
+                }
+            }
+
+            setTitleDraft(sourceTitle);
+            console.error("[editor] rename title failed", {
+                articleId,
+                from: sourcePath,
+                to: targetPath,
+                submitReason,
+                message: error instanceof Error ? error.message : String(error),
+            });
+        } finally {
+            titleRenameInFlightRef.current = false;
+            setIsTitleRenaming(false);
+        }
+    };
+
     return (
         <EditorErrorBoundary>
             <div className={`cm-tab ${isReadingMode ? "cm-tab-reading" : "cm-tab-editing"}`}>
-                <button
-                    type="button"
-                    className={`cm-tab-mode-toggle ${displayMode === "read" ? "is-reading" : "is-editing"}`}
-                    title={modeToggleLabel}
-                    aria-label={modeToggleLabel}
-                    aria-pressed={displayMode === "read"}
-                    onClick={() => {
-                        updateEditorDisplayMode(toggleEditorDisplayMode(displayMode));
-                    }}
-                >
-                    {displayMode === "read"
-                        ? <SquarePen size={16} strokeWidth={1.8} aria-hidden="true" />
-                        : <BookOpen size={16} strokeWidth={1.8} aria-hidden="true" />}
-                </button>
+                <div className="cm-tab-header">
+                    <div className="cm-tab-header-inner">
+                        <input
+                            type="text"
+                            className="cm-tab-title-input"
+                            aria-label={i18n.t("commands.renameCurrent")}
+                            title={displayFilePath}
+                            value={titleDraft}
+                            spellCheck={false}
+                            disabled={isTitleRenaming}
+                            onChange={(event) => {
+                                setTitleDraft(event.target.value);
+                            }}
+                            onCompositionStart={() => {
+                                isTitleInputComposingRef.current = true;
+                            }}
+                            onCompositionEnd={() => {
+                                isTitleInputComposingRef.current = false;
+                                lastTitleInputCompositionEndAtRef.current = performance.now();
+                            }}
+                            onBlur={() => {
+                                if (shouldDeferTitleBlurCommit()) {
+                                    return;
+                                }
+
+                                void commitTitleRename("blur");
+                            }}
+                            onKeyDownCapture={(event) => {
+                                event.stopPropagation();
+
+                                if (shouldSubmitPlainEnter({
+                                    key: event.key,
+                                    nativeEvent: event.nativeEvent,
+                                })) {
+                                    event.preventDefault();
+                                    void commitTitleRename("enter");
+                                    return;
+                                }
+
+                                if (event.key === "Escape") {
+                                    event.preventDefault();
+                                    setTitleDraft(displayTitle);
+                                    event.currentTarget.blur();
+                                }
+                            }}
+                        />
+                        <button
+                            type="button"
+                            className={`cm-tab-mode-toggle ${displayMode === "read" ? "is-reading" : "is-editing"}`}
+                            title={modeToggleLabel}
+                            aria-label={modeToggleLabel}
+                            aria-pressed={displayMode === "read"}
+                            onClick={() => {
+                                updateEditorDisplayMode(toggleEditorDisplayMode(displayMode));
+                            }}
+                        >
+                            {displayMode === "read"
+                                ? <SquarePen size={16} strokeWidth={1.8} aria-hidden="true" />
+                                : <BookOpen size={16} strokeWidth={1.8} aria-hidden="true" />}
+                        </button>
+                    </div>
+                </div>
                 {isReadModeGuardBlocked ? (
                     <div className="cm-tab-guard-banner" role="status" aria-live="polite">
                         <div className="cm-tab-guard-title">{i18n.t("editor.readModeGuardTitle")}</div>
@@ -1199,7 +1492,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 {isReadingMode ? (
                     <MarkdownReadView
                         content={readContent}
-                        currentFilePath={currentFilePath}
+                        currentFilePath={displayFilePath}
                         containerApi={props.containerApi}
                     />
                 ) : null}

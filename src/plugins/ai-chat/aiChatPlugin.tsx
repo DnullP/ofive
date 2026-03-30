@@ -61,6 +61,7 @@ import {
 } from "./aiChatDebugFilter";
 import { formatAiChatDebugEntriesForClipboard } from "./aiChatDebugExport";
 import { shouldSubmitAiChatComposer } from "./aiChatInputPolicy";
+import { AiChatMessageMarkdown } from "./aiChatMessageMarkdown";
 import { buildConfirmationPreview } from "./aiChatConfirmationPreview";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerPanel } from "../../host/registry/panelRegistry";
@@ -866,7 +867,12 @@ function ChatPanel(): ReactNode {
                                                 ? i18n.t("aiChatPlugin.assistant")
                                                 : i18n.t("aiChatPlugin.user")}
                                         </div>
-                                        <div className="ai-chat-message-bubble">{message.text || "..."}</div>
+                                        <div className="ai-chat-message-bubble">
+                                            <AiChatMessageMarkdown
+                                                content={message.text}
+                                                role={message.role}
+                                            />
+                                        </div>
                                         {confirmation ? (
                                             <div className="ai-chat-confirmation-card">
                                                 <div className="ai-chat-confirmation-meta">

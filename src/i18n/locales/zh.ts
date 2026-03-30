@@ -720,6 +720,7 @@ const zh = {
 
     /* ==================== frontmatter ==================== */
     frontmatter: {
+        readModeTitle: "Frontmatter",
         clickToEdit: "点击编辑",
         addField: "新增字段",
         docSynced: "文档已同步，保存由统一调度负责",

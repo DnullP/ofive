@@ -12,6 +12,10 @@ import { useTranslation } from "react-i18next";
 import "./FileTree.css";
 import { writeWorkspaceFileDragPayload } from "../../../host/layout/workspaceFileDragPayload";
 import { showNativeContextMenu } from "../../../host/layout/nativeContextMenu";
+import {
+  shouldDeferBlurCommitAfterComposition,
+  shouldSubmitPlainEnter,
+} from "../../../utils/imeInputGuard";
 
 export interface FileTreeItem {
   id: string;
@@ -301,6 +305,9 @@ function TreeItem({
   onCreateDraftChange,
   onCommitCreate,
   onCancelCreate,
+  onInputCompositionStart,
+  onInputCompositionEnd,
+  shouldDeferBlurCommit,
 }: {
   node: TreeNode;
   level: number;
@@ -329,6 +336,9 @@ function TreeItem({
   onCreateDraftChange: (nextValue: string) => void;
   onCommitCreate: () => void;
   onCancelCreate: () => void;
+  onInputCompositionStart: () => void;
+  onInputCompositionEnd: () => void;
+  shouldDeferBlurCommit: () => boolean;
 }): ReactNode {
   const { t } = useTranslation();
   const isExpanded = expanded.has(node.path);
@@ -363,11 +373,20 @@ function TreeItem({
             onChange={(event) => {
               onRenameDraftChange(event.target.value);
             }}
+            onCompositionStart={onInputCompositionStart}
+            onCompositionEnd={onInputCompositionEnd}
             onBlur={() => {
+              if (shouldDeferBlurCommit()) {
+                return;
+              }
+
               onCommitRename(node);
             }}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
+              if (shouldSubmitPlainEnter({
+                key: event.key,
+                nativeEvent: event.nativeEvent,
+              })) {
                 event.preventDefault();
                 onCommitRename(node);
                 return;
@@ -473,6 +492,9 @@ function TreeItem({
               onCreateDraftChange={onCreateDraftChange}
               onCommitCreate={onCommitCreate}
               onCancelCreate={onCancelCreate}
+              onInputCompositionStart={onInputCompositionStart}
+              onInputCompositionEnd={onInputCompositionEnd}
+              shouldDeferBlurCommit={shouldDeferBlurCommit}
             />
           ))}
           {shouldRenderCreateInputInsideFolder && (
@@ -485,11 +507,20 @@ function TreeItem({
                   onChange={(event) => {
                     onCreateDraftChange(event.target.value);
                   }}
+                  onCompositionStart={onInputCompositionStart}
+                  onCompositionEnd={onInputCompositionEnd}
                   onBlur={() => {
+                    if (shouldDeferBlurCommit()) {
+                      return;
+                    }
+
                     onCommitCreate();
                   }}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") {
+                    if (shouldSubmitPlainEnter({
+                      key: event.key,
+                      nativeEvent: event.nativeEvent,
+                    })) {
                       event.preventDefault();
                       onCommitCreate();
                       return;
@@ -519,11 +550,20 @@ function TreeItem({
                 onChange={(event) => {
                   onCreateDraftChange(event.target.value);
                 }}
+                onCompositionStart={onInputCompositionStart}
+                onCompositionEnd={onInputCompositionEnd}
                 onBlur={() => {
+                  if (shouldDeferBlurCommit()) {
+                    return;
+                  }
+
                   onCommitCreate();
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") {
+                  if (shouldSubmitPlainEnter({
+                    key: event.key,
+                    nativeEvent: event.nativeEvent,
+                  })) {
                     event.preventDefault();
                     onCommitCreate();
                     return;
@@ -581,12 +621,31 @@ export function FileTree({
   const [creatingType, setCreatingType] = useState<"file" | "canvas" | "folder" | null>(null);
   const [creatingParentPath, setCreatingParentPath] = useState<string | null>(null);
   const [creatingDraft, setCreatingDraft] = useState<string>("");
+  const isInputComposingRef = useRef(false);
+  const lastInputCompositionEndAtRef = useRef(0);
 
   const visibleNodes = useMemo(
     () => flattenVisibleNodes(tree, expandedFolders),
     [tree, expandedFolders],
   );
   const headerSummary = buildTreeHeaderSummary(selectedPaths.size, t);
+
+  const handleInputCompositionStart = (): void => {
+    isInputComposingRef.current = true;
+  };
+
+  const handleInputCompositionEnd = (): void => {
+    isInputComposingRef.current = false;
+    lastInputCompositionEndAtRef.current = performance.now();
+  };
+
+  const shouldDeferInputBlurCommit = (): boolean => {
+    return shouldDeferBlurCommitAfterComposition({
+      isComposing: isInputComposingRef.current,
+      lastCompositionEndAt: lastInputCompositionEndAtRef.current,
+      now: performance.now(),
+    });
+  };
 
   useEffect(() => {
     if (!activePath) {
@@ -1255,11 +1314,20 @@ export function FileTree({
                 onChange={(event) => {
                   setCreatingDraft(event.target.value);
                 }}
+                onCompositionStart={handleInputCompositionStart}
+                onCompositionEnd={handleInputCompositionEnd}
                 onBlur={() => {
+                  if (shouldDeferInputBlurCommit()) {
+                    return;
+                  }
+
                   commitCreate();
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") {
+                  if (shouldSubmitPlainEnter({
+                    key: event.key,
+                    nativeEvent: event.nativeEvent,
+                  })) {
                     event.preventDefault();
                     commitCreate();
                     return;
@@ -1322,6 +1390,9 @@ export function FileTree({
               onCancelCreate={() => {
                 cancelCreate();
               }}
+              onInputCompositionStart={handleInputCompositionStart}
+              onInputCompositionEnd={handleInputCompositionEnd}
+              shouldDeferBlurCommit={shouldDeferInputBlurCommit}
             />
           ))
         ) : (

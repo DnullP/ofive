@@ -28,6 +28,30 @@ export interface SyntaxDecorationRange {
 }
 
 /**
+ * @function getDecorationStartSide
+ * @description 读取 Decoration 的 startSide，用于按 CodeMirror 要求稳定排序。
+ * @param decoration CodeMirror 装饰对象。
+ * @returns startSide；缺省时回退为 0。
+ */
+function getDecorationStartSide(decoration: Decoration): number {
+    return typeof decoration.startSide === "number"
+        ? decoration.startSide
+        : 0;
+}
+
+/**
+ * @function getDecorationEndSide
+ * @description 读取 Decoration 的 endSide，用于在相同范围上稳定排序。
+ * @param decoration CodeMirror 装饰对象。
+ * @returns endSide；缺省时回退为 0。
+ */
+function getDecorationEndSide(decoration: Decoration): number {
+    return typeof decoration.endSide === "number"
+        ? decoration.endSide
+        : 0;
+}
+
+/**
  * @interface LineSyntaxDecorationContext
  * @description 单行语法渲染回调上下文。
  */
@@ -252,10 +276,15 @@ function buildRegisteredSyntaxDecorations(view: EditorView): DecorationSet {
             if (left.from !== right.from) {
                 return left.from - right.from;
             }
+            const startSideDiff =
+                getDecorationStartSide(left.decoration) - getDecorationStartSide(right.decoration);
+            if (startSideDiff !== 0) {
+                return startSideDiff;
+            }
             if (left.to !== right.to) {
                 return left.to - right.to;
             }
-            return 0;
+            return getDecorationEndSide(left.decoration) - getDecorationEndSide(right.decoration);
         })
         .forEach((range) => {
             builder.add(range.from, range.to, range.decoration);

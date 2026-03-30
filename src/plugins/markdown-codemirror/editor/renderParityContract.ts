@@ -40,7 +40,9 @@ const EDIT_MODE_SUPPORTED_FEATURES = new Set<EditorRenderFeature>(
     FEATURE_DESCRIPTORS.map((descriptor) => descriptor.id),
 );
 
-const READ_MODE_SUPPORTED_FEATURES = new Set<EditorRenderFeature>([]);
+const READ_MODE_SUPPORTED_FEATURES = new Set<EditorRenderFeature>(
+    FEATURE_DESCRIPTORS.map((descriptor) => descriptor.id),
+);
 
 /**
  * @function getReadModeUnsupportedFeatures

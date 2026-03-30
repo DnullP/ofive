@@ -396,3 +396,103 @@ func TestBuildToolParametersSanitizesNullableSchemaForMinimax(t *testing.T) {
 		t.Fatalf("expected null union to collapse to string, got %#v", contentProperty["type"])
 	}
 }
+
+func TestBuildMinimaxMessagesPrunesUnmatchedToolUseBeforeLaterMessages(t *testing.T) {
+	t.Parallel()
+
+	_, messages := buildMinimaxMessages(&model.LLMRequest{
+		Contents: []*genai.Content{
+			genai.NewContentFromText("初始请求", genai.RoleUser),
+			{
+				Role: genai.RoleModel,
+				Parts: []*genai.Part{
+					genai.NewPartFromText("需要两个确认。"),
+					{
+						FunctionCall: &genai.FunctionCall{
+							ID:   "tool-call-1",
+							Name: "adk_request_confirmation",
+							Args: map[string]any{},
+						},
+					},
+					{
+						FunctionCall: &genai.FunctionCall{
+							ID:   "tool-call-2",
+							Name: "adk_request_confirmation",
+							Args: map[string]any{},
+						},
+					},
+				},
+			},
+			{
+				Role: genai.RoleUser,
+				Parts: []*genai.Part{{
+					FunctionResponse: &genai.FunctionResponse{
+						ID:       "tool-call-1",
+						Name:     "adk_request_confirmation",
+						Response: map[string]any{"confirmed": true},
+					},
+				}},
+			},
+			genai.NewContentFromText("第一个已完成，第二个还没确认。", genai.RoleModel),
+			genai.NewContentFromText("继续新的问题", genai.RoleUser),
+		},
+	})
+
+	if len(messages) != 5 {
+		t.Fatalf("expected 5 normalized messages, got %+v", messages)
+	}
+
+	assistantConfirmation := messages[1]
+	if assistantConfirmation.Role != "assistant" {
+		t.Fatalf("expected assistant confirmation message, got %+v", assistantConfirmation)
+	}
+	if len(assistantConfirmation.Content) != 2 {
+		t.Fatalf("expected text + one matched tool_use after pruning, got %+v", assistantConfirmation.Content)
+	}
+	if assistantConfirmation.Content[1].Type != "tool_use" || assistantConfirmation.Content[1].ID != "tool-call-1" {
+		t.Fatalf("expected only matched tool-call-1 to remain, got %+v", assistantConfirmation.Content)
+	}
+
+	toolResultMessage := messages[2]
+	if len(toolResultMessage.Content) != 1 || toolResultMessage.Content[0].ToolUseID != "tool-call-1" {
+		t.Fatalf("expected only tool-call-1 result to remain, got %+v", toolResultMessage.Content)
+	}
+
+	for _, message := range messages {
+		for _, block := range message.Content {
+			if block.Type == "tool_use" && block.ID == "tool-call-2" {
+				t.Fatalf("expected unmatched tool-call-2 to be pruned, got %+v", messages)
+			}
+		}
+	}
+}
+
+func TestBuildMinimaxMessagesDropsOrphanToolResultMessages(t *testing.T) {
+	t.Parallel()
+
+	_, messages := buildMinimaxMessages(&model.LLMRequest{
+		Contents: []*genai.Content{
+			genai.NewContentFromText("问题", genai.RoleUser),
+			{
+				Role: genai.RoleUser,
+				Parts: []*genai.Part{{
+					FunctionResponse: &genai.FunctionResponse{
+						ID:       "orphan-call",
+						Name:     "vault_read_markdown_file",
+						Response: map[string]any{"output": "ignored"},
+					},
+				}},
+			},
+			genai.NewContentFromText("后续正常问题", genai.RoleUser),
+		},
+	})
+
+	if len(messages) != 2 {
+		t.Fatalf("expected orphan tool result message to be removed, got %+v", messages)
+	}
+	for _, message := range messages {
+		if isMinimaxToolResultOnlyMessage(message) {
+			t.Fatalf("expected no orphan tool result messages, got %+v", messages)
+		}
+	}
+}

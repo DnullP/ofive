@@ -383,7 +383,129 @@ func buildMinimaxMessages(req *model.LLMRequest) (string, []minimaxMessage) {
 		messages = append(messages, message)
 	}
 
-	return systemPrompt, messages
+	return systemPrompt, normalizeMinimaxMessages(messages)
+}
+
+type minimaxPendingToolUseRef struct {
+	messageIndex int
+	blockIndex   int
+}
+
+func normalizeMinimaxMessages(messages []minimaxMessage) []minimaxMessage {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	normalized := make([]minimaxMessage, 0, len(messages))
+	pendingRefs := make(map[string]minimaxPendingToolUseRef)
+	pendingOrder := make([]string, 0)
+
+	prunePendingToolUses := func() {
+		for _, toolUseID := range pendingOrder {
+			ref, ok := pendingRefs[toolUseID]
+			if !ok {
+				continue
+			}
+			if ref.messageIndex < 0 || ref.messageIndex >= len(normalized) {
+				continue
+			}
+			message := &normalized[ref.messageIndex]
+			if ref.blockIndex < 0 || ref.blockIndex >= len(message.Content) {
+				continue
+			}
+			message.Content[ref.blockIndex] = minimaxContentBlock{}
+		}
+		pendingRefs = make(map[string]minimaxPendingToolUseRef)
+		pendingOrder = pendingOrder[:0]
+	}
+
+	for _, message := range messages {
+		if len(pendingRefs) > 0 {
+			if message.Role == "user" && isMinimaxToolResultOnlyMessage(message) {
+				filteredContent := make([]minimaxContentBlock, 0, len(message.Content))
+				for _, block := range message.Content {
+					toolUseID := strings.TrimSpace(block.ToolUseID)
+					if block.Type != "tool_result" || toolUseID == "" {
+						continue
+					}
+					if _, ok := pendingRefs[toolUseID]; !ok {
+						continue
+					}
+					delete(pendingRefs, toolUseID)
+					filteredContent = append(filteredContent, block)
+				}
+				if len(filteredContent) > 0 {
+					message.Content = filteredContent
+					normalized = append(normalized, message)
+				}
+				if len(pendingRefs) == 0 {
+					pendingOrder = pendingOrder[:0]
+				}
+				continue
+			}
+
+			prunePendingToolUses()
+			normalized = compactMinimaxMessages(normalized)
+		}
+
+		if message.Role == "user" && isMinimaxToolResultOnlyMessage(message) {
+			continue
+		}
+
+		messageIndex := len(normalized)
+		normalized = append(normalized, message)
+		for blockIndex, block := range message.Content {
+			if block.Type != "tool_use" {
+				continue
+			}
+			toolUseID := strings.TrimSpace(block.ID)
+			if toolUseID == "" {
+				continue
+			}
+			pendingRefs[toolUseID] = minimaxPendingToolUseRef{
+				messageIndex: messageIndex,
+				blockIndex:   blockIndex,
+			}
+			pendingOrder = append(pendingOrder, toolUseID)
+		}
+	}
+
+	if len(pendingRefs) > 0 {
+		prunePendingToolUses()
+	}
+
+	return compactMinimaxMessages(normalized)
+}
+
+func compactMinimaxMessages(messages []minimaxMessage) []minimaxMessage {
+	compacted := make([]minimaxMessage, 0, len(messages))
+	for _, message := range messages {
+		filteredContent := make([]minimaxContentBlock, 0, len(message.Content))
+		for _, block := range message.Content {
+			if strings.TrimSpace(block.Type) == "" {
+				continue
+			}
+			filteredContent = append(filteredContent, block)
+		}
+		if len(filteredContent) == 0 {
+			continue
+		}
+		message.Content = filteredContent
+		compacted = append(compacted, message)
+	}
+	return compacted
+}
+
+func isMinimaxToolResultOnlyMessage(message minimaxMessage) bool {
+	if message.Role != "user" || len(message.Content) == 0 {
+		return false
+	}
+	for _, block := range message.Content {
+		if block.Type != "tool_result" {
+			return false
+		}
+	}
+	return true
 }
 
 func convertContentToMinimaxMessage(

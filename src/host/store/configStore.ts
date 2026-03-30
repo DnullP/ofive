@@ -194,6 +194,52 @@ interface ConfigChangedEventDetail {
 const configEventTarget = new EventTarget();
 
 /**
+ * @constant DEFAULT_FEATURE_SETTINGS
+ * @description 无仓库上下文或后端缺省字段时使用的功能配置默认值。
+ */
+export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
+    searchEnabled: true,
+    knowledgeGraphEnabled: true,
+    glassEffectEnabled: true,
+    glassTintOpacity: 0.05,
+    glassSurfaceOpacity: 0.12,
+    glassInactiveSurfaceOpacity: 0.09,
+    glassBlurRadius: 8,
+    windowsAcrylicFocusedRed: 56,
+    windowsAcrylicFocusedGreen: 64,
+    windowsAcrylicFocusedBlue: 76,
+    windowsAcrylicFocusedAlpha: 72,
+    windowsAcrylicInactiveRed: 64,
+    windowsAcrylicInactiveGreen: 72,
+    windowsAcrylicInactiveBlue: 84,
+    windowsAcrylicInactiveAlpha: 56,
+    windowsAcrylicDisableSystemBackdrop: true,
+    windowsAcrylicFocusedAccentFlags: 0,
+    windowsAcrylicFocusedAnimationId: 0,
+    windowsAcrylicInactiveAccentFlags: 0,
+    windowsAcrylicInactiveAnimationId: 0,
+    vimModeEnabled: false,
+    editorFontSize: 16,
+    editorTabSize: 4,
+    editorLineWrapping: true,
+    editorLineNumbers: "absolute",
+    autoSaveEnabled: true,
+    autoSaveDelayMs: 1500,
+    editorFontFamily: DEFAULT_EDITOR_FONT_FAMILY,
+};
+
+/**
+ * @function buildDefaultFeatureSettings
+ * @description 生成一份可安全写入 store 的默认功能配置快照。
+ * @returns 默认功能配置副本。
+ */
+function buildDefaultFeatureSettings(): FeatureSettings {
+    return {
+        ...DEFAULT_FEATURE_SETTINGS,
+    };
+}
+
+/**
  * @function readRememberLastVaultFromLocal
  * @description 读取“记住上次仓库”本地开关。
  * @returns 配置值，默认 true。
@@ -276,85 +322,131 @@ function normalizeBackendConfig(config: VaultConfig): {
             : {};
 
     const searchEnabled =
-        typeof featuresObj.searchEnabled === "boolean" ? featuresObj.searchEnabled : true;
+        typeof featuresObj.searchEnabled === "boolean"
+            ? featuresObj.searchEnabled
+            : DEFAULT_FEATURE_SETTINGS.searchEnabled;
     const knowledgeGraphEnabled =
-        typeof featuresObj.knowledgeGraphEnabled === "boolean" ? featuresObj.knowledgeGraphEnabled : true;
+        typeof featuresObj.knowledgeGraphEnabled === "boolean"
+            ? featuresObj.knowledgeGraphEnabled
+            : DEFAULT_FEATURE_SETTINGS.knowledgeGraphEnabled;
     const glassEffectEnabled =
-        typeof featuresObj.glassEffectEnabled === "boolean" ? featuresObj.glassEffectEnabled : true;
+        typeof featuresObj.glassEffectEnabled === "boolean"
+            ? featuresObj.glassEffectEnabled
+            : DEFAULT_FEATURE_SETTINGS.glassEffectEnabled;
     const glassTintOpacity =
         typeof featuresObj.glassTintOpacity === "number" &&
             Number.isFinite(featuresObj.glassTintOpacity) &&
             (featuresObj.glassTintOpacity as number) >= 0.02 &&
             (featuresObj.glassTintOpacity as number) <= 0.24
             ? (featuresObj.glassTintOpacity as number)
-            : 0.08;
+            : DEFAULT_FEATURE_SETTINGS.glassTintOpacity;
     const glassSurfaceOpacity =
         typeof featuresObj.glassSurfaceOpacity === "number" &&
             Number.isFinite(featuresObj.glassSurfaceOpacity) &&
             (featuresObj.glassSurfaceOpacity as number) >= 0.08 &&
             (featuresObj.glassSurfaceOpacity as number) <= 0.40
             ? (featuresObj.glassSurfaceOpacity as number)
-            : 0.18;
+            : DEFAULT_FEATURE_SETTINGS.glassSurfaceOpacity;
     const glassInactiveSurfaceOpacity =
         typeof featuresObj.glassInactiveSurfaceOpacity === "number" &&
             Number.isFinite(featuresObj.glassInactiveSurfaceOpacity) &&
             (featuresObj.glassInactiveSurfaceOpacity as number) >= 0.04 &&
             (featuresObj.glassInactiveSurfaceOpacity as number) <= 0.40
             ? (featuresObj.glassInactiveSurfaceOpacity as number)
-            : 0.14;
+            : DEFAULT_FEATURE_SETTINGS.glassInactiveSurfaceOpacity;
     const glassBlurRadius =
         typeof featuresObj.glassBlurRadius === "number" &&
             Number.isFinite(featuresObj.glassBlurRadius) &&
             (featuresObj.glassBlurRadius as number) >= 4 &&
             (featuresObj.glassBlurRadius as number) <= 24
             ? (featuresObj.glassBlurRadius as number)
-            : 10;
+            : DEFAULT_FEATURE_SETTINGS.glassBlurRadius;
     const windowsAcrylicFocusedRed =
-        normalizeByteFeature(featuresObj.windowsAcrylicFocusedRed, 56);
+        normalizeByteFeature(
+            featuresObj.windowsAcrylicFocusedRed,
+            DEFAULT_FEATURE_SETTINGS.windowsAcrylicFocusedRed,
+        );
     const windowsAcrylicFocusedGreen =
-        normalizeByteFeature(featuresObj.windowsAcrylicFocusedGreen, 64);
+        normalizeByteFeature(
+            featuresObj.windowsAcrylicFocusedGreen,
+            DEFAULT_FEATURE_SETTINGS.windowsAcrylicFocusedGreen,
+        );
     const windowsAcrylicFocusedBlue =
-        normalizeByteFeature(featuresObj.windowsAcrylicFocusedBlue, 76);
+        normalizeByteFeature(
+            featuresObj.windowsAcrylicFocusedBlue,
+            DEFAULT_FEATURE_SETTINGS.windowsAcrylicFocusedBlue,
+        );
     const windowsAcrylicFocusedAlpha =
-        normalizeByteFeature(featuresObj.windowsAcrylicFocusedAlpha, 72);
+        normalizeByteFeature(
+            featuresObj.windowsAcrylicFocusedAlpha,
+            DEFAULT_FEATURE_SETTINGS.windowsAcrylicFocusedAlpha,
+        );
     const windowsAcrylicInactiveRed =
-        normalizeByteFeature(featuresObj.windowsAcrylicInactiveRed, 64);
+        normalizeByteFeature(
+            featuresObj.windowsAcrylicInactiveRed,
+            DEFAULT_FEATURE_SETTINGS.windowsAcrylicInactiveRed,
+        );
     const windowsAcrylicInactiveGreen =
-        normalizeByteFeature(featuresObj.windowsAcrylicInactiveGreen, 72);
+        normalizeByteFeature(
+            featuresObj.windowsAcrylicInactiveGreen,
+            DEFAULT_FEATURE_SETTINGS.windowsAcrylicInactiveGreen,
+        );
     const windowsAcrylicInactiveBlue =
-        normalizeByteFeature(featuresObj.windowsAcrylicInactiveBlue, 84);
+        normalizeByteFeature(
+            featuresObj.windowsAcrylicInactiveBlue,
+            DEFAULT_FEATURE_SETTINGS.windowsAcrylicInactiveBlue,
+        );
     const windowsAcrylicInactiveAlpha =
-        normalizeByteFeature(featuresObj.windowsAcrylicInactiveAlpha, 56);
+        normalizeByteFeature(
+            featuresObj.windowsAcrylicInactiveAlpha,
+            DEFAULT_FEATURE_SETTINGS.windowsAcrylicInactiveAlpha,
+        );
     const windowsAcrylicDisableSystemBackdrop =
         typeof featuresObj.windowsAcrylicDisableSystemBackdrop === "boolean"
             ? featuresObj.windowsAcrylicDisableSystemBackdrop
-            : true;
+            : DEFAULT_FEATURE_SETTINGS.windowsAcrylicDisableSystemBackdrop;
     const windowsAcrylicFocusedAccentFlags =
-        normalizeUint32Feature(featuresObj.windowsAcrylicFocusedAccentFlags, 0);
+        normalizeUint32Feature(
+            featuresObj.windowsAcrylicFocusedAccentFlags,
+            DEFAULT_FEATURE_SETTINGS.windowsAcrylicFocusedAccentFlags,
+        );
     const windowsAcrylicFocusedAnimationId =
-        normalizeUint32Feature(featuresObj.windowsAcrylicFocusedAnimationId, 0);
+        normalizeUint32Feature(
+            featuresObj.windowsAcrylicFocusedAnimationId,
+            DEFAULT_FEATURE_SETTINGS.windowsAcrylicFocusedAnimationId,
+        );
     const windowsAcrylicInactiveAccentFlags =
-        normalizeUint32Feature(featuresObj.windowsAcrylicInactiveAccentFlags, 0);
+        normalizeUint32Feature(
+            featuresObj.windowsAcrylicInactiveAccentFlags,
+            DEFAULT_FEATURE_SETTINGS.windowsAcrylicInactiveAccentFlags,
+        );
     const windowsAcrylicInactiveAnimationId =
-        normalizeUint32Feature(featuresObj.windowsAcrylicInactiveAnimationId, 0);
+        normalizeUint32Feature(
+            featuresObj.windowsAcrylicInactiveAnimationId,
+            DEFAULT_FEATURE_SETTINGS.windowsAcrylicInactiveAnimationId,
+        );
     const vimModeEnabled =
-        typeof featuresObj.vimModeEnabled === "boolean" ? featuresObj.vimModeEnabled : false;
+        typeof featuresObj.vimModeEnabled === "boolean"
+            ? featuresObj.vimModeEnabled
+            : DEFAULT_FEATURE_SETTINGS.vimModeEnabled;
     const editorFontSize =
         typeof featuresObj.editorFontSize === "number" &&
             Number.isFinite(featuresObj.editorFontSize) &&
             (featuresObj.editorFontSize as number) >= 10 &&
             (featuresObj.editorFontSize as number) <= 32
             ? (featuresObj.editorFontSize as number)
-            : 16;
+            : DEFAULT_FEATURE_SETTINGS.editorFontSize;
     const editorTabSize =
         typeof featuresObj.editorTabSize === "number" &&
             Number.isFinite(featuresObj.editorTabSize) &&
             (featuresObj.editorTabSize as number) >= 1 &&
             (featuresObj.editorTabSize as number) <= 8
             ? (featuresObj.editorTabSize as number)
-            : 4;
+            : DEFAULT_FEATURE_SETTINGS.editorTabSize;
     const editorLineWrapping =
-        typeof featuresObj.editorLineWrapping === "boolean" ? featuresObj.editorLineWrapping : true;
+        typeof featuresObj.editorLineWrapping === "boolean"
+            ? featuresObj.editorLineWrapping
+            : DEFAULT_FEATURE_SETTINGS.editorLineWrapping;
     /* 行号模式：兼容旧版 boolean 值（true→"absolute"，false→"off"） */
     const editorLineNumbers: "off" | "absolute" | "relative" = (() => {
         const raw = featuresObj.editorLineNumbers;
@@ -364,22 +456,24 @@ function normalizeBackendConfig(config: VaultConfig): {
         if (typeof raw === "boolean") {
             return raw ? "absolute" : "off";
         }
-        return "absolute";
+        return DEFAULT_FEATURE_SETTINGS.editorLineNumbers;
     })();
     const autoSaveEnabled =
-        typeof featuresObj.autoSaveEnabled === "boolean" ? featuresObj.autoSaveEnabled : true;
+        typeof featuresObj.autoSaveEnabled === "boolean"
+            ? featuresObj.autoSaveEnabled
+            : DEFAULT_FEATURE_SETTINGS.autoSaveEnabled;
     const autoSaveDelayMs =
         typeof featuresObj.autoSaveDelayMs === "number" &&
             Number.isFinite(featuresObj.autoSaveDelayMs) &&
             (featuresObj.autoSaveDelayMs as number) >= 500 &&
             (featuresObj.autoSaveDelayMs as number) <= 10000
             ? (featuresObj.autoSaveDelayMs as number)
-            : 1500;
+            : DEFAULT_FEATURE_SETTINGS.autoSaveDelayMs;
     const editorFontFamily =
         typeof featuresObj.editorFontFamily === "string" &&
             (featuresObj.editorFontFamily as string).trim().length > 0
             ? (featuresObj.editorFontFamily as string).trim()
-            : DEFAULT_EDITOR_FONT_FAMILY;
+            : DEFAULT_FEATURE_SETTINGS.editorFontFamily;
 
     const nextFeatures = {
         ...featuresObj,
@@ -495,36 +589,7 @@ class ConfigStore {
     private state: ConfigState = {
         loadedVaultPath: null,
         backendConfig: null,
-        featureSettings: {
-            searchEnabled: true,
-            knowledgeGraphEnabled: true,
-            glassEffectEnabled: true,
-            glassTintOpacity: 0.05,
-            glassSurfaceOpacity: 0.12,
-            glassInactiveSurfaceOpacity: 0.09,
-            glassBlurRadius: 8,
-            windowsAcrylicFocusedRed: 56,
-            windowsAcrylicFocusedGreen: 64,
-            windowsAcrylicFocusedBlue: 76,
-            windowsAcrylicFocusedAlpha: 72,
-            windowsAcrylicInactiveRed: 64,
-            windowsAcrylicInactiveGreen: 72,
-            windowsAcrylicInactiveBlue: 84,
-            windowsAcrylicInactiveAlpha: 56,
-            windowsAcrylicDisableSystemBackdrop: true,
-            windowsAcrylicFocusedAccentFlags: 0,
-            windowsAcrylicFocusedAnimationId: 0,
-            windowsAcrylicInactiveAccentFlags: 0,
-            windowsAcrylicInactiveAnimationId: 0,
-            vimModeEnabled: false,
-            editorFontSize: 16,
-            editorTabSize: 4,
-            editorLineWrapping: true,
-            editorLineNumbers: "absolute",
-            autoSaveEnabled: true,
-            autoSaveDelayMs: 1500,
-            editorFontFamily: DEFAULT_EDITOR_FONT_FAMILY,
-        },
+        featureSettings: buildDefaultFeatureSettings(),
         frontendSettings: {
             rememberLastVault: readRememberLastVaultFromLocal(),
         },
@@ -554,6 +619,28 @@ class ConfigStore {
 
     getSnapshot(): ConfigState {
         return this.state;
+    }
+
+    resetForNoVault(): void {
+        if (this.activeVaultUnlisten) {
+            this.activeVaultUnlisten();
+            this.activeVaultUnlisten = null;
+        }
+
+        this.latestHandledEventId = null;
+        this.state = {
+            ...this.state,
+            loadedVaultPath: null,
+            backendConfig: null,
+            featureSettings: buildDefaultFeatureSettings(),
+            frontendSettings: {
+                rememberLastVault: readRememberLastVaultFromLocal(),
+            },
+            isLoading: false,
+            error: null,
+        };
+        this.emit();
+        console.info("[config-store] reset to default feature settings for empty vault context");
     }
 
     async ensureLoaded(vaultPath: string): Promise<void> {
@@ -990,6 +1077,28 @@ export async function ensureConfigLoadedForVault(vaultPath: string): Promise<voi
 }
 
 /**
+ * @function syncConfigStateForVault
+ * @description 根据当前仓库上下文同步配置；未打开仓库时回落到全局默认配置。
+ * @param vaultPath 当前仓库路径。
+ * @param enabled 是否允许执行同步。
+ */
+export async function syncConfigStateForVault(
+    vaultPath: string,
+    enabled: boolean,
+): Promise<void> {
+    if (!enabled) {
+        return;
+    }
+
+    if (!vaultPath || vaultPath.trim().length === 0) {
+        configStore.resetForNoVault();
+        return;
+    }
+
+    await configStore.ensureLoaded(vaultPath);
+}
+
+/**
  * @function updateSearchEnabled
  * @description 更新后端配置项“是否开启搜索功能”。
  * @param nextValue 配置值。
@@ -1050,10 +1159,6 @@ export async function updateBackendConfig(
  */
 export function useConfigSync(vaultPath: string, enabled: boolean): void {
     useEffect(() => {
-        if (!enabled) {
-            return;
-        }
-
-        void ensureConfigLoadedForVault(vaultPath);
+        void syncConfigStateForVault(vaultPath, enabled);
     }, [vaultPath, enabled]);
 }

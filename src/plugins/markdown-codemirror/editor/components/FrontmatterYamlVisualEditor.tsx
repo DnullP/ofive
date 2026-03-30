@@ -18,6 +18,10 @@ import { useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type M
 import { useTranslation } from "react-i18next";
 import YAML from "yaml";
 import { showNativeContextMenu } from "../../../../host/layout/nativeContextMenu";
+import {
+    shouldDeferBlurCommitAfterComposition,
+    shouldSubmitPlainEnter,
+} from "../../../../utils/imeInputGuard";
 import "./FrontmatterYamlVisualEditor.css";
 
 /**
@@ -322,8 +326,40 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
     const [editingListItem, setEditingListItem] = useState<{ key: string; index: number } | null>(null);
     const [editingListDraft, setEditingListDraft] = useState<string>("");
     const lastCommittedYamlRef = useRef<string>(props.initialYamlText.trimEnd());
+    const isInputComposingRef = useRef(false);
+    const lastInputCompositionEndAtRef = useRef(0);
 
     const fieldEntries = useMemo(() => Object.entries(recordDraft), [recordDraft]);
+
+    /**
+     * @function handleInputCompositionStart
+     * @description 标记 frontmatter 输入框进入输入法组合态。
+     */
+    const handleInputCompositionStart = (): void => {
+        isInputComposingRef.current = true;
+    };
+
+    /**
+     * @function handleInputCompositionEnd
+     * @description 标记 frontmatter 输入框退出输入法组合态，并记录结束时间戳。
+     */
+    const handleInputCompositionEnd = (): void => {
+        isInputComposingRef.current = false;
+        lastInputCompositionEndAtRef.current = performance.now();
+    };
+
+    /**
+     * @function shouldDeferInputBlurCommit
+     * @description 判断 frontmatter 输入框 blur 是否应延后提交，避免候选确认误触发保存。
+     * @returns `true` 表示本次 blur 不应提交。
+     */
+    const shouldDeferInputBlurCommit = (): boolean => {
+        return shouldDeferBlurCommitAfterComposition({
+            isComposing: isInputComposingRef.current,
+            lastCompositionEndAt: lastInputCompositionEndAtRef.current,
+            now: performance.now(),
+        });
+    };
 
     /**
      * @function commitRecordDraft
@@ -532,7 +568,10 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
         event: KeyboardEvent<HTMLInputElement>,
         fieldKey: string,
     ): void => {
-        if (event.key === "Enter") {
+        if (shouldSubmitPlainEnter({
+            key: event.key,
+            nativeEvent: event.nativeEvent,
+        })) {
             event.preventDefault();
             commitFieldKeyRename(fieldKey);
             return;
@@ -614,11 +653,20 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                             [key]: Number.isFinite(nextNumber) ? nextNumber : 0,
                         }));
                     }}
+                    onCompositionStart={handleInputCompositionStart}
+                    onCompositionEnd={handleInputCompositionEnd}
                     onBlur={() => {
+                        if (shouldDeferInputBlurCommit()) {
+                            return;
+                        }
+
                         commitRecordDraft();
                     }}
                     onKeyDown={(event) => {
-                        if (event.key === "Enter") {
+                        if (shouldSubmitPlainEnter({
+                            key: event.key,
+                            nativeEvent: event.nativeEvent,
+                        })) {
                             event.preventDefault();
                             commitRecordDraft();
                         }
@@ -641,11 +689,20 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                                     onChange={(event: ChangeEvent<HTMLInputElement>) => {
                                         setEditingListDraft(event.target.value);
                                     }}
+                                    onCompositionStart={handleInputCompositionStart}
+                                    onCompositionEnd={handleInputCompositionEnd}
                                     onBlur={() => {
+                                        if (shouldDeferInputBlurCommit()) {
+                                            return;
+                                        }
+
                                         commitListItemEdit();
                                     }}
                                     onKeyDown={(event) => {
-                                        if (event.key === "Enter") {
+                                        if (shouldSubmitPlainEnter({
+                                            key: event.key,
+                                            nativeEvent: event.nativeEvent,
+                                        })) {
                                             event.preventDefault();
                                             commitListItemEdit();
                                             return;
@@ -738,11 +795,20 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                         [key]: event.target.value,
                     }));
                 }}
+                onCompositionStart={handleInputCompositionStart}
+                onCompositionEnd={handleInputCompositionEnd}
                 onBlur={() => {
+                    if (shouldDeferInputBlurCommit()) {
+                        return;
+                    }
+
                     commitRecordDraft();
                 }}
                 onKeyDown={(event) => {
-                    if (event.key === "Enter") {
+                    if (shouldSubmitPlainEnter({
+                        key: event.key,
+                        nativeEvent: event.nativeEvent,
+                    })) {
                         event.preventDefault();
                         commitRecordDraft();
                     }
@@ -777,7 +843,13 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                                         [key]: nextDraftValue,
                                     }));
                                 }}
+                                onCompositionStart={handleInputCompositionStart}
+                                onCompositionEnd={handleInputCompositionEnd}
                                 onBlur={() => {
+                                    if (shouldDeferInputBlurCommit()) {
+                                        return;
+                                    }
+
                                     commitFieldKeyRename(key);
                                 }}
                                 onKeyDown={(event) => {

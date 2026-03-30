@@ -16,6 +16,14 @@ import type { DockviewApi } from "dockview";
 import type { TabInstanceDefinition } from "./DockviewLayout";
 import { resolveFileOpener } from "../registry/fileOpenerRegistry";
 
+interface DockviewPanelLike {
+    id: string;
+    params?: Record<string, unknown>;
+    api: {
+        setActive(): void;
+    };
+}
+
 /**
  * @interface ResolveFileTabOptions
  * @description 文件打开解析选项。
@@ -69,6 +77,28 @@ export function normalizeRelativePath(relativePath: string): string {
  */
 export function buildFileTabId(relativePath: string): string {
     return `file:${normalizeRelativePath(relativePath)}`;
+}
+
+/**
+ * @function findExistingFilePanelByPath
+ * @description 根据 panel 当前参数里的 `path` 查找已打开的文件标签，避免路径重命名后重复打开。
+ * @param containerApi Dockview 容器实例。
+ * @param relativePath 目标文件相对路径。
+ * @returns 匹配的 panel；未命中时返回 null。
+ */
+function findExistingFilePanelByPath(
+    containerApi: DockviewApi,
+    relativePath: string,
+): DockviewPanelLike | null {
+    const normalizedTargetPath = normalizeRelativePath(relativePath);
+    const panels = (containerApi.panels ?? []) as unknown as DockviewPanelLike[];
+
+    return panels.find((panel) => {
+        const panelPath = typeof panel.params?.path === "string"
+            ? normalizeRelativePath(panel.params.path)
+            : null;
+        return panelPath === normalizedTargetPath;
+    }) ?? null;
 }
 
 /**
@@ -170,13 +200,14 @@ export async function openFileInDockview(
 ): Promise<TabInstanceDefinition | null> {
     const normalizedPath = normalizeRelativePath(options.relativePath);
     const tabId = buildFileTabId(normalizedPath);
-    const existingPanel = options.containerApi.getPanel(tabId);
+    const existingPanel = options.containerApi.getPanel(tabId)
+        ?? findExistingFilePanelByPath(options.containerApi, normalizedPath);
 
     if (existingPanel) {
         existingPanel.api.setActive();
         console.info("[openFileService] activated existing file tab", {
             relativePath: normalizedPath,
-            tabId,
+            tabId: existingPanel.id,
         });
         return null;
     }

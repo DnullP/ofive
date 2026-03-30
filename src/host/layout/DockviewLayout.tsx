@@ -712,6 +712,22 @@ function syncActiveEditorFromPanel(
     });
 }
 
+function resolveDockviewPanelFilePath(panel: IDockviewPanel): string | null {
+    const paramPath = typeof panel.params?.path === "string"
+        ? panel.params.path.replace(/\\/g, "/")
+        : null;
+
+    if (paramPath) {
+        return paramPath;
+    }
+
+    if (!panel.id.startsWith("file:")) {
+        return null;
+    }
+
+    return panel.id.slice(5).replace(/\\/g, "/");
+}
+
 function decorateTabInstanceWithLifecycle(tab: TabInstanceDefinition): TabInstanceDefinition {
     const lifecycleScope = getTabComponentById(tab.component)?.lifecycleScope ?? "global";
 
@@ -3415,22 +3431,28 @@ export function DockviewLayout({
 
             const normalizedDeletedPath = deletedPath.replace(/\\/g, "/");
 
-            // 尝试关闭精确匹配的文件 tab（file:<path>）
-            const exactTabId = `file:${normalizedDeletedPath}`;
-            const exactPanel = api.getPanel(exactTabId);
-            if (exactPanel) {
-                exactPanel.api.close();
+            const filePanelsToClose = api.panels.filter((panel) =>
+                resolveDockviewPanelFilePath(panel) === normalizedDeletedPath,
+            );
+
+            for (const panel of filePanelsToClose) {
+                panel.api.close();
+            }
+
+            if (filePanelsToClose.length > 0) {
                 console.info("[dockview-layout] closed tab for deleted file", {
                     eventId: payload.eventId,
-                    tabId: exactTabId,
                     path: normalizedDeletedPath,
+                    closedTabIds: filePanelsToClose.map((panel) => panel.id),
                 });
                 return;
             }
 
-            // 目录删除：关闭该目录下所有文件的 tab
-            const dirPrefix = `file:${normalizedDeletedPath}/`;
-            const panelsToClose = api.panels.filter((panel) => panel.id.startsWith(dirPrefix));
+            const dirPrefix = `${normalizedDeletedPath}/`;
+            const panelsToClose = api.panels.filter((panel) => {
+                const panelPath = resolveDockviewPanelFilePath(panel);
+                return panelPath?.startsWith(dirPrefix) === true;
+            });
 
             for (const panel of panelsToClose) {
                 panel.api.close();

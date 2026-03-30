@@ -62,7 +62,35 @@ interface SaveFrontmatterResult {
     message: string;
 }
 
+/**
+ * @interface FrontmatterSelectionRange
+ * @description frontmatter 选区判断所需的最小选区结构。
+ */
+interface FrontmatterSelectionRange {
+    /** 选区起始偏移。 */
+    from: number;
+    /** 选区结束偏移。 */
+    to: number;
+    /** 选区是否为空光标。 */
+    empty: boolean;
+}
+
 const FRONTMATTER_DELIMITER = "---";
+
+/**
+ * @function isFrontmatterBlockSelected
+ * @description 判断当前编辑器选区是否覆盖 frontmatter 隐藏源码范围。
+ * @param block frontmatter 区块。
+ * @param ranges 当前编辑器选区集合。
+ * @returns 若任一非空选区与 frontmatter 区块相交，返回 true。
+ * @throws 无显式异常。
+ */
+export function isFrontmatterBlockSelected(
+    block: Pick<FrontmatterBlock, "from" | "to">,
+    ranges: readonly FrontmatterSelectionRange[],
+): boolean {
+    return ranges.some((range) => !range.empty && range.from < block.to && range.to > block.from);
+}
 
 /**
  * @function isViewAlive
@@ -230,25 +258,35 @@ class FrontmatterYamlWidget extends WidgetType {
     /** YAML 初始文本。 */
     private readonly yamlText: string;
 
+    /** 当前 widget 是否处于选中高亮态。 */
+    private readonly isSelected: boolean;
+
     /** 保存回调。 */
     private readonly onSave: (yamlText: string) => SaveFrontmatterResult;
 
     /** React 根实例。 */
     private root: Root | null = null;
 
-    constructor(yamlText: string, onSave: (yamlText: string) => SaveFrontmatterResult) {
+    constructor(
+        yamlText: string,
+        isSelected: boolean,
+        onSave: (yamlText: string) => SaveFrontmatterResult,
+    ) {
         super();
         this.yamlText = yamlText;
+        this.isSelected = isSelected;
         this.onSave = onSave;
     }
 
     eq(other: FrontmatterYamlWidget): boolean {
-        return this.yamlText === other.yamlText;
+        return this.yamlText === other.yamlText && this.isSelected === other.isSelected;
     }
 
     toDOM(): HTMLElement {
         const wrapper = document.createElement("section");
-        wrapper.className = "cm-frontmatter-widget";
+        wrapper.className = this.isSelected
+            ? "cm-frontmatter-widget cm-frontmatter-widget-selected"
+            : "cm-frontmatter-widget";
 
         // React root 创建和渲染必须在 try-catch 中执行：
         // toDOM() 在 CM6 DocView 构造期间被调用，此时 EditorView.docView 尚未赋值。
@@ -344,6 +382,8 @@ export function createFrontmatterSyntaxExtension(): Extension {
                     { from: block.from, to: block.to },
                 ]);
 
+                const isSelected = isFrontmatterBlockSelected(block, view.state.selection.ranges);
+
                 // 通过 Decoration.line 为每行添加隐藏类，CSS 将行高设为 0。
                 // 对应的 gutter 元素通过 CSS overflow:hidden 自动裁剪溢出行号。
                 for (let lineNumber = block.startLineNumber; lineNumber < block.endLineNumber; lineNumber += 1) {
@@ -359,7 +399,7 @@ export function createFrontmatterSyntaxExtension(): Extension {
                     block.to,
                     block.to,
                     Decoration.widget({
-                        widget: new FrontmatterYamlWidget(block.yamlText, (nextYamlText) =>
+                        widget: new FrontmatterYamlWidget(block.yamlText, isSelected, (nextYamlText) =>
                             saveFrontmatterYaml(view, nextYamlText),
                         ),
                         block: false,

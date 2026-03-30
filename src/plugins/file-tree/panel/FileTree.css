@@ -110,6 +110,9 @@
 /* 重命名编辑态：输入框行保持与普通树节点一致的布局。 */
 .tree-item.tree-item-editing {
   cursor: text;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  gap: 4px;
 }
 
 /* 文件树重命名输入框：用于右键 rename 后进入可编辑状态。 */
@@ -119,9 +122,11 @@
   border: 1px solid var(--surface-input-border);
   background: var(--surface-input-bg);
   color: var(--text-primary);
-  border-radius: 8px;
-  padding: 4px 8px;
-  font: inherit;
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-family: inherit;
 }
 
 /* 拖拽源节点样式：在拖拽过程中降低源节点透明度。 */
