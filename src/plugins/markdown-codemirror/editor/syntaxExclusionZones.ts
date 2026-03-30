@@ -13,6 +13,7 @@
  *   1. frontmatter — 最高，总在文档头部，内容为 YAML
  *   2. code-fence  — 次高，内容为原始代码，不应做任何 markdown 渲染
  *   3. latex-block — 内容为 TeX 公式，不应做 markdown 渲染
+ *   4. markdown-table — 表格块由可视化编辑器接管，不应继续做行级渲染
  *
  *   数据存储以 EditorView 为键（WeakMap），每次文档/选区变化时由各插件重新声明，
  *   因此不存在过期区域。
@@ -38,7 +39,7 @@ import type { EditorView } from "@codemirror/view";
  * @type ExclusionZoneOwner
  * @description 排斥区域所有者标识。按优先级从高到低排列。
  */
-export type ExclusionZoneOwner = "frontmatter" | "code-fence" | "latex-block";
+export type ExclusionZoneOwner = "frontmatter" | "code-fence" | "latex-block" | "markdown-table";
 
 /**
  * @interface ExclusionZone
@@ -62,6 +63,7 @@ const OWNER_PRIORITY: Record<ExclusionZoneOwner, number> = {
     frontmatter: 0,
     "code-fence": 1,
     "latex-block": 2,
+    "markdown-table": 3,
 };
 
 /* ================================================================== */

@@ -75,7 +75,9 @@ import {
     insertLink,
     insertTask,
     insertFrontmatter,
+    insertTable,
 } from "./markdownFormattingCommands";
+import { createMarkdownTableSyntaxExtension } from "./syntaxPlugins/markdownTableSyntaxExtension";
 import {
     containsChineseCharacter,
     resolveChinesePreviousWordBoundary,
@@ -101,6 +103,10 @@ import {
 } from "./vimChineseMotionExtension";
 import { flushAutoSaveByPath } from "../../../host/store/autoSaveService";
 import { openFileInDockview } from "../../../host/layout/openFileService";
+import {
+    flushFocusedMarkdownTableEditor,
+    isMarkdownTableEditorFocused,
+} from "./markdownTableWidgetRegistry";
 
 ensureBuiltinSyntaxRenderersRegistered();
 ensureBuiltinEditPluginsRegistered();
@@ -316,6 +322,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         "editor.insertLink": "Cmd+K",
         "editor.insertTask": "",
         "editor.insertFrontmatter": "",
+        "editor.insertTable": "",
         "fileTree.copySelected": "Cmd+C",
         "fileTree.pasteInDirectory": "Cmd+V",
         "fileTree.deleteSelected": "Cmd+Backspace",
@@ -535,6 +542,10 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
 
         if (commandId === "editor.insertFrontmatter") {
             return insertFrontmatter(view);
+        }
+
+        if (commandId === "editor.insertTable") {
+            return insertTable(view);
         }
 
         return false;
@@ -780,6 +791,10 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 createFrontmatterSyntaxExtension(),
                 createCodeBlockHighlightExtension(),
                 ...createLatexSyntaxExtension(),
+                createMarkdownTableSyntaxExtension(
+                    props.containerApi,
+                    () => currentFilePathRef.current,
+                ),
                 /* 行级语法渲染：依赖排斥区域跳过块级结构内的行 */
                 registeredLineSyntaxRenderExtension,
                 createTaskCheckboxToggleExtension(),
@@ -948,6 +963,27 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 }),
                 managedShortcutCandidates: managedEditorShortcutCandidatesRef.current,
             });
+
+            if (isMarkdownTableEditorFocused()) {
+                if (resolution.shouldPreventDefault) {
+                    event.preventDefault();
+                }
+                if (resolution.shouldStopPropagation) {
+                    event.stopPropagation();
+                }
+
+                if (resolution.kind === "block-native") {
+                    return;
+                }
+
+                if (resolution.commandId?.startsWith("editor.")) {
+                    return;
+                }
+
+                if (resolution.kind === "execute") {
+                    flushFocusedMarkdownTableEditor();
+                }
+            }
 
             if (resolution.kind === "none") {
                 return;

@@ -400,6 +400,7 @@ const zh = {
         insertLink: "插入链接",
         insertTask: "快速创建任务",
         insertFrontmatter: "插入 frontmatter",
+        insertTable: "插入表格",
         copySelectedFile: "复制选中文件",
         pasteFileToDir: "粘贴文件到当前目录",
         deleteSelectedFile: "删除选中文件",
@@ -418,6 +419,22 @@ const zh = {
         activeEditorPresent: "存在活跃编辑器",
         vaultLoaded: "仓库已加载",
         overlayClosed: "浮层已关闭",
+    },
+
+    markdownTable: {
+        addRowAbove: "上方插入行",
+        addRowBelow: "下方插入行",
+        deleteRow: "删除当前行",
+        addColumnLeft: "左侧插入列",
+        addColumnRight: "右侧插入列",
+        deleteColumn: "删除当前列",
+        headerSelection: "当前选中：表头第 {{column}} 列",
+        bodySelection: "当前选中：第 {{row}} 行第 {{column}} 列",
+        headerPlaceholder: "表头",
+        cellPlaceholder: "输入 Markdown / WikiLink",
+        synced: "表格已同步",
+        editorClosed: "编辑器已关闭，无法同步表格",
+        blockMissing: "表格块不存在，无法同步",
     },
 
     /* ==================== 标题栏 ==================== */

@@ -109,17 +109,6 @@ export function CustomTitlebar(): ReactNode {
 
             <button
                 type="button"
-                className="app-titlebar__control app-titlebar__control--maximize window-no-drag"
-                aria-label={t("titlebar.toggleFullscreen")}
-                onClick={() => {
-                    void handleToggleFullscreen();
-                }}
-            >
-                <Expand size={10} strokeWidth={2.2} />
-            </button>
-
-            <button
-                type="button"
                 className="app-titlebar__control app-titlebar__control--minimize window-no-drag"
                 aria-label={t("titlebar.minimizeWindow")}
                 onClick={() => {
@@ -127,6 +116,17 @@ export function CustomTitlebar(): ReactNode {
                 }}
             >
                 <Minus size={12} strokeWidth={2.2} />
+            </button>
+
+            <button
+                type="button"
+                className="app-titlebar__control app-titlebar__control--maximize window-no-drag"
+                aria-label={t("titlebar.toggleFullscreen")}
+                onClick={() => {
+                    void handleToggleFullscreen();
+                }}
+            >
+                <Expand size={10} strokeWidth={2.2} />
             </button>
         </div>
     ) : (

@@ -239,6 +239,18 @@
     caret-color: transparent;
 }
 
+/* 表格 widget 聚焦态：隐藏主编辑器光标层，避免与单元格输入框形成双编辑态视觉。 */
+.cm-tab-editor .cm-editor.cm-table-widget-focused .cm-cursorLayer,
+.cm-tab-editor .cm-editor.cm-table-widget-focused .cm-selectionLayer,
+.cm-tab-editor .cm-editor.cm-table-widget-focused .cm-dropCursor {
+    display: none !important;
+}
+
+/* 表格 widget 聚焦态：隐藏主内容区 caret，确保用户只感知单元格输入光标。 */
+.cm-tab-editor .cm-editor.cm-table-widget-focused .cm-content {
+    caret-color: transparent;
+}
+
 /* CodeMirror 内容区样式：行高与文本色。
    font-family / font-size 由 editorStyleCompartment 动态注入，不在 CSS 中硬编码。 */
 .cm-tab-editor .cm-content {

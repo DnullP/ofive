@@ -110,11 +110,13 @@
 .sidebar-paneview-container {
   --dv-group-view-background-color: var(--surface-base);
   --dv-tabs-and-actions-container-background-color: var(--chrome-tabstrip-bg);
+  --dv-tabs-and-actions-container-font-size: var(--font-size-ui-md);
   --dv-activegroup-visiblepanel-tab-background-color: var(--chrome-tab-active-bg);
   --dv-activegroup-hiddenpanel-tab-background-color: color-mix(in srgb, var(--chrome-tabstrip-bg) 72%, transparent);
   --dv-inactivegroup-visiblepanel-tab-background-color: var(--chrome-tab-inactive-bg);
   --dv-inactivegroup-hiddenpanel-tab-background-color: color-mix(in srgb, var(--surface-base) 72%, transparent);
   --dv-tab-divider-color: var(--chrome-border-soft);
+  --dv-tab-font-size: var(--font-size-ui-md);
   --dv-activegroup-visiblepanel-tab-color: var(--text-primary);
   --dv-activegroup-hiddenpanel-tab-color: var(--text-secondary);
   --dv-inactivegroup-visiblepanel-tab-color: var(--text-secondary);
@@ -239,6 +241,11 @@
 }
 
 /* Dockview paneview header：禁止文本选中，避免点击时误选。 */
+.dv-pane-header,
+.dv-pane-header-icon {
+  font-size: var(--font-size-ui-md);
+}
+
 .dv-pane-header,
 .dv-pane-header-icon,
 .dv-tab,

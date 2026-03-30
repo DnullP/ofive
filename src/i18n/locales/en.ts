@@ -390,6 +390,7 @@ const en = {
         insertLink: "Insert Link",
         insertTask: "Quick Insert Task",
         insertFrontmatter: "Insert Frontmatter",
+        insertTable: "Insert Table",
         copySelectedFile: "Copy Selected File",
         pasteFileToDir: "Paste File to Current Directory",
         deleteSelectedFile: "Delete Selected File",
@@ -408,6 +409,22 @@ const en = {
         activeEditorPresent: "Active editor present",
         vaultLoaded: "Vault loaded",
         overlayClosed: "Overlay closed",
+    },
+
+    markdownTable: {
+        addRowAbove: "Insert Row Above",
+        addRowBelow: "Insert Row Below",
+        deleteRow: "Delete Current Row",
+        addColumnLeft: "Insert Column Left",
+        addColumnRight: "Insert Column Right",
+        deleteColumn: "Delete Current Column",
+        headerSelection: "Selected: Header Column {{column}}",
+        bodySelection: "Selected: Row {{row}}, Column {{column}}",
+        headerPlaceholder: "Header",
+        cellPlaceholder: "Type Markdown / WikiLink",
+        synced: "Table synced",
+        editorClosed: "Editor closed; failed to sync table",
+        blockMissing: "Table block missing; failed to sync table",
     },
 
     /* ==================== Titlebar ==================== */

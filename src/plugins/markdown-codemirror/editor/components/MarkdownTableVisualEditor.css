@@ -1,0 +1,221 @@
+/* mtv-shell：Markdown 表格可视化编辑器整体容器。 */
+.mtv-shell {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--editor-panel-border-color);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--editor-panel-bg-color) 92%, var(--editor-panel-bg-elevated-color));
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* mtv-toolbar：表格工具栏。 */
+.mtv-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* mtv-toolbar-group：工具栏按钮组。 */
+.mtv-toolbar-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* mtv-toolbar-button：工具栏按钮。 */
+.mtv-toolbar-button {
+    border: 1px solid var(--editor-panel-border-color);
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--editor-panel-text-color);
+    background: color-mix(in srgb, var(--editor-panel-bg-elevated-color) 92%, transparent);
+    cursor: pointer;
+}
+
+/* mtv-toolbar-button:hover：工具栏按钮悬浮态。 */
+.mtv-toolbar-button:hover {
+    border-color: var(--editor-suggest-item-hover-border-color);
+    background: var(--editor-suggest-item-hover-bg);
+}
+
+/* mtv-toolbar-button:disabled：工具栏按钮禁用态。 */
+.mtv-toolbar-button:disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
+}
+
+/* mtv-status：表格状态与快捷键提示区。 */
+.mtv-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    color: var(--editor-panel-muted-text-color);
+}
+
+/* mtv-status-current：当前选中单元格说明。 */
+.mtv-status-current {
+    font-weight: 600;
+    color: var(--editor-panel-text-color);
+}
+
+/* mtv-shortcut-list：快捷键文案。 */
+.mtv-shortcut-list {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* mtv-shortcut-chip：快捷键标签。 */
+.mtv-shortcut-chip {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--editor-panel-bg-elevated-color) 86%, transparent);
+    border: 1px solid color-mix(in srgb, var(--editor-panel-border-color) 88%, transparent);
+}
+
+/* mtv-table-scroll：表格滚动容器。 */
+.mtv-table-scroll {
+    overflow: auto;
+}
+
+/* mtv-table：表格布局本体。 */
+.mtv-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+}
+
+/* mtv-table-head-cell：表头单元格。 */
+.mtv-table-head-cell {
+    position: relative;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--editor-panel-border-color) 84%, transparent);
+    background: color-mix(in srgb, var(--editor-panel-bg-elevated-color) 96%, transparent);
+}
+
+/* mtv-table-body-cell：表体单元格。 */
+.mtv-table-body-cell {
+    position: relative;
+    padding: 0;
+    border-right: 1px solid color-mix(in srgb, var(--editor-panel-border-color) 84%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--editor-panel-border-color) 84%, transparent);
+    background: color-mix(in srgb, var(--editor-panel-bg-color) 96%, transparent);
+}
+
+/* mtv-table-body-row:first-child mtv-table-body-cell：表体首行补齐上边框。 */
+.mtv-table-body-row:first-child .mtv-table-body-cell {
+    border-top: 1px solid color-mix(in srgb, var(--editor-panel-border-color) 84%, transparent);
+}
+
+/* mtv-table-head-cell:first-child：首列表头补齐左边框。 */
+.mtv-table-head-cell:first-child {
+    border-left: 1px solid color-mix(in srgb, var(--editor-panel-border-color) 84%, transparent);
+}
+
+/* mtv-table-body-cell:first-child：首列表体补齐左边框。 */
+.mtv-table-body-cell:first-child {
+    border-left: 1px solid color-mix(in srgb, var(--editor-panel-border-color) 84%, transparent);
+}
+
+/* mtv-cell-input：单元格输入框。 */
+.mtv-cell-input {
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 0;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--editor-panel-text-color);
+    background: transparent;
+    outline: none;
+    box-sizing: border-box;
+}
+
+/* mtv-cell-input::placeholder：单元格输入框占位。 */
+.mtv-cell-input::placeholder {
+    color: var(--editor-panel-muted-text-color);
+}
+
+/* mtv-cell-input[data-active="true"]：激活单元格输入框。 */
+.mtv-cell-input[data-active="true"] {
+    background: color-mix(in srgb, var(--editor-suggest-item-hover-bg) 64%, transparent);
+    box-shadow: inset 0 0 0 1px var(--editor-suggest-item-hover-border-color);
+}
+
+/* mtv-cell-frame：单元格内容框，统一承载输入态与预览态高度。 */
+.mtv-cell-frame {
+    min-height: 38px;
+}
+
+/* mtv-cell-preview：单元格预览态，未激活时展示可点击链接。 */
+.mtv-cell-preview {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0;
+    min-height: 38px;
+    padding: 8px 10px;
+    box-sizing: border-box;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--editor-panel-text-color);
+    white-space: pre-wrap;
+    cursor: text;
+}
+
+/* mtv-cell-preview[data-empty="true"]：空单元格预览态采用弱化文本色。 */
+.mtv-cell-preview[data-empty="true"] {
+    color: var(--editor-panel-muted-text-color);
+}
+
+/* mtv-cell-preview-placeholder：预览态占位文本。 */
+.mtv-cell-preview-placeholder {
+    color: inherit;
+}
+
+/* mtv-cell-preview-text：预览态普通文本片段。 */
+.mtv-cell-preview-text {
+    color: inherit;
+}
+
+/* mtv-cell-preview-link-button：预览态 WikiLink 按钮，复用编辑器链接外观。 */
+.mtv-cell-preview-link-button {
+    padding: 0;
+    border: 0;
+    font: inherit;
+    background: transparent;
+    cursor: pointer;
+}
+
+/* mtv-cell-preview-link-anchor：预览态普通链接锚点。 */
+.mtv-cell-preview-link-anchor {
+    cursor: pointer;
+}
+
+/* mtv-cell-popup：表格单元格内的 WikiLink 补全面板定位容器。 */
+.mtv-cell-popup {
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: max(280px, 100%);
+    z-index: 260;
+}
+
+/* mtv-cell-popup-item：表格单元格内的补全项按钮。 */
+.mtv-cell-popup-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+}

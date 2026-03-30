@@ -1,6 +1,6 @@
 /**
  * @module plugins/markdown-codemirror/editor/markdownFormattingCommands.test
- * @description markdownFormattingCommands 单元测试：验证加粗、斜体、删除线、行内代码、高亮、链接等格式切换逻辑。
+ * @description markdownFormattingCommands 单元测试：验证加粗、斜体、删除线、行内代码、高亮、链接、任务与表格插入逻辑。
  */
 
 import { describe, expect, test } from "bun:test";
@@ -18,6 +18,7 @@ import {
     insertLink,
     insertTask,
     insertFrontmatter,
+    insertTable,
 } from "./markdownFormattingCommands";
 
 /**
@@ -272,5 +273,45 @@ describe("insertFrontmatter", () => {
         const { view, dispatches } = createMockView("---\ntitle: demo\n---\n\n# Title\n", 0, 0);
         insertFrontmatter(view);
         expect(dispatches).toHaveLength(0);
+    });
+});
+
+/* ================================================================== */
+/*  insertTable 测试                                                   */
+/* ================================================================== */
+
+describe("insertTable", () => {
+    test("空选区时在光标处插入基础表格并选中首个表头", () => {
+        const { view, dispatches } = createMockView("hello", 5, 5);
+        insertTable(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({
+            from: 5,
+            to: 5,
+            insert: [
+                "| Column 1 | Column 2 |",
+                "| --- | --- |",
+                "| Cell 1 | Cell 2 |",
+                "| Cell 3 | Cell 4 |",
+            ].join("\n"),
+        });
+        expect(dispatches[0]!.selection).toEqual({ anchor: 7, head: 15 });
+    });
+
+    test("有选区时使用基础表格替换选中内容", () => {
+        const { view, dispatches } = createMockView("replace me", 0, 10);
+        insertTable(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({
+            from: 0,
+            to: 10,
+            insert: [
+                "| Column 1 | Column 2 |",
+                "| --- | --- |",
+                "| Cell 1 | Cell 2 |",
+                "| Cell 3 | Cell 4 |",
+            ].join("\n"),
+        });
+        expect(dispatches[0]!.selection).toEqual({ anchor: 2, head: 10 });
     });
 });

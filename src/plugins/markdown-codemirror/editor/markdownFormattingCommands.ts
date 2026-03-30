@@ -20,6 +20,9 @@
  *  - insertLink         — 插入/包裹链接 `[text](url)`
  *  - insertTask         — 在当前光标或选区快速创建任务 `- [ ] content`
  *  - insertFrontmatter  — 若文档缺少 frontmatter，则在顶部插入空 frontmatter 模板
+ *  - insertTable        — 在当前光标或选区插入基础 Markdown 表格
+ *  - insertFrontmatter  — 若文档缺少 frontmatter，则在顶部插入空 frontmatter 模板
+ *  - insertTable        — 在当前光标或选区插入基础 Markdown 表格
  */
 
 import type { EditorView } from "codemirror";
@@ -361,6 +364,55 @@ export function insertFrontmatter(view: EditorView): boolean {
         },
         selection: {
             anchor: insertText.length,
+        },
+    });
+
+    return true;
+}
+
+/**
+ * @function buildBaseTableTemplate
+ * @description 构建一个 2x2 基础 Markdown 表格模板，并给出首个表头占位的选区范围。
+ * @returns 表格文本与插入后的建议选区偏移。
+ */
+function buildBaseTableTemplate(): {
+    text: string;
+    selectionFrom: number;
+    selectionTo: number;
+} {
+    const firstHeader = "Column 1";
+    return {
+        text: [
+            `| ${firstHeader} | Column 2 |`,
+            "| --- | --- |",
+            "| Cell 1 | Cell 2 |",
+            "| Cell 3 | Cell 4 |",
+        ].join("\n"),
+        selectionFrom: 2,
+        selectionTo: 2 + firstHeader.length,
+    };
+}
+
+/**
+ * @function insertTable
+ * @description 在当前光标位置或选区处插入一个 2x2 基础 Markdown 表格。
+ *   插入后默认选中第一个表头单元格，便于立即改写列名。
+ * @param view 编辑器视图。
+ * @returns 是否执行成功。
+ */
+export function insertTable(view: EditorView): boolean {
+    const selection = view.state.selection.main;
+    const template = buildBaseTableTemplate();
+
+    view.dispatch({
+        changes: {
+            from: selection.from,
+            to: selection.to,
+            insert: template.text,
+        },
+        selection: {
+            anchor: selection.from + template.selectionFrom,
+            head: selection.from + template.selectionTo,
         },
     });
 

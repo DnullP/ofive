@@ -16,6 +16,10 @@
   --glass-blur-radius: 8px;
   --font-ui: "SF Pro Text", "Avenir Next", "Segoe UI Variable", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-display: "SF Pro Display", "Avenir Next", "Segoe UI Variable", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-size-ui-xs: 10px;
+  --font-size-ui-sm: 11px;
+  --font-size-ui-md: 12px;
+  --font-size-ui-lg: 13px;
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 18px;

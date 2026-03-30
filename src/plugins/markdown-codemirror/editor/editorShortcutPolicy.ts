@@ -31,6 +31,7 @@ export const EDITOR_MANAGED_NATIVE_COMMAND_IDS: EditorNativeCommandId[] = [
     "editor.insertLink",
     "editor.insertTask",
     "editor.insertFrontmatter",
+    "editor.insertTable",
 ];
 
 /**
@@ -53,6 +54,7 @@ export const EDITOR_NATIVE_FALLBACK_SHORTCUTS: Record<EditorNativeCommandId, str
     "editor.insertLink": ["Cmd+K", "Ctrl+K"],
     "editor.insertTask": [],
     "editor.insertFrontmatter": [],
+    "editor.insertTable": [],
 };
 
 /**

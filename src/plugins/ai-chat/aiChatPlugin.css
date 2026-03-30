@@ -1,5 +1,6 @@
 /* ai-chat-panel：聊天面板整体布局容器 */
 .ai-chat-panel {
+    --ai-chat-control-font-size: var(--font-size-ui-md);
     height: 100%;
     min-height: 0;
     display: grid;
@@ -753,7 +754,9 @@
     border: 1px solid var(--border-color);
     border-radius: 16px;
     padding: 11px 12px;
-    font: inherit;
+    font-family: inherit;
+    font-size: var(--ai-chat-control-font-size);
+    line-height: 1.5;
     color: var(--text-primary);
     background: color-mix(in srgb, var(--bg-primary) 90%, var(--bg-secondary));
 }
@@ -867,7 +870,8 @@
     border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 8px 10px;
-    font: inherit;
+    font-family: inherit;
+    font-size: var(--ai-chat-control-font-size);
     color: var(--text-primary);
     background: var(--bg-primary);
 }
