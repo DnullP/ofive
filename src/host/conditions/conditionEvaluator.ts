@@ -17,6 +17,8 @@
  */
 export type BuiltinShortcutCondition =
     | "editorFocused"
+    | "editorBodyFocused"
+    | "frontmatterFieldFocused"
     | "fileTreeFocused"
     | "activeTabPresent"
     | "activeEditorPresent"
@@ -73,6 +75,8 @@ export interface ConditionDefinition {
  */
 export const SHORTCUT_CONDITION_LABELS: Record<BuiltinShortcutCondition, string> = {
     editorFocused: "focusContext.editorFocused",
+    editorBodyFocused: "focusContext.editorBodyFocused",
+    frontmatterFieldFocused: "focusContext.frontmatterFieldFocused",
     fileTreeFocused: "focusContext.fileTreeFocused",
     activeTabPresent: "conditions.activeTabPresent",
     activeEditorPresent: "conditions.activeEditorPresent",
@@ -88,7 +92,19 @@ const builtinConditionDefinitions: ConditionDefinition[] = [
     {
         id: "editorFocused",
         label: SHORTCUT_CONDITION_LABELS.editorFocused,
+        evaluate: (context) =>
+            context.focusedComponent === "tab:codemirror"
+            || context.focusedComponent === "tab:codemirror-frontmatter",
+    },
+    {
+        id: "editorBodyFocused",
+        label: SHORTCUT_CONDITION_LABELS.editorBodyFocused,
         evaluate: (context) => context.focusedComponent === "tab:codemirror",
+    },
+    {
+        id: "frontmatterFieldFocused",
+        label: SHORTCUT_CONDITION_LABELS.frontmatterFieldFocused,
+        evaluate: (context) => context.focusedComponent === "tab:codemirror-frontmatter",
     },
     {
         id: "fileTreeFocused",

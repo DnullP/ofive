@@ -83,4 +83,23 @@ describe("imeInputGuard", () => {
             now: 160,
         })).toBe(false);
     });
+
+    it("应在组合态刚结束的宽限窗口内阻止 Enter 提交", () => {
+        const shouldSubmit = shouldSubmitPlainEnter({
+            key: "Enter",
+            nativeEvent: {
+                isComposing: false,
+                keyCode: 13,
+            },
+        });
+
+        const shouldDefer = shouldDeferBlurCommitAfterComposition({
+            isComposing: false,
+            lastCompositionEndAt: 100,
+            now: 120,
+        });
+
+        expect(shouldSubmit).toBe(true);
+        expect(shouldDefer).toBe(true);
+    });
 });

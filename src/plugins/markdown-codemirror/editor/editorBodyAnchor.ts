@@ -35,3 +35,28 @@ export function resolveEditorBodyAnchor(state: EditorState): number {
 
     return state.doc.line(frontmatterBlock.endLineNumber + 1).from;
 }
+
+/**
+ * @interface EditorBodySelectionRange
+ * @description 正文范围选择结果；用于将 metadata 区域排除在正文选择之外。
+ */
+export interface EditorBodySelectionRange {
+    /** 选区起点。 */
+    anchor: number;
+    /** 选区终点。 */
+    head: number;
+}
+
+/**
+ * @function resolveEditorBodySelectionRange
+ * @description 解析正文的完整可选范围；若存在 frontmatter，则仅返回其后的正文区间。
+ * @param state CodeMirror 编辑器状态。
+ * @returns 正文选区范围。
+ */
+export function resolveEditorBodySelectionRange(state: EditorState): EditorBodySelectionRange {
+    const anchor = resolveEditorBodyAnchor(state);
+    return {
+        anchor,
+        head: state.doc.length,
+    };
+}

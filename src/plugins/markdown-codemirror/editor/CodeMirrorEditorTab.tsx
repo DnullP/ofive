@@ -9,17 +9,17 @@
  *  - ./codemirrorTheme
  */
 
-import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
 import { BookOpen, SquarePen } from "lucide-react";
 import type { IDockviewPanelProps } from "dockview";
 import { EditorView } from "codemirror";
 import { Compartment, EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { basicSetup } from "codemirror";
-import { indentLess, indentMore, indentWithTab, redo, selectAll, toggleComment, undo } from "@codemirror/commands";
+import { indentLess, indentMore, indentWithTab, redo, toggleComment, undo } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
 import { keymap } from "@codemirror/view";
-import { vim } from "@replit/codemirror-vim";
+import { getCM, Vim, vim } from "@replit/codemirror-vim";
 import "./CodeMirrorEditorTab.css";
 /* KaTeX 样式：LaTeX 数学公式渲染所需的字体和布局样式 */
 import "katex/dist/katex.min.css";
@@ -113,7 +113,8 @@ import {
     resolveMarkdownNoteTitle,
     resolveRenamedMarkdownPath,
 } from "./noteTitleUtils";
-import { resolveEditorBodyAnchor } from "./editorBodyAnchor";
+import { resolveEditorBodyAnchor, resolveEditorBodySelectionRange } from "./editorBodyAnchor";
+import { shouldEnterFrontmatterFromBody } from "./frontmatterVimHandoff";
 import {
     shouldDeferBlurCommitAfterComposition,
     shouldSubmitPlainEnter,
@@ -126,6 +127,55 @@ ensureBuiltinEditPluginsRegistered();
 setupVimEnhancedMotions();
 
 const registeredLineSyntaxRenderExtension = createRegisteredLineSyntaxRenderExtension();
+const FRONTMATTER_FOCUSABLE_SELECTOR = "[data-frontmatter-field-focusable='true']";
+const FRONTMATTER_VIM_NAV_SELECTOR = "[data-frontmatter-vim-nav='true']";
+const FRONTMATTER_VIM_ROW_SELECTOR = "[data-frontmatter-vim-nav='true'][data-frontmatter-field-key]";
+
+/**
+ * @function isVimNormalMode
+ * @description 判断指定 EditorView 当前是否处于 Vim normal 模式。
+ * @param view 编辑器视图。
+ * @returns 是否处于 normal 模式。
+ */
+function isVimNormalMode(view: EditorView): boolean {
+    const cm = getCM(view) as { state?: { vim?: { insertMode?: boolean; visualMode?: boolean } } } | null;
+    const vimState = cm?.state?.vim;
+    if (!vimState) {
+        return false;
+    }
+
+    return !vimState.insertMode && !vimState.visualMode;
+}
+
+/**
+ * @function exitVimInsertMode
+ * @description 将 Vim 状态强制收回到 normal 模式。
+ * @param view 编辑器视图。
+ */
+function exitVimInsertMode(view: EditorView): void {
+    const cm = getCM(view) as ({ state?: { vim?: unknown } } & object) | null;
+    if (!cm || !cm.state?.vim) {
+        return;
+    }
+
+    Vim.exitInsertMode(cm as never);
+}
+const SHARED_EDITOR_FONT_FAMILY_CSS_VALUE = "var(--cm-editor-font-family)";
+const SHARED_EDITOR_FONT_SIZE_CSS_VALUE = "var(--cm-editor-font-size)";
+
+/**
+ * @function resolveEditorShortcutFocusedComponent
+ * @description 根据事件目标解析编辑器快捷键应使用的焦点上下文。
+ * @param target 键盘事件目标。
+ * @returns 正文或 frontmatter 的焦点组件标识。
+ */
+function resolveEditorShortcutFocusedComponent(target: EventTarget | null): string {
+    if (target instanceof HTMLElement && target.closest(FRONTMATTER_FOCUSABLE_SELECTOR)) {
+        return "tab:codemirror-frontmatter";
+    }
+
+    return "tab:codemirror";
+}
 
 /**
  * @function buildLineNumbersExtension
@@ -327,6 +377,7 @@ type TitleSubmitReason = "blur" | "enter";
  * @returns 编辑器 Tab 视图。
  */
 export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, unknown>>): ReactNode {
+    const tabRootRef = useRef<HTMLDivElement | null>(null);
     const hostRef = useRef<HTMLDivElement | null>(null);
     const viewRef = useRef<EditorView | null>(null);
     const hasAppliedInitialAutoFocusRef = useRef<boolean>(false);
@@ -393,6 +444,10 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     const editorTabSize = featureSettings.editorTabSize;
     const editorLineWrapping = featureSettings.editorLineWrapping;
     const editorLineNumbers = featureSettings.editorLineNumbers;
+    const sharedTypographyVariables = useMemo(() => ({
+        "--cm-editor-font-family": editorFontFamily,
+        "--cm-editor-font-size": `${editorFontSize}px`,
+    } as CSSProperties), [editorFontFamily, editorFontSize]);
     const currentFilePath = String(props.params.path ?? i18n.t("editor.untitledFile"));
     const initialDoc = useMemo(() => {
         const content = props.params.content;
@@ -448,6 +503,36 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     }, [displayTitle]);
 
     /**
+     * @function syncTitleOffsetWithEditorGutter
+     * @description 将标题输入的文本起点与编辑器正文首列对齐。
+     *   CodeMirror 的正文会受到 gutter 宽度影响，而标题栏不在同一布局流内，
+     *   因此需要把实时 gutter 宽度同步到 CSS 变量，供标题输入补偿使用。
+     */
+    const syncTitleOffsetWithEditorGutter = (): void => {
+        const tabRoot = tabRootRef.current;
+        const view = viewRef.current;
+
+        if (!tabRoot || !view || effectiveDisplayMode !== "edit") {
+            tabRoot?.style.setProperty("--cm-tab-gutter-width", "0px");
+            return;
+        }
+
+        const gutterElement = view.dom.querySelector(".cm-gutters");
+        const gutterWidth = gutterElement instanceof HTMLElement
+            ? gutterElement.getBoundingClientRect().width
+            : 0;
+
+        tabRoot.style.setProperty(
+            "--cm-tab-gutter-width",
+            `${gutterWidth.toFixed(2)}px`,
+        );
+    };
+
+    useEffect(() => {
+        syncTitleOffsetWithEditorGutter();
+    }, [displayFilePath, editorLineNumbers, effectiveDisplayMode, readContent]);
+
+    /**
      * @function focusEditorBodyStart
      * @description 将编辑器焦点移动到正文首个可编辑位置；若存在 frontmatter，则跳至其后第一行。
      */
@@ -464,6 +549,55 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 scrollIntoView: true,
             });
             liveView.focus();
+        });
+    };
+
+    /**
+     * @function focusFrontmatterVimNavigationTarget
+     * @description 将焦点切入 frontmatter 的 Vim 导航层。
+     * @param position 进入时优先聚焦首项或末项。
+     * @returns 是否成功切入 frontmatter。
+     */
+    const focusFrontmatterVimNavigationTarget = (position: "first" | "last"): boolean => {
+        const view = viewRef.current;
+        if (!view) {
+            return false;
+        }
+
+        const rowTargets = Array.from(view.dom.querySelectorAll<HTMLElement>(FRONTMATTER_VIM_ROW_SELECTOR));
+        const navigationTargets = Array.from(view.dom.querySelectorAll<HTMLElement>(FRONTMATTER_VIM_NAV_SELECTOR));
+        const preferredTargets = rowTargets.length > 0 ? rowTargets : navigationTargets;
+        const target = position === "first"
+            ? preferredTargets[0]
+            : preferredTargets[preferredTargets.length - 1];
+
+        if (!target) {
+            return false;
+        }
+
+        exitVimInsertMode(view);
+        target.focus();
+        console.info("[editor] frontmatter vim handoff entered", {
+            articleId,
+            position,
+        });
+        return true;
+    };
+
+    /**
+     * @function exitFrontmatterVimNavigationToBody
+     * @description 从 frontmatter Vim 导航层返回正文起点。
+     */
+    const exitFrontmatterVimNavigationToBody = (): void => {
+        const view = viewRef.current;
+        if (!view) {
+            return;
+        }
+
+        exitVimInsertMode(view);
+        focusEditorBodyStart();
+        console.info("[editor] frontmatter vim handoff exited", {
+            articleId,
         });
     };
 
@@ -574,7 +708,15 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
 
         if (commandId === "editor.selectAll") {
             view.focus();
-            return selectAll(view);
+            const bodySelection = resolveEditorBodySelectionRange(view.state);
+            view.dispatch({
+                selection: {
+                    anchor: bodySelection.anchor,
+                    head: bodySelection.head,
+                },
+                scrollIntoView: true,
+            });
+            return true;
         }
 
         if (commandId === "editor.find") {
@@ -849,12 +991,12 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 /* 字体族 Compartment：通过 theme 扩展动态控制 .cm-content 字体族 */
                 fontFamilyCompartmentRef.current.of(
                     /* theme-guard-ignore-next-line: 这里是实例级字体配置，不属于静态主题定义。 */
-                    EditorView.theme({ ".cm-content": { fontFamily: editorFontFamily } }),
+                    EditorView.theme({ ".cm-content": { fontFamily: SHARED_EDITOR_FONT_FAMILY_CSS_VALUE } }),
                 ),
                 /* 字体大小 Compartment：通过 theme 扩展动态控制 .cm-content 字号 */
                 fontSizeCompartmentRef.current.of(
                     /* theme-guard-ignore-next-line: 这里是实例级字号配置，不属于静态主题定义。 */
-                    EditorView.theme({ ".cm-content": { fontSize: `${editorFontSize}px` } }),
+                    EditorView.theme({ ".cm-content": { fontSize: SHARED_EDITOR_FONT_SIZE_CSS_VALUE } }),
                 ),
                 /* Tab 缩进宽度 Compartment */
                 tabSizeCompartmentRef.current.of(EditorState.tabSize.of(editorTabSize)),
@@ -869,7 +1011,11 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 /* Tab 键缩进：拦截 Tab/Shift-Tab 使其执行缩进而非焦点切换 */
                 keymap.of([indentWithTab]),
                 /* 块级插件优先注册，确保排斥区域在行级渲染器之前声明 */
-                createFrontmatterSyntaxExtension(),
+                createFrontmatterSyntaxExtension({
+                    onRequestExitVimNavigation: () => {
+                        exitFrontmatterVimNavigationToBody();
+                    },
+                }),
                 createCodeBlockHighlightExtension(),
                 ...createLatexSyntaxExtension(),
                 createMarkdownTableSyntaxExtension(
@@ -940,6 +1086,35 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
             return;
         }
 
+        syncTitleOffsetWithEditorGutter();
+
+        const gutterResizeObserver = typeof ResizeObserver !== "undefined"
+            ? new ResizeObserver(() => {
+                syncTitleOffsetWithEditorGutter();
+            })
+            : null;
+        const gutterMutationObserver = typeof MutationObserver !== "undefined"
+            ? new MutationObserver(() => {
+                syncTitleOffsetWithEditorGutter();
+            })
+            : null;
+
+        gutterResizeObserver?.observe(viewRef.current.dom);
+        const initialGutterElement = viewRef.current.dom.querySelector(".cm-gutters");
+        if (initialGutterElement instanceof HTMLElement) {
+            gutterResizeObserver?.observe(initialGutterElement);
+        }
+        gutterMutationObserver?.observe(viewRef.current.dom, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["class", "style"],
+        });
+
+        window.requestAnimationFrame(() => {
+            syncTitleOffsetWithEditorGutter();
+        });
+
         // 注册 Vim 分词 token 提供器，让增强运动能获取当前行的分词缓存
         registerVimTokenProvider(viewRef.current, getLineTokens);
 
@@ -993,6 +1168,8 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 window.clearTimeout(segmentationTimerRef.current);
                 segmentationTimerRef.current = null;
             }
+            gutterResizeObserver?.disconnect();
+            gutterMutationObserver?.disconnect();
             cleanupPasteHandler();
             if (viewRef.current) {
                 unregisterVimTokenProvider(viewRef.current);
@@ -1016,6 +1193,33 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 return;
             }
 
+            const eventTarget = event.target instanceof HTMLElement ? event.target : null;
+            const isFrontmatterNavigationTarget = !!eventTarget?.closest(FRONTMATTER_VIM_NAV_SELECTOR);
+            const isFrontmatterFieldTarget = !!eventTarget?.closest(FRONTMATTER_FOCUSABLE_SELECTOR);
+
+            if (vimModeEnabledRef.current && !isFrontmatterNavigationTarget && !isFrontmatterFieldTarget) {
+                const selection = view.state.selection.main;
+                const bodyAnchor = resolveEditorBodyAnchor(view.state);
+                const firstBodyLineNumber = view.state.doc.lineAt(bodyAnchor).number;
+                const currentLineNumber = view.state.doc.lineAt(selection.head).number;
+
+                if (shouldEnterFrontmatterFromBody({
+                    key: event.key,
+                    hasFrontmatter: bodyAnchor > 0,
+                    currentLineNumber,
+                    firstBodyLineNumber,
+                    isVimEnabled: vimModeEnabledRef.current,
+                    isVimNormalMode: isVimNormalMode(view),
+                })) {
+                    const focused = focusFrontmatterVimNavigationTarget("last");
+                    if (focused) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return;
+                    }
+                }
+            }
+
             const isCmdBackspace =
                 event.key === "Backspace" &&
                 event.metaKey &&
@@ -1037,7 +1241,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 bindings: bindingsRef.current,
                 source: "editor",
                 conditionContext: createConditionContext({
-                    focusedComponent: "tab:codemirror",
+                    focusedComponent: resolveEditorShortcutFocusedComponent(event.target),
                     activeTabId: articleId,
                     activeEditorArticleId: articleId,
                     currentVaultPath,
@@ -1111,39 +1315,14 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         });
     }, [vimModeEnabled, articleId, currentFilePath]);
 
-    /* 编辑器字体族动态重配置 */
+    /* 编辑器排版变量变化日志：编辑态与阅读态共用同一套字体配置。 */
     useEffect(() => {
-        const view = viewRef.current;
-        if (!view) {
-            return;
-        }
-
-        view.dispatch({
-            effects: fontFamilyCompartmentRef.current.reconfigure(
-                /* theme-guard-ignore-next-line: 这里是实例级字体配置重设，不属于静态主题定义。 */
-                EditorView.theme({ ".cm-content": { fontFamily: editorFontFamily } }),
-            ),
+        console.info("[editor] shared typography changed", {
+            articleId,
+            editorFontFamily,
+            editorFontSize,
         });
-
-        console.info("[editor] font family changed", { articleId, editorFontFamily });
-    }, [editorFontFamily, articleId]);
-
-    /* 编辑器字体大小动态重配置 */
-    useEffect(() => {
-        const view = viewRef.current;
-        if (!view) {
-            return;
-        }
-
-        view.dispatch({
-            effects: fontSizeCompartmentRef.current.reconfigure(
-                /* theme-guard-ignore-next-line: 这里是实例级字号配置重设，不属于静态主题定义。 */
-                EditorView.theme({ ".cm-content": { fontSize: `${editorFontSize}px` } }),
-            ),
-        });
-
-        console.info("[editor] font size changed", { articleId, editorFontSize });
-    }, [editorFontSize, articleId]);
+    }, [editorFontFamily, editorFontSize, articleId]);
 
     /* Tab 缩进宽度动态重配置 */
     useEffect(() => {
@@ -1415,7 +1594,11 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
 
     return (
         <EditorErrorBoundary>
-            <div className={`cm-tab ${isReadingMode ? "cm-tab-reading" : "cm-tab-editing"}`}>
+            <div
+                ref={tabRootRef}
+                className={`cm-tab ${isReadingMode ? "cm-tab-reading" : "cm-tab-editing"}`}
+                style={sharedTypographyVariables}
+            >
                 <div className="cm-tab-header">
                     <div className="cm-tab-header-inner">
                         <input

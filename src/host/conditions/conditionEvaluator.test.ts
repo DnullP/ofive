@@ -41,6 +41,17 @@ describe("evaluateCondition", () => {
         expect(evaluateCondition("fileTreeFocused", context)).toBe(false);
     });
 
+    test("should distinguish editor body and frontmatter field focus", () => {
+        const bodyContext = createConditionContext({ focusedComponent: "tab:codemirror" });
+        const frontmatterContext = createConditionContext({ focusedComponent: "tab:codemirror-frontmatter" });
+
+        expect(evaluateCondition("editorBodyFocused", bodyContext)).toBe(true);
+        expect(evaluateCondition("frontmatterFieldFocused", bodyContext)).toBe(false);
+        expect(evaluateCondition("editorFocused", frontmatterContext)).toBe(true);
+        expect(evaluateCondition("editorBodyFocused", frontmatterContext)).toBe(false);
+        expect(evaluateCondition("frontmatterFieldFocused", frontmatterContext)).toBe(true);
+    });
+
     test("should match fileTreeFocused with files panel", () => {
         const context = createConditionContext({ focusedComponent: "panel:files" });
         expect(evaluateCondition("fileTreeFocused", context)).toBe(true);
@@ -104,6 +115,8 @@ describe("condition registry", () => {
 describe("SHORTCUT_CONDITION_LABELS", () => {
     test("should expose i18n labels for built-in conditions", () => {
         expect(SHORTCUT_CONDITION_LABELS.editorFocused).toBe("focusContext.editorFocused");
+        expect(SHORTCUT_CONDITION_LABELS.editorBodyFocused).toBe("focusContext.editorBodyFocused");
+        expect(SHORTCUT_CONDITION_LABELS.frontmatterFieldFocused).toBe("focusContext.frontmatterFieldFocused");
         expect(SHORTCUT_CONDITION_LABELS.fileTreeFocused).toBe("focusContext.fileTreeFocused");
         expect(getConditionLabel("editorFocused")).toBe("focusContext.editorFocused");
     });

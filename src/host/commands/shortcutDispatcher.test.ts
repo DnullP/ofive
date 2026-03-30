@@ -244,6 +244,47 @@ describe("dispatchShortcut", () => {
         expect(result.reason).toBe("managed-editor-shortcut");
     });
 
+    test("editor source should not block native shortcut inside frontmatter fields", () => {
+        defineCommand("test.editor.selectAll", {
+            scope: "editor",
+            condition: "editorBodyFocused",
+        });
+
+        const result = dispatchShortcut({
+            event: createKeyboardEventLike("Cmd+A"),
+            bindings: {
+                "test.editor.selectAll": "Cmd+A",
+            },
+            source: "editor",
+            conditionContext: createConditionContext({ focusedComponent: "tab:codemirror-frontmatter" }),
+            managedShortcutCandidates: ["Cmd+A"],
+        });
+
+        expect(result.kind).toBe("none");
+        expect(result.commandId).toBeNull();
+        expect(result.reason).toBe("no-match");
+    });
+
+    test("editor source should execute body-only command in editor body context", () => {
+        defineCommand("test.editor.selectAll", {
+            scope: "editor",
+            condition: "editorBodyFocused",
+        });
+
+        const result = dispatchShortcut({
+            event: createKeyboardEventLike("Cmd+A"),
+            bindings: {
+                "test.editor.selectAll": "Cmd+A",
+            },
+            source: "editor",
+            conditionContext: createConditionContext({ focusedComponent: "tab:codemirror" }),
+            managedShortcutCandidates: ["Cmd+A"],
+        });
+
+        expect(result.kind).toBe("execute");
+        expect(result.commandId).toBe("test.editor.selectAll");
+    });
+
     test("should support composite command conditions with AND semantics", () => {
         defineCommand("test.editor.command", {
             scope: "editor",

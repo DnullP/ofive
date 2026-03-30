@@ -68,7 +68,7 @@ describe("regression: condition-aware command matching", () => {
         "fileTree.pasteInDirectory": "fileTreeFocused",
         "editor.undo": "editorFocused",
         "editor.redo": "editorFocused",
-        "editor.selectAll": "editorFocused",
+        "editor.selectAll": "editorBodyFocused",
         "editor.find": "editorFocused",
         "quickSwitcher.open": undefined,
         "commandPalette.open": undefined,

@@ -1,142 +1,367 @@
-/* Frontmatter 可视化编辑器根容器：卡片化布局并承载整体视觉层次。 */
+/* Frontmatter 属性面板根容器：以轻量卡片气质承载 metadata 组件。 */
 .fmv-editor {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
+    gap: 8px;
+    padding: 10px 0 2px;
+    color: var(--text-primary);
 }
 
-/* Frontmatter 底部操作区：放置新增字段入口。 */
-.fmv-footer {
+/* Frontmatter 折叠头部：作为属性区域的唯一标题与显隐开关。 */
+.fmv-header-toggle {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
     gap: 8px;
-    flex-wrap: wrap;
-}
-
-/* Frontmatter 底部加号按钮：单击新增一行字符串字段。 */
-.fmv-add-plus-button {
-    height: 24px;
-    min-width: 24px;
+    width: 100%;
+    justify-content: flex-start;
+    border: 0;
     padding: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 999px;
-    background: var(--bg-primary);
+    background: transparent;
     color: var(--text-primary);
-    font-size: 16px;
-    line-height: 1;
     cursor: pointer;
 }
 
-/* Frontmatter 字段网格：按行组织 key/value 编辑卡片。 */
-.fmv-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-    border-top: 1px solid var(--border-color);
-}
-
-/* Frontmatter 字段卡片：单个字段可视化编辑容器。 */
-.fmv-row {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    padding: 8px 0;
-    display: grid;
-    grid-template-columns: 180px minmax(0, 1fr);
-    gap: 8px;
-    align-items: center;
-    border-bottom: 1px solid var(--border-color);
-}
-
-/* Frontmatter 字段行悬停态：提示整行支持右键切换数据类型。 */
-.fmv-row:hover {
-    background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
-}
-
-/* Frontmatter 字段键文本：显示 YAML key 名称。 */
-/* Frontmatter 字段名输入框：允许直接编辑 YAML key。 */
-.fmv-key-input {
-    min-width: 0;
-    width: 100%;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--text-primary);
-    font-size: 12px;
-    font-weight: 600;
-    padding: 6px 8px;
-    word-break: break-all;
-}
-
-/* Frontmatter 字段名输入框聚焦态：明确当前在编辑字段名。 */
-.fmv-key-input:focus {
-    border-color: var(--border-color);
+/* Frontmatter 折叠头部聚焦态：为键盘导航提供最小必要反馈。 */
+.fmv-header-toggle:focus-visible {
     outline: none;
-    background: var(--bg-primary);
 }
 
-/* Frontmatter 值编辑区域：承载不同类型输入控件。 */
-.fmv-control {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-/* Frontmatter 通用输入框：字符串/数字/源码输入共用样式。 */
-.fmv-input {
-    min-width: 0;
-    width: 100%;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    padding: 6px 8px;
-    font-size: 12px;
-    box-sizing: border-box;
-}
-
-/* Frontmatter 数字输入：限制宽度，突出数值输入语义。 */
-.fmv-input-number {
-    width: 140px;
-}
-
-/* Frontmatter 布尔编辑容器：勾选框与文本并排。 */
-.fmv-bool {
+/* Frontmatter 头部前导图标区：组合标题图标和折叠箭头。 */
+.fmv-header-leading {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     color: var(--text-secondary);
-    font-size: 12px;
 }
 
-/* Frontmatter 列表容器：列表项 chip 化展示并允许换行。 */
+/* Frontmatter 折叠箭头：弱化视觉权重，仅作为状态提示。 */
+.fmv-header-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Frontmatter 标题：突出 metadata 面板身份。 */
+.fmv-header-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+/* Frontmatter 字段网格：组织属性行并提供整体边界。 */
+.fmv-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+}
+
+/* Frontmatter 属性行：左侧属性名，右侧值与动作。 */
+.fmv-row {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+    padding: 6px 0;
+    transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+/* Frontmatter 属性行悬停态：弱提示当前行可交互。 */
+.fmv-row:hover {
+    background: color-mix(in srgb, var(--content-material-hover-bg) 38%, transparent);
+}
+
+/* Frontmatter Vim 导航目标：统一去除浏览器默认 outline，改用面板内聚焦样式。 */
+.fmv-vim-nav-target:focus {
+    outline: none;
+    background: color-mix(in srgb, var(--accent-primary-soft-weak) 72%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 34%, transparent);
+}
+
+/* Frontmatter Vim 导航目标键盘聚焦态：沿用当前项高亮，确保浏览器支持 focus-visible 时表现一致。 */
+.fmv-vim-nav-target:focus-visible {
+    background: color-mix(in srgb, var(--accent-primary-soft-weak) 72%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 34%, transparent);
+}
+
+/* Frontmatter 行级导航聚焦态：维持整行级别的当前项感知。 */
+.fmv-row.fmv-vim-nav-target:focus,
+.fmv-row.fmv-vim-nav-target:focus-visible {
+    border-radius: 10px;
+}
+
+/* Frontmatter 行内字段聚焦态：字段名或值控件拿到焦点时，整行仍显示当前项高亮。 */
+.fmv-row:focus-within {
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent-primary-soft-weak) 72%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 34%, transparent);
+}
+
+/* Frontmatter 左侧元信息区：放置图标与字段基础信息。 */
+.fmv-field-meta {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Frontmatter 图标按钮：点击图标即可切换属性类型。 */
+.fmv-field-icon-button {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* Frontmatter 图标按钮聚焦态：为键盘导航提供明确反馈。 */
+.fmv-field-icon-button:focus-visible {
+    outline: none;
+}
+
+/* Frontmatter 图标按钮聚焦态内部图标：显示环形高亮。 */
+.fmv-field-icon-button:focus-visible .fmv-field-icon {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 24%, transparent);
+}
+
+/* Frontmatter 字段图标：赋予属性面板更接近 properties 的识别感。 */
+.fmv-field-icon {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent-primary-soft-weak) 58%, var(--content-material-bg));
+    color: var(--accent-primary);
+    flex-shrink: 0;
+}
+
+/* Frontmatter 图标悬停态：提示该图标是可点击的类型切换入口。 */
+.fmv-field-icon-button:hover .fmv-field-icon {
+    background: color-mix(in srgb, var(--accent-primary-soft) 78%, var(--content-material-bg));
+    color: var(--text-primary);
+}
+
+/* Frontmatter 字段文案区：承载字段名与类型标签。 */
+.fmv-field-copy {
+    min-width: 0;
+    display: block;
+}
+
+/* Frontmatter 单行文本壳层：承载镜像文本与真实 textarea，提供自绘选区的对齐基座。 */
+.fmv-inline-text-shell {
+    position: relative;
+    display: inline-block;
+    min-width: 0;
+    width: 100%;
+    min-height: 1lh;
+}
+
+/* Frontmatter 镜像文本层：负责稳定显示文本与自绘选区，不响应鼠标事件。 */
+.fmv-inline-text-mirror-surface {
+    display: block;
+    pointer-events: none;
+    white-space: pre;
+    min-height: 1lh;
+}
+
+/* Frontmatter 真实输入控件：覆盖在镜像层上方，仅负责输入、选择和光标。 */
+.fmv-inline-text-control {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    caret-color: var(--text-primary);
+}
+
+/* Frontmatter 自绘选区片段：使用稳定高亮底色确保在 Tauri 中可见。 */
+.fmv-inline-text-selection {
+    border-radius: 2px;
+    background: var(--editor-selection-bg-color);
+    color: var(--editor-selection-text-color);
+}
+
+/* Frontmatter 自绘占位符：在镜像层中弱化显示空字段提示。 */
+.fmv-inline-text-placeholder {
+    color: var(--text-secondary);
+}
+
+/* Frontmatter 空文本占位：用不可见占位字符撑开单行高度，避免空字段编辑层塌陷。 */
+.fmv-inline-text-empty {
+    visibility: hidden;
+}
+
+/* Frontmatter 字段名输入框：默认近似 label，聚焦时进入可编辑态。 */
+.fmv-key-input {
+    min-width: 0;
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 0;
+    word-break: break-all;
+    overflow: hidden;
+    white-space: nowrap;
+    line-height: 1.2;
+    resize: none;
+}
+
+/* Frontmatter 字段名输入框聚焦态：不再引入额外外框，仅保留原生焦点。 */
+.fmv-key-input:focus {
+    outline: none;
+    caret-color: var(--text-primary);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.14);
+}
+
+/* Frontmatter 右侧容器：承载值控件与行级动作。 */
+.fmv-control-shell {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+/* Frontmatter 值编辑区：允许不同类型控件自适应占据剩余空间。 */
+.fmv-control {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* Frontmatter 通用输入框：正文样式文本输入，不再使用额外边框包裹。 */
+.fmv-input {
+    min-width: 0;
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-primary);
+    padding: 0;
+    font-size: 13px;
+    box-sizing: border-box;
+    overflow: hidden;
+    white-space: nowrap;
+    line-height: 1.3;
+    resize: none;
+}
+
+/* Frontmatter 输入框聚焦态：不增加额外边框。 */
+.fmv-input:focus {
+    outline: none;
+    caret-color: var(--text-primary);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.14);
+}
+
+/* Frontmatter 列表项输入聚焦态：保持和普通输入一致的 caret 与底色反馈。 */
+.fmv-list-item-input:focus {
+    outline: none;
+    caret-color: var(--text-primary);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.14);
+}
+
+/* Frontmatter 列表项输入框：单行 textarea 形态，避免换行并保持 chip 内紧凑编辑。 */
+.fmv-list-item-input {
+    min-width: 4ch;
+    resize: none;
+    overflow: hidden;
+    white-space: nowrap;
+    line-height: 1.3;
+}
+
+/* Frontmatter 文本选区：直接命中输入类名，提升 Chromium 原生 input 选区样式兼容性。 */
+.fmv-inline-text-control::selection,
+.fmv-inline-text-control::-moz-selection {
+    background: transparent;
+    color: transparent;
+}
+
+/* Frontmatter 数字输入框：避免数值控件铺满整行。 */
+.fmv-input-number {
+    width: 180px;
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+/* Frontmatter 数字输入框移除 WebKit 默认步进箭头。 */
+.fmv-input-number::-webkit-outer-spin-button,
+.fmv-input-number::-webkit-inner-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+}
+
+/* Frontmatter 日期输入框：保持与普通文本输入一致的轻量形态。 */
+.fmv-input-date {
+    width: 170px;
+}
+
+/* Frontmatter 布尔编辑器：隐藏原生 checkbox，仅暴露 pill 状态。 */
+.fmv-bool {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Frontmatter 原生 checkbox：保留可访问性但不直接参与视觉展示。 */
+.fmv-bool-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Frontmatter 布尔状态 pill：显示 true/false 的可点击状态。 */
+.fmv-bool-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--surface-chip-border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--content-material-pill-bg) 90%, transparent);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 12px;
+    cursor: pointer;
+}
+
+/* Frontmatter 布尔已勾选态：使用强调色突出启用状态。 */
+.fmv-bool-indicator-checked {
+    border-color: color-mix(in srgb, var(--accent-primary) 32%, var(--surface-chip-border));
+    background: color-mix(in srgb, var(--accent-primary-soft) 72%, var(--content-material-pill-bg));
+    color: var(--accent-primary);
+}
+
+/* Frontmatter 列表容器：以 chip 布局承载 tags/aliases 等列表值。 */
 .fmv-list {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
     width: 100%;
 }
 
-/* Frontmatter 列表项：单个元素输入与操作按钮并排。 */
+/* Frontmatter 列表项：采用柔和 pill 包裹单个列表值。 */
 .fmv-list-item {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    border: 0;
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 18%, var(--surface-chip-border));
     border-radius: 999px;
-    padding: 0;
-    background: transparent;
+    padding: 2px 4px 2px 10px;
+    background: color-mix(in srgb, var(--accent-primary-soft-weak) 64%, var(--content-material-pill-bg));
 }
 
-/* Frontmatter 列表项只读按钮：默认展示内容，点击后进入编辑态。 */
+/* Frontmatter 列表项只读按钮：保持 pill 文本自然且可进入编辑态。 */
 .fmv-list-item-read {
     border: 0;
     background: transparent;
@@ -147,7 +372,7 @@
     cursor: text;
 }
 
-/* Frontmatter 列表项输入框：收敛宽度并继承主题色。 */
+/* Frontmatter 列表项输入框：编辑 tag/alias 时维持紧凑宽度。 */
 .fmv-list-item-input {
     min-width: 4ch;
     border: 0;
@@ -157,24 +382,24 @@
     font-size: 12px;
 }
 
-/* Frontmatter 小型操作按钮：用于列表新增。 */
+/* Frontmatter 列表新增按钮：作为内联 chip 动作追加新值。 */
 .fmv-mini-action {
-    height: 22px;
-    min-width: 22px;
-    border: 1px solid var(--border-color);
+    height: 26px;
+    min-width: 26px;
+    border: 1px dashed var(--surface-chip-border);
     border-radius: 999px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    font-size: 12px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
     cursor: pointer;
 }
 
-/* Frontmatter 列表项删除按钮：无边框圆圈，仅显示叉号，hover 变色提示可点击。 */
+/* Frontmatter 列表删除按钮：弱化但保持明确的移除语义。 */
 .fmv-mini-action-remove {
-    height: 22px;
-    min-width: 22px;
+    height: 20px;
+    min-width: 20px;
     border: none;
-    border-radius: 0;
+    border-radius: 999px;
     background: transparent;
     color: var(--text-secondary);
     font-size: 14px;
@@ -186,14 +411,75 @@
     justify-content: center;
 }
 
-/* Frontmatter 列表项删除按钮悬停态：颜色加深提示交互。 */
+/* Frontmatter 删除按钮悬停态：提高对删除操作的可感知性。 */
 .fmv-mini-action-remove:hover {
+    background: color-mix(in srgb, var(--error-color) 10%, transparent);
+    color: var(--error-color);
+}
+
+/* Frontmatter null 值徽标：避免把 null 渲染成普通文本输入框。 */
+.fmv-null-pill {
+    display: inline-flex;
+    align-items: center;
+    border: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--content-material-pill-bg) 72%, transparent);
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 4px 10px;
+}
+
+/* Frontmatter 行级按钮悬停态：统一弱高亮反馈。 */
+.fmv-add-button:hover,
+.fmv-mini-action:hover {
+    border-color: color-mix(in srgb, var(--accent-primary) 36%, var(--surface-chip-border));
+    background: color-mix(in srgb, var(--accent-primary-soft-weak) 72%, var(--content-material-bg));
     color: var(--text-primary);
 }
 
-/* Frontmatter 空态文本：无可编辑字段时提示用户。 */
-.fmv-empty {
+/* Frontmatter 底部操作区：放置新增属性入口。 */
+.fmv-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 2px;
+}
+
+/* Frontmatter 新增按钮：使用完整文案强化“添加属性”而不是单纯加号。 */
+.fmv-add-button {
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px dashed var(--surface-chip-border);
+    border-radius: 12px;
+    background: transparent;
     color: var(--text-secondary);
-    font-size: 12px;
-    line-height: 1.5;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0 12px;
+    cursor: pointer;
+}
+
+/* Frontmatter 空态：在无属性时仍保留面板质感与说明文案。 */
+.fmv-empty {
+    border: 1px dashed var(--content-material-border);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--content-material-bg-muted) 88%, transparent);
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 16px;
+}
+
+/* Frontmatter 窄屏适配：在较小宽度下将属性行切成上下布局。 */
+@media (max-width: 720px) {
+    .fmv-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 6px;
+    }
+
+    .fmv-control-shell {
+        align-items: stretch;
+    }
 }

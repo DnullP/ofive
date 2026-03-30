@@ -28,6 +28,110 @@ async function waitForMockLayoutReady(page: Page): Promise<void> {
 }
 
 /**
+ * @function enableVimMode
+ * @description 在 web mock 中开启 Vim 模式，复用前端配置 store 的正式入口。
+ * @param page Playwright 页面对象。
+ * @returns Promise<void>
+ */
+async function enableVimMode(page: Page): Promise<void> {
+    await page.evaluate(async () => {
+        const module = await import("/src/host/store/configStore.ts");
+        await module.updateVimModeEnabled(true);
+    });
+}
+
+/**
+ * @function openMockFrontmatterNote
+ * @description 打开带 frontmatter 的 mock 笔记并等待 frontmatter widget 渲染完成。
+ * @param page Playwright 页面对象。
+ * @returns Promise<void>
+ */
+async function openMockFrontmatterNote(page: Page): Promise<void> {
+    await page.getByRole("button", { name: "▸ test-resources" }).click();
+    await page.getByRole("button", { name: "▸ notes" }).click();
+    await page.getByRole("button", { name: "network-segment.md" }).click();
+    await expect(page.locator(".cm-frontmatter-widget")).toBeVisible();
+}
+
+/**
+ * @function focusFrontmatterNavigationRow
+ * @description 将焦点直接放到指定 frontmatter 导航行，用于稳定验证 Vim 导航层行为。
+ * @param page Playwright 页面对象。
+ * @param fieldKey frontmatter 字段名。
+ * @returns Promise<void>
+ */
+async function focusFrontmatterNavigationRow(page: Page, fieldKey: string): Promise<void> {
+    await page.evaluate((nextFieldKey) => {
+        const row = document.querySelector<HTMLElement>(`[data-frontmatter-field-key="${nextFieldKey}"]`);
+        row?.focus();
+    }, fieldKey);
+}
+
+/**
+ * @function dispatchImeConfirmEnterOnFrontmatterKey
+ * @description 在指定字段名输入框上模拟一次输入法候选确认 Enter，覆盖组合结束后的 Enter 冒泡路径。
+ * @param page Playwright 页面对象。
+ * @param fieldKey frontmatter 字段名。
+ * @returns Promise<void>
+ */
+async function dispatchImeConfirmEnterOnFrontmatterKey(page: Page, fieldKey: string): Promise<void> {
+    await page.evaluate((nextFieldKey) => {
+        const keyField = document.querySelector<HTMLTextAreaElement>(
+            `[data-frontmatter-field-key="${nextFieldKey}"] [data-frontmatter-focus-role="key"].fmv-inline-text-control`,
+        );
+
+        if (!keyField) {
+            throw new Error(`Frontmatter key field not found: ${nextFieldKey}`);
+        }
+
+        keyField.focus();
+        keyField.dispatchEvent(new CompositionEvent("compositionstart", {
+            bubbles: true,
+            data: "ti",
+        }));
+        keyField.dispatchEvent(new CompositionEvent("compositionend", {
+            bubbles: true,
+            data: "题",
+        }));
+        keyField.dispatchEvent(new KeyboardEvent("keydown", {
+            key: "Enter",
+            bubbles: true,
+            cancelable: true,
+        }));
+    }, fieldKey);
+}
+
+/**
+ * @function focusEditorBodyFirstLine
+ * @description 通过 CodeMirror EditorView 直接将光标放到正文首行，避免依赖不稳定的文本点击。
+ * @param page Playwright 页面对象。
+ * @returns Promise<void>
+ */
+async function focusEditorBodyFirstLine(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const content = document.querySelector(".cm-content") as (HTMLElement & {
+            cmTile?: { view?: { focus: () => void; state: { doc: { toString(): string } }; dispatch: (spec: unknown) => void } };
+        }) | null;
+        const view = content?.cmTile?.view;
+        if (!view) {
+            throw new Error("EditorView not found on .cm-content");
+        }
+
+        const docText = view.state.doc.toString();
+        const firstBodyOffset = docText.indexOf("Description");
+        if (firstBodyOffset < 0) {
+            throw new Error("Could not find first body line");
+        }
+
+        view.focus();
+        view.dispatch({
+            selection: { anchor: firstBodyOffset },
+            scrollIntoView: true,
+        });
+    });
+}
+
+/**
  * @function expectVisibleWithPositiveRect
  * @description 断言目标元素不仅存在，而且拥有正的可见盒模型尺寸。
  * @param locator 目标元素定位器。
@@ -45,14 +149,12 @@ test.describe("frontmatter 可见性", () => {
     test("frontmatter widget 应保持可见且正文不应并入 frontmatter 行", async ({ page }) => {
         await waitForMockLayoutReady(page);
 
-        await page.getByRole("button", { name: "▸ test-resources" }).click();
-        await page.getByRole("button", { name: "▸ notes" }).click();
-        await page.getByRole("button", { name: "network-segment.md" }).click();
+        await openMockFrontmatterNote(page);
 
         const frontmatterWidget = page.locator(".cm-frontmatter-widget");
         await expectVisibleWithPositiveRect(frontmatterWidget);
 
-        await expect(frontmatterWidget.locator("input[value='Network Segment']")).toBeVisible();
+        await expect(frontmatterWidget.locator("textarea.fmv-input").first()).toHaveValue("Network Segment");
 
         const bodyLine = page.locator(".cm-content").getByText("Description", { exact: true }).first();
         await expectVisibleWithPositiveRect(bodyLine);
@@ -77,5 +179,110 @@ test.describe("frontmatter 可见性", () => {
 
         expect(relation).not.toBeNull();
         expect(relation!.bodyTop).toBeGreaterThanOrEqual(relation!.widgetBottom);
+    });
+
+    test("frontmatter 文本字段提交再按 j 不应展开源码或写入正文", async ({ page }) => {
+        await waitForMockLayoutReady(page);
+        await enableVimMode(page);
+        await openMockFrontmatterNote(page);
+
+        await focusFrontmatterNavigationRow(page, "title");
+        await page.keyboard.press("Enter");
+        await page.keyboard.type(" Updated");
+        await page.keyboard.press("Enter");
+        await page.keyboard.press("j");
+
+        const navigationState = await page.evaluate(() => {
+            const activeElement = document.activeElement as HTMLElement | null;
+            const titleInput = document.querySelector<HTMLInputElement>(
+                '[data-frontmatter-field-key="title"] [data-frontmatter-focus-role="value"]',
+            );
+            const widget = document.querySelector(".cm-frontmatter-widget");
+            const editorText = document.querySelector(".cm-content")?.textContent ?? "";
+
+            return {
+                activeFieldKey: activeElement?.getAttribute("data-frontmatter-field-key") ?? null,
+                activeParentFieldKey: activeElement?.closest?.("[data-frontmatter-field-key]")?.getAttribute("data-frontmatter-field-key") ?? null,
+                activeClassName: activeElement?.className ?? null,
+                titleValue: titleInput?.value ?? null,
+                widgetVisible: widget instanceof HTMLElement,
+                editorText,
+            };
+        });
+
+        expect(navigationState.widgetVisible).toBe(true);
+        expect(navigationState.titleValue).toContain("Updated");
+        expect(navigationState.activeParentFieldKey ?? navigationState.activeFieldKey).toBe("category");
+        expect(navigationState.editorText.startsWith("j---")).toBe(false);
+    });
+
+    test("空文本字段通过 vim 回车后应进入编辑态，输入首字符时不应立即保存退出", async ({ page }) => {
+        await waitForMockLayoutReady(page);
+        await enableVimMode(page);
+        await openMockFrontmatterNote(page);
+
+        await page.evaluate(() => {
+            const addButton = document.querySelector<HTMLButtonElement>(".fmv-add-button");
+            addButton?.click();
+        });
+
+        await focusFrontmatterNavigationRow(page, "newField");
+        await page.keyboard.press("Enter");
+
+        const enteredEditState = await page.evaluate(() => {
+            const activeElement = document.activeElement as HTMLElement | null;
+            return {
+                activeTag: activeElement?.tagName ?? null,
+                activeClassName: activeElement?.className ?? null,
+                activeParentFieldKey: activeElement?.closest?.("[data-frontmatter-field-key]")?.getAttribute("data-frontmatter-field-key") ?? null,
+                activeFocusRole: activeElement?.getAttribute?.("data-frontmatter-focus-role") ?? null,
+            };
+        });
+
+        expect(enteredEditState.activeTag).toBe("TEXTAREA");
+        expect(enteredEditState.activeParentFieldKey).toBe("newField");
+        expect(enteredEditState.activeFocusRole).toBe("value");
+
+        await page.keyboard.press("A");
+
+        const typedState = await page.evaluate(() => {
+            const activeElement = document.activeElement as HTMLElement | null;
+            const valueControl = document.querySelector<HTMLTextAreaElement>(
+                '[data-frontmatter-field-key="newField"] [data-frontmatter-focus-role="value"].fmv-inline-text-control',
+            );
+            return {
+                activeTag: activeElement?.tagName ?? null,
+                activeClassName: activeElement?.className ?? null,
+                activeParentFieldKey: activeElement?.closest?.("[data-frontmatter-field-key]")?.getAttribute("data-frontmatter-field-key") ?? null,
+                activeFocusRole: activeElement?.getAttribute?.("data-frontmatter-focus-role") ?? null,
+                fieldValue: valueControl?.value ?? null,
+            };
+        });
+
+        expect(typedState.activeTag).toBe("TEXTAREA");
+        expect(typedState.activeParentFieldKey).toBe("newField");
+        expect(typedState.activeFocusRole).toBe("value");
+        expect(typedState.fieldValue).toBe("A");
+    });
+
+    test("frontmatter 字段名的 IME 确认回车不应被行级 vim 导航吞掉", async ({ page }) => {
+        await waitForMockLayoutReady(page);
+        await enableVimMode(page);
+        await openMockFrontmatterNote(page);
+
+        await dispatchImeConfirmEnterOnFrontmatterKey(page, "title");
+
+        const imeState = await page.evaluate(() => {
+            const activeElement = document.activeElement as HTMLElement | null;
+            return {
+                activeTag: activeElement?.tagName ?? null,
+                activeFocusRole: activeElement?.getAttribute?.("data-frontmatter-focus-role") ?? null,
+                activeParentFieldKey: activeElement?.closest?.("[data-frontmatter-field-key]")?.getAttribute("data-frontmatter-field-key") ?? null,
+            };
+        });
+
+        expect(imeState.activeTag).toBe("TEXTAREA");
+        expect(imeState.activeFocusRole).toBe("key");
+        expect(imeState.activeParentFieldKey).toBe("title");
     });
 });

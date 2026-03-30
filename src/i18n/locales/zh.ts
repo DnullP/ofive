@@ -412,6 +412,8 @@ const zh = {
     /* ==================== 焦点上下文 ==================== */
     focusContext: {
         editorFocused: "编辑器聚焦",
+        editorBodyFocused: "编辑器正文聚焦",
+        frontmatterFieldFocused: "Frontmatter 字段聚焦",
         fileTreeFocused: "文件树聚焦",
     },
     conditions: {
@@ -721,8 +723,14 @@ const zh = {
     /* ==================== frontmatter ==================== */
     frontmatter: {
         readModeTitle: "Frontmatter",
+        panelTitle: "笔记属性",
+        panelHint: "metadata 独立于正文编辑，只负责当前笔记的属性。",
         clickToEdit: "点击编辑",
         addField: "新增字段",
+        addProperty: "添加笔记属性",
+        changeType: "更改属性类型",
+        togglePanel: "切换笔记属性折叠状态",
+        removeField: "删除属性",
         docSynced: "文档已同步，保存由统一调度负责",
         emptyFrontmatter: "当前 frontmatter 为空。",
         keyPlaceholder: "字段名",
@@ -730,6 +738,7 @@ const zh = {
         typeNumber: "数字",
         typeBoolean: "布尔值",
         typeList: "列表",
+        typeDate: "日期",
         typeNull: "空值",
         yamlError: "YAML 格式错误",
         editorClosed: "编辑器已关闭，无法同步。",

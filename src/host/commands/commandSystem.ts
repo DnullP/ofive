@@ -583,7 +583,7 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         title: "commands.selectAll",
         scope: "editor",
         routeClass: "frontend-editor",
-        condition: "editorFocused",
+        condition: "editorBodyFocused",
         shortcut: {
             defaultBinding: "Cmd+A",
             editableInSettings: true,

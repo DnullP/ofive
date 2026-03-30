@@ -16,6 +16,7 @@ describe("buildDefaultValueByFieldType", () => {
         expect(buildDefaultValueByFieldType("number")).toBe(0);
         expect(buildDefaultValueByFieldType("boolean")).toBe(false);
         expect(buildDefaultValueByFieldType("list")).toEqual([]);
+        expect(buildDefaultValueByFieldType("date")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         expect(buildDefaultValueByFieldType("null")).toBeNull();
     });
 });
@@ -25,6 +26,7 @@ describe("resolveNextFieldKey", () => {
         expect(resolveNextFieldKey({}, "string")).toBe("newField");
         expect(resolveNextFieldKey({}, "number")).toBe("numberField");
         expect(resolveNextFieldKey({}, "boolean")).toBe("booleanField");
+        expect(resolveNextFieldKey({}, "date")).toBe("dateField");
     });
 
     test("should append numeric suffix when base key already exists", () => {
@@ -44,6 +46,7 @@ describe("convertValueToFieldType", () => {
         expect(convertValueToFieldType("", "boolean")).toBe(false);
         expect(convertValueToFieldType("42", "number")).toBe(42);
         expect(convertValueToFieldType("abc", "number")).toBe(0);
+        expect(convertValueToFieldType("2026-03-30T10:00:00Z", "date")).toBe("2026-03-30");
     });
 
     test("should convert list and null values to string", () => {

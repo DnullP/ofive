@@ -402,6 +402,8 @@ const en = {
     /* ==================== Focus context ==================== */
     focusContext: {
         editorFocused: "Editor Focused",
+        editorBodyFocused: "Editor Body Focused",
+        frontmatterFieldFocused: "Frontmatter Field Focused",
         fileTreeFocused: "File Tree Focused",
     },
     conditions: {
@@ -711,8 +713,14 @@ const en = {
     /* ==================== Frontmatter ==================== */
     frontmatter: {
         readModeTitle: "Frontmatter",
+        panelTitle: "Note Properties",
+        panelHint: "Metadata stays separate from body editing and only describes the current note.",
         clickToEdit: "Click to edit",
         addField: "Add Field",
+        addProperty: "Add property",
+        changeType: "Change property type",
+        togglePanel: "Toggle note properties panel",
+        removeField: "Remove property",
         docSynced: "Document synced, save is handled by unified scheduler",
         emptyFrontmatter: "Current frontmatter is empty.",
         keyPlaceholder: "Field key",
@@ -720,6 +728,7 @@ const en = {
         typeNumber: "Number",
         typeBoolean: "Boolean",
         typeList: "List",
+        typeDate: "Date",
         typeNull: "Null",
         yamlError: "YAML format error",
         editorClosed: "Editor is closed, cannot sync.",

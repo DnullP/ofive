@@ -14,15 +14,74 @@
  *   />
  */
 
-import { useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import {
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ChangeEvent,
+    type ComponentPropsWithoutRef,
+    type FocusEvent,
+    type KeyboardEvent,
+    type MouseEvent,
+    type ReactNode,
+} from "react";
+import {
+    BookOpen,
+    CalendarDays,
+    ChevronDown,
+    ChevronRight,
+    CheckSquare,
+    FileText,
+    Hash,
+    List,
+    Minus,
+    Plus,
+    type LucideIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import YAML from "yaml";
 import { showNativeContextMenu } from "../../../../host/layout/nativeContextMenu";
+import {
+    isPlainFrontmatterVimKey,
+    resolveFrontmatterEnterAction,
+    resolveFrontmatterNavigationMove,
+} from "../frontmatterVimHandoff";
 import {
     shouldDeferBlurCommitAfterComposition,
     shouldSubmitPlainEnter,
 } from "../../../../utils/imeInputGuard";
 import "./FrontmatterYamlVisualEditor.css";
+
+const FRONTMATTER_WIDGET_FOCUS_CLASS = "cm-frontmatter-widget-focused";
+const FRONTMATTER_VIM_NAV_SELECTOR = "[data-frontmatter-vim-nav='true']";
+let pendingFrontmatterNavigationRestoreKey: string | null = null;
+
+/**
+ * @function restoreNavigationRowFocus
+ * @description 在 frontmatter 组件重建后重试恢复指定字段行的导航焦点。
+ * @param fieldKey 字段名。
+ * @param attemptsRemaining 剩余重试次数。
+ */
+function restoreNavigationRowFocus(fieldKey: string, attemptsRemaining = 4): void {
+    const rowElement = Array.from(document.querySelectorAll<HTMLElement>("[data-frontmatter-field-key]"))
+        .find((element) => element.dataset.frontmatterFieldKey === fieldKey);
+
+    if (rowElement) {
+        rowElement.focus();
+        if (document.activeElement === rowElement || attemptsRemaining <= 1) {
+            return;
+        }
+    }
+
+    if (attemptsRemaining <= 1) {
+        return;
+    }
+
+    window.requestAnimationFrame(() => {
+        restoreNavigationRowFocus(fieldKey, attemptsRemaining - 1);
+    });
+}
 
 /**
  * @type VisualYamlScalar
@@ -46,7 +105,62 @@ type VisualYamlValue = VisualYamlScalar | VisualYamlArray;
  * @type FrontmatterFieldType
  * @description 新增 frontmatter 字段时支持的字段类型。
  */
-export type FrontmatterFieldType = "string" | "number" | "boolean" | "list" | "null";
+export type FrontmatterFieldType = "string" | "number" | "boolean" | "list" | "date" | "null";
+
+/**
+ * @type FrontmatterContextAction
+ * @description frontmatter 行右键菜单支持的动作。
+ */
+type FrontmatterContextAction = FrontmatterFieldType | "remove";
+
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * @function formatLocalDate
+ * @description 将日期对象格式化为本地 YYYY-MM-DD 字符串。
+ * @param date 日期对象。
+ * @returns 日期字符串。
+ */
+function formatLocalDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${String(year)}-${month}-${day}`;
+}
+
+/**
+ * @function normalizeDateString
+ * @description 将原始日期字符串归一化为 YYYY-MM-DD；无法识别时返回 null。
+ * @param rawValue 原始字符串。
+ * @returns 规范化日期或 null。
+ */
+function normalizeDateString(rawValue: string): string | null {
+    const trimmed = rawValue.trim();
+    if (DATE_ONLY_RE.test(trimmed)) {
+        return trimmed;
+    }
+
+    const isoCandidate = trimmed.match(/^(\d{4}-\d{2}-\d{2})[T\s].*$/)?.[1] ?? null;
+    if (isoCandidate && DATE_ONLY_RE.test(isoCandidate)) {
+        return isoCandidate;
+    }
+
+    return null;
+}
+
+/**
+ * @function resolveDateValue
+ * @description 将任意 frontmatter 值转换为日期字段可用的 YYYY-MM-DD。
+ * @param value 原始字段值。
+ * @returns 可写入 date input 的字符串。
+ */
+function resolveDateValue(value: VisualYamlValue): string {
+    if (typeof value === "string") {
+        return normalizeDateString(value) ?? formatLocalDate(new Date());
+    }
+
+    return formatLocalDate(new Date());
+}
 
 /**
  * @interface SaveResult
@@ -60,6 +174,127 @@ interface SaveResult {
 }
 
 /**
+ * @interface FrontmatterInlineTextFieldProps
+ * @description frontmatter 单行文本编辑控件参数。
+ */
+interface FrontmatterInlineTextFieldProps extends Omit<ComponentPropsWithoutRef<"textarea">, "value" | "onChange"> {
+    /** 当前文本值。 */
+    value: string;
+    /** 文本变更回调。 */
+    onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
+}
+
+/**
+ * @function FrontmatterInlineTextField
+ * @description 使用镜像文本与显式选区片段渲染单行文本编辑控件，避免依赖宿主原生选区绘制。
+ * @param props 控件参数。
+ * @returns React 节点。
+ */
+function FrontmatterInlineTextField(props: FrontmatterInlineTextFieldProps): ReactNode {
+    const {
+        className,
+        value,
+        onChange,
+        onFocus,
+        onBlur,
+        onSelect,
+        onKeyDown,
+        style,
+        placeholder,
+        ...restProps
+    } = props;
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+    const [isFocused, setIsFocused] = useState(false);
+
+    const updateSelection = (target: HTMLTextAreaElement | null): void => {
+        if (!target) {
+            return;
+        }
+
+        setSelection({
+            start: target.selectionStart ?? 0,
+            end: target.selectionEnd ?? 0,
+        });
+    };
+
+    useEffect(() => {
+        if (!isFocused) {
+            return;
+        }
+
+        let frameId = window.requestAnimationFrame(function syncSelection() {
+            updateSelection(textareaRef.current);
+            frameId = window.requestAnimationFrame(syncSelection);
+        });
+
+        return () => {
+            window.cancelAnimationFrame(frameId);
+        };
+    }, [isFocused]);
+
+    const selectedText = selection.end > selection.start ? value.slice(selection.start, selection.end) : "";
+    const beforeSelection = value.slice(0, selection.start);
+    const afterSelection = value.slice(selection.end);
+    const shouldRenderSelection = selectedText.length > 0;
+    const shouldRenderPlaceholder = value.length === 0 && Boolean(placeholder);
+    const shouldRenderEmptyLine = value.length === 0 && !shouldRenderPlaceholder;
+
+    return (
+        <span className="fmv-inline-text-shell" style={style}>
+            <span
+                className={`${className ?? ""} fmv-inline-text-mirror-surface`}
+                aria-hidden="true"
+            >
+                {value.length > 0 ? (
+                    shouldRenderSelection ? (
+                        <>
+                            <span>{beforeSelection}</span>
+                            <span className="fmv-inline-text-selection">{selectedText}</span>
+                            <span>{afterSelection}</span>
+                        </>
+                    ) : (
+                        value
+                    )
+                ) : shouldRenderPlaceholder ? (
+                    <span className="fmv-inline-text-placeholder">{placeholder ?? ""}</span>
+                ) : shouldRenderEmptyLine ? (
+                    <span className="fmv-inline-text-empty">&nbsp;</span>
+                ) : null}
+            </span>
+            <textarea
+                {...restProps}
+                ref={textareaRef}
+                className={`${className ?? ""} fmv-inline-text-control`}
+                rows={1}
+                wrap="off"
+                value={value}
+                placeholder={placeholder}
+                onChange={(event) => {
+                    onChange(event);
+                    updateSelection(event.currentTarget);
+                }}
+                onFocus={(event) => {
+                    setIsFocused(true);
+                    updateSelection(event.currentTarget);
+                    onFocus?.(event);
+                }}
+                onBlur={(event) => {
+                    setIsFocused(false);
+                    setSelection({ start: 0, end: 0 });
+                    onBlur?.(event);
+                }}
+                onSelect={(event) => {
+                    updateSelection(event.currentTarget);
+                    onSelect?.(event);
+                }}
+                onKeyDown={onKeyDown}
+            />
+        </span>
+    );
+}
+
+/**
  * @interface FrontmatterYamlVisualEditorProps
  * @description 组件输入参数。
  */
@@ -68,6 +303,8 @@ export interface FrontmatterYamlVisualEditorProps {
     initialYamlText: string;
     /** 将 frontmatter 同步回编辑器文档的回调（不负责最终写盘）。 */
     onCommitYaml: (yamlText: string) => SaveResult;
+    /** 请求退出 frontmatter Vim 导航并返回正文。 */
+    onRequestExitVimNavigation?: () => void;
 }
 
 /**
@@ -131,6 +368,10 @@ function stringifyRecordToYaml(record: Record<string, VisualYamlValue>): string 
  * @returns 对应类型的默认值。
  */
 export function buildDefaultValueByFieldType(fieldType: FrontmatterFieldType): VisualYamlValue {
+    if (fieldType === "date") {
+        return formatLocalDate(new Date());
+    }
+
     if (fieldType === "number") {
         return 0;
     }
@@ -171,6 +412,10 @@ export function convertValueToFieldType(
         }
 
         return [value];
+    }
+
+    if (fieldType === "date") {
+        return resolveDateValue(value);
     }
 
     if (fieldType === "null") {
@@ -256,6 +501,10 @@ function resolveFieldBaseName(fieldType: FrontmatterFieldType): string {
         return "listField";
     }
 
+    if (fieldType === "date") {
+        return "dateField";
+    }
+
     if (fieldType === "null") {
         return "nullField";
     }
@@ -312,6 +561,67 @@ function renameRecordKey(
 }
 
 /**
+ * @function resolveFieldType
+ * @description 根据值结构推导 frontmatter 字段类型。
+ * @param value 字段值。
+ * @returns 推导出的字段类型。
+ */
+function resolveFieldType(value: VisualYamlValue): FrontmatterFieldType {
+    if (value === null) {
+        return "null";
+    }
+
+    if (Array.isArray(value)) {
+        return "list";
+    }
+
+    if (typeof value === "boolean") {
+        return "boolean";
+    }
+
+    if (typeof value === "number") {
+        return "number";
+    }
+
+    if (typeof value === "string" && normalizeDateString(value)) {
+        return "date";
+    }
+
+    return "string";
+}
+
+/**
+ * @function resolveFieldIcon
+ * @description 为属性行选择可直接表达当前字段类型的图标。
+ * @param value 字段值。
+ * @returns 对应的 Lucide 图标组件。
+ */
+function resolveFieldIcon(value: VisualYamlValue): LucideIcon {
+    const fieldType = resolveFieldType(value);
+    if (fieldType === "boolean") {
+        return CheckSquare;
+    }
+
+    if (fieldType === "number") {
+        return Hash;
+    }
+
+    if (fieldType === "list") {
+        return List;
+    }
+
+    if (fieldType === "date") {
+        return CalendarDays;
+    }
+
+    if (fieldType === "null") {
+        return Minus;
+    }
+
+    return FileText;
+}
+
+/**
  * @function FrontmatterYamlVisualEditor
  * @description 渲染 frontmatter 的可视化 YAML 编辑器。
  * @param props 组件参数。
@@ -319,17 +629,218 @@ function renameRecordKey(
  */
 export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorProps): ReactNode {
     const { t } = useTranslation();
+    const wrapperRef = useRef<HTMLElement | null>(null);
+    const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const [recordDraft, setRecordDraft] = useState<Record<string, VisualYamlValue>>(() =>
         parseYamlToRecord(props.initialYamlText),
     );
     const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
     const [editingListItem, setEditingListItem] = useState<{ key: string; index: number } | null>(null);
     const [editingListDraft, setEditingListDraft] = useState<string>("");
+    const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
     const lastCommittedYamlRef = useRef<string>(props.initialYamlText.trimEnd());
+    const pendingNavigationFocusFieldRef = useRef<string | null>(null);
     const isInputComposingRef = useRef(false);
     const lastInputCompositionEndAtRef = useRef(0);
 
     const fieldEntries = useMemo(() => Object.entries(recordDraft), [recordDraft]);
+
+    useEffect(() => {
+        const pendingFieldKey = pendingNavigationFocusFieldRef.current ?? pendingFrontmatterNavigationRestoreKey;
+        if (!pendingFieldKey) {
+            return;
+        }
+
+        const rowElement = rowRefs.current.get(pendingFieldKey);
+        if (!rowElement) {
+            return;
+        }
+
+        pendingNavigationFocusFieldRef.current = null;
+        pendingFrontmatterNavigationRestoreKey = null;
+        restoreNavigationRowFocus(pendingFieldKey);
+    }, [fieldEntries, editingListItem]);
+
+    /**
+     * @function syncEditorFocusClass
+     * @description 同步宿主 CodeMirror 的 frontmatter 聚焦样式类。
+     * @param focused 当前组件是否处于聚焦态。
+     */
+    const syncEditorFocusClass = (focused: boolean): void => {
+        const editorElement = wrapperRef.current?.closest(".cm-editor");
+        if (!(editorElement instanceof HTMLElement)) {
+            return;
+        }
+
+        editorElement.classList.toggle(FRONTMATTER_WIDGET_FOCUS_CLASS, focused);
+    };
+
+    /**
+     * @function resolveNavigationTargets
+     * @description 解析当前 frontmatter 中所有 Vim 导航目标。
+     * @returns 导航目标列表。
+     */
+    const resolveNavigationTargets = (): HTMLElement[] => {
+        if (!wrapperRef.current) {
+            return [];
+        }
+
+        return Array.from(wrapperRef.current.querySelectorAll<HTMLElement>(FRONTMATTER_VIM_NAV_SELECTOR));
+    };
+
+    /**
+     * @function focusNavigationRow
+     * @description 将焦点返回到指定字段所在的导航行。
+     * @param fieldKey 字段名。
+     */
+    const focusNavigationRow = (fieldKey: string): void => {
+        pendingNavigationFocusFieldRef.current = fieldKey;
+        pendingFrontmatterNavigationRestoreKey = fieldKey;
+        window.requestAnimationFrame(() => {
+            restoreNavigationRowFocus(fieldKey);
+        });
+    };
+
+    /**
+     * @function focusPreferredFieldForRow
+     * @description 从导航行进入当前字段的主要可编辑控件。
+     * @param fieldKey 字段名。
+     * @param value 字段值。
+     */
+    const focusPreferredFieldForRow = (fieldKey: string, value: VisualYamlValue): void => {
+        if (resolveFrontmatterEnterAction(value) === "toggle-boolean") {
+            commitWithNextRecord({
+                ...recordDraft,
+                [fieldKey]: !Boolean(value),
+            });
+            focusNavigationRow(fieldKey);
+            return;
+        }
+
+        const rowElement = rowRefs.current.get(fieldKey);
+        if (!rowElement) {
+            return;
+        }
+
+        const valueTarget = rowElement.querySelector<HTMLElement>("[data-frontmatter-focus-role='value']");
+        const keyTarget = rowElement.querySelector<HTMLElement>("[data-frontmatter-focus-role='key']");
+        const target = valueTarget ?? keyTarget;
+        if (!target) {
+            rowElement.focus();
+            return;
+        }
+
+        if (target instanceof HTMLButtonElement) {
+            target.focus();
+            target.click();
+            return;
+        }
+
+        target.focus();
+        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+            const caretOffset = target.value.length;
+            target.setSelectionRange?.(caretOffset, caretOffset);
+        }
+    };
+
+    /**
+     * @function handleVimNavigationTargetKeyDown
+     * @description 处理导航层中的 Vim handoff 按键。
+     * @param event 键盘事件。
+     * @param fieldKey 当前字段名。
+     * @param value 当前字段值。
+     */
+    const handleVimNavigationTargetKeyDown = (
+        event: KeyboardEvent<HTMLElement>,
+        fieldKey?: string,
+        value?: VisualYamlValue,
+    ): void => {
+        if (event.target !== event.currentTarget) {
+            return;
+        }
+
+        if (isPlainFrontmatterVimKey(event, "j") || isPlainFrontmatterVimKey(event, "k")) {
+            const targets = resolveNavigationTargets();
+            const currentIndex = targets.indexOf(event.currentTarget);
+            const result = resolveFrontmatterNavigationMove(
+                currentIndex,
+                targets.length,
+                event.key === "j" ? "next" : "previous",
+            );
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (result.kind === "move") {
+                targets[result.index]?.focus();
+                return;
+            }
+
+            if (result.kind === "exit-body") {
+                props.onRequestExitVimNavigation?.();
+            }
+
+            return;
+        }
+
+        if (isPlainFrontmatterVimKey(event, "Enter")) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (fieldKey && value !== undefined) {
+                focusPreferredFieldForRow(fieldKey, value);
+                return;
+            }
+
+            if (event.currentTarget instanceof HTMLButtonElement) {
+                event.currentTarget.click();
+            }
+            return;
+        }
+
+        if (isPlainFrontmatterVimKey(event, "Escape")) {
+            event.preventDefault();
+            event.stopPropagation();
+            props.onRequestExitVimNavigation?.();
+        }
+    };
+
+    /**
+     * @function handleWrapperFocusCapture
+     * @description frontmatter 获得焦点时同步宿主聚焦样式。
+     */
+    const handleWrapperFocusCapture = (): void => {
+        syncEditorFocusClass(true);
+    };
+
+    /**
+     * @function handleWrapperBlurCapture
+     * @description frontmatter 完全失焦时清理宿主聚焦样式。
+     * @param event 焦点事件。
+     */
+    const handleWrapperBlurCapture = (event: FocusEvent<HTMLElement>): void => {
+        const nextTarget = event.relatedTarget as Node | null;
+        if (nextTarget && wrapperRef.current?.contains(nextTarget)) {
+            return;
+        }
+
+        syncEditorFocusClass(false);
+    };
+
+    /**
+     * @function setRowRef
+     * @description 维护字段行节点引用。
+     * @param fieldKey 字段名。
+     * @param node 行节点。
+     */
+    const setRowRef = (fieldKey: string, node: HTMLDivElement | null): void => {
+        if (node) {
+            rowRefs.current.set(fieldKey, node);
+            return;
+        }
+
+        rowRefs.current.delete(fieldKey);
+    };
 
     /**
      * @function handleInputCompositionStart
@@ -355,6 +866,29 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
      */
     const shouldDeferInputBlurCommit = (): boolean => {
         return shouldDeferBlurCommitAfterComposition({
+            isComposing: isInputComposingRef.current,
+            lastCompositionEndAt: lastInputCompositionEndAtRef.current,
+            now: performance.now(),
+        });
+    };
+
+    /**
+     * @function shouldSubmitFrontmatterPlainEnter
+     * @description 判断当前 frontmatter 的 Enter 是否应视为提交，而不是输入法候选确认。
+     * @param event 键盘事件。
+     * @returns `true` 表示可以提交；`false` 表示应忽略本次 Enter。
+     */
+    const shouldSubmitFrontmatterPlainEnter = (
+        event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement>,
+    ): boolean => {
+        if (!shouldSubmitPlainEnter({
+            key: event.key,
+            nativeEvent: event.nativeEvent,
+        })) {
+            return false;
+        }
+
+        return !shouldDeferBlurCommitAfterComposition({
             isComposing: isInputComposingRef.current,
             lastCompositionEndAt: lastInputCompositionEndAtRef.current,
             now: performance.now(),
@@ -490,23 +1024,27 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
      * @description 通过原生右键菜单请求用户选择字段的数据类型。
      * @returns 选中的字段类型；取消时返回 null。
      */
-    const requestFieldTypeSelection = async (): Promise<FrontmatterFieldType | null> => {
-        const selectedType = await showNativeContextMenu([
+    const requestFieldContextAction = async (): Promise<FrontmatterContextAction | null> => {
+        const selectedAction = await showNativeContextMenu([
             { id: "string", text: t("frontmatter.typeString") },
             { id: "number", text: t("frontmatter.typeNumber") },
             { id: "boolean", text: t("frontmatter.typeBoolean") },
             { id: "list", text: t("frontmatter.typeList") },
+            { id: "date", text: t("frontmatter.typeDate") },
             { id: "null", text: t("frontmatter.typeNull") },
+            { id: "remove", text: t("frontmatter.removeField") },
         ]);
 
         if (
-            selectedType === "string" ||
-            selectedType === "number" ||
-            selectedType === "boolean" ||
-            selectedType === "list" ||
-            selectedType === "null"
+            selectedAction === "string" ||
+            selectedAction === "number" ||
+            selectedAction === "boolean" ||
+            selectedAction === "list" ||
+            selectedAction === "date" ||
+            selectedAction === "null" ||
+            selectedAction === "remove"
         ) {
-            return selectedType;
+            return selectedAction;
         }
 
         return null;
@@ -540,6 +1078,57 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
     };
 
     /**
+     * @function removeField
+     * @description 删除指定 frontmatter 字段。
+     * @param fieldKey 字段名。
+     */
+    const removeField = (fieldKey: string): void => {
+        if (!(fieldKey in recordDraft)) {
+            console.warn("[frontmatter-editor] remove skipped: field missing", {
+                fieldKey,
+            });
+            return;
+        }
+
+        console.info("[frontmatter-editor] remove field", {
+            fieldKey,
+        });
+
+        const nextRecord = Object.entries(recordDraft).reduce<Record<string, VisualYamlValue>>((accumulator, [key, value]) => {
+            if (key !== fieldKey) {
+                accumulator[key] = value;
+            }
+            return accumulator;
+        }, {});
+
+        commitWithNextRecord(nextRecord);
+        clearKeyDraft(fieldKey);
+        if (editingListItem?.key === fieldKey) {
+            setEditingListItem(null);
+            setEditingListDraft("");
+        }
+    };
+
+    /**
+     * @function openFieldTypeMenu
+     * @description 打开指定字段的类型切换菜单。
+     * @param fieldKey 字段名。
+     */
+    const openFieldTypeMenu = async (fieldKey: string): Promise<void> => {
+        const selectedType = await requestFieldContextAction();
+        if (!selectedType) {
+            return;
+        }
+
+        if (selectedType === "remove") {
+            removeField(fieldKey);
+            return;
+        }
+
+        changeFieldType(fieldKey, selectedType);
+    };
+
+    /**
      * @function handleFieldRowContextMenu
      * @description 响应字段行右键菜单，将当前行转换为指定数据类型。
      * @param event 鼠标事件。
@@ -550,12 +1139,17 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
         fieldKey: string,
     ): Promise<void> => {
         event.preventDefault();
-        const selectedType = await requestFieldTypeSelection();
-        if (!selectedType) {
+        const selectedAction = await requestFieldContextAction();
+        if (!selectedAction) {
             return;
         }
 
-        changeFieldType(fieldKey, selectedType);
+        if (selectedAction === "remove") {
+            removeField(fieldKey);
+            return;
+        }
+
+        changeFieldType(fieldKey, selectedAction);
     };
 
     /**
@@ -565,21 +1159,21 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
      * @param fieldKey 当前字段名。
      */
     const handleFieldKeyKeyDown = (
-        event: KeyboardEvent<HTMLInputElement>,
+        event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
         fieldKey: string,
     ): void => {
-        if (shouldSubmitPlainEnter({
-            key: event.key,
-            nativeEvent: event.nativeEvent,
-        })) {
+        if (shouldSubmitFrontmatterPlainEnter(event)) {
             event.preventDefault();
+            event.stopPropagation();
             commitFieldKeyRename(fieldKey);
             return;
         }
 
         if (event.key === "Escape") {
             event.preventDefault();
+            event.stopPropagation();
             clearKeyDraft(fieldKey);
+            focusNavigationRow(fieldKey);
         }
     };
 
@@ -623,20 +1217,42 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
     const renderValueControl = (key: string, value: VisualYamlValue): ReactNode => {
         if (typeof value === "boolean") {
             return (
-                <label className="fmv-bool" htmlFor={`fmv-bool-${key}`}>
-                    <input
+                <div className="fmv-bool">
+                    <button
                         id={`fmv-bool-${key}`}
-                        type="checkbox"
-                        checked={value}
-                        onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                        type="button"
+                        className={`fmv-bool-indicator${value ? " fmv-bool-indicator-checked" : ""}`}
+                        data-frontmatter-field-focusable="true"
+                        data-frontmatter-focus-role="value"
+                        aria-pressed={value}
+                        onClick={() => {
                             commitWithNextRecord({
                                 ...recordDraft,
-                                [key]: event.target.checked,
+                                [key]: !value,
                             });
                         }}
-                    />
-                    {value ? "true" : "false"}
-                </label>
+                        onKeyDown={(event) => {
+                            if (shouldSubmitFrontmatterPlainEnter(event)) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                commitWithNextRecord({
+                                    ...recordDraft,
+                                    [key]: !value,
+                                });
+                                return;
+                            }
+
+                            if (event.key === "Escape") {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                focusNavigationRow(key);
+                            }
+                        }}
+                    >
+                        <CheckSquare size={14} strokeWidth={1.8} aria-hidden="true" />
+                        {value ? "true" : "false"}
+                    </button>
+                </div>
             );
         }
 
@@ -644,6 +1260,8 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
             return (
                 <input
                     className="fmv-input fmv-input-number"
+                    data-frontmatter-field-focusable="true"
+                    data-frontmatter-focus-role="value"
                     type="number"
                     value={String(value)}
                     onChange={(event: ChangeEvent<HTMLInputElement>) => {
@@ -663,12 +1281,70 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                         commitRecordDraft();
                     }}
                     onKeyDown={(event) => {
-                        if (shouldSubmitPlainEnter({
-                            key: event.key,
-                            nativeEvent: event.nativeEvent,
-                        })) {
+                        if (shouldSubmitFrontmatterPlainEnter(event)) {
                             event.preventDefault();
+                            event.stopPropagation();
                             commitRecordDraft();
+                            focusNavigationRow(key);
+                            return;
+                        }
+
+                        if (event.key === "Escape") {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            commitRecordDraft();
+                            focusNavigationRow(key);
+                        }
+                    }}
+                />
+            );
+        }
+
+        if (resolveFieldType(value) === "date") {
+            return (
+                <input
+                    className="fmv-input fmv-input-date"
+                    data-frontmatter-field-focusable="true"
+                    data-frontmatter-focus-role="value"
+                    type="date"
+                    value={resolveDateValue(value)}
+                    onClick={(event: ChangeEvent<HTMLInputElement> | MouseEvent<HTMLInputElement>) => {
+                        const dateInput = event.currentTarget as HTMLInputElement & { showPicker?: () => void };
+                        if (typeof dateInput.showPicker === "function") {
+                            try {
+                                dateInput.showPicker();
+                            } catch {
+                                // 浏览器不支持或当前时机不可调用时，退回原生 date input 默认行为。
+                            }
+                        }
+                    }}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                        setRecordDraft((previous) => ({
+                            ...previous,
+                            [key]: event.target.value,
+                        }));
+                    }}
+                    onBlur={() => {
+                        if (shouldDeferInputBlurCommit()) {
+                            return;
+                        }
+
+                        commitRecordDraft();
+                    }}
+                    onKeyDown={(event) => {
+                        if (shouldSubmitFrontmatterPlainEnter(event)) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            commitRecordDraft();
+                            focusNavigationRow(key);
+                            return;
+                        }
+
+                        if (event.key === "Escape") {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            commitRecordDraft();
+                            focusNavigationRow(key);
                         }
                     }}
                 />
@@ -681,12 +1357,13 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                     {value.map((item, index) => (
                         <div key={`${key}-${String(index)}`} className="fmv-list-item">
                             {editingListItem?.key === key && editingListItem.index === index ? (
-                                <input
+                                <FrontmatterInlineTextField
                                     className="fmv-list-item-input"
-                                    type="text"
+                                    data-frontmatter-field-focusable="true"
+                                    data-frontmatter-focus-role="value"
                                     value={editingListDraft}
                                     style={{ width: `${String(Math.max(4, editingListDraft.length + 1))}ch` }}
-                                    onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                                    onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
                                         setEditingListDraft(event.target.value);
                                     }}
                                     onCompositionStart={handleInputCompositionStart}
@@ -699,25 +1376,19 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                                         commitListItemEdit();
                                     }}
                                     onKeyDown={(event) => {
-                                        if (shouldSubmitPlainEnter({
-                                            key: event.key,
-                                            nativeEvent: event.nativeEvent,
-                                        })) {
+                                        if (shouldSubmitFrontmatterPlainEnter(event)) {
                                             event.preventDefault();
+                                            event.stopPropagation();
                                             commitListItemEdit();
+                                            focusNavigationRow(key);
                                             return;
                                         }
 
                                         if (event.key === "Escape") {
                                             event.preventDefault();
-
-                                            if (editingListDraft.trim().length === 0) {
-                                                commitListItemEdit();
-                                                return;
-                                            }
-
-                                            setEditingListItem(null);
-                                            setEditingListDraft("");
+                                            event.stopPropagation();
+                                            commitListItemEdit();
+                                            focusNavigationRow(key);
                                         }
                                     }}
                                     autoFocus
@@ -726,6 +1397,8 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                                 <button
                                     type="button"
                                     className="fmv-list-item-read"
+                                    data-frontmatter-field-focusable="true"
+                                    data-frontmatter-focus-role="value"
                                     onClick={() => {
                                         const text = item === null ? "null" : String(item);
                                         setEditingListItem({ key, index });
@@ -762,6 +1435,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                     <button
                         type="button"
                         className="fmv-mini-action"
+                        data-frontmatter-focus-role="value"
                         onClick={() => {
                             const currentList = (recordDraft[key] as VisualYamlArray) ?? [];
                             const nextIndex = currentList.length;
@@ -777,6 +1451,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                             setEditingListItem({ key, index: nextIndex });
                             setEditingListDraft("");
                         }}
+                        title={t("frontmatter.addField")}
                     >
                         +
                     </button>
@@ -784,12 +1459,17 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
             );
         }
 
+        if (value === null) {
+            return <span className="fmv-null-pill">null</span>;
+        }
+
         return (
-            <input
+            <FrontmatterInlineTextField
                 className="fmv-input"
-                type="text"
-                value={value === null ? "null" : String(value)}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                data-frontmatter-field-focusable="true"
+                data-frontmatter-focus-role="value"
+                value={String(value)}
+                onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
                     setRecordDraft((previous) => ({
                         ...previous,
                         [key]: event.target.value,
@@ -805,12 +1485,19 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                     commitRecordDraft();
                 }}
                 onKeyDown={(event) => {
-                    if (shouldSubmitPlainEnter({
-                        key: event.key,
-                        nativeEvent: event.nativeEvent,
-                    })) {
+                    if (shouldSubmitFrontmatterPlainEnter(event)) {
                         event.preventDefault();
+                        event.stopPropagation();
                         commitRecordDraft();
+                        focusNavigationRow(key);
+                        return;
+                    }
+
+                    if (event.key === "Escape") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        commitRecordDraft();
+                        focusNavigationRow(key);
                     }
                 }}
             />
@@ -818,62 +1505,141 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
     };
 
     return (
-        <section className="fmv-editor">
-            <div className="fmv-grid">
-                {fieldEntries.length === 0 ? (
-                    <div className="fmv-empty">{t("frontmatter.emptyFrontmatter")}</div>
-                ) : (
-                    fieldEntries.map(([key, value]) => (
-                        <div
-                            key={key}
-                            className="fmv-row"
-                            onContextMenu={(event) => {
-                                void handleFieldRowContextMenu(event, key);
+        <section
+            ref={wrapperRef}
+            className="fmv-editor"
+            onFocusCapture={handleWrapperFocusCapture}
+            onBlurCapture={handleWrapperBlurCapture}
+        >
+            {/* fmv-header-toggle: 带图标的折叠头部，负责显示/隐藏属性列表。 */}
+            <button
+                type="button"
+                className="fmv-header-toggle fmv-vim-nav-target"
+                data-frontmatter-vim-nav="true"
+                onClick={() => {
+                    setIsCollapsed((previous) => !previous);
+                }}
+                aria-expanded={!isCollapsed}
+                aria-label={t("frontmatter.togglePanel")}
+                onKeyDown={(event) => {
+                    handleVimNavigationTargetKeyDown(event);
+                }}
+            >
+                <span className="fmv-header-leading" aria-hidden="true">
+                    <BookOpen size={16} strokeWidth={1.8} />
+                    <span className="fmv-header-chevron">
+                        {isCollapsed ? <ChevronRight size={14} strokeWidth={2} /> : <ChevronDown size={14} strokeWidth={2} />}
+                    </span>
+                </span>
+                <span className="fmv-header-title">{t("frontmatter.panelTitle")}</span>
+            </button>
+
+            {/* fmv-grid: 属性主体区，按 properties 面板样式组织每个字段。 */}
+            {!isCollapsed ? (
+                <>
+                    <div className="fmv-grid">
+                        {fieldEntries.length === 0 ? (
+                            <div className="fmv-empty">{t("frontmatter.emptyFrontmatter")}</div>
+                        ) : (
+                            fieldEntries.map(([key, value]) => {
+                                const FieldIcon = resolveFieldIcon(value);
+
+                                return (
+                                    <div
+                                        key={key}
+                                        ref={(node) => {
+                                            setRowRef(key, node);
+                                        }}
+                                        className="fmv-row fmv-vim-nav-target"
+                                        data-frontmatter-vim-nav="true"
+                                        data-frontmatter-field-key={key}
+                                        tabIndex={-1}
+                                        onContextMenu={(event) => {
+                                            void handleFieldRowContextMenu(event, key);
+                                        }}
+                                        onKeyDown={(event) => {
+                                            handleVimNavigationTargetKeyDown(event, key, value);
+                                        }}
+                                        onMouseDown={(event) => {
+                                            if (event.target === event.currentTarget) {
+                                                event.preventDefault();
+                                                event.currentTarget.focus();
+                                            }
+                                        }}
+                                    >
+                                        <div className="fmv-field-meta">
+                                            <button
+                                                type="button"
+                                                className="fmv-field-icon-button"
+                                                onClick={() => {
+                                                    void openFieldTypeMenu(key);
+                                                }}
+                                                title={t("frontmatter.changeType")}
+                                                aria-label={t("frontmatter.changeType")}
+                                            >
+                                                <span className="fmv-field-icon" aria-hidden="true">
+                                                    <FieldIcon size={16} strokeWidth={1.8} />
+                                                </span>
+                                            </button>
+                                            <div className="fmv-field-copy">
+                                                <FrontmatterInlineTextField
+                                                    className="fmv-key-input"
+                                                    data-frontmatter-field-focusable="true"
+                                                    data-frontmatter-focus-role="key"
+                                                    value={keyDrafts[key] ?? key}
+                                                    placeholder={t("frontmatter.keyPlaceholder")}
+                                                    onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+                                                        const nextDraftValue = event.target.value;
+                                                        setKeyDrafts((previous) => ({
+                                                            ...previous,
+                                                            [key]: nextDraftValue,
+                                                        }));
+                                                    }}
+                                                    onCompositionStart={handleInputCompositionStart}
+                                                    onCompositionEnd={handleInputCompositionEnd}
+                                                    onBlur={() => {
+                                                        if (shouldDeferInputBlurCommit()) {
+                                                            return;
+                                                        }
+
+                                                        commitFieldKeyRename(key);
+                                                    }}
+                                                    onKeyDown={(event) => {
+                                                        handleFieldKeyKeyDown(event, key);
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="fmv-control-shell">
+                                            <div className="fmv-control">{renderValueControl(key, value)}</div>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+
+                    {/* fmv-footer: 属性新增入口，使用完整按钮文案而非孤立加号。 */}
+                    <div className="fmv-footer">
+                        <button
+                            type="button"
+                            className="fmv-add-button fmv-vim-nav-target"
+                            data-frontmatter-vim-nav="true"
+                            onClick={() => {
+                                addFieldByType("string");
+                            }}
+                            title={t("frontmatter.addProperty")}
+                            aria-label={t("frontmatter.addProperty")}
+                            onKeyDown={(event) => {
+                                handleVimNavigationTargetKeyDown(event);
                             }}
                         >
-                            <input
-                                className="fmv-key-input"
-                                type="text"
-                                value={keyDrafts[key] ?? key}
-                                placeholder={t("frontmatter.keyPlaceholder")}
-                                onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                                    const nextDraftValue = event.target.value;
-                                    setKeyDrafts((previous) => ({
-                                        ...previous,
-                                        [key]: nextDraftValue,
-                                    }));
-                                }}
-                                onCompositionStart={handleInputCompositionStart}
-                                onCompositionEnd={handleInputCompositionEnd}
-                                onBlur={() => {
-                                    if (shouldDeferInputBlurCommit()) {
-                                        return;
-                                    }
-
-                                    commitFieldKeyRename(key);
-                                }}
-                                onKeyDown={(event) => {
-                                    handleFieldKeyKeyDown(event, key);
-                                }}
-                            />
-                            <div className="fmv-control">{renderValueControl(key, value)}</div>
-                        </div>
-                    ))
-                )}
-            </div>
-            <div className="fmv-footer">
-                <button
-                    type="button"
-                    className="fmv-add-plus-button"
-                    onClick={() => {
-                        addFieldByType("string");
-                    }}
-                    title={t("frontmatter.addField")}
-                    aria-label={t("frontmatter.addField")}
-                >
-                    +
-                </button>
-            </div>
+                            <Plus size={16} strokeWidth={1.8} aria-hidden="true" />
+                            <span>{t("frontmatter.addProperty")}</span>
+                        </button>
+                    </div>
+                </>
+            ) : null}
         </section>
     );
 }

@@ -227,6 +227,10 @@ function dispatchEditorShortcut(
         return buildExecuteResult(commandId, "conditioned-match");
     }
 
+    if (request.conditionContext.focusedComponent === "tab:codemirror-frontmatter") {
+        return buildNoneResult("no-match");
+    }
+
     const shouldBlockNativeShortcut = (request.managedShortcutCandidates ?? []).some((shortcut) =>
         matchShortcut(request.event, shortcut),
     );

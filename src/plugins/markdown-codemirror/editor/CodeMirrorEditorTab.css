@@ -1,5 +1,8 @@
 /* 编辑器根容器：保证 Tab 内垂直布局占满可用空间 */
 .cm-tab {
+    --cm-tab-gutter-width: 0px;
+    --cm-editor-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --cm-editor-font-size: 16px;
     position: relative;
     height: 100%;
     display: flex;
@@ -20,6 +23,8 @@
     gap: 12px;
     max-width: 800px;
     margin: 0 auto;
+    padding: 0 32px;
+    box-sizing: border-box;
 }
 
 /* 顶部标题输入栏：模仿 Obsidian 的大标题样式，默认无边框，仅在交互时给出轻微背景反馈。 */
@@ -30,11 +35,12 @@
     border-radius: 10px;
     background: transparent;
     color: var(--editor-panel-text-color);
-    padding: 4px 6px;
+    padding: 2px 0 2px calc(var(--cm-tab-gutter-width) / 2);
+    box-sizing: border-box;
     font-family: var(--font-display, inherit);
-    font-size: clamp(1.75rem, 2.2vw, 2.35rem);
+    font-size: clamp(1.45rem, 1.8vw, 1.9rem);
     font-weight: 700;
-    line-height: 1.08;
+    line-height: 1.14;
     letter-spacing: -0.04em;
 }
 
@@ -171,6 +177,8 @@
     padding: 8px 32px 24px;
     color: var(--editor-text-color);
     background: var(--editor-bg-color);
+    font-family: var(--cm-editor-font-family);
+    font-size: var(--cm-editor-font-size);
     line-height: 1.6;
     user-select: text;
     -webkit-user-select: text;
@@ -370,6 +378,18 @@
     caret-color: transparent;
 }
 
+/* Frontmatter widget 聚焦态：隐藏主编辑器光标与选区层，避免导航焦点和正文 caret 并存。 */
+.cm-tab-editor .cm-editor.cm-frontmatter-widget-focused .cm-cursorLayer,
+.cm-tab-editor .cm-editor.cm-frontmatter-widget-focused .cm-selectionLayer,
+.cm-tab-editor .cm-editor.cm-frontmatter-widget-focused .cm-dropCursor {
+    display: none !important;
+}
+
+/* Frontmatter widget 聚焦态：主内容区隐藏 caret，仅保留 metadata 导航或字段输入焦点。 */
+.cm-tab-editor .cm-editor.cm-frontmatter-widget-focused .cm-content {
+    caret-color: transparent;
+}
+
 /* CodeMirror 内容区样式：行高与文本色。
    font-family / font-size 由 editorStyleCompartment 动态注入，不在 CSS 中硬编码。 */
 .cm-tab-editor .cm-content {
@@ -385,10 +405,11 @@
 
     .cm-tab-header-inner {
         gap: 10px;
+        padding: 0 16px;
     }
 
     .cm-tab-title-input {
-        font-size: clamp(1.5rem, 6.2vw, 2rem);
+        font-size: clamp(1.3rem, 5.3vw, 1.6rem);
     }
 
     .cm-tab-guard-banner {
@@ -897,32 +918,38 @@
 }
 
 /* 一级标题样式 */
-.cm-tab-editor .cm-rendered-header-h1 {
+.cm-tab-editor .cm-rendered-header-h1,
+.cm-tab-reader .cm-rendered-header-h1 {
     font-size: 1.9em;
 }
 
 /* 二级标题样式 */
-.cm-tab-editor .cm-rendered-header-h2 {
+.cm-tab-editor .cm-rendered-header-h2,
+.cm-tab-reader .cm-rendered-header-h2 {
     font-size: 1.6em;
 }
 
 /* 三级标题样式 */
-.cm-tab-editor .cm-rendered-header-h3 {
+.cm-tab-editor .cm-rendered-header-h3,
+.cm-tab-reader .cm-rendered-header-h3 {
     font-size: 1.35em;
 }
 
 /* 四级标题样式 */
-.cm-tab-editor .cm-rendered-header-h4 {
+.cm-tab-editor .cm-rendered-header-h4,
+.cm-tab-reader .cm-rendered-header-h4 {
     font-size: 1.2em;
 }
 
 /* 五级标题样式 */
-.cm-tab-editor .cm-rendered-header-h5 {
+.cm-tab-editor .cm-rendered-header-h5,
+.cm-tab-reader .cm-rendered-header-h5 {
     font-size: 1.05em;
 }
 
 /* 六级标题样式 */
-.cm-tab-editor .cm-rendered-header-h6 {
+.cm-tab-editor .cm-rendered-header-h6,
+.cm-tab-reader .cm-rendered-header-h6 {
     font-size: 1em;
     opacity: 0.9;
 }

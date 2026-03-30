@@ -63,6 +63,15 @@ interface SaveFrontmatterResult {
 }
 
 /**
+ * @interface FrontmatterSyntaxExtensionOptions
+ * @description Frontmatter 语法扩展的宿主回调参数。
+ */
+interface FrontmatterSyntaxExtensionOptions {
+    /** 请求退出 frontmatter Vim 导航并返回正文。 */
+    onRequestExitVimNavigation?: () => void;
+}
+
+/**
  * @interface FrontmatterSelectionRange
  * @description frontmatter 选区判断所需的最小选区结构。
  */
@@ -264,6 +273,9 @@ class FrontmatterYamlWidget extends WidgetType {
     /** 保存回调。 */
     private readonly onSave: (yamlText: string) => SaveFrontmatterResult;
 
+    /** 请求退出 frontmatter Vim 导航。 */
+    private readonly onRequestExitVimNavigation?: () => void;
+
     /** React 根实例。 */
     private root: Root | null = null;
 
@@ -271,11 +283,13 @@ class FrontmatterYamlWidget extends WidgetType {
         yamlText: string,
         isSelected: boolean,
         onSave: (yamlText: string) => SaveFrontmatterResult,
+        onRequestExitVimNavigation?: () => void,
     ) {
         super();
         this.yamlText = yamlText;
         this.isSelected = isSelected;
         this.onSave = onSave;
+        this.onRequestExitVimNavigation = onRequestExitVimNavigation;
     }
 
     eq(other: FrontmatterYamlWidget): boolean {
@@ -298,6 +312,7 @@ class FrontmatterYamlWidget extends WidgetType {
                 createElement(FrontmatterYamlVisualEditor, {
                     initialYamlText: this.yamlText,
                     onCommitYaml: (yamlText: string) => this.onSave(yamlText),
+                    onRequestExitVimNavigation: this.onRequestExitVimNavigation,
                 }),
             );
         } catch (error) {
@@ -338,7 +353,7 @@ class FrontmatterYamlWidget extends WidgetType {
  * @returns CodeMirror Extension 数组（ViewPlugin + atomicRanges）。
  * @throws 无显式异常；内部异常将降级为空装饰并记录日志。
  */
-export function createFrontmatterSyntaxExtension(): Extension {
+export function createFrontmatterSyntaxExtension(options: FrontmatterSyntaxExtensionOptions = {}): Extension {
     const plugin = ViewPlugin.fromClass(
         class {
             decorations: DecorationSet;
@@ -399,8 +414,11 @@ export function createFrontmatterSyntaxExtension(): Extension {
                     block.to,
                     block.to,
                     Decoration.widget({
-                        widget: new FrontmatterYamlWidget(block.yamlText, isSelected, (nextYamlText) =>
-                            saveFrontmatterYaml(view, nextYamlText),
+                        widget: new FrontmatterYamlWidget(
+                            block.yamlText,
+                            isSelected,
+                            (nextYamlText) => saveFrontmatterYaml(view, nextYamlText),
+                            options.onRequestExitVimNavigation,
                         ),
                         block: false,
                         side: -1,
