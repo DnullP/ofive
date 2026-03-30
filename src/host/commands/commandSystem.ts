@@ -59,6 +59,7 @@ type BuiltinCommandId =
     | "editor.toggleHighlight"
     | "editor.insertLink"
     | "editor.insertTask"
+    | "editor.insertFrontmatter"
     ;
 
 /**
@@ -86,7 +87,8 @@ export type EditorNativeCommandId =
     | "editor.toggleInlineCode"
     | "editor.toggleHighlight"
     | "editor.insertLink"
-    | "editor.insertTask";
+    | "editor.insertTask"
+    | "editor.insertFrontmatter";
 
 /**
  * @interface CreateEntryDraftRequest
@@ -740,6 +742,20 @@ export const COMMAND_DEFINITIONS: Record<BuiltinCommandId, CommandDefinition> = 
         },
         execute(context) {
             context.executeEditorNativeCommand?.("editor.insertTask");
+        },
+    },
+    "editor.insertFrontmatter": {
+        id: "editor.insertFrontmatter",
+        title: "commands.insertFrontmatter",
+        scope: "editor",
+        routeClass: "frontend-editor",
+        condition: "editorFocused",
+        shortcut: {
+            defaultBinding: "",
+            editableInSettings: true,
+        },
+        execute(context) {
+            context.executeEditorNativeCommand?.("editor.insertFrontmatter");
         },
     },
     "file.moveFocusedToDirectory": {

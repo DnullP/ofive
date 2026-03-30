@@ -772,6 +772,13 @@
     background: transparent;
 }
 
+/* Frontmatter 内部输入控件聚焦时隐藏 CodeMirror caret，避免输入框 caret 与编辑器 caret 同时出现。 */
+.cm-tab-editor .cm-editor:has(.cm-frontmatter-widget input:focus) .cm-cursorLayer,
+.cm-tab-editor .cm-editor:has(.cm-frontmatter-widget textarea:focus) .cm-cursorLayer,
+.cm-tab-editor .cm-editor:has(.cm-frontmatter-widget select:focus) .cm-cursorLayer {
+    opacity: 0;
+}
+
 /* Frontmatter 标题：标识当前块为 frontmatter 编辑区域 */
 .cm-tab-editor .cm-frontmatter-title {
     font-size: 12px;

@@ -389,6 +389,7 @@ const en = {
         toggleHighlight: "Toggle Highlight",
         insertLink: "Insert Link",
         insertTask: "Quick Insert Task",
+        insertFrontmatter: "Insert Frontmatter",
         copySelectedFile: "Copy Selected File",
         pasteFileToDir: "Paste File to Current Directory",
         deleteSelectedFile: "Delete Selected File",
@@ -693,8 +694,15 @@ const en = {
     /* ==================== Frontmatter ==================== */
     frontmatter: {
         clickToEdit: "Click to edit",
+        addField: "Add Field",
         docSynced: "Document synced, save is handled by unified scheduler",
         emptyFrontmatter: "Current frontmatter is empty.",
+        keyPlaceholder: "Field key",
+        typeString: "String",
+        typeNumber: "Number",
+        typeBoolean: "Boolean",
+        typeList: "List",
+        typeNull: "Null",
         yamlError: "YAML format error",
         editorClosed: "Editor is closed, cannot sync.",
         noFrontmatterBlock: "No frontmatter block detected.",

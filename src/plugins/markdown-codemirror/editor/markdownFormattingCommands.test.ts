@@ -17,6 +17,7 @@ import {
     toggleHighlight,
     insertLink,
     insertTask,
+    insertFrontmatter,
 } from "./markdownFormattingCommands";
 
 /**
@@ -247,5 +248,29 @@ describe("insertTask", () => {
         expect(dispatches).toHaveLength(1);
         expect(dispatches[0]!.changes).toEqual({ from: 0, to: 14, insert: "  - [ ] review draft" });
         expect(dispatches[0]!.selection).toEqual({ anchor: 20 });
+    });
+});
+
+/* ================================================================== */
+/*  insertFrontmatter 测试                                             */
+/* ================================================================== */
+
+describe("insertFrontmatter", () => {
+    test("当前文档没有 frontmatter 时在顶部插入空模板", () => {
+        const { view, dispatches } = createMockView("# Title\n", 0, 0);
+        insertFrontmatter(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({
+            from: 0,
+            to: 0,
+            insert: "---\n\n---\n\n",
+        });
+        expect(dispatches[0]!.selection).toEqual({ anchor: 10 });
+    });
+
+    test("当前文档已有 frontmatter 时不重复插入", () => {
+        const { view, dispatches } = createMockView("---\ntitle: demo\n---\n\n# Title\n", 0, 0);
+        insertFrontmatter(view);
+        expect(dispatches).toHaveLength(0);
     });
 });

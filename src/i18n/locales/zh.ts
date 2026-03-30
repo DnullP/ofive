@@ -399,6 +399,7 @@ const zh = {
         toggleHighlight: "切换高亮",
         insertLink: "插入链接",
         insertTask: "快速创建任务",
+        insertFrontmatter: "插入 frontmatter",
         copySelectedFile: "复制选中文件",
         pasteFileToDir: "粘贴文件到当前目录",
         deleteSelectedFile: "删除选中文件",
@@ -703,8 +704,15 @@ const zh = {
     /* ==================== frontmatter ==================== */
     frontmatter: {
         clickToEdit: "点击编辑",
+        addField: "新增字段",
         docSynced: "文档已同步，保存由统一调度负责",
         emptyFrontmatter: "当前 frontmatter 为空。",
+        keyPlaceholder: "字段名",
+        typeString: "字符串",
+        typeNumber: "数字",
+        typeBoolean: "布尔值",
+        typeList: "列表",
+        typeNull: "空值",
         yamlError: "YAML 格式错误",
         editorClosed: "编辑器已关闭，无法同步。",
         noFrontmatterBlock: "未检测到 frontmatter 区块。",

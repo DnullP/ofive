@@ -9,6 +9,29 @@
     background: transparent;
 }
 
+/* Frontmatter 底部操作区：放置新增字段入口。 */
+.fmv-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Frontmatter 底部加号按钮：单击新增一行字符串字段。 */
+.fmv-add-plus-button {
+    height: 24px;
+    min-width: 24px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
 /* Frontmatter 字段网格：按行组织 key/value 编辑卡片。 */
 .fmv-grid {
     display: grid;
@@ -30,12 +53,31 @@
     border-bottom: 1px solid var(--border-color);
 }
 
+/* Frontmatter 字段行悬停态：提示整行支持右键切换数据类型。 */
+.fmv-row:hover {
+    background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+}
+
 /* Frontmatter 字段键文本：显示 YAML key 名称。 */
-.fmv-key {
+/* Frontmatter 字段名输入框：允许直接编辑 YAML key。 */
+.fmv-key-input {
+    min-width: 0;
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
     color: var(--text-primary);
     font-size: 12px;
     font-weight: 600;
+    padding: 6px 8px;
     word-break: break-all;
+}
+
+/* Frontmatter 字段名输入框聚焦态：明确当前在编辑字段名。 */
+.fmv-key-input:focus {
+    border-color: var(--border-color);
+    outline: none;
+    background: var(--bg-primary);
 }
 
 /* Frontmatter 值编辑区域：承载不同类型输入控件。 */

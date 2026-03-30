@@ -74,6 +74,7 @@ import {
     toggleHighlight,
     insertLink,
     insertTask,
+    insertFrontmatter,
 } from "./markdownFormattingCommands";
 import {
     containsChineseCharacter,
@@ -314,6 +315,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         "editor.toggleHighlight": "Cmd+Shift+H",
         "editor.insertLink": "Cmd+K",
         "editor.insertTask": "",
+        "editor.insertFrontmatter": "",
         "fileTree.copySelected": "Cmd+C",
         "fileTree.pasteInDirectory": "Cmd+V",
         "fileTree.deleteSelected": "Cmd+Backspace",
@@ -529,6 +531,10 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
 
         if (commandId === "editor.insertTask") {
             return insertTask(view);
+        }
+
+        if (commandId === "editor.insertFrontmatter") {
+            return insertFrontmatter(view);
         }
 
         return false;

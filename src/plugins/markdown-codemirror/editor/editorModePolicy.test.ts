@@ -27,6 +27,7 @@ describe("editorModePolicy", () => {
         expect(canExecuteEditorNativeCommandInMode("read", "editor.selectAll")).toBe(true);
         expect(canExecuteEditorNativeCommandInMode("read", "editor.toggleBold")).toBe(false);
         expect(canExecuteEditorNativeCommandInMode("read", "editor.insertTask")).toBe(false);
+        expect(canExecuteEditorNativeCommandInMode("read", "editor.insertFrontmatter")).toBe(false);
     });
 
     test("should expose mutation boundary and mode toggle", () => {

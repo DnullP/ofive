@@ -19,6 +19,7 @@
  *  - toggleHighlight    — 切换高亮 `==text==`
  *  - insertLink         — 插入/包裹链接 `[text](url)`
  *  - insertTask         — 在当前光标或选区快速创建任务 `- [ ] content`
+ *  - insertFrontmatter  — 若文档缺少 frontmatter，则在顶部插入空 frontmatter 模板
  */
 
 import type { EditorView } from "codemirror";
@@ -121,6 +122,27 @@ function resolveTaskContentInsertRange(view: EditorView): {
         content: "task",
         shouldSelectPlaceholder: true,
     };
+}
+
+/**
+ * @function hasFrontmatterBlock
+ * @description 判断文档顶部是否已存在 frontmatter 区块。
+ * @param docText 当前文档全文。
+ * @returns 若检测到合法开头 frontmatter，返回 true。
+ */
+function hasFrontmatterBlock(docText: string): boolean {
+    const lines = docText.split("\n");
+    if (lines.length < 2 || lines[0]?.trim() !== "---") {
+        return false;
+    }
+
+    for (let lineIndex = 1; lineIndex < lines.length; lineIndex += 1) {
+        if (lines[lineIndex]?.trim() === "---") {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -312,6 +334,34 @@ export function insertTask(view: EditorView): boolean {
             : {
                 anchor: resolved.from + insertText.length,
             },
+    });
+
+    return true;
+}
+
+/**
+ * @function insertFrontmatter
+ * @description 若当前文档缺少 frontmatter，则在文档顶部插入空 frontmatter 模板。
+ *   已存在 frontmatter 时不修改正文。
+ * @param view 编辑器视图。
+ * @returns 是否完成处理。
+ */
+export function insertFrontmatter(view: EditorView): boolean {
+    const docText = view.state.doc.sliceString(0, view.state.doc.length);
+    if (hasFrontmatterBlock(docText)) {
+        return true;
+    }
+
+    const insertText = "---\n\n---\n\n";
+    view.dispatch({
+        changes: {
+            from: 0,
+            to: 0,
+            insert: insertText,
+        },
+        selection: {
+            anchor: insertText.length,
+        },
     });
 
     return true;
