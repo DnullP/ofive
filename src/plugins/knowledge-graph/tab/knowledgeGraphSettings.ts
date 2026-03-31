@@ -37,6 +37,51 @@ const KNOWLEDGE_GRAPH_THEME_COLOR_TOKENS = {
 type KnowledgeGraphThemeColorKey = keyof typeof KNOWLEDGE_GRAPH_THEME_COLOR_TOKENS;
 
 /**
+ * @function normalizeGraphCssColor
+ * @description 将浏览器计算出的 CSS 颜色值规整为图引擎稳定可解析的 rgb/rgba 字符串。
+ * @param colorValue 原始颜色字符串。
+ * @returns 规整后的颜色字符串；无法规整时返回原值。
+ */
+function normalizeGraphCssColor(colorValue: string): string {
+    const trimmed = colorValue.trim();
+    if (!trimmed) {
+        return trimmed;
+    }
+
+    if (trimmed === "transparent") {
+        return "rgba(0, 0, 0, 0)";
+    }
+
+    const srgbMatch = trimmed.match(/^color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\)$/i);
+    if (!srgbMatch) {
+        return trimmed;
+    }
+
+    const [, red, green, blue, alpha] = srgbMatch;
+    const toChannel = (value: string): number => {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return 0;
+        }
+
+        return Math.max(0, Math.min(255, Math.round(numeric * 255)));
+    };
+
+    const normalizedRed = toChannel(red);
+    const normalizedGreen = toChannel(green);
+    const normalizedBlue = toChannel(blue);
+    if (typeof alpha === "string") {
+        const normalizedAlpha = Number(alpha);
+        const safeAlpha = Number.isFinite(normalizedAlpha)
+            ? Math.max(0, Math.min(1, normalizedAlpha))
+            : 1;
+        return `rgba(${String(normalizedRed)}, ${String(normalizedGreen)}, ${String(normalizedBlue)}, ${String(safeAlpha)})`;
+    }
+
+    return `rgb(${String(normalizedRed)}, ${String(normalizedGreen)}, ${String(normalizedBlue)})`;
+}
+
+/**
  * @function readKnowledgeGraphThemeColorToken
  * @description 读取当前主题下指定图谱 token 的计算后颜色值。
  * @param tokenName 主题 token 名称，不包含前导 `--`。
@@ -62,6 +107,7 @@ function readKnowledgeGraphThemeColorToken(tokenName: string): string | null {
     probe.style.pointerEvents = "none";
     probe.style.opacity = "0";
     probe.style.color = `var(--${tokenName})`;
+    probe.style.backgroundColor = `var(--${tokenName})`;
 
     const mountTarget = document.body ?? document.documentElement;
     if (!mountTarget || typeof mountTarget.appendChild !== "function") {
@@ -69,10 +115,14 @@ function readKnowledgeGraphThemeColorToken(tokenName: string): string | null {
     }
 
     mountTarget.appendChild(probe);
-    const resolvedValue = window.getComputedStyle(probe).color.trim();
+    const probeStyle = window.getComputedStyle(probe);
+    const resolvedValue =
+        probeStyle.backgroundColor.trim()
+        || probeStyle.color.trim();
     probe.remove();
 
-    return resolvedValue.length > 0 ? resolvedValue : rawValue;
+    const finalValue = resolvedValue.length > 0 ? resolvedValue : rawValue;
+    return normalizeGraphCssColor(finalValue);
 }
 
 /**

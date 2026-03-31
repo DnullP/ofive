@@ -369,6 +369,7 @@ const en = {
         toggleLeftSidebar: "Toggle Left Sidebar",
         toggleRightSidebar: "Toggle Right Sidebar",
         saveCurrentFile: "Save Current File",
+        deleteCurrentFile: "Delete Current File",
         createFileInDir: "Create File in Current Directory",
         createCanvasInDir: "Create Canvas in Current Directory",
         createFolderInDir: "Create Folder in Current Directory",

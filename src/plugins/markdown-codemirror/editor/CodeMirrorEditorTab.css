@@ -7,19 +7,20 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+    background: var(--editor-bg-color);
 }
 
 /* 编辑器标题头部：承载顶部标题输入栏和视图模式切换按钮。 */
 .cm-tab-header {
     flex-shrink: 0;
-    padding: 28px 32px 10px;
-    background: var(--editor-bg-color);
+    padding: 8px 32px 0;
+    background: inherit;
 }
 
 /* 编辑器标题头部内层：与正文保持统一版心宽度，并将标题与切换按钮横向排布。 */
 .cm-tab-header-inner {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 12px;
     max-width: 800px;
     margin: 0 auto;
@@ -38,9 +39,9 @@
     padding: 2px 0 2px calc(var(--cm-tab-gutter-width) / 2);
     box-sizing: border-box;
     font-family: var(--font-display, inherit);
-    font-size: clamp(1.45rem, 1.8vw, 1.9rem);
+    font-size: clamp(1.2rem, 1.5vw, 1.55rem);
     font-weight: 700;
-    line-height: 1.14;
+    line-height: 1.08;
     letter-spacing: -0.04em;
 }
 
@@ -74,7 +75,7 @@
     justify-content: center;
     width: 32px;
     height: 32px;
-    margin-top: 10px;
+    margin-top: 0;
     border: 1px solid var(--editor-panel-border-color);
     border-radius: 999px;
     background: color-mix(in srgb, var(--editor-panel-bg-elevated-color) 86%, transparent);
@@ -336,7 +337,7 @@
 
 /* 编辑器滚动容器：顶部预留切换按钮空间，避免正文与按钮重叠。 */
 .cm-tab-editor .cm-scroller {
-    padding-top: 8px;
+    padding-top: 0;
 }
 
 /* 文档居中布局：宽度足够时限制内容最大宽度并居中，营造 Word 文档编辑体验 */
@@ -400,7 +401,7 @@
 /* 小屏标题头部：在窄视口下压缩留白并略微收敛标题字号，避免顶部区域过高。 */
 @media (max-width: 720px) {
     .cm-tab-header {
-        padding: 20px 16px 8px;
+        padding: 6px 16px 0;
     }
 
     .cm-tab-header-inner {
@@ -409,7 +410,7 @@
     }
 
     .cm-tab-title-input {
-        font-size: clamp(1.3rem, 5.3vw, 1.6rem);
+        font-size: clamp(1.1rem, 4.8vw, 1.4rem);
     }
 
     .cm-tab-guard-banner {

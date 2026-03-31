@@ -65,24 +65,48 @@ describe("knowledgeGraphSettings", () => {
         globalThis.window = {
             getComputedStyle: (target?: Element) => {
                 if (target && appendedNodes.includes(target as never)) {
-                    const colorValue = (target as { style?: { color?: string } }).style?.color;
+                    const styleValue = (target as {
+                        style?: { color?: string; backgroundColor?: string };
+                    }).style;
+                    const colorValue = styleValue?.backgroundColor || styleValue?.color;
                     switch (colorValue) {
                         case "var(--graph-bg-primary)":
-                            return { color: "rgba(0, 0, 0, 0)" };
+                            return {
+                                color: "rgba(0, 0, 0, 0)",
+                                backgroundColor: "color(srgb 0.121569 0.133333 0.152941)",
+                            };
                         case "var(--graph-point-color)":
-                            return { color: "rgb(11, 109, 255)" };
+                            return {
+                                color: "rgb(11, 109, 255)",
+                                backgroundColor: "rgb(11, 109, 255)",
+                            };
                         case "var(--graph-point-greyout-color)":
-                            return { color: "rgb(107, 114, 128)" };
+                            return {
+                                color: "rgb(107, 114, 128)",
+                                backgroundColor: "rgb(107, 114, 128)",
+                            };
                         case "var(--graph-point-ring-hover-color)":
-                            return { color: "rgb(11, 109, 255)" };
+                            return {
+                                color: "rgb(11, 109, 255)",
+                                backgroundColor: "rgb(11, 109, 255)",
+                            };
                         case "var(--graph-point-ring-focus-color)":
-                            return { color: "rgb(31, 41, 55)" };
+                            return {
+                                color: "rgb(31, 41, 55)",
+                                backgroundColor: "rgb(31, 41, 55)",
+                            };
                         case "var(--graph-link-color)":
-                            return { color: "rgb(107, 114, 128)" };
+                            return {
+                                color: "rgb(107, 114, 128)",
+                                backgroundColor: "rgb(107, 114, 128)",
+                            };
                         case "var(--graph-link-hover-color)":
-                            return { color: "rgb(11, 109, 255)" };
+                            return {
+                                color: "rgb(11, 109, 255)",
+                                backgroundColor: "rgb(11, 109, 255)",
+                            };
                         default:
-                            return { color: "" };
+                            return { color: "", backgroundColor: "" };
                     }
                 }
 
@@ -115,7 +139,7 @@ describe("knowledgeGraphSettings", () => {
             ...DEFAULT_KNOWLEDGE_GRAPH_SETTINGS,
         });
 
-        expect(config.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+        expect(config.backgroundColor).toBe("rgb(31, 34, 39)");
         expect(config.pointDefaultColor).toBe("rgb(11, 109, 255)");
         expect(config.pointGreyoutColor).toBe("rgb(107, 114, 128)");
         expect(config.hoveredPointRingColor).toBe("rgb(11, 109, 255)");

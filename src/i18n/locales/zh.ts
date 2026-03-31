@@ -379,6 +379,7 @@ const zh = {
         toggleLeftSidebar: "显示/隐藏左侧边栏",
         toggleRightSidebar: "显示/隐藏右侧边栏",
         saveCurrentFile: "保存当前文件",
+        deleteCurrentFile: "删除当前文件",
         createFileInDir: "在当前目录创建文件",
         createCanvasInDir: "在当前目录创建 Canvas",
         createFolderInDir: "在当前目录创建文件夹",

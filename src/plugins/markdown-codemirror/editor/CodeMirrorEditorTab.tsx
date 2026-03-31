@@ -387,6 +387,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         "sidebar.left.toggle": "Cmd+Shift+J",
         "sidebar.right.toggle": "Cmd+Shift+K",
         "file.saveFocused": "Cmd+S",
+        "file.deleteFocused": "Cmd+Backspace",
         "file.moveFocusedToDirectory": "",
         "folder.createInFocusedDirectory": "",
         "file.renameFocused": "",
