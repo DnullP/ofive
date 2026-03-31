@@ -67,6 +67,26 @@
     color: var(--editor-panel-muted-text-color);
 }
 
+/* Keep header visual style when editing the source line in-place.
+   The renderer marks the whole line with `cm-rendered-header-source` when
+   the line is being edited; ensure font-family, weight and sizing
+   apply to the raw source and its child spans. */
+.cm-tab-editor .cm-rendered-header-source,
+.cm-tab-editor .cm-rendered-header-source * {
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-weight: 700;
+    color: var(--editor-header-text-color);
+    line-height: 1.3;
+    padding: 2px 0 6px 0;
+    text-decoration: none;
+}
+
+/* Ensure child token spans inherit the font-size so the header level
+   sizes are respected even when CodeMirror wraps tokens in spans. */
+.cm-tab-editor .cm-rendered-header-source span {
+    font-size: inherit;
+}
+
 /* 编辑器模式切换按钮：放入标题栏右侧，用于切换编辑态与阅读态。 */
 .cm-tab-mode-toggle {
     flex-shrink: 0;
@@ -559,6 +579,24 @@
     background: var(--editor-tag-bg-color);
     color: var(--editor-tag-text-color);
     line-height: 1.35;
+}
+
+/* Hover 效果：轻微放大并增强可见度（过渡动画） */
+.cm-tab-editor .cm-rendered-tag,
+.cm-tab-reader .cm-rendered-tag {
+    transition: transform 160ms cubic-bezier(.2,.9,.3,1), filter 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+    will-change: transform, filter, box-shadow, opacity;
+    position: relative;
+    z-index: 0;
+}
+
+.cm-tab-editor .cm-rendered-tag:hover,
+.cm-tab-reader .cm-rendered-tag:hover {
+    transform: scale(1.06);
+    filter: brightness(1.06) saturate(1.06);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+    z-index: 1;
+    opacity: 1;
 }
 
 /* 引用块内容渲染样式：左侧竖线 + 次级文本色 */

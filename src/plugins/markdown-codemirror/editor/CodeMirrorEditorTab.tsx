@@ -84,6 +84,7 @@ import {
     containsChineseCharacter,
     resolveChinesePreviousWordBoundary,
     resolveEnglishPreviousWordBoundary,
+    getWordObjectRange,
 } from "./editorWordBoundaries";
 import {
     canExecuteEditorNativeCommandInMode,
@@ -1031,6 +1032,36 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                     props.containerApi,
                     () => currentFilePathRef.current,
                 ),
+                // 双击选择：对中文使用分词缓存/回退分字符策略，保证双击按中文词边界选中
+                EditorView.domEventHandlers({
+                    dblclick(event, view) {
+                        try {
+                            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+                            if (pos === null) return false;
+
+                            const line = view.state.doc.lineAt(pos);
+                            const lineOffset = pos - line.from;
+
+                            const cacheItem = segmentationCacheRef.current.get(line.number);
+                            const tokens = cacheItem && cacheItem.text === line.text ? cacheItem.tokens : null;
+
+                            const range = getWordObjectRange(line.text, lineOffset, tokens, false);
+                            if (!range) return false;
+
+                            const from = line.from + range.start;
+                            const to = line.from + range.end;
+                            view.dispatch({
+                                selection: { anchor: from, head: to },
+                                scrollIntoView: true,
+                            });
+                            event.preventDefault();
+                            return true;
+                        } catch (e) {
+                            // fallback to default behavior
+                            return false;
+                        }
+                    },
+                }),
                 ...getRegisteredEditPluginExtensions({
                     getCurrentFilePath: () => currentFilePathRef.current,
                 }),

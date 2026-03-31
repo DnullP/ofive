@@ -3721,10 +3721,23 @@ export function DockviewLayout({
             const wrapTabComponent = (
                 componentKey: string,
                 Component: (props: IDockviewPanelProps<Record<string, unknown>>) => ReactNode,
-            ): ((props: IDockviewPanelProps<Record<string, unknown>>) => ReactNode) => {
-                const Wrapped = (tabProps: IDockviewPanelProps<Record<string, unknown>>): ReactNode => (
-                    // tabIndex={-1} 使容器可聚焦，点击空白区域也能触发 focusin
-                    // outline: "none" 避免容器获焦时显示浏览器默认蓝色轮廓
+            ): React.FunctionComponent<IDockviewPanelProps<Record<string, unknown>>> => {
+                if (typeof Component !== "function") {
+                    const InvalidPlaceholder = memo(function InvalidTabComponent(): ReactNode {
+                        console.error("[DockviewLayout] invalid tab component registered", { componentKey, Component });
+                        return (
+                            <div
+                                {...{ [TAB_COMPONENT_DATA_ATTR]: componentKey }}
+                                tabIndex={-1}
+                                style={{ height: "100%", outline: "none" }}
+                            />
+                        );
+                    });
+                    InvalidPlaceholder.displayName = `InvalidTabComponent(${componentKey})`;
+                    return InvalidPlaceholder as React.FunctionComponent<IDockviewPanelProps<Record<string, unknown>>>;
+                }
+
+                const Inner = (tabProps: IDockviewPanelProps<Record<string, unknown>>): ReactNode => (
                     <div
                         {...{ [TAB_COMPONENT_DATA_ATTR]: componentKey }}
                         tabIndex={-1}
@@ -3733,6 +3746,8 @@ export function DockviewLayout({
                         <Component {...tabProps} />
                     </div>
                 );
+
+                const Wrapped = memo(Inner);
                 Wrapped.displayName = `TabWrapper(${componentKey})`;
                 return Wrapped;
             };
