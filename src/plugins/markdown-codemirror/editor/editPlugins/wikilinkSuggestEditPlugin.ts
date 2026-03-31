@@ -542,12 +542,32 @@ function createWikiLinkSuggestExtensions(): Extension[] {
                 if (!coords) {
                     this.popup.style.display = "none";
                 } else {
-                    const editorRect = view.dom.getBoundingClientRect();
-                    const left = coords.left - editorRect.left;
-                    const top = coords.bottom - editorRect.top + 4; // 4px 间距
-                    this.popup.style.display = "";
-                    this.popup.style.left = `${left}px`;
-                    this.popup.style.top = `${top}px`;
+                        const editorRect = view.dom.getBoundingClientRect();
+                        let left = coords.left - editorRect.left;
+                        // default prefer below the anchor
+                        const spacing = 4; // px
+                        let top = coords.bottom - editorRect.top + spacing;
+
+                        // measure popup size (offsetHeight/Width are available because popup is attached)
+                        const popupHeight = this.popup.offsetHeight || 0;
+                        const popupWidth = this.popup.offsetWidth || 0;
+
+                        // If the popup would overflow the bottom of the editor, flip it above the anchor
+                        if (top + popupHeight > editorRect.height) {
+                            top = coords.top - editorRect.top - popupHeight - spacing;
+                        }
+
+                        // Clamp top to editor bounds
+                        if (top < 0) top = 0;
+
+                        // Adjust horizontal position to avoid right overflow
+                        if (left + popupWidth > editorRect.width) {
+                            left = Math.max(0, editorRect.width - popupWidth - 8);
+                        }
+
+                        this.popup.style.display = "";
+                        this.popup.style.left = `${left}px`;
+                        this.popup.style.top = `${top}px`;
                 }
 
                 this.lastRenderedState = state;

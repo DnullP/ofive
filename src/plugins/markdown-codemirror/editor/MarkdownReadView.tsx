@@ -46,6 +46,7 @@ import {
     prepareMarkdownForReadMode,
     type ReadModeFrontmatterField,
 } from "./markdownReadTransform";
+import { computeTagColorStyles } from "./utils/tagColor";
 import { shouldSkipWikiLinkNavigationForSelection } from "./readModeSelectionPolicy";
 
 interface MarkdownReadViewProps {
@@ -193,9 +194,17 @@ export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
                                 );
                             }
 
-                            if (decodeReadModeTagHref(href) !== null) {
+                            const tagTarget = decodeReadModeTagHref(href);
+                            if (tagTarget !== null) {
+                                const styles = computeTagColorStyles(tagTarget);
+                                const styleAttr = {
+                                    background: styles.background,
+                                    borderColor: styles.border,
+                                    color: styles.text,
+                                } as React.CSSProperties;
+
                                 return (
-                                    <span className="cm-rendered-tag">
+                                    <span className="cm-rendered-tag" style={styleAttr}>
                                         {children}
                                     </span>
                                 );
