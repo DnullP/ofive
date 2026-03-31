@@ -32,8 +32,13 @@ import { registerCommand } from "../../host/commands/commandSystem";
 import i18n from "../../i18n";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerTabComponent } from "../../host/registry/tabComponentRegistry";
-import { getConfigSnapshot, subscribeConfigChanges } from "../../host/store/configStore";
+import { getConfigSnapshot, subscribeConfigChanges } from "../../host/config/configStore";
+import { registerPluginOwnedStore } from "../../host/store/storeRegistry";
 import { registerGraphSettingsSection } from "./settings/graphSettingsRegistrar";
+import {
+    getGraphSettingsStateSnapshot,
+    subscribeGraphSettingsState,
+} from "./store/graphSettingsStore";
 
 const KNOWLEDGE_GRAPH_TAB_COMPONENT_ID = "knowledgegraph";
 const KNOWLEDGE_GRAPH_ACTIVITY_ID = "knowledge-graph";
@@ -95,12 +100,123 @@ function registerKnowledgeGraphPlugin(): () => void {
         },
     });
 
-    const unregisterGraphSettings = registerGraphSettingsSection();
+    const unregisterGraphSettingsStore = registerPluginOwnedStore("knowledge-graph", {
+        storeId: "settings",
+        title: "Knowledge Graph Settings Store",
+        description: "Vault-scoped knowledge graph settings and persistence state.",
+        scope: "plugin-private",
+        tags: ["knowledge-graph", "settings", "graph"],
+        schema: {
+            summary: "Govern knowledge graph settings hydration, normalization, persistence, and reset behavior.",
+            state: {
+                fields: [
+                    {
+                        name: "settings",
+                        description: "Normalized knowledge graph settings for the active vault.",
+                        valueType: "object",
+                        initialValue: "DEFAULT_KNOWLEDGE_GRAPH_SETTINGS",
+                        persisted: true,
+                    },
+                    {
+                        name: "loadedVaultPath",
+                        description: "The vault path whose graph settings are currently loaded.",
+                        valueType: "string",
+                        initialValue: "null",
+                    },
+                    {
+                        name: "isLoading",
+                        description: "Settings load or save request is in flight.",
+                        valueType: "boolean",
+                        initialValue: "false",
+                        allowedValues: ["true", "false"],
+                    },
+                    {
+                        name: "error",
+                        description: "Latest graph settings load or save error message.",
+                        valueType: "string",
+                        initialValue: "null",
+                    },
+                ],
+                invariants: [
+                    "settings is always normalized against DEFAULT_KNOWLEDGE_GRAPH_SETTINGS",
+                    "loadedVaultPath identifies the vault context for the current settings snapshot",
+                    "isLoading=false after every resolved or rejected load/save attempt",
+                ],
+                actions: [
+                    {
+                        id: "load-settings",
+                        description: "Load and normalize graph settings for the active vault.",
+                        updates: ["settings", "loadedVaultPath", "isLoading", "error"],
+                        sideEffects: ["read graph settings from vault config", "rewrite config when deprecated fields are detected"],
+                    },
+                    {
+                        id: "save-settings",
+                        description: "Persist updated graph settings for the active vault.",
+                        updates: ["settings", "loadedVaultPath", "isLoading", "error"],
+                        sideEffects: ["write graph settings to vault config"],
+                    },
+                    {
+                        id: "reset-settings",
+                        description: "Reset graph settings to defaults when vault context changes.",
+                        updates: ["settings", "loadedVaultPath", "isLoading", "error"],
+                    },
+                ],
+            },
+            flow: {
+                kind: "state-machine",
+                description: "Knowledge graph settings move through idle, loading, ready, and error snapshots around normalization and persistence.",
+                initialState: "idle",
+                states: [
+                    { id: "idle", description: "No vault-specific graph settings are loaded yet." },
+                    { id: "loading", description: "Graph settings are being read, normalized, or saved." },
+                    { id: "ready", description: "Graph settings snapshot is available for the active vault." },
+                    { id: "error", description: "Last load/save request failed and error is retained." },
+                ],
+                transitions: [
+                    {
+                        event: "load-or-save-request",
+                        from: ["idle", "ready", "error"],
+                        to: "loading",
+                        description: "A graph settings load or save request enters the async phase.",
+                        sideEffects: ["invoke graph settings config APIs"],
+                    },
+                    {
+                        event: "request-success",
+                        from: ["loading"],
+                        to: "ready",
+                        description: "Successful load or save produces a normalized ready snapshot.",
+                    },
+                    {
+                        event: "request-failure",
+                        from: ["loading"],
+                        to: "error",
+                        description: "Failed load or save records an error snapshot.",
+                    },
+                    {
+                        event: "reset-context",
+                        from: ["ready", "error"],
+                        to: "idle",
+                        description: "Vault switch or reset clears graph settings context.",
+                    },
+                ],
+                failureModes: [
+                    "invalid persisted graph settings are normalized before consumers see them",
+                    "save failure preserves the current in-memory snapshot plus error",
+                ],
+            },
+        },
+        getSnapshot: () => getGraphSettingsStateSnapshot(),
+        subscribe: (listener) => subscribeGraphSettingsState(listener),
+        contributions: [{
+            kind: "settings",
+            activate: () => registerGraphSettingsSection(),
+        }],
+    });
 
     console.info("[knowledgeGraphPlugin] registered knowledge graph plugin");
 
     return () => {
-        unregisterGraphSettings();
+        unregisterGraphSettingsStore();
         unregisterCommand();
         unregisterActivity();
         unregisterTabComponent();

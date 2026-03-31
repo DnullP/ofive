@@ -4,7 +4,7 @@
  * @dependencies
  *  - bun:test
  *  - ./commandSystem
- *  - ../store/editorContextStore
+ *  - ../editor/editorContextStore
  *
  * @example
  *   bun test src/host/commands/commandSystem.delete.test.ts
@@ -68,7 +68,7 @@ const { executeCommand } = await import("./commandSystem");
 const {
     reportArticleFocus,
     resetEditorContext,
-} = await import("../store/editorContextStore");
+} = await import("../editor/editorContextStore");
 
 describe("commandSystem file.deleteFocused", () => {
     beforeEach(() => {

@@ -1,5 +1,5 @@
 /**
- * @module host/store/editorDisplayModeStore
+ * @module host/editor/editorDisplayModeStore
  * @description 编辑器显示模式全局状态管理：集中维护所有 Markdown editor 共享的编辑态/阅读态开关。
  * @dependencies
  *  - react (useSyncExternalStore)

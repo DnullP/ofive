@@ -11,7 +11,8 @@ import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from "
 import { Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ensureBuiltinSettingsRegistered } from "../settings/registerBuiltinSettings";
-import { useSettingsSections, type SettingsSectionRegistration } from "../settings/settingsRegistry";
+import { SettingsRegisteredSection } from "../settings/SettingsRegisteredSection";
+import { useSettingsSections, type SettingsSectionSnapshot } from "../settings/settingsRegistry";
 import "./SettingsTab.css";
 
 ensureBuiltinSettingsRegistered();
@@ -35,7 +36,7 @@ function normalizeSettingsQuery(value: string): string {
  * @returns 是否命中。
  */
 function matchesSettingsSection(
-    section: SettingsSectionRegistration,
+    section: SettingsSectionSnapshot,
     normalizedQuery: string,
     translate: (key: string) => string,
 ): boolean {
@@ -43,10 +44,17 @@ function matchesSettingsSection(
         return true;
     }
 
+    const itemCandidates = section.items.flatMap((item) => [
+        translate(item.title),
+        item.description ? translate(item.description) : "",
+        ...(item.searchTerms ?? []),
+    ]);
+
     const candidates = [
         translate(section.title),
         section.description ? translate(section.description) : "",
         ...(section.searchTerms ?? []),
+        ...itemCandidates,
     ];
 
     return candidates.some((candidate) => candidate.toLocaleLowerCase().includes(normalizedQuery));
@@ -156,7 +164,7 @@ export function SettingsTab(): ReactNode {
                     ) : null}
                 </header>
 
-                {activeSection ? activeSection.render() : (
+                {activeSection ? <SettingsRegisteredSection section={activeSection} /> : (
                     <div className="settings-tab-empty-state">
                         <div className="settings-tab-empty-state-title">
                             {normalizeSettingsQuery(searchQuery).length > 0

@@ -315,7 +315,7 @@ export function removeCustomActivityFromEntries(
  * @returns 保存后的仓库配置。
  */
 export async function appendCustomActivityToVaultConfig(nextItem: CustomActivityDefinition): Promise<VaultConfig> {
-    const { updateBackendConfig } = await import("../../host/store/configStore");
+    const { updateBackendConfig } = await import("../../host/config/configStore");
     return updateBackendConfig((currentConfig) => {
         const currentItems = parseCustomActivitiesConfig(currentConfig.entries);
         return {
@@ -340,7 +340,7 @@ export async function appendCustomActivityToVaultConfig(nextItem: CustomActivity
  * @returns 保存后的仓库配置。
  */
 export async function removeCustomActivityFromVaultConfig(activityConfigId: string): Promise<VaultConfig> {
-    const { updateBackendConfig } = await import("../../host/store/configStore");
+    const { updateBackendConfig } = await import("../../host/config/configStore");
     return updateBackendConfig((currentConfig) => ({
         ...currentConfig,
         entries: removeCustomActivityFromEntries(currentConfig.entries, activityConfigId),

@@ -1,6 +1,6 @@
 /**
  * @module plugins/ai-chat/aiChatPlugin
- * @description AI 聊天插件：注册右侧聊天面板和 AI 设置选栏。
+ * @description AI 聊天插件：注册右侧聊天面板，并通过插件拥有的 settings store 向 host 贡献 AI 设置选栏。
  */
 
 import React, {
@@ -65,12 +65,14 @@ import { AiChatMessageMarkdown } from "./aiChatMessageMarkdown";
 import { buildConfirmationPreview } from "./aiChatConfirmationPreview";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerPanel } from "../../host/registry/panelRegistry";
-import { registerSettingsSection } from "../../host/settings/settingsRegistry";
-import { useVaultState } from "../../host/store/vaultStore";
+import { registerSettingsItem, registerSettingsSection } from "../../host/settings/settingsRegistry";
+import { registerPluginOwnedStore } from "../../host/store/storeRegistry";
+import { useVaultState } from "../../host/vault/vaultStore";
 import i18n from "../../i18n";
 import "./aiChatPlugin.css";
 
 const AI_CHAT_PANEL_ID = "ai-chat";
+const AI_CHAT_PLUGIN_ID = "ai-chat";
 
 interface QuickPromptDefinition {
     id: string;
@@ -1368,8 +1370,35 @@ function AiChatSettingsSection(): ReactNode {
 }
 
 /**
+ * @function registerAiChatSettingsSection
+ * @description 注册 AI 设置选栏。
+ * @returns 取消注册函数。
+ */
+function registerAiChatSettingsSection(): () => void {
+    const unregisterSection = registerSettingsSection({
+        id: AI_CHAT_PANEL_ID,
+        title: "settings.aiSection",
+        order: 45,
+    });
+
+    const unregisterItem = registerSettingsItem({
+        id: "ai-chat-settings-panel",
+        sectionId: AI_CHAT_PANEL_ID,
+        order: 10,
+        kind: "custom",
+        title: "settings.aiSection",
+        render: () => <AiChatSettingsSection />,
+    });
+
+    return () => {
+        unregisterItem();
+        unregisterSection();
+    };
+}
+
+/**
  * @function activatePlugin
- * @description 注册 AI 聊天 panel、activity 图标与设置选栏。
+ * @description 注册 AI 聊天 panel、activity 图标，以及 AI chat 插件拥有的 settings store。
  * @returns 插件清理函数。
  */
 export function activatePlugin(): () => void {
@@ -1392,17 +1421,122 @@ export function activatePlugin(): () => void {
         render: () => <ChatPanel />,
     });
 
-    const unregisterSettings = registerSettingsSection({
-        id: AI_CHAT_PANEL_ID,
-        title: "settings.aiSection",
-        order: 45,
-        render: () => <AiChatSettingsSection />,
+    const unregisterAiChatSettingsStore = registerPluginOwnedStore(AI_CHAT_PLUGIN_ID, {
+        storeId: "settings",
+        title: "AI Chat Settings Store",
+        description: "Vault-scoped AI chat settings and provider configuration state.",
+        scope: "plugin-private",
+        tags: ["ai-chat", "settings", "llm"],
+        schema: {
+            summary: "Govern vault-scoped AI chat settings hydration, save, and reset behavior for the plugin.",
+            state: {
+                fields: [
+                    {
+                        name: "vaultPath",
+                        description: "The vault path whose AI settings are currently loaded.",
+                        valueType: "string",
+                        initialValue: "null",
+                    },
+                    {
+                        name: "settings",
+                        description: "The currently loaded AI chat settings snapshot.",
+                        valueType: "object",
+                        initialValue: "null",
+                        persisted: true,
+                    },
+                    {
+                        name: "isLoading",
+                        description: "Settings load or save request is in flight.",
+                        valueType: "boolean",
+                        initialValue: "false",
+                        allowedValues: ["true", "false"],
+                    },
+                    {
+                        name: "error",
+                        description: "Latest AI settings load or save error message.",
+                        valueType: "string",
+                        initialValue: "null",
+                    },
+                ],
+                invariants: [
+                    "settings belongs to vaultPath when vaultPath is non-null",
+                    "isLoading=false after every resolved or rejected settings request",
+                ],
+                actions: [
+                    {
+                        id: "ensure-loaded",
+                        description: "Load AI settings for the active vault and cache the snapshot.",
+                        updates: ["vaultPath", "settings", "isLoading", "error"],
+                        sideEffects: ["invoke ai settings read API"],
+                    },
+                    {
+                        id: "save-settings",
+                        description: "Persist AI settings for the active vault and refresh the cached snapshot.",
+                        updates: ["vaultPath", "settings", "isLoading", "error"],
+                        sideEffects: ["invoke ai settings save API"],
+                    },
+                    {
+                        id: "reset-settings",
+                        description: "Clear cached AI settings when vault context changes or plugin resets.",
+                        updates: ["vaultPath", "settings", "isLoading", "error"],
+                    },
+                ],
+            },
+            flow: {
+                kind: "state-machine",
+                description: "AI chat settings move through idle, loading, ready, and error snapshots around async persistence.",
+                initialState: "idle",
+                states: [
+                    { id: "idle", description: "No vault settings snapshot is currently loaded." },
+                    { id: "loading", description: "AI settings are being loaded or saved." },
+                    { id: "ready", description: "AI settings snapshot is available for the active vault." },
+                    { id: "error", description: "Last async settings request failed and error is retained." },
+                ],
+                transitions: [
+                    {
+                        event: "load-or-save-request",
+                        from: ["idle", "ready", "error"],
+                        to: "loading",
+                        description: "A load or save request enters the async loading phase.",
+                        sideEffects: ["invoke ai chat settings API"],
+                    },
+                    {
+                        event: "request-success",
+                        from: ["loading"],
+                        to: "ready",
+                        description: "Successful load or save produces a ready settings snapshot.",
+                    },
+                    {
+                        event: "request-failure",
+                        from: ["loading"],
+                        to: "error",
+                        description: "Failed load or save records an error snapshot.",
+                    },
+                    {
+                        event: "reset-context",
+                        from: ["ready", "error"],
+                        to: "idle",
+                        description: "Vault switch or plugin reset clears cached settings.",
+                    },
+                ],
+                failureModes: [
+                    "async API failure leaves the previous settings snapshot or null plus error",
+                    "vault switch must reset cached settings before the next load completes",
+                ],
+            },
+        },
+        getSnapshot: () => getAiChatSettingsSnapshot(),
+        subscribe: (listener) => subscribeAiChatSettingsSnapshot(listener),
+        contributions: [{
+            kind: "settings",
+            activate: () => registerAiChatSettingsSection(),
+        }],
     });
 
     console.info("[aiChatPlugin] registered ai chat plugin");
 
     return () => {
-        unregisterSettings();
+        unregisterAiChatSettingsStore();
         unregisterPanel();
         unregisterActivity();
         console.info("[aiChatPlugin] unregistered ai chat plugin");

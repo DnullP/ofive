@@ -19,7 +19,7 @@
  */
 
 import type { EditorNativeCommandId } from "../../../host/commands/commandSystem";
-import type { EditorDisplayMode } from "../../../host/store/editorDisplayModeStore";
+import type { EditorDisplayMode } from "../../../host/editor/editorDisplayModeStore";
 
 const READ_MODE_ALLOWED_COMMANDS = new Set<EditorNativeCommandId>([
     "editor.find",

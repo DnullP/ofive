@@ -180,6 +180,25 @@ export function useThemeState(): ThemeState {
 }
 
 /**
+ * @function subscribeThemeState
+ * @description 对外暴露主题 store 的订阅接口，供治理层注册使用。
+ * @param listener 监听函数。
+ * @returns 取消订阅函数。
+ */
+export function subscribeThemeState(listener: () => void): () => void {
+    return themeStore.subscribe(listener);
+}
+
+/**
+ * @function getThemeStateSnapshot
+ * @description 对外暴露主题 store 当前快照，供治理层注册使用。
+ * @returns 当前主题状态。
+ */
+export function getThemeStateSnapshot(): ThemeState {
+    return themeStore.getSnapshot();
+}
+
+/**
  * @function updateThemeMode
  * @description 更新主题模式并同步到文档样式与本地存储。
  * @param themeMode 目标主题模式。

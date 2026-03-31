@@ -1,12 +1,12 @@
 /**
- * @module host/store/editorContextStore.test
+ * @module host/editor/editorContextStore.test
  * @description editorContextStore 回归测试，覆盖“focus-only 事件不应清空内容”的边界。
  * @dependencies
  *  - bun:test
  *  - ./editorContextStore
  *
  * @example
- *   bun test src/host/store/editorContextStore.test.ts
+ *   bun test src/host/editor/editorContextStore.test.ts
  */
 
 import { describe, expect, it } from "bun:test";

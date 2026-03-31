@@ -3,15 +3,15 @@
  * @description 风格设置注册：提供全局主题切换。
  * @dependencies
  *  - react
- *  - ../../store/themeStore
+ *  - ../../theme/themeStore
  *  - ../settingsRegistry
  */
 
 import { useMemo, type ChangeEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { updateFeatureSetting, useConfigState } from "../../store/configStore";
-import { updateThemeMode, useThemeState, type ThemeMode } from "../../store/themeStore";
-import { registerSettingsSection } from "../settingsRegistry";
+import { updateFeatureSetting, useConfigState } from "../../config/configStore";
+import { updateThemeMode, type ThemeMode, useThemeState } from "../../theme/themeStore";
+import { registerSettingsItems, registerSettingsSection } from "../settingsRegistry";
 
 const THEME_MODE_OPTIONS: Array<{ value: ThemeMode; labelKey: string; descKey: string }> = [
     {
@@ -110,9 +110,8 @@ function GlassSettingNumberRow(props: {
     );
 }
 
-function ThemeSettingsSection(): ReactNode {
+function ThemeSettingsAdvancedItem(): ReactNode {
     const { t } = useTranslation();
-    const themeState = useThemeState();
     const configState = useConfigState();
     const { featureSettings } = configState;
     const isWindowsRuntime = useMemo(() => {
@@ -124,49 +123,7 @@ function ThemeSettingsSection(): ReactNode {
     }, []);
 
     return (
-        <div className="settings-item-group">
-            <div className="settings-compact-row-column">
-                <div className="settings-compact-info">
-                    <span className="settings-compact-title">{t("settings.themeTitle")}</span>
-                    <span className="settings-compact-desc">{t("settings.themeDesc")}</span>
-                </div>
-
-                <div className="settings-theme-mode-row">
-                    {THEME_MODE_OPTIONS.map((option) => {
-                        const isActive = themeState.themeMode === option.value;
-
-                        return (
-                            <button
-                                key={option.value}
-                                type="button"
-                                className={`settings-theme-mode-button ${isActive ? "active" : ""}`}
-                                onClick={() => {
-                                    updateThemeMode(option.value);
-                                }}
-                            >
-                                <span className="settings-theme-mode-button-title">{t(option.labelKey)}</span>
-                                <span className="settings-theme-mode-button-desc">{t(option.descKey)}</span>
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-
-            <label className="settings-compact-row" htmlFor="glass-effect-switch">
-                <div className="settings-compact-info">
-                    <span className="settings-compact-title">{t("settings.enableGlassEffect")}</span>
-                    <span className="settings-compact-desc">{t("settings.enableGlassEffectDesc")}</span>
-                </div>
-                <input
-                    id="glass-effect-switch"
-                    type="checkbox"
-                    checked={featureSettings.glassEffectEnabled}
-                    onChange={(event) => {
-                        void updateFeatureSetting("glassEffectEnabled", event.target.checked);
-                    }}
-                />
-            </label>
-
+        <>
             {featureSettings.glassEffectEnabled ? (
                 <>
                     <GlassSettingNumberRow
@@ -405,17 +362,60 @@ function ThemeSettingsSection(): ReactNode {
             ) : null}
 
             {configState.error ? <div className="settings-tab-error">{configState.error}</div> : null}
-        </div>
+        </>
     );
 }
 
-export function registerThemeSettingsSection(): void {
-    registerSettingsSection({
+export function registerThemeSettingsSection(): () => void {
+    const unregisterSection = registerSettingsSection({
         id: "theme-style",
         title: "settings.themeSection",
         order: 20,
         description: "settings.themeSectionDesc",
         searchTerms: ["theme", "appearance", "glass", "acrylic", "dark", "light", "kraft", "主题", "风格", "毛玻璃", "透明"],
-        render: () => <ThemeSettingsSection />,
     });
+
+    const unregisterItems = registerSettingsItems([
+        {
+            id: "theme-mode",
+            sectionId: "theme-style",
+            order: 10,
+            kind: "select",
+            title: "settings.themeTitle",
+            description: "settings.themeDesc",
+            searchTerms: ["theme", "dark", "light", "kraft", "主题"],
+            presentation: "buttons",
+            useValue: () => useThemeState().themeMode,
+            updateValue: (nextValue) => updateThemeMode(nextValue as ThemeMode),
+            options: THEME_MODE_OPTIONS.map((option) => ({
+                value: option.value,
+                label: option.labelKey,
+                description: option.descKey,
+            })),
+        },
+        {
+            id: "glass-effect-enabled",
+            sectionId: "theme-style",
+            order: 20,
+            kind: "toggle",
+            title: "settings.enableGlassEffect",
+            description: "settings.enableGlassEffectDesc",
+            searchTerms: ["glass", "acrylic", "毛玻璃", "透明"],
+            useValue: () => useConfigState().featureSettings.glassEffectEnabled,
+            updateValue: (nextValue) => updateFeatureSetting("glassEffectEnabled", nextValue),
+        },
+        {
+            id: "glass-advanced-controls",
+            sectionId: "theme-style",
+            order: 30,
+            kind: "custom",
+            title: "settings.themeSection",
+            render: () => <ThemeSettingsAdvancedItem />,
+        },
+    ]);
+
+    return () => {
+        unregisterItems();
+        unregisterSection();
+    };
 }

@@ -28,4 +28,9 @@ describe("readModeRenderGuard", () => {
         const features = detectUsedEnhancedRenderFeatures("```md\n==no==\n#tag\n$math$\n![[image.png]]\n```\n\n$$\na+b\n$$\n");
         expect(features).toEqual(["latex-block"]);
     });
+
+    test("should detect single-line block latex", () => {
+        const features = detectUsedEnhancedRenderFeatures("$$a+b$$\n");
+        expect(features).toEqual(["latex-block"]);
+    });
 });

@@ -3,12 +3,12 @@
  * @description 系统快捷键子系统：统一托管应用内“类系统”快捷键，并提供受控退出能力。
  * @dependencies
  *  - ./commandSystem
- *  - ../store/shortcutStore
+ *  - ./shortcutStore
  */
 
 import { getCommandBindingPolicy, type CommandId } from "./commandSystem";
 import { SYSTEM_RESERVED_BINDINGS, allowsSystemReservedBinding } from "./shortcutPolicies";
-import { matchShortcut } from "../store/shortcutStore";
+import { matchShortcut } from "./shortcutStore";
 
 /**
  * @interface SystemShortcutPolicy

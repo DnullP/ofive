@@ -46,12 +46,12 @@ import {
     getFocusedArticleSnapshot,
     reportArticleFocus,
     resetEditorContext,
-} from "../store/editorContextStore";
+} from "../editor/editorContextStore";
 import {
     clearActiveEditor,
     getActiveEditorSnapshot,
     reportActiveEditor,
-} from "../store/activeEditorStore";
+} from "../editor/activeEditorStore";
 import {
     moveVaultDirectoryToDirectory,
     moveVaultMarkdownFileToDirectory,
@@ -62,7 +62,7 @@ import {
     emitEditorCommandRequestedEvent,
     subscribeVaultFsBusEvent,
 } from "../events/appEventBus";
-import { useVaultState } from "../store/vaultStore";
+import { useVaultState } from "../vault/vaultStore";
 import {
     executeCommand,
     getCommandDefinitions,
@@ -82,7 +82,7 @@ import {
 import {
     ensureShortcutBindingsLoaded,
     useShortcutState,
-} from "../store/shortcutStore";
+} from "../commands/shortcutStore";
 import {
     requestApplicationQuit,
 } from "../commands/systemShortcutSubsystem";
@@ -97,8 +97,8 @@ import {
     useActivityBarConfig,
     ensureActivityBarConfigLoaded,
     updateActivityBarConfig,
-} from "../store/activityBarStore";
-import { useConfigState } from "../store/configStore";
+} from "./activityBarStore";
+import { useConfigState } from "../config/configStore";
 import { showNativeContextMenu } from "./nativeContextMenu";
 import {
     hasWorkspaceFileDragPayloadFiles,

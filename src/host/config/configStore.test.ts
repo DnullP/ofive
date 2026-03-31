@@ -1,15 +1,17 @@
 /**
- * @module host/store/configStore.test
+ * @module host/config/configStore.test
  * @description 配置 store 单元测试，覆盖空仓库回落默认配置与首次仓库配置归一化场景。
  * @dependencies
  *  - bun:test
  *  - ./configStore
  *
  * @example
- *   bun test src/host/store/configStore.test.ts
+ *   bun test src/host/config/configStore.test.ts
  */
 
 import { beforeEach, describe, expect, it, mock } from "bun:test";
+
+const actualAppEventBus = await import("../events/appEventBus");
 
 interface MockVaultConfig {
     schemaVersion: number;
@@ -34,6 +36,7 @@ mock.module("../../api/vaultApi", () => ({
 }));
 
 mock.module("../events/appEventBus", () => ({
+    ...actualAppEventBus,
     subscribeVaultConfigBusEvent: () => {
         return () => {
             /* noop */

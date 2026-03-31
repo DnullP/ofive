@@ -27,8 +27,8 @@ import {
     useGraphSettingsState,
     useGraphSettingsSync,
 } from "../store/graphSettingsStore";
-import { useThemeState } from "../../../host/store/themeStore";
-import { useVaultState } from "../../../host/store/vaultStore";
+import { useThemeState } from "../../../host/theme/themeStore";
+import { useVaultState } from "../../../host/vault/vaultStore";
 import { openFileInDockview } from "../../../host/layout/openFileService";
 import "./KnowledgeGraphTab.css";
 

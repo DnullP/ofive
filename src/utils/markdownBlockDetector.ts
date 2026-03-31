@@ -10,7 +10,7 @@
  *   检测的块级结构（按优先级）：
  *   1. frontmatter — 文档开头的 `---` YAML 块
  *   2. code-fence  — ``` 或 ~~~ 围栏代码块
- *   3. latex-block — `$$` 行级 LaTeX 公式块
+ *   3. latex-block — `$$...$$` 单行或 `$$` 包裹的多行 LaTeX 公式块
  *
  *   用法：
  *   ```ts
@@ -65,6 +65,9 @@ const FENCE_OPEN_RE = /^(`{3,}|~{3,})\s*(\S*)\s*$/;
 
 /** 匹配 frontmatter 分隔符 --- */
 const FRONTMATTER_DELIMITER_RE = /^---\s*$/;
+
+/** 匹配单行 LaTeX 块：整行仅包含 `$$...$$`（允许前后空白）。 */
+const LATEX_BLOCK_SINGLE_LINE_RE = /^\s*\$\$(.+?)\$\$\s*$/;
 
 /** 匹配 LaTeX 块分隔符 $$ */
 const LATEX_BLOCK_DELIMITER_RE = /^\$\$\s*$/;
@@ -128,6 +131,17 @@ export function detectExcludedLineRanges(text: string): ExcludedLineRange[] {
                 /* 未闭合围栏 — 不视为代码块 */
                 i += 1;
             }
+            continue;
+        }
+
+        /* 尝试匹配单行 LaTeX 块 */
+        if (LATEX_BLOCK_SINGLE_LINE_RE.test(line)) {
+            ranges.push({
+                fromLine: lineNumber,
+                toLine: lineNumber,
+                type: "latex-block",
+            });
+            i += 1;
             continue;
         }
 

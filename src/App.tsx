@@ -7,11 +7,11 @@ import {
   type TabInstanceDefinition,
 } from "./host/layout";
 import { useBackendEventBridge } from "./host/events/appEventBus";
-import { useVaultTreeSync } from "./host/store/vaultStore";
-import { useConfigSync } from "./host/store/configStore";
-import { useThemeSync } from "./host/store/themeStore";
-import { useAutoSaveLifecycle } from "./host/store/autoSaveService";
-import { useVaultState } from "./host/store/vaultStore";
+import { useVaultTreeSync } from "./host/vault/vaultStore";
+import { useConfigSync } from "./host/config/configStore";
+import { useThemeSync } from "./host/theme/themeStore";
+import { useAutoSaveLifecycle } from "./host/editor/autoSaveService";
+import { useVaultState } from "./host/vault/vaultStore";
 import { useWindowDragGestureSupport } from "./utils/windowDragGesture";
 import { ensureBuiltinComponentsRegistered } from "./host/registry/registerBuiltinComponents";
 import { useWindowEffectsSync } from "./host/window/useWindowEffectsSync";

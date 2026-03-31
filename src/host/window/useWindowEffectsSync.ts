@@ -12,8 +12,8 @@
  *   - react
  *   - ../../api/windowApi
  *   - ../layout/glassRuntimeStyle
- *   - ../store/configStore
- *   - ../store/themeStore
+ *   - ../config/configStore
+ *   - ../theme/themeStore
  *
  * @example
  *   useWindowEffectsSync();
@@ -35,11 +35,11 @@ import { buildGlassRuntimeStyle } from "../layout/glassRuntimeStyle";
 import {
     useConfigState,
     type FeatureSettings,
-} from "../store/configStore";
+} from "../config/configStore";
 import {
     useThemeState,
     type ThemeMode,
-} from "../store/themeStore";
+} from "../theme/themeStore";
 
 /**
  * @interface WindowRuntimeInfo

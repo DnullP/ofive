@@ -6,7 +6,7 @@
  * @dependencies
  *   - ../../api/vaultApi
  *   - ../../host/events/appEventBus
- *   - ../../host/store/editorContextStore
+ *   - ../../host/editor/editorContextStore
  *
  * @example
  *   import { activatePlugin } from "./vaultFsSyncPlugin";
@@ -30,7 +30,7 @@ import {
 import {
     getFocusedArticleSnapshot,
     reportArticleContentByPath,
-} from "../../host/store/editorContextStore";
+} from "../../host/editor/editorContextStore";
 
 /**
  * @interface VaultFsSyncPluginDependencies

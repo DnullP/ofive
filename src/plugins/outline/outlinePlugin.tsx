@@ -15,7 +15,7 @@
  *   - lucide-react (Compass 图标)
  *   - ../../host/registry/activityRegistry
  *   - ../../host/registry/panelRegistry
- *   - ../../host/store/activeEditorStore
+ *   - ../../host/editor/activeEditorStore
  *   - ../../host/events/appEventBus
  *   - ../../api/vaultApi
  *   - i18next
@@ -29,7 +29,7 @@ import { Compass, FileText } from "lucide-react";
 import { registerCommand } from "../../host/commands/commandSystem";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerPanel } from "../../host/registry/panelRegistry";
-import { useActiveEditor } from "../../host/store/activeEditorStore";
+import { useActiveEditor } from "../../host/editor/activeEditorStore";
 import { getVaultMarkdownOutline, type OutlineHeading } from "../../api/vaultApi";
 import {
     emitEditorRevealRequestedEvent,

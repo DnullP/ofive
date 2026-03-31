@@ -1,12 +1,12 @@
 /**
- * @module host/store/autoSaveService.test
+ * @module host/editor/autoSaveService.test
  * @description 自动保存服务单元测试，覆盖防抖调度、flush、手动保存同步、配置变更等场景。
  * @dependencies
  *  - bun:test
  *  - ./autoSaveService
  *
  * @example
- *   bun test src/host/store/autoSaveService.test.ts
+ *   bun test src/host/editor/autoSaveService.test.ts
  */
 
 import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";

@@ -1,11 +1,11 @@
 /**
- * @module host/store/editorContextStore
+ * @module host/editor/editorContextStore
  * @description 前端全局编辑上下文状态管理：用于跨组件共享“当前聚焦文章”和文章内容。
  * @dependencies
  *  - react (useSyncExternalStore)
  *
  * @example
- *   import { reportArticleFocus, reportArticleContent, useFocusedArticle } from "../host/store/editorContextStore";
+ *   import { reportArticleFocus, reportArticleContent, useFocusedArticle } from "../host/editor/editorContextStore";
  *
  *   reportArticleFocus({ articleId: "file:1", path: "test-resources/notes/guide.md", content: "# Guide" });
  *   reportArticleContent({ articleId: "file:1", content: "# Guide\n\nupdated" });

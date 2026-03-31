@@ -1,5 +1,5 @@
 /**
- * @module host/store/activityBarStore.test
+ * @module host/layout/activityBarStore.test
  * @description 活动栏配置纯函数测试。
  *
  * @dependencies
@@ -7,7 +7,7 @@
  *   - ./activityBarStore
  *
  * @example
- *   bun test src/host/store/activityBarStore.test.ts
+ *   bun test src/host/layout/activityBarStore.test.ts
  */
 
 import { describe, expect, it } from "bun:test";

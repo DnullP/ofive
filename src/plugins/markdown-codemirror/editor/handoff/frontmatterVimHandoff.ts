@@ -1,5 +1,5 @@
 /**
- * @module plugins/markdown-codemirror/editor/frontmatterVimHandoff
+ * @module plugins/markdown-codemirror/editor/handoff/frontmatterVimHandoff
  * @description frontmatter 与正文编辑器之间的 Vim handoff 纯逻辑。
  * @dependencies 无
  *

@@ -15,7 +15,6 @@ import type { IDockviewPanelProps } from "dockview";
 import { EditorView } from "codemirror";
 import { Compartment, EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
-import { basicSetup } from "codemirror";
 import { indentLess, indentMore, indentWithTab, redo, toggleComment, undo } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
 import { keymap } from "@codemirror/view";
@@ -27,7 +26,7 @@ import {
     reportArticleContent,
     reportArticleFocus,
     useArticleById,
-} from "../../../host/store/editorContextStore";
+} from "../../../host/editor/editorContextStore";
 import {
     executeCommand,
     type CommandId,
@@ -36,10 +35,10 @@ import {
 import {
     notifyTabCloseShortcutTriggered,
 } from "../../../host/commands/shortcutEvents";
-import { useShortcutState } from "../../../host/store/shortcutStore";
+import { useShortcutState } from "../../../host/commands/shortcutStore";
 import { dispatchShortcut } from "../../../host/commands/shortcutDispatcher";
 import { createConditionContext } from "../../../host/conditions/conditionEvaluator";
-import { useVaultState } from "../../../host/store/vaultStore";
+import { useVaultState } from "../../../host/vault/vaultStore";
 import {
     createVaultBinaryFile,
     renameVaultMarkdownFile,
@@ -47,16 +46,17 @@ import {
     segmentChineseText,
     type ChineseSegmentToken,
 } from "../../../api/vaultApi";
-import { useConfigState, DEFAULT_EDITOR_FONT_FAMILY } from "../../../host/store/configStore";
+import { useConfigState, DEFAULT_EDITOR_FONT_FAMILY } from "../../../host/config/configStore";
 import {
     subscribeEditorCommandRequestedEvent,
     subscribeEditorRevealRequestedEvent,
 } from "../../../host/events/appEventBus";
-import { reportActiveEditor, useActiveEditor } from "../../../host/store/activeEditorStore";
+import { reportActiveEditor, useActiveEditor } from "../../../host/editor/activeEditorStore";
 import i18n from "../../../i18n";
 import { createRegisteredLineSyntaxRenderExtension } from "./syntaxRenderRegistry";
 import { ensureBuiltinSyntaxRenderersRegistered } from "./registerBuiltinSyntaxRenderers";
 import { ensureBuiltinEditPluginsRegistered } from "./registerBuiltinEditPlugins";
+import { ensureBuiltinVimHandoffsRegistered } from "./handoff/registerBuiltinVimHandoffs";
 import { getRegisteredEditPluginExtensions } from "./editPluginRegistry";
 import { createWikiLinkNavigationExtension } from "./syntaxPlugins/wikiLinkSyntaxRenderer";
 import { createImageEmbedSyntaxExtension } from "./syntaxPlugins/imageEmbedSyntaxExtension";
@@ -67,7 +67,8 @@ import { createTaskCheckboxToggleExtension } from "./syntaxPlugins/listSyntaxRen
 import { createCodeMirrorThemeExtension } from "./codemirrorTheme";
 import { collectManagedEditorShortcutCandidates } from "./editorShortcutPolicy";
 import { attachPasteImageHandler } from "./editorPasteImageHandler";
-import { createRelativeLineNumbersExtension } from "./relativeLineNumbersExtension";
+import { editorBaseSetup } from "./editorBaseSetup";
+import { buildLineNumbersExtension } from "./lineNumbersModeExtension";
 import {
     toggleBold,
     toggleItalic,
@@ -96,7 +97,7 @@ import {
     updateEditorDisplayMode,
     useEditorDisplayModeState,
     type EditorDisplayMode,
-} from "../../../host/store/editorDisplayModeStore";
+} from "../../../host/editor/editorDisplayModeStore";
 import { evaluateReadModeRenderGuard } from "./readModeRenderGuard";
 import { describeRenderFeature } from "./renderParityContract";
 import {
@@ -104,7 +105,7 @@ import {
     unregisterVimTokenProvider,
     setupVimEnhancedMotions,
 } from "./vimChineseMotionExtension";
-import { flushAutoSaveByPath } from "../../../host/store/autoSaveService";
+import { flushAutoSaveByPath } from "../../../host/editor/autoSaveService";
 import { openFileInDockview } from "../../../host/layout/openFileService";
 import {
     flushFocusedMarkdownTableEditor,
@@ -115,7 +116,10 @@ import {
     resolveRenamedMarkdownPath,
 } from "./noteTitleUtils";
 import { resolveEditorBodyAnchor, resolveEditorBodySelectionRange } from "./editorBodyAnchor";
-import { shouldEnterFrontmatterFromBody } from "./frontmatterVimHandoff";
+import {
+    resolveRegisteredVimHandoff,
+    type VimHandoffResult,
+} from "./handoff/vimHandoffRegistry";
 import {
     shouldDeferBlurCommitAfterComposition,
     shouldSubmitPlainEnter,
@@ -123,6 +127,7 @@ import {
 
 ensureBuiltinSyntaxRenderersRegistered();
 ensureBuiltinEditPluginsRegistered();
+ensureBuiltinVimHandoffsRegistered();
 
 // 初始化 Vim 增强运动（全局仅一次）
 setupVimEnhancedMotions();
@@ -161,6 +166,36 @@ function exitVimInsertMode(view: EditorView): void {
 
     Vim.exitInsertMode(cm as never);
 }
+
+/**
+ * @function applyResolvedVimHandoff
+ * @description 执行 Vim handoff 解析结果。
+ *   所有 handoff 结果的副作用统一收敛在宿主层，避免 handler 直接操作 EditorView/DOM。
+ * @param view 编辑器视图。
+ * @param result handoff 解析结果。
+ * @param focusFrontmatterNavigationTarget 聚焦 frontmatter 导航层的回调。
+ * @returns `true` 表示已执行并消费事件。
+ */
+function applyResolvedVimHandoff(
+    view: EditorView,
+    result: VimHandoffResult,
+    focusFrontmatterNavigationTarget: (position: "first" | "last") => boolean,
+): boolean {
+    if (result.kind === "move-selection") {
+        const targetLine = view.state.doc.line(result.targetLineNumber);
+        view.dispatch({
+            selection: { anchor: targetLine.from },
+            scrollIntoView: true,
+        });
+        return true;
+    }
+
+    if (result.kind === "focus-frontmatter-navigation") {
+        return focusFrontmatterNavigationTarget(result.position);
+    }
+
+    return false;
+}
 const SHARED_EDITOR_FONT_FAMILY_CSS_VALUE = "var(--cm-editor-font-family)";
 const SHARED_EDITOR_FONT_SIZE_CSS_VALUE = "var(--cm-editor-font-size)";
 
@@ -176,34 +211,6 @@ function resolveEditorShortcutFocusedComponent(target: EventTarget | null): stri
     }
 
     return "tab:codemirror";
-}
-
-/**
- * @function buildLineNumbersExtension
- * @description 根据行号模式构建 CM6 行号相关扩展。
- *   - "off"：通过 theme 隐藏 gutter
- *   - "absolute"：空扩展（CM6 basicSetup 自带默认行号）
- *   - "relative"：替换为相对行号扩展
- *
- * @param mode 行号显示模式
- * @returns CM6 Extension 或 Extension[]
- */
-function buildLineNumbersExtension(
-    mode: "off" | "absolute" | "relative",
-): import("@codemirror/state").Extension {
-    switch (mode) {
-        case "off":
-            /* theme-guard-ignore-next-line: 这里是实例级 gutter 显隐控制，不属于静态主题定义。 */
-            return EditorView.theme({
-                ".cm-gutters": { display: "none !important" },
-            });
-        case "relative":
-            return createRelativeLineNumbersExtension();
-        case "absolute":
-        default:
-            /* basicSetup 已包含默认 lineNumbers()，无需额外配置 */
-            return [];
-    }
 }
 
 /**
@@ -344,6 +351,15 @@ interface SegmentationCacheItem {
 }
 
 /**
+ * @interface SegmentationPendingItem
+ * @description 行分词中的请求条目，用于去重并复用同一行的分词请求。
+ */
+interface SegmentationPendingItem {
+    text: string;
+    promise: Promise<ChineseSegmentToken[] | null>;
+}
+
+/**
  * @function buildDefaultContent
  * @description 构建编辑器默认内容。
  *   新建空文件应保持真正的空文档，因此这里不再注入示例正文或标题。
@@ -422,6 +438,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     const displayModeRef = useRef<EditorDisplayMode>("edit");
     const currentFilePathRef = useRef<string>(String(props.params.path ?? i18n.t("editor.untitledFile")));
     const segmentationCacheRef = useRef<Map<number, SegmentationCacheItem>>(new Map());
+    const segmentationPendingRef = useRef<Map<number, SegmentationPendingItem>>(new Map());
     const segmentationTimerRef = useRef<number | null>(null);
     const vimModeCompartmentRef = useRef<Compartment>(new Compartment());
     /** 编辑器字体族 Compartment：通过 EditorView.theme 动态控制 .cm-content 字体族 */
@@ -831,17 +848,38 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         executeEditorCommandRef.current = executeEditorCommand;
     }, [executeEditorCommand]);
 
-    const requestSegmentationForLine = (lineNumber: number, lineText: string): void => {
+    const readCachedLineTokens = (
+        lineNumber: number,
+        lineText: string,
+    ): ChineseSegmentToken[] | null => {
+        const cacheItem = segmentationCacheRef.current.get(lineNumber);
+        if (cacheItem && cacheItem.text === lineText) {
+            return cacheItem.tokens;
+        }
+
+        return null;
+    };
+
+    const requestSegmentationForLine = (
+        lineNumber: number,
+        lineText: string,
+    ): Promise<ChineseSegmentToken[] | null> => {
         if (!containsChineseCharacter(lineText)) {
-            return;
+            return Promise.resolve(null);
         }
 
-        const currentCache = segmentationCacheRef.current.get(lineNumber);
-        if (currentCache && currentCache.text === lineText) {
-            return;
+        const cachedTokens = readCachedLineTokens(lineNumber, lineText);
+        if (cachedTokens) {
+            return Promise.resolve(cachedTokens);
         }
 
-        void segmentChineseText(lineText)
+        const pendingItem = segmentationPendingRef.current.get(lineNumber);
+        if (pendingItem && pendingItem.text === lineText) {
+            return pendingItem.promise;
+        }
+
+        let requestPromise: Promise<ChineseSegmentToken[] | null>;
+        requestPromise = segmentChineseText(lineText)
             .then((tokens) => {
                 segmentationCacheRef.current.set(lineNumber, {
                     text: lineText,
@@ -852,6 +890,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                     lineNumber,
                     tokenCount: tokens.length,
                 });
+                return tokens;
             })
             .catch((error) => {
                 console.warn("[editor] segment line failed", {
@@ -859,7 +898,21 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                     lineNumber,
                     message: error instanceof Error ? error.message : String(error),
                 });
+                return null;
+            })
+            .finally(() => {
+                const latestPendingItem = segmentationPendingRef.current.get(lineNumber);
+                if (latestPendingItem?.promise === requestPromise) {
+                    segmentationPendingRef.current.delete(lineNumber);
+                }
             });
+
+        segmentationPendingRef.current.set(lineNumber, {
+            text: lineText,
+            promise: requestPromise,
+        });
+
+        return requestPromise;
     };
 
     const scheduleActiveLineSegmentation = (state: EditorState): void => {
@@ -874,12 +927,12 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     };
 
     const getLineTokens = (lineNumber: number, lineText: string): ChineseSegmentToken[] | null => {
-        const cacheItem = segmentationCacheRef.current.get(lineNumber);
-        if (cacheItem && cacheItem.text === lineText) {
-            return cacheItem.tokens;
+        const cachedTokens = readCachedLineTokens(lineNumber, lineText);
+        if (cachedTokens) {
+            return cachedTokens;
         }
 
-        requestSegmentationForLine(lineNumber, lineText);
+        void requestSegmentationForLine(lineNumber, lineText);
         return null;
     };
 
@@ -887,30 +940,70 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         lineNumber: number,
         lineText: string,
     ): Promise<ChineseSegmentToken[] | null> => {
-        const cacheItem = segmentationCacheRef.current.get(lineNumber);
-        if (cacheItem && cacheItem.text === lineText) {
-            return cacheItem.tokens;
+        const cachedTokens = readCachedLineTokens(lineNumber, lineText);
+        if (cachedTokens) {
+            return cachedTokens;
         }
 
         if (!containsChineseCharacter(lineText)) {
             return null;
         }
 
-        try {
-            const tokens = await segmentChineseText(lineText);
-            segmentationCacheRef.current.set(lineNumber, {
-                text: lineText,
-                tokens,
-            });
-            return tokens;
-        } catch (error) {
-            console.warn("[editor] segment line for cmd+backspace failed", {
-                articleId,
-                lineNumber,
-                message: error instanceof Error ? error.message : String(error),
-            });
+        return requestSegmentationForLine(lineNumber, lineText);
+    };
+
+    const resolveLineAtMouseEvent = (
+        view: EditorView,
+        event: MouseEvent,
+    ): { lineNumber: number; lineText: string; lineFrom: number; lineOffset: number } | null => {
+        const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+        if (pos === null) {
             return null;
         }
+
+        const line = view.state.doc.lineAt(pos);
+        return {
+            lineNumber: line.number,
+            lineText: line.text,
+            lineFrom: line.from,
+            lineOffset: pos - line.from,
+        };
+    };
+
+    const prefetchSegmentationAtMouseEvent = (view: EditorView, event: MouseEvent): void => {
+        const lineInfo = resolveLineAtMouseEvent(view, event);
+        if (!lineInfo) {
+            return;
+        }
+
+        void requestSegmentationForLine(lineInfo.lineNumber, lineInfo.lineText);
+    };
+
+    const trySelectWordAtMouseEvent = (view: EditorView, event: MouseEvent): boolean => {
+        const lineInfo = resolveLineAtMouseEvent(view, event);
+        if (!lineInfo) {
+            return false;
+        }
+
+        const tokens = readCachedLineTokens(lineInfo.lineNumber, lineInfo.lineText);
+        const range = getWordObjectRange(
+            lineInfo.lineText,
+            lineInfo.lineOffset,
+            tokens,
+            false,
+        );
+        if (!range) {
+            return false;
+        }
+
+        view.dispatch({
+            selection: {
+                anchor: lineInfo.lineFrom + range.start,
+                head: lineInfo.lineFrom + range.end,
+            },
+            scrollIntoView: true,
+        });
+        return true;
     };
 
     const executeSegmentedDeleteBackward = async (view: EditorView): Promise<void> => {
@@ -987,7 +1080,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
             doc: initialDoc,
             extensions: [
                 vimModeCompartmentRef.current.of(vimModeEnabled ? vim() : []),
-                basicSetup,
+                editorBaseSetup,
                 markdown(),
                 createCodeMirrorThemeExtension(),
                 /* 字体族 Compartment：通过 theme 扩展动态控制 .cm-content 字体族 */
@@ -1032,31 +1125,28 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                     props.containerApi,
                     () => currentFilePathRef.current,
                 ),
-                // 双击选择：对中文使用分词缓存/回退分字符策略，保证双击按中文词边界选中
+                // 双击选择：在第二次按下时抢先接管，避免先出现原生选区再被分词选区覆盖。
                 EditorView.domEventHandlers({
-                    dblclick(event, view) {
+                    mousedown(event, view) {
                         try {
-                            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-                            if (pos === null) return false;
+                            if (event.button !== 0) {
+                                return false;
+                            }
 
-                            const line = view.state.doc.lineAt(pos);
-                            const lineOffset = pos - line.from;
+                            prefetchSegmentationAtMouseEvent(view, event);
 
-                            const cacheItem = segmentationCacheRef.current.get(line.number);
-                            const tokens = cacheItem && cacheItem.text === line.text ? cacheItem.tokens : null;
+                            if (event.detail !== 2) {
+                                return false;
+                            }
 
-                            const range = getWordObjectRange(line.text, lineOffset, tokens, false);
-                            if (!range) return false;
+                            const handled = trySelectWordAtMouseEvent(view, event);
+                            if (!handled) {
+                                return false;
+                            }
 
-                            const from = line.from + range.start;
-                            const to = line.from + range.end;
-                            view.dispatch({
-                                selection: { anchor: from, head: to },
-                                scrollIntoView: true,
-                            });
                             event.preventDefault();
                             return true;
-                        } catch (e) {
+                        } catch (_error) {
                             // fallback to default behavior
                             return false;
                         }
@@ -1076,7 +1166,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                         });
                     }
 
-                    if ((update.docChanged || update.selectionSet) && vimModeEnabledRef.current) {
+                    if (update.docChanged || update.selectionSet) {
                         scheduleActiveLineSegmentation(update.state);
                     }
 
@@ -1190,16 +1280,15 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
             });
         }
 
-        if (vimModeEnabledRef.current) {
-            const activeLine = state.doc.lineAt(state.selection.main.head);
-            requestSegmentationForLine(activeLine.number, activeLine.text);
-        }
+        const activeLine = state.doc.lineAt(state.selection.main.head);
+        void requestSegmentationForLine(activeLine.number, activeLine.text);
 
         return () => {
             if (segmentationTimerRef.current !== null) {
                 window.clearTimeout(segmentationTimerRef.current);
                 segmentationTimerRef.current = null;
             }
+            segmentationPendingRef.current.clear();
             gutterResizeObserver?.disconnect();
             gutterMutationObserver?.disconnect();
             cleanupPasteHandler();
@@ -1235,16 +1324,25 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 const firstBodyLineNumber = view.state.doc.lineAt(bodyAnchor).number;
                 const currentLineNumber = view.state.doc.lineAt(selection.head).number;
 
-                if (shouldEnterFrontmatterFromBody({
+                const handoffResult = resolveRegisteredVimHandoff({
+                    surface: "editor-body",
                     key: event.key,
-                    hasFrontmatter: bodyAnchor > 0,
+                    markdown: view.state.doc.toString(),
                     currentLineNumber,
+                    selectionHead: selection.head,
+                    hasFrontmatter: bodyAnchor > 0,
                     firstBodyLineNumber,
                     isVimEnabled: vimModeEnabledRef.current,
                     isVimNormalMode: isVimNormalMode(view),
-                })) {
-                    const focused = focusFrontmatterVimNavigationTarget("last");
-                    if (focused) {
+                });
+
+                if (handoffResult) {
+                    const handled = applyResolvedVimHandoff(
+                        view,
+                        handoffResult,
+                        focusFrontmatterVimNavigationTarget,
+                    );
+                    if (handled) {
                         event.preventDefault();
                         event.stopPropagation();
                         return;

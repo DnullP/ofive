@@ -10,13 +10,16 @@
  */
 
 import { describe, expect, it, mock } from "bun:test";
-import type { FeatureSettings } from "../store/configStore";
+import type { FeatureSettings } from "../config/configStore";
+
+const actualThemeStore = await import("../theme/themeStore");
 
 mock.module("../../api/windowApi", () => ({
     updateMainWindowAcrylicEffect: async () => undefined,
 }));
 
-mock.module("../store/themeStore", () => ({
+mock.module("../theme/themeStore", () => ({
+    ...actualThemeStore,
     useThemeState: () => ({
         themeMode: "kraft",
     }),

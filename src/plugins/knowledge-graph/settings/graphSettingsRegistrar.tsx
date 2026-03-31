@@ -21,8 +21,8 @@ import {
     useGraphSettingsState,
     useGraphSettingsSync,
 } from "../store/graphSettingsStore";
-import { useVaultState } from "../../../host/store/vaultStore";
-import { registerSettingsSection } from "../../../host/settings/settingsRegistry";
+import { useVaultState } from "../../../host/vault/vaultStore";
+import { registerSettingsItem, registerSettingsSection } from "../../../host/settings/settingsRegistry";
 
 /**
  * @function toNumberValue
@@ -138,12 +138,27 @@ function GraphSettingsSection(): ReactNode {
  * @description 注册图谱设置选栏。
  */
 export function registerGraphSettingsSection(): () => void {
-    return registerSettingsSection({
+    const unregisterSection = registerSettingsSection({
         id: "graph-component",
         title: "settings.graphSection",
         order: 40,
         description: "settings.graphSectionDesc",
         searchTerms: ["graph", "knowledge", "node", "physics", "图谱", "知识图谱", "节点", "布局"],
+    });
+
+    const unregisterItem = registerSettingsItem({
+        id: "knowledge-graph-settings-panel",
+        sectionId: "graph-component",
+        order: 10,
+        kind: "custom",
+        title: "settings.graphSection",
+        description: "settings.graphSectionDesc",
+        searchTerms: ["graph", "knowledge", "node", "physics", "图谱", "知识图谱", "节点", "布局"],
         render: () => <GraphSettingsSection />,
     });
+
+    return () => {
+        unregisterItem();
+        unregisterSection();
+    };
 }

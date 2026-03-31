@@ -1,5 +1,5 @@
 /**
- * @module host/store/activityBarStore
+ * @module host/layout/activityBarStore
  * @description 活动栏定制配置存储：管理活动栏图标排序、可见性与区域对齐。
  *   配置通过 VaultConfig.entries.activityBar 持久化到后端。
  *

@@ -5,7 +5,7 @@
  *  - bun:test
  *  - ./commandSystem
  *  - ../events/appEventBus
- *  - ../store/editorContextStore
+ *  - ../editor/editorContextStore
  *
  * @example
  *   bun test src/host/commands/commandSystem.rename.test.ts
@@ -50,7 +50,7 @@ const {
 const {
     reportArticleFocus,
     resetEditorContext,
-} = await import("../store/editorContextStore");
+} = await import("../editor/editorContextStore");
 
 describe("commandSystem file.renameFocused", () => {
     beforeEach(() => {

@@ -5,7 +5,7 @@
  *  - ./commandSystem
  *  - ./focusContext
  *  - ./systemShortcutSubsystem
- *  - ../store/shortcutStore
+ *  - ./shortcutStore
  *
  * @example
  *   const result = dispatchShortcut({
@@ -27,7 +27,7 @@ import {
     type ConditionContext,
 } from "../conditions/conditionEvaluator";
 import { resolveSystemShortcutCommand } from "./systemShortcutSubsystem";
-import { matchShortcut } from "../store/shortcutStore";
+import { matchShortcut } from "./shortcutStore";
 
 /**
  * @type ShortcutDispatchSource

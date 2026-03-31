@@ -382,6 +382,25 @@ export function useGraphSettingsState(): GraphSettingsState {
 }
 
 /**
+ * @function subscribeGraphSettingsState
+ * @description 对外暴露图谱设置 store 的订阅接口，供 store hub 治理使用。
+ * @param listener 监听函数。
+ * @returns 取消订阅函数。
+ */
+export function subscribeGraphSettingsState(listener: () => void): () => void {
+    return graphSettingsStore.subscribe(listener);
+}
+
+/**
+ * @function getGraphSettingsStateSnapshot
+ * @description 对外暴露图谱设置 store 当前快照，供 store hub 治理使用。
+ * @returns 图谱设置状态快照。
+ */
+export function getGraphSettingsStateSnapshot(): GraphSettingsState {
+    return graphSettingsStore.getSnapshot();
+}
+
+/**
  * @function ensureGraphSettingsLoadedForVault
  * @description 确保指定仓库的图谱设置已加载。
  * @param vaultPath 当前仓库路径。

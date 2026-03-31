@@ -10,7 +10,7 @@
  *   - react
  *   - ../../host/commands/commandSystem
  *   - ../../host/registry
- *   - ../../host/store/configStore
+ *   - ../../host/config/configStore
  *   - ./customActivityConfig
  *   - ./customActivityEvents
  *   - ./iconCatalog
@@ -27,7 +27,7 @@ import {
     registerOverlay,
     type ActivityDescriptor,
 } from "../../host/registry";
-import { getConfigSnapshot, subscribeConfigChanges } from "../../host/store/configStore";
+import { getConfigSnapshot, subscribeConfigChanges } from "../../host/config/configStore";
 import { CustomActivityModal } from "./CustomActivityModal";
 import { requestCustomActivityModalOpen } from "./customActivityEvents";
 import {

@@ -593,6 +593,25 @@ export function useShortcutState(): ShortcutState {
 }
 
 /**
+ * @function subscribeShortcutState
+ * @description 对外暴露快捷键 store 的订阅接口，供治理层注册使用。
+ * @param listener 监听函数。
+ * @returns 取消订阅函数。
+ */
+export function subscribeShortcutState(listener: () => void): () => void {
+    return shortcutStore.subscribe(listener);
+}
+
+/**
+ * @function getShortcutStateSnapshot
+ * @description 对外暴露快捷键 store 当前快照，供治理层注册使用。
+ * @returns 当前快捷键状态。
+ */
+export function getShortcutStateSnapshot(): ShortcutState {
+    return shortcutStore.getSnapshot();
+}
+
+/**
  * @function ensureShortcutBindingsLoaded
  * @description 对外能力：为当前仓库确保快捷键配置可用。
  * @param vaultPath 当前仓库路径。

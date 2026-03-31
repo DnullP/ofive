@@ -46,7 +46,7 @@ import {
     isPlainFrontmatterVimKey,
     resolveFrontmatterEnterAction,
     resolveFrontmatterNavigationMove,
-} from "../frontmatterVimHandoff";
+} from "../handoff/frontmatterVimHandoff";
 import {
     shouldDeferBlurCommitAfterComposition,
     shouldSubmitPlainEnter,

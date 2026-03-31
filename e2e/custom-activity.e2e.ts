@@ -31,7 +31,7 @@ async function waitForLayoutReady(page: Page): Promise<void> {
 async function deleteCustomActivity(page: Page, activityId: string): Promise<void> {
     await page.evaluate(async (targetActivityId) => {
         const configModule = await import("/src/plugins/custom-activity/customActivityConfig.ts");
-        const activityBarModule = await import("/src/host/store/activityBarStore.ts");
+        const activityBarModule = await import("/src/host/layout/activityBarStore.ts");
         const configStoreModule = await import("/src/host/store/configStore.ts");
         const targetRegistrationId = `custom-activity:${targetActivityId}`;
 

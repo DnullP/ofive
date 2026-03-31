@@ -101,7 +101,7 @@ mock.module("./systemShortcutSubsystem", () => ({
     },
 }));
 
-mock.module("../store/shortcutStore", () => ({
+mock.module("./shortcutStore", () => ({
     matchShortcut(event: KeyboardEvent, shortcut: string): boolean {
         return matchesShortcut(event, shortcut);
     },

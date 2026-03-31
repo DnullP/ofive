@@ -4,15 +4,14 @@
  * @dependencies
  *  - ./registrars/generalSettingsRegistrar
  *  - ./registrars/autoSaveSettingsRegistrar
- *  - ./registrars/shortcutSettingsRegistrar
- *  - ./registrars/themeSettingsRegistrar
+ *  - ../store/registerBuiltinManagedStores
  */
 
+import { ensureBuiltinManagedStoresRegistered } from "../store/registerBuiltinManagedStores";
+import { enableManagedStoreSettings } from "../store/storeRegistry";
 import { registerAutoSaveSettingsSection } from "./registrars/autoSaveSettingsRegistrar.tsx";
 import { registerGeneralSettingsSection } from "./registrars/generalSettingsRegistrar.tsx";
 import { registerLanguageSettingsSection } from "./registrars/languageSettingsRegistrar.tsx";
-import { registerShortcutSettingsSection } from "./registrars/shortcutSettingsRegistrar.tsx";
-import { registerThemeSettingsSection } from "./registrars/themeSettingsRegistrar.tsx";
 
 let registered = false;
 
@@ -25,10 +24,18 @@ export function ensureBuiltinSettingsRegistered(): void {
         return;
     }
 
+    ensureBuiltinManagedStoresRegistered();
     registerGeneralSettingsSection();
     registerLanguageSettingsSection();
-    registerThemeSettingsSection();
     registerAutoSaveSettingsSection();
-    registerShortcutSettingsSection();
+    enableManagedStoreSettings();
     registered = true;
+}
+
+/**
+ * @function __resetBuiltinSettingsRegistrationForTests
+ * @description 仅供测试使用：重置内建 settings 注册幂等标记。
+ */
+export function __resetBuiltinSettingsRegistrationForTests(): void {
+    registered = false;
 }

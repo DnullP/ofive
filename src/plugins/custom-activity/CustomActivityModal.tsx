@@ -29,7 +29,7 @@ import {
 import { useTranslation } from "react-i18next";
 import type { OverlayRenderContext } from "../../host/registry";
 import { modalPlainTextInputProps } from "../../host/layout/textInputBehaviors";
-import { getConfigSnapshot } from "../../host/store/configStore";
+import { getConfigSnapshot } from "../../host/config/configStore";
 import {
     appendCustomActivityToVaultConfig,
     createCustomActivityDefinition,

@@ -1,22 +1,21 @@
 /**
  * @module plugins/markdown-codemirror/settings/codeMirrorSettingsRegistrar
- * @description CodeMirror 设置注册：Vim 模式、字体大小、Tab 宽度、自动换行、行号与字体族。
+ * @description CodeMirror 设置注册：通过中心化 settings item registry 注册编辑器设置。
  * @dependencies
  *  - react
- *  - ../../../host/store/configStore
+ *  - ../../../host/config/configStore
  *  - ../../../host/settings/settingsRegistry
  */
 
-import type { ChangeEvent, ReactNode } from "react";
-import { useTranslation } from "react-i18next";
+import type { ReactNode } from "react";
 import {
     DEFAULT_EDITOR_FONT_FAMILY,
     FONT_FAMILY_PRESETS,
     updateFeatureSetting,
     updateVimModeEnabled,
     useConfigState,
-} from "../../../host/store/configStore";
-import { registerSettingsSection } from "../../../host/settings/settingsRegistry";
+} from "../../../host/config/configStore";
+import { registerSettingsItems, registerSettingsSection } from "../../../host/settings/settingsRegistry";
 
 /**
  * @function clampNumber
@@ -37,143 +36,13 @@ function clampNumber(raw: string, min: number, max: number, fallback: number): n
 }
 
 /**
- * @function CodeMirrorSettingsSection
- * @description CodeMirror 编辑器设置选栏内容。
+ * @function CodeMirrorSettingsErrorItem
+ * @description 渲染编辑器设置区块中的错误提示。
  * @returns React 节点。
  */
-function CodeMirrorSettingsSection(): ReactNode {
-    const { t } = useTranslation();
+function CodeMirrorSettingsErrorItem(): ReactNode {
     const configState = useConfigState();
-    const { featureSettings } = configState;
-
-    const onFontSizeChange = (event: ChangeEvent<HTMLInputElement>): void => {
-        const next = clampNumber(event.target.value, 10, 32, featureSettings.editorFontSize);
-        void updateFeatureSetting("editorFontSize", next);
-    };
-
-    const onTabSizeChange = (event: ChangeEvent<HTMLInputElement>): void => {
-        const next = clampNumber(event.target.value, 1, 8, featureSettings.editorTabSize);
-        void updateFeatureSetting("editorTabSize", next);
-    };
-
-    const onFontFamilyChange = (event: ChangeEvent<HTMLSelectElement>): void => {
-        const next = event.target.value;
-        void updateFeatureSetting(
-            "editorFontFamily",
-            next.length > 0 ? next : DEFAULT_EDITOR_FONT_FAMILY,
-        );
-    };
-
-    return (
-        <div className="settings-item-group">
-            <label className="settings-compact-row" htmlFor="vim-mode-switch">
-                <div className="settings-compact-info">
-                    <span className="settings-compact-title">{t("settings.vimMode")}</span>
-                    <span className="settings-compact-desc">{t("settings.vimModeDesc")}</span>
-                </div>
-                <input
-                    id="vim-mode-switch"
-                    type="checkbox"
-                    checked={featureSettings.vimModeEnabled}
-                    onChange={(event) => {
-                        void updateVimModeEnabled(event.target.checked);
-                    }}
-                />
-            </label>
-
-            <label className="settings-compact-row" htmlFor="line-wrapping-switch">
-                <div className="settings-compact-info">
-                    <span className="settings-compact-title">{t("settings.lineWrapping")}</span>
-                    <span className="settings-compact-desc">{t("settings.lineWrappingDesc")}</span>
-                </div>
-                <input
-                    id="line-wrapping-switch"
-                    type="checkbox"
-                    checked={featureSettings.editorLineWrapping}
-                    onChange={(event) => {
-                        void updateFeatureSetting("editorLineWrapping", event.target.checked);
-                    }}
-                />
-            </label>
-
-            <div className="settings-compact-row">
-                <div className="settings-compact-info">
-                    <span className="settings-compact-title">{t("settings.lineNumbers")}</span>
-                    <span className="settings-compact-desc">{t("settings.lineNumbersDesc")}</span>
-                </div>
-                <select
-                    className="settings-compact-select"
-                    value={featureSettings.editorLineNumbers}
-                    onChange={(event) => {
-                        void updateFeatureSetting(
-                            "editorLineNumbers",
-                            event.target.value as "off" | "absolute" | "relative",
-                        );
-                    }}
-                >
-                    <option value="off">{t("settings.lineNumbersOff")}</option>
-                    <option value="absolute">{t("settings.lineNumbersAbsolute")}</option>
-                    <option value="relative">{t("settings.lineNumbersRelative")}</option>
-                </select>
-            </div>
-
-            <div className="settings-compact-row">
-                <div className="settings-compact-info">
-                    <span className="settings-compact-title">{t("settings.fontFamily")}</span>
-                    <span className="settings-compact-desc">{t("settings.fontFamilyDesc")}</span>
-                </div>
-                <select
-                    className="settings-compact-select"
-                    value={
-                        FONT_FAMILY_PRESETS.some((preset) => preset.value === featureSettings.editorFontFamily)
-                            ? featureSettings.editorFontFamily
-                            : DEFAULT_EDITOR_FONT_FAMILY
-                    }
-                    onChange={onFontFamilyChange}
-                >
-                    {FONT_FAMILY_PRESETS.map((preset) => (
-                        <option key={preset.value} value={preset.value}>
-                            {t(preset.label)}
-                        </option>
-                    ))}
-                </select>
-            </div>
-
-            <div className="settings-compact-row">
-                <div className="settings-compact-info">
-                    <span className="settings-compact-title">{t("settings.fontSize")}</span>
-                    <span className="settings-compact-desc">{t("settings.fontSizeDesc")}</span>
-                </div>
-                <input
-                    className="settings-compact-number-input"
-                    type="number"
-                    min={10}
-                    max={32}
-                    step={1}
-                    value={featureSettings.editorFontSize}
-                    onChange={onFontSizeChange}
-                />
-            </div>
-
-            <div className="settings-compact-row">
-                <div className="settings-compact-info">
-                    <span className="settings-compact-title">{t("settings.tabSize")}</span>
-                    <span className="settings-compact-desc">{t("settings.tabSizeDesc")}</span>
-                </div>
-                <input
-                    className="settings-compact-number-input"
-                    type="number"
-                    min={1}
-                    max={8}
-                    step={1}
-                    value={featureSettings.editorTabSize}
-                    onChange={onTabSizeChange}
-                />
-            </div>
-
-            {configState.error ? <div className="settings-tab-error">{configState.error}</div> : null}
-        </div>
-    );
+    return configState.error ? <div className="settings-tab-error">{configState.error}</div> : null;
 }
 
 /**
@@ -182,12 +51,121 @@ function CodeMirrorSettingsSection(): ReactNode {
  * @returns 取消注册函数。
  */
 export function registerCodeMirrorSettingsSection(): () => void {
-    return registerSettingsSection({
+    const unregisterSection = registerSettingsSection({
         id: "codemirror-editor",
         title: "settings.editorSection",
         order: 20,
         description: "settings.editorSectionDesc",
         searchTerms: ["editor", "vim", "font", "line numbers", "wrap", "tab", "编辑器", "vim", "字体", "行号", "换行", "缩进"],
-        render: () => <CodeMirrorSettingsSection />,
     });
+
+    const unregisterItems = registerSettingsItems([
+        {
+            id: "vim-mode",
+            sectionId: "codemirror-editor",
+            order: 10,
+            kind: "toggle",
+            title: "settings.vimMode",
+            description: "settings.vimModeDesc",
+            searchTerms: ["vim", "modal editing"],
+            useValue: () => useConfigState().featureSettings.vimModeEnabled,
+            updateValue: (nextValue) => updateVimModeEnabled(nextValue),
+        },
+        {
+            id: "line-wrapping",
+            sectionId: "codemirror-editor",
+            order: 20,
+            kind: "toggle",
+            title: "settings.lineWrapping",
+            description: "settings.lineWrappingDesc",
+            searchTerms: ["wrap", "line wrapping", "自动换行"],
+            useValue: () => useConfigState().featureSettings.editorLineWrapping,
+            updateValue: (nextValue) => updateFeatureSetting("editorLineWrapping", nextValue),
+        },
+        {
+            id: "line-numbers",
+            sectionId: "codemirror-editor",
+            order: 30,
+            kind: "select",
+            title: "settings.lineNumbers",
+            description: "settings.lineNumbersDesc",
+            searchTerms: ["line numbers", "relative", "absolute", "行号"],
+            useValue: () => useConfigState().featureSettings.editorLineNumbers,
+            updateValue: (nextValue) => updateFeatureSetting(
+                "editorLineNumbers",
+                nextValue as "off" | "absolute" | "relative",
+            ),
+            options: [
+                { value: "off", label: "settings.lineNumbersOff" },
+                { value: "absolute", label: "settings.lineNumbersAbsolute" },
+                { value: "relative", label: "settings.lineNumbersRelative" },
+            ],
+        },
+        {
+            id: "font-family",
+            sectionId: "codemirror-editor",
+            order: 40,
+            kind: "select",
+            title: "settings.fontFamily",
+            description: "settings.fontFamilyDesc",
+            searchTerms: ["font", "family", "字体"],
+            useValue: () => {
+                const featureSettings = useConfigState().featureSettings;
+                return FONT_FAMILY_PRESETS.some((preset) => preset.value === featureSettings.editorFontFamily)
+                    ? featureSettings.editorFontFamily
+                    : DEFAULT_EDITOR_FONT_FAMILY;
+            },
+            updateValue: (nextValue) => updateFeatureSetting(
+                "editorFontFamily",
+                String(nextValue).length > 0 ? String(nextValue) : DEFAULT_EDITOR_FONT_FAMILY,
+            ),
+            options: FONT_FAMILY_PRESETS.map((preset) => ({
+                value: preset.value,
+                label: preset.label,
+            })),
+        },
+        {
+            id: "font-size",
+            sectionId: "codemirror-editor",
+            order: 50,
+            kind: "number",
+            title: "settings.fontSize",
+            description: "settings.fontSizeDesc",
+            searchTerms: ["font size", "字号", "字体大小"],
+            min: 10,
+            max: 32,
+            step: 1,
+            useValue: () => useConfigState().featureSettings.editorFontSize,
+            normalizeValue: (raw, currentValue) => clampNumber(raw, 10, 32, currentValue),
+            updateValue: (nextValue) => updateFeatureSetting("editorFontSize", nextValue),
+        },
+        {
+            id: "tab-size",
+            sectionId: "codemirror-editor",
+            order: 60,
+            kind: "number",
+            title: "settings.tabSize",
+            description: "settings.tabSizeDesc",
+            searchTerms: ["tab size", "indent", "缩进", "tab"],
+            min: 1,
+            max: 8,
+            step: 1,
+            useValue: () => useConfigState().featureSettings.editorTabSize,
+            normalizeValue: (raw, currentValue) => clampNumber(raw, 1, 8, currentValue),
+            updateValue: (nextValue) => updateFeatureSetting("editorTabSize", nextValue),
+        },
+        {
+            id: "config-error",
+            sectionId: "codemirror-editor",
+            order: 999,
+            kind: "custom",
+            title: "settings.editorSection",
+            render: () => <CodeMirrorSettingsErrorItem />,
+        },
+    ]);
+
+    return () => {
+        unregisterItems();
+        unregisterSection();
+    };
 }

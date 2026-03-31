@@ -11,7 +11,7 @@
  * @dependencies
  *   - react
  *   - ../../host/registry/panelRegistry
- *   - ../../host/store/activeEditorStore
+ *   - ../../host/editor/activeEditorStore
  *   - ../../api/vaultApi
  *   - i18next
  *
@@ -24,7 +24,7 @@ import { Link2 } from "lucide-react";
 import { registerCommand } from "../../host/commands/commandSystem";
 import { registerPanel } from "../../host/registry/panelRegistry";
 import type { PanelRenderContext } from "../../host/layout/DockviewLayout";
-import { useActiveEditor } from "../../host/store/activeEditorStore";
+import { useActiveEditor } from "../../host/editor/activeEditorStore";
 import { getBacklinksForFile, type BacklinkItem } from "../../api/vaultApi";
 import i18n from "../../i18n";
 import "./backlinksPlugin.css";

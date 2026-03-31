@@ -73,6 +73,14 @@ describe("detectExcludedLineRanges", () => {
         ]);
     });
 
+    test("should detect single-line LaTeX block", () => {
+        const text = "Text\n$$E = mc^2$$\nEnd";
+        const ranges = detectExcludedLineRanges(text);
+        expect(ranges).toEqual([
+            { fromLine: 2, toLine: 2, type: "latex-block" },
+        ]);
+    });
+
     test("should NOT detect $$ inside code fence", () => {
         const text = "```\n$$\nvalue\n$$\n```";
         const ranges = detectExcludedLineRanges(text);
@@ -102,6 +110,21 @@ describe("detectExcludedLineRanges", () => {
             { fromLine: 1, toLine: 3, type: "frontmatter" },
             { fromLine: 5, toLine: 8, type: "code-fence" },
             { fromLine: 9, toLine: 11, type: "latex-block" },
+        ]);
+    });
+
+    test("should detect mixed single-line and multi-line LaTeX blocks", () => {
+        const text = [
+            "$$\\alpha + \\beta$$",
+            "",
+            "$$",
+            "x^2 + y^2",
+            "$$",
+        ].join("\n");
+        const ranges = detectExcludedLineRanges(text);
+        expect(ranges).toEqual([
+            { fromLine: 1, toLine: 1, type: "latex-block" },
+            { fromLine: 3, toLine: 5, type: "latex-block" },
         ]);
     });
 

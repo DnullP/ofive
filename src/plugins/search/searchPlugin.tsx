@@ -6,7 +6,7 @@
  * @dependencies
  *   - react
  *   - ../../api/vaultApi
- *   - ../../host/store/configStore
+ *   - ../../host/config/configStore
  *   - ../../host/registry/activityRegistry
  *   - ../../host/registry/panelRegistry
  *   - ../../host/layout/DockviewLayout
@@ -36,7 +36,7 @@ import i18n from "../../i18n";
 import {
     getConfigSnapshot,
     subscribeConfigChanges,
-} from "../../host/store/configStore";
+} from "../../host/config/configStore";
 import {
     registerActivity,
     unregisterActivity,

@@ -403,6 +403,25 @@ export function useVaultState(): VaultState {
 }
 
 /**
+ * @function subscribeVaultState
+ * @description 对外暴露 vault store 的订阅接口，供状态治理中心注册使用。
+ * @param listener 监听函数。
+ * @returns 取消订阅函数。
+ */
+export function subscribeVaultState(listener: () => void): () => void {
+    return vaultStore.subscribe(listener);
+}
+
+/**
+ * @function getVaultStateSnapshot
+ * @description 非响应式读取当前 vault 状态，供状态治理中心注册使用。
+ * @returns vault 状态快照。
+ */
+export function getVaultStateSnapshot(): VaultState {
+    return vaultStore.getSnapshot();
+}
+
+/**
  * @function useVaultTreeSync
  * @description Hook 回调：订阅当前目录状态，在目录变化后自动请求后端刷新文件树。
  *

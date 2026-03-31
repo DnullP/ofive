@@ -58,6 +58,22 @@ describe("markdownReadTransform", () => {
         );
     });
 
+    test("should convert single-line block latex into a dedicated read mode protocol", () => {
+        const prepared = prepareMarkdownForReadMode("Before\n\n$$a+b$$\n\nAfter");
+
+        expect(prepared.renderedMarkdown).toBe(
+            "Before\n\n[LaTeX](/__ofive_block_latex__/a%2Bb)\n\nAfter",
+        );
+    });
+
+    test("should isolate block latex into its own paragraph when adjacent text has no blank lines", () => {
+        const prepared = prepareMarkdownForReadMode("Before\n$$a+b$$\nAfter");
+
+        expect(prepared.renderedMarkdown).toBe(
+            "Before\n\n[LaTeX](/__ofive_block_latex__/a%2Bb)\n\nAfter",
+        );
+    });
+
     test("should decode read mode wikilink href", () => {
         expect(decodeReadModeWikiLinkHref("/__ofive_wikilink__/Note%2FChild")).toBe("Note/Child");
         expect(decodeReadModeWikiLinkHref("ofive-wikilink://Note%2FChild")).toBe("Note/Child");

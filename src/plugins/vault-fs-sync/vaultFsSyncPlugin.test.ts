@@ -39,7 +39,7 @@ mock.module("../../host/events/appEventBus", () => ({
     },
 }));
 
-mock.module("../../host/store/editorContextStore", () => ({
+mock.module("../../host/editor/editorContextStore", () => ({
     getFocusedArticleSnapshot: () => null,
     reportArticleContentByPath: () => undefined,
 }));

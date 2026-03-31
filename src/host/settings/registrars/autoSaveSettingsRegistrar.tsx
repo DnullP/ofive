@@ -1,16 +1,13 @@
 /**
  * @module host/settings/registrars/autoSaveSettingsRegistrar
- * @description 自动保存设置注册：提供自动保存开关与延迟配置。
+ * @description 自动保存设置注册：注册“保存”分类及其标准化设置项。
  * @dependencies
- *  - react
- *  - ../../store/configStore
+ *  - ../../config/configStore
  *  - ../settingsRegistry
  */
 
-import type { ChangeEvent, ReactNode } from "react";
-import { useTranslation } from "react-i18next";
-import { updateFeatureSetting, useConfigState } from "../../store/configStore";
-import { registerSettingsSection } from "../settingsRegistry";
+import { updateFeatureSetting, useConfigState } from "../../config/configStore";
+import { registerSettingsItems, registerSettingsSection } from "../settingsRegistry";
 
 /**
  * @function clampNumber
@@ -31,72 +28,62 @@ function clampNumber(raw: string, min: number, max: number, fallback: number): n
 }
 
 /**
- * @function AutoSaveSettingsSection
- * @description 自动保存设置选栏内容。
- * @returns React 节点。
- */
-function AutoSaveSettingsSection(): ReactNode {
-    const { t } = useTranslation();
-    const configState = useConfigState();
-    const { featureSettings } = configState;
-
-    const onAutoSaveDelayChange = (event: ChangeEvent<HTMLInputElement>): void => {
-        const next = clampNumber(event.target.value, 500, 10000, featureSettings.autoSaveDelayMs);
-        void updateFeatureSetting("autoSaveDelayMs", next);
-    };
-
-    return (
-        <div className="settings-item-group">
-            <label className="settings-compact-row" htmlFor="auto-save-switch">
-                <div className="settings-compact-info">
-                    <span className="settings-compact-title">{t("settings.autoSave")}</span>
-                    <span className="settings-compact-desc">{t("settings.autoSaveDesc")}</span>
-                </div>
-                <input
-                    id="auto-save-switch"
-                    type="checkbox"
-                    checked={featureSettings.autoSaveEnabled}
-                    onChange={(event) => {
-                        void updateFeatureSetting("autoSaveEnabled", event.target.checked);
-                    }}
-                />
-            </label>
-
-            {featureSettings.autoSaveEnabled ? (
-                <div className="settings-compact-row">
-                    <div className="settings-compact-info">
-                        <span className="settings-compact-title">{t("settings.autoSaveDelay")}</span>
-                        <span className="settings-compact-desc">{t("settings.autoSaveDelayDesc")}</span>
-                    </div>
-                    <input
-                        className="settings-compact-number-input"
-                        type="number"
-                        min={500}
-                        max={10000}
-                        step={100}
-                        value={featureSettings.autoSaveDelayMs}
-                        onChange={onAutoSaveDelayChange}
-                    />
-                </div>
-            ) : null}
-
-            {configState.error ? <div className="settings-tab-error">{configState.error}</div> : null}
-        </div>
-    );
-}
-
-/**
  * @function registerAutoSaveSettingsSection
  * @description 注册自动保存设置选栏。
  * @returns 取消注册函数。
  */
 export function registerAutoSaveSettingsSection(): () => void {
-    return registerSettingsSection({
+    const unregisterSection = registerSettingsSection({
         id: "editor-auto-save",
         title: "settings.saveSection",
         order: 25,
         description: "settings.saveSectionDesc",
         searchTerms: ["save", "auto save", "delay", "保存", "自动保存", "延迟"],
-        render: () => <AutoSaveSettingsSection />,
     });
+
+    const unregisterItems = registerSettingsItems([
+        {
+            id: "auto-save-enabled",
+            sectionId: "editor-auto-save",
+            order: 10,
+            kind: "toggle",
+            title: "settings.autoSave",
+            description: "settings.autoSaveDesc",
+            searchTerms: ["save", "auto save", "自动保存"],
+            useValue: () => useConfigState().featureSettings.autoSaveEnabled,
+            updateValue: (nextValue) => updateFeatureSetting("autoSaveEnabled", nextValue),
+        },
+        {
+            id: "auto-save-delay-ms",
+            sectionId: "editor-auto-save",
+            order: 20,
+            kind: "number",
+            title: "settings.autoSaveDelay",
+            description: "settings.autoSaveDelayDesc",
+            searchTerms: ["save delay", "debounce", "延迟"],
+            min: 500,
+            max: 10000,
+            step: 100,
+            useValue: () => useConfigState().featureSettings.autoSaveDelayMs,
+            useIsVisible: () => useConfigState().featureSettings.autoSaveEnabled,
+            normalizeValue: (raw, currentValue) => clampNumber(raw, 500, 10000, currentValue),
+            updateValue: (nextValue) => updateFeatureSetting("autoSaveDelayMs", nextValue),
+        },
+        {
+            id: "config-error",
+            sectionId: "editor-auto-save",
+            order: 999,
+            kind: "custom",
+            title: "settings.saveSection",
+            render: () => {
+                const configState = useConfigState();
+                return configState.error ? <div className="settings-tab-error">{configState.error}</div> : null;
+            },
+        },
+    ]);
+
+    return () => {
+        unregisterItems();
+        unregisterSection();
+    };
 }

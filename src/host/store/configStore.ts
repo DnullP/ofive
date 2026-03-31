@@ -1059,6 +1059,16 @@ export function useConfigState(): ConfigState {
 }
 
 /**
+ * @function subscribeConfigState
+ * @description 对外暴露配置 store 的订阅接口，供状态治理中心注册使用。
+ * @param listener 监听函数。
+ * @returns 取消订阅函数。
+ */
+export function subscribeConfigState(listener: () => void): () => void {
+    return configStore.subscribe(listener);
+}
+
+/**
  * @function getConfigSnapshot
  * @description 非响应式读取当前配置状态，供插件入口同步 feature flag。
  * @returns 配置状态快照。

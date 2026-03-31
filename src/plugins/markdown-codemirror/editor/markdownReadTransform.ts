@@ -41,6 +41,7 @@ const IMAGE_EMBED_PATTERN = /!\[\[([^\]\n]+?)\]\]/g;
 const HIGHLIGHT_INLINE_PATTERN = /(==)(?=\S)(.+?)(?<=\S)\1/g;
 const TAG_PATTERN = /(^|[\s([{])(#(?!\s)[\p{L}\p{N}_-]+)/gu;
 const INLINE_LATEX_PATTERN = /(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/g;
+const BLOCK_LATEX_SINGLE_LINE_PATTERN = /^\s*\$\$(.+?)\$\$\s*$/;
 
 /**
  * @interface ReadModeFrontmatterField
@@ -89,15 +90,8 @@ export function prepareMarkdownForReadMode(markdown: string): PreparedReadModeMa
         }
 
         if (range?.type === "latex-block") {
-            const latexSource = lines
-                .slice(range.fromLine, Math.max(range.fromLine, range.toLine - 1))
-                .join("\n")
-                .trim();
-            outputLines.push(buildProtocolMarkdown(
-                READ_MODE_BLOCK_LATEX_PROTOCOL,
-                latexSource,
-                "LaTeX",
-            ));
+            const latexSource = extractLatexBlockSource(lines, range.fromLine, range.toLine);
+            appendReadModeBlockLatex(outputLines, lines, range.toLine, latexSource);
             lineIndex = range.toLine - 1;
             continue;
         }
@@ -116,6 +110,58 @@ export function prepareMarkdownForReadMode(markdown: string): PreparedReadModeMa
         hasFrontmatter,
         frontmatter,
     };
+}
+
+/**
+ * @function extractLatexBlockSource
+ * @description 从单行或多行块级 LaTeX 范围中提取公式源码。
+ * @param lines 原始 Markdown 行数组。
+ * @param fromLine 块起始行号（1-based，含）。
+ * @param toLine 块结束行号（1-based，含）。
+ * @returns 去掉外围 `$$` 后的公式源码。
+ */
+function extractLatexBlockSource(lines: string[], fromLine: number, toLine: number): string {
+    if (fromLine === toLine) {
+        const singleLineText = lines[fromLine - 1] ?? "";
+        const singleLineMatch = singleLineText.match(BLOCK_LATEX_SINGLE_LINE_PATTERN);
+        return (singleLineMatch?.[1] ?? "").trim();
+    }
+
+    return lines
+        .slice(fromLine, Math.max(fromLine, toLine - 1))
+        .join("\n")
+        .trim();
+}
+
+/**
+ * @function appendReadModeBlockLatex
+ * @description 以独立 Markdown block 的形式追加阅读态块级 LaTeX 协议，避免与相邻段落合并为普通链接。
+ * @param outputLines 当前输出行数组。
+ * @param sourceLines 原始 Markdown 行数组。
+ * @param toLine 块级 LaTeX 结束行号（1-based，含）。
+ * @param latexSource 公式源码。
+ * @returns 无返回值。
+ */
+function appendReadModeBlockLatex(
+    outputLines: string[],
+    sourceLines: string[],
+    toLine: number,
+    latexSource: string,
+): void {
+    if (outputLines.length > 0 && outputLines[outputLines.length - 1] !== "") {
+        outputLines.push("");
+    }
+
+    outputLines.push(buildProtocolMarkdown(
+        READ_MODE_BLOCK_LATEX_PROTOCOL,
+        latexSource,
+        "LaTeX",
+    ));
+
+    const nextLineText = sourceLines[toLine] ?? "";
+    if (nextLineText.trim() !== "") {
+        outputLines.push("");
+    }
 }
 
 /**

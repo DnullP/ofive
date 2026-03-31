@@ -5,7 +5,7 @@
  *  - react
  *  - @tauri-apps/plugin-dialog
  *  - ./FileTree
- *  - ../../../host/store/vaultStore
+ *  - ../../../host/vault/vaultStore
  *  - ../api/vaultApi
  */
 
@@ -38,11 +38,11 @@ import {
     isCanvasPath,
     resolveCreatedCanvasPath,
 } from "../../../utils/canvasFileSpec";
-import { getArticleSnapshotById, useFocusedArticle } from "../../../host/store/editorContextStore";
+import { getArticleSnapshotById, useFocusedArticle } from "../../../host/editor/editorContextStore";
 import {
     setCurrentVaultPath,
     useVaultState,
-} from "../../../host/store/vaultStore";
+} from "../../../host/vault/vaultStore";
 import {
     subscribeFileTreeRenameRequestedEvent,
     type FileTreeRenameRequestedBusEvent,

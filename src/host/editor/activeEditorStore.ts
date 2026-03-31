@@ -1,5 +1,5 @@
 /**
- * @module host/store/activeEditorStore
+ * @module host/editor/activeEditorStore
  * @description 当前活跃编辑器状态管理：记录主工作区中当前活跃的 Markdown 编辑器及其对应笔记。
  *
  *   该 Store 与 focusContext 的 DOM 焦点语义不同，专门回答：

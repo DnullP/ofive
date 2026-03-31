@@ -1,12 +1,12 @@
 /**
- * @module host/store/activeEditorStore.test
+ * @module host/editor/activeEditorStore.test
  * @description activeEditorStore 回归测试，覆盖活跃 Markdown 编辑器状态的写入与清理。
  * @dependencies
  *  - bun:test
  *  - ./activeEditorStore
  *
  * @example
- *   bun test src/host/store/activeEditorStore.test.ts
+ *   bun test src/host/editor/activeEditorStore.test.ts
  */
 
 import { describe, expect, it } from "bun:test";

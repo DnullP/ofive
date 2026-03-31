@@ -1,5 +1,5 @@
 /**
- * @module host/store/editorDisplayModeStore.test
+ * @module host/editor/editorDisplayModeStore.test
  * @description editorDisplayModeStore 回归测试，覆盖全局编辑器显示模式的更新与读取。
  * @dependencies
  *  - bun:test

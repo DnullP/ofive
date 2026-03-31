@@ -6,8 +6,8 @@
  *  - ../../../i18n
  *  - ../../../utils/canvasFileSpec
  *  - ../../events/appEventBus
- *  - ../../store/autoSaveService
- *  - ../../store/editorContextStore
+ *  - ../../editor/autoSaveService
+ *  - ../../editor/editorContextStore
  *  - ../commandTypes
  *
  * @example
@@ -33,11 +33,11 @@ import {
     resolveCreatedCanvasPath,
 } from "../../../utils/canvasFileSpec";
 import { emitFileTreeRenameRequestedEvent } from "../../events/appEventBus";
-import { markContentAsSaved } from "../../store/autoSaveService";
+import { markContentAsSaved } from "../../editor/autoSaveService";
 import {
     getArticleSnapshotById,
     getFocusedArticleSnapshot,
-} from "../../store/editorContextStore";
+} from "../../editor/editorContextStore";
 import type { CommandContext, CommandDefinition } from "../commandTypes";
 
 interface TargetArticleSnapshot {

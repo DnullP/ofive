@@ -353,7 +353,7 @@ export function mergePanelStatesWithSidebarLayoutFallback(
  * @returns 保存后的配置。
  */
 export async function saveSidebarLayoutSnapshot(snapshot: SidebarLayoutSnapshot): Promise<VaultConfig> {
-    const { updateBackendConfig } = await import("../store/configStore");
+    const { updateBackendConfig } = await import("../config/configStore");
 
     return updateBackendConfig((currentConfig) => ({
         ...currentConfig,

@@ -26,6 +26,32 @@
 3. 性能测试和视觉专项测试目前更偏向专项验证，而非默认合并门禁。
 4. Rust 测试按是否依赖真实 sidecar 拆成两条画像，以避免每次都强依赖 Go sidecar 构建。
 
+### 1.2 Store 状态全流程 Guard
+
+前端当前新增了一条静态质量门：`node scripts/check-store-state-tests.mjs`。
+
+该 guard 的目标不是统计语句覆盖率，而是保证 store 治理声明和真实测试锚点之间没有脱节。当前它会同时检查两层约束：
+
+1. 模块级约束：store 逻辑模块与使用 store 的业务模块都必须绑定到真实测试文件。
+2. schema 级约束：每个已注册 managed store 声明的 `actions`、`flow`、`failureModes` 都必须显式映射到测试锚点。
+
+实现方式：
+
+1. guard 优先基于 [src/host/store/storeRegistry.ts](../src/host/store/storeRegistry.ts) 的注册结果发现 managed store，并补充少量仍处于显式治理名单中的状态模块。
+2. 每个 store 逻辑模块、store 使用模块都必须在 [scripts/store-state-flow-coverage.config.mjs](../scripts/store-state-flow-coverage.config.mjs) 中声明覆盖它的测试文件。
+3. 每个已注册 store 还必须在 `storeSchemaCoverage` 中为 schema 声明的每个 action、flow 条目、failure mode 提供测试文件映射。
+4. 测试锚点既可以是单元测试，也可以是 E2E/性能专项测试，但路径必须指向真实存在的测试文件。
+
+这意味着新增一个 managed store 时，不能只完成注册本身，还必须同步完成三件事：
+
+1. 在 store registration 中声明完整 schema，至少包含状态摘要、actions、flow 与 failure modes。
+2. 在对应测试中覆盖这些状态变化路径。
+3. 在 [scripts/store-state-flow-coverage.config.mjs](../scripts/store-state-flow-coverage.config.mjs) 里把模块级 coverage 和 schema 级 coverage 都登记完整。
+
+当前 guard 仍然主要校验“治理声明是否完整且可追踪到真实测试文件”，并不直接理解测试断言是否足够强。因此它解决的是“有没有覆盖声明缺口”，不是“测试语义一定正确”。后者仍需通过单测/E2E 设计质量来保证。
+
+这条 guard 已经接入 [scripts/check-guards.mjs](../scripts/check-guards.mjs)，因此会跟随 `bun run build` 和主线 guard 一起执行。
+
 ## 2. 当前测试目录与覆盖对象
 
 ### 2.1 前端单元测试

@@ -9,7 +9,7 @@
  *  - ../../api/vaultApi
  *  - ../../host/events/appEventBus
  *  - ../../host/layout/nativeContextMenu
- *  - ../../host/store/vaultStore
+ *  - ../../host/vault/vaultStore
  *  - ./calendarDateUtils
  *  - ./calendarViewState
  *  - ./CalendarTab.css
@@ -27,7 +27,7 @@ import {
 } from "../../api/vaultApi";
 import { subscribeVaultFsBusEvent } from "../../host/events/appEventBus";
 import { showNativeContextMenu } from "../../host/layout/nativeContextMenu";
-import { useVaultState } from "../../host/store/vaultStore";
+import { useVaultState } from "../../host/vault/vaultStore";
 import {
     buildCalendarMonthGrid,
     buildDailyNoteInitialContent,

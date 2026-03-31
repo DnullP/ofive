@@ -3,7 +3,7 @@
  * @description 快捷键设置注册：由快捷键系统注册快捷键配置选栏。
  * @dependencies
  *  - react
- *  - ../../store/shortcutStore
+ *  - ../../commands/shortcutStore
  *  - ../../commands/commandSystem
  *  - ../settingsRegistry
  */
@@ -15,7 +15,7 @@ import {
     recordShortcutFromKeyboardEvent,
     updateShortcutBinding,
     useShortcutState,
-} from "../../store/shortcutStore";
+} from "../../commands/shortcutStore";
 import {
     getCommandBindingPolicy,
     getCommandRouteClass,
@@ -25,7 +25,7 @@ import {
 } from "../../commands/commandSystem";
 import { getConditionLabel } from "../../conditions/conditionEvaluator";
 import { analyzeShortcutGovernance } from "../../commands/shortcutGovernance";
-import { registerSettingsSection } from "../settingsRegistry";
+import { registerSettingsItem, registerSettingsSection } from "../settingsRegistry";
 
 function ShortcutSettingsSection(): ReactNode {
     const { t } = useTranslation();
@@ -257,13 +257,28 @@ function ShortcutSettingsSection(): ReactNode {
     );
 }
 
-export function registerShortcutSettingsSection(): void {
-    registerSettingsSection({
+export function registerShortcutSettingsSection(): () => void {
+    const unregisterSection = registerSettingsSection({
         id: "shortcut-system",
         title: "settings.shortcutSection",
         order: 30,
         description: "settings.shortcutSectionDesc",
         searchTerms: ["shortcut", "keybinding", "keyboard", "快捷键", "键位", "键盘"],
+    });
+
+    const unregisterItem = registerSettingsItem({
+        id: "shortcut-table",
+        sectionId: "shortcut-system",
+        order: 10,
+        kind: "custom",
+        title: "settings.shortcutSection",
+        description: "settings.shortcutSectionDesc",
+        searchTerms: ["shortcut", "keybinding", "keyboard", "快捷键", "键位", "键盘"],
         render: () => <ShortcutSettingsSection />,
     });
+
+    return () => {
+        unregisterItem();
+        unregisterSection();
+    };
 }
