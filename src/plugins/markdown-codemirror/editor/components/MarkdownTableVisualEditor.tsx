@@ -1065,9 +1065,9 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             <div className="mtv-status">
                 <span className="mtv-status-current">{currentSelectionLabel}</span>
                 <span className="mtv-shortcut-list">
-                    <span className="mtv-shortcut-chip">Tab / Shift+Tab</span>
-                    <span className="mtv-shortcut-chip">Alt+Arrows</span>
-                    <span className="mtv-shortcut-chip">Alt+Backspace</span>
+                    <span className="mtv-shortcut-chip">{t("markdownTable.shortcutTabNavigation")}</span>
+                    <span className="mtv-shortcut-chip">{t("markdownTable.shortcutReorder")}</span>
+                    <span className="mtv-shortcut-chip">{t("markdownTable.shortcutDeleteContent")}</span>
                 </span>
             </div>
 

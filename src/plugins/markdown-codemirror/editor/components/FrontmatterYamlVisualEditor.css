@@ -217,7 +217,7 @@
     outline: none;
     caret-color: var(--text-primary);
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.14);
+    background: var(--editor-frontmatter-focus-bg);
 }
 
 /* Frontmatter 右侧容器：承载值控件与行级动作。 */
@@ -260,7 +260,7 @@
     outline: none;
     caret-color: var(--text-primary);
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.14);
+    background: var(--editor-frontmatter-focus-bg);
 }
 
 /* Frontmatter 列表项输入聚焦态：保持和普通输入一致的 caret 与底色反馈。 */
@@ -268,7 +268,7 @@
     outline: none;
     caret-color: var(--text-primary);
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.14);
+    background: var(--editor-frontmatter-focus-bg);
 }
 
 /* Frontmatter 列表项输入框：单行 textarea 形态，避免换行并保持 chip 内紧凑编辑。 */

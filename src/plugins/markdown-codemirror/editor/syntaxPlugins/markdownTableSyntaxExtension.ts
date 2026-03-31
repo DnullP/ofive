@@ -13,7 +13,7 @@
  */
 
 import { RangeSet, RangeSetBuilder } from "@codemirror/state";
-import type { Extension } from "@codemirror/state";
+import type { EditorState, Extension } from "@codemirror/state";
 import {
     Decoration,
     type DecorationSet,
@@ -24,7 +24,6 @@ import {
 } from "@codemirror/view";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import type { EditorState } from "codemirror";
 import type { DockviewApi } from "dockview";
 import i18n from "../../../../i18n";
 import { MarkdownTableVisualEditor } from "../components/MarkdownTableVisualEditor";

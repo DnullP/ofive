@@ -67,6 +67,7 @@ async function dragWorkspaceItem(
     options?: {
         drop?: boolean;
         dragEnd?: boolean;
+        holdBeforeDropMs?: number;
     },
 ): Promise<void> {
     const source = page.locator(sourceSelector);
@@ -90,6 +91,7 @@ async function dragWorkspaceItem(
             endY,
             drop,
             dragEnd,
+            holdBeforeDropMs,
         }) => {
             const wait = (ms: number): Promise<void> => {
                 return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -127,6 +129,8 @@ async function dragWorkspaceItem(
                 await wait(24);
             }
 
+            await wait(holdBeforeDropMs);
+
             if (drop !== false) {
                 dispatch(target, "drop", endX, endY);
                 await wait(16);
@@ -144,6 +148,7 @@ async function dragWorkspaceItem(
             endY: targetRect.y + targetRect.height * targetOffset.y,
             drop: options?.drop ?? true,
             dragEnd: options?.dragEnd ?? true,
+            holdBeforeDropMs: options?.holdBeforeDropMs ?? 160,
         },
     );
 

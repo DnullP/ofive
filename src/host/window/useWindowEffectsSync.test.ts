@@ -12,85 +12,8 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { FeatureSettings } from "../store/configStore";
 
-const actualConfigStore = await import("../store/configStore");
-
 mock.module("../../api/windowApi", () => ({
     updateMainWindowAcrylicEffect: async () => undefined,
-}));
-
-mock.module("../store/configStore", () => ({
-    ...actualConfigStore,
-    getConfigSnapshot: () => ({
-        featureSettings: {
-            searchEnabled: true,
-            knowledgeGraphEnabled: true,
-            glassEffectEnabled: true,
-            glassTintOpacity: 0.05,
-            glassSurfaceOpacity: 0.12,
-            glassInactiveSurfaceOpacity: 0.09,
-            glassBlurRadius: 8,
-            windowsAcrylicFocusedRed: 56,
-            windowsAcrylicFocusedGreen: 64,
-            windowsAcrylicFocusedBlue: 76,
-            windowsAcrylicFocusedAlpha: 72,
-            windowsAcrylicInactiveRed: 64,
-            windowsAcrylicInactiveGreen: 72,
-            windowsAcrylicInactiveBlue: 84,
-            windowsAcrylicInactiveAlpha: 56,
-            windowsAcrylicDisableSystemBackdrop: true,
-            windowsAcrylicFocusedAccentFlags: 9,
-            windowsAcrylicFocusedAnimationId: 7,
-            windowsAcrylicInactiveAccentFlags: 5,
-            windowsAcrylicInactiveAnimationId: 3,
-            vimModeEnabled: false,
-            editorFontSize: 16,
-            editorTabSize: 4,
-            editorLineWrapping: true,
-            editorLineNumbers: "absolute",
-            autoSaveEnabled: true,
-            autoSaveDelayMs: 1500,
-            editorFontFamily:
-                '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-        },
-    }),
-    subscribeConfigChanges: () => {
-        return () => {
-            /* noop */
-        };
-    },
-    useConfigState: () => ({
-        featureSettings: {
-            searchEnabled: true,
-            knowledgeGraphEnabled: true,
-            glassEffectEnabled: true,
-            glassTintOpacity: 0.05,
-            glassSurfaceOpacity: 0.12,
-            glassInactiveSurfaceOpacity: 0.09,
-            glassBlurRadius: 8,
-            windowsAcrylicFocusedRed: 56,
-            windowsAcrylicFocusedGreen: 64,
-            windowsAcrylicFocusedBlue: 76,
-            windowsAcrylicFocusedAlpha: 72,
-            windowsAcrylicInactiveRed: 64,
-            windowsAcrylicInactiveGreen: 72,
-            windowsAcrylicInactiveBlue: 84,
-            windowsAcrylicInactiveAlpha: 56,
-            windowsAcrylicDisableSystemBackdrop: true,
-            windowsAcrylicFocusedAccentFlags: 9,
-            windowsAcrylicFocusedAnimationId: 7,
-            windowsAcrylicInactiveAccentFlags: 5,
-            windowsAcrylicInactiveAnimationId: 3,
-            vimModeEnabled: false,
-            editorFontSize: 16,
-            editorTabSize: 4,
-            editorLineWrapping: true,
-            editorLineNumbers: "absolute",
-            autoSaveEnabled: true,
-            autoSaveDelayMs: 1500,
-            editorFontFamily:
-                '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-        },
-    }),
 }));
 
 mock.module("../store/themeStore", () => ({

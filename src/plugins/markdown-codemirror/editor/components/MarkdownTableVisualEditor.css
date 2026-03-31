@@ -6,7 +6,7 @@
     border: 1px solid var(--editor-panel-border-color);
     border-radius: 12px;
     background: color-mix(in srgb, var(--editor-panel-bg-color) 92%, var(--editor-panel-bg-elevated-color));
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--editor-panel-shadow-medium);
 }
 
 /* mtv-toolbar：表格工具栏。 */

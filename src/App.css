@@ -152,6 +152,8 @@
   --editor-inline-code-bg: rgba(120, 120, 120, 0.2);
   --editor-link-color: var(--text-link-color);
   --editor-panel-shadow-light: 0 6px 16px rgba(0, 0, 0, 0.08);
+  --editor-panel-shadow-medium: 0 10px 24px rgba(0, 0, 0, 0.12);
+  --editor-frontmatter-focus-bg: transparent;
   --editor-handle-highlight-border: rgba(255, 255, 255, 0.92);
   --editor-bg-color: #1f1f1f;
   --editor-text-color: #d4d4d4;

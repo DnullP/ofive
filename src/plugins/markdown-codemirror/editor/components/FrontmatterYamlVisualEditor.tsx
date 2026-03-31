@@ -84,6 +84,24 @@ function restoreNavigationRowFocus(fieldKey: string, attemptsRemaining = 4): voi
 }
 
 /**
+ * @function tryRestoreNavigationRowFocusNow
+ * @description 同步尝试恢复 frontmatter 导航行焦点，避免提交后首个 Vim 按键被旧输入框吞掉。
+ * @param fieldKey 字段名。
+ * @returns 若已成功聚焦目标导航行则返回 true。
+ */
+function tryRestoreNavigationRowFocusNow(fieldKey: string): boolean {
+    const rowElement = Array.from(document.querySelectorAll<HTMLElement>("[data-frontmatter-field-key]"))
+        .find((element) => element.dataset.frontmatterFieldKey === fieldKey);
+
+    if (!rowElement) {
+        return false;
+    }
+
+    rowElement.focus();
+    return document.activeElement === rowElement;
+}
+
+/**
  * @type VisualYamlScalar
  * @description 可直接可视化编辑的基础类型。
  */
@@ -259,7 +277,7 @@ function FrontmatterInlineTextField(props: FrontmatterInlineTextFieldProps): Rea
                 ) : shouldRenderPlaceholder ? (
                     <span className="fmv-inline-text-placeholder">{placeholder ?? ""}</span>
                 ) : shouldRenderEmptyLine ? (
-                    <span className="fmv-inline-text-empty">&nbsp;</span>
+                    <span className="fmv-inline-text-empty">{"\u00A0"}</span>
                 ) : null}
             </span>
             <textarea
@@ -696,6 +714,10 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
     const focusNavigationRow = (fieldKey: string): void => {
         pendingNavigationFocusFieldRef.current = fieldKey;
         pendingFrontmatterNavigationRestoreKey = fieldKey;
+        if (tryRestoreNavigationRowFocusNow(fieldKey)) {
+            return;
+        }
+
         window.requestAnimationFrame(() => {
             restoreNavigationRowFocus(fieldKey);
         });
@@ -951,11 +973,12 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
      * @function commitFieldKeyRename
      * @description 提交字段名重命名。
      * @param previousKey 原字段名。
+     * @returns 提交后应恢复焦点的字段名；未发生重命名时返回原字段名，无法提交时返回 null。
      */
-    const commitFieldKeyRename = (previousKey: string): void => {
+    const commitFieldKeyRename = (previousKey: string): string | null => {
         const draftValue = keyDrafts[previousKey];
         if (draftValue === undefined) {
-            return;
+            return previousKey;
         }
 
         const nextKey = draftValue.trim();
@@ -964,12 +987,12 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                 previousKey,
             });
             clearKeyDraft(previousKey);
-            return;
+            return previousKey;
         }
 
         if (nextKey === previousKey) {
             clearKeyDraft(previousKey);
-            return;
+            return previousKey;
         }
 
         if (Object.prototype.hasOwnProperty.call(recordDraft, nextKey)) {
@@ -978,7 +1001,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                 nextKey,
             });
             clearKeyDraft(previousKey);
-            return;
+            return previousKey;
         }
 
         console.info("[frontmatter-editor] rename field", {
@@ -999,6 +1022,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
             };
         });
         clearKeyDraft(previousKey);
+        return nextKey;
     };
 
     /**
@@ -1165,7 +1189,10 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
         if (shouldSubmitFrontmatterPlainEnter(event)) {
             event.preventDefault();
             event.stopPropagation();
-            commitFieldKeyRename(fieldKey);
+            const nextFieldKey = commitFieldKeyRename(fieldKey);
+            if (nextFieldKey) {
+                focusNavigationRow(nextFieldKey);
+            }
             return;
         }
 
@@ -1460,7 +1487,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
         }
 
         if (value === null) {
-            return <span className="fmv-null-pill">null</span>;
+            return <span className="fmv-null-pill">{t("frontmatter.typeNull")}</span>;
         }
 
         return (

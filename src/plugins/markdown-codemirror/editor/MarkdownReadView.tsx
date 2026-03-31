@@ -449,6 +449,7 @@ function renderReadModeLatex(latex: string, displayMode: boolean): ReadModeLatex
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         const renderResult = {
+            // i18n-guard-ignore-next-line
             html: `<span class="cm-latex-error" title="${escapeHtml(errorMessage)}">${escapeHtml(latex)}</span>`,
             isError: true,
         };

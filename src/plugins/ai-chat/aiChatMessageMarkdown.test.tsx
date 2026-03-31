@@ -33,11 +33,14 @@ describe("AiChatMessageMarkdown", () => {
         );
 
         expect(html).toContain("ai-chat-message-markdown");
+        // i18n-guard-ignore-next-line
         expect(html).toContain("<h1 class=\"ai-chat-message-heading ai-chat-message-heading-h1\">Summary</h1>");
+        // i18n-guard-ignore-next-line
         expect(html).toContain("<strong>bold</strong>");
         expect(html).toContain("ai-chat-message-inline-code");
         expect(html).toContain("href=\"https://example.com\"");
         expect(html).toContain("target=\"_blank\"");
+        // i18n-guard-ignore-next-line
         expect(html).toContain("<li class=\"ai-chat-message-list-item\">alpha</li>");
         expect(html).toContain("ai-chat-message-code-block language-ts");
         expect(html).toContain("const total = 1;");

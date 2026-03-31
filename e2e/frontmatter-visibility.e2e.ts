@@ -68,6 +68,28 @@ async function focusFrontmatterNavigationRow(page: Page, fieldKey: string): Prom
 }
 
 /**
+ * @function focusFrontmatterKeyInput
+ * @description 将焦点放到指定字段名输入框，并把光标移动到文本末尾。
+ * @param page Playwright 页面对象。
+ * @param fieldKey frontmatter 字段名。
+ * @returns Promise<void>
+ */
+async function focusFrontmatterKeyInput(page: Page, fieldKey: string): Promise<void> {
+    await page.evaluate((nextFieldKey) => {
+        const keyField = document.querySelector<HTMLTextAreaElement>(
+            `[data-frontmatter-field-key="${nextFieldKey}"] [data-frontmatter-focus-role="key"].fmv-inline-text-control`,
+        );
+        if (!keyField) {
+            throw new Error(`Frontmatter key field not found: ${nextFieldKey}`);
+        }
+
+        keyField.focus();
+        const caretOffset = keyField.value.length;
+        keyField.setSelectionRange(caretOffset, caretOffset);
+    }, fieldKey);
+}
+
+/**
  * @function dispatchImeConfirmEnterOnFrontmatterKey
  * @description 在指定字段名输入框上模拟一次输入法候选确认 Enter，覆盖组合结束后的 Enter 冒泡路径。
  * @param page Playwright 页面对象。
@@ -212,6 +234,39 @@ test.describe("frontmatter 可见性", () => {
 
         expect(navigationState.widgetVisible).toBe(true);
         expect(navigationState.titleValue).toContain("Updated");
+        expect(navigationState.activeParentFieldKey ?? navigationState.activeFieldKey).toBe("category");
+        expect(navigationState.editorText.startsWith("j---")).toBe(false);
+    });
+
+    test("frontmatter 字段名提交再按 j 不应展开源码或写入正文", async ({ page }) => {
+        await waitForMockLayoutReady(page);
+        await enableVimMode(page);
+        await openMockFrontmatterNote(page);
+
+        await focusFrontmatterKeyInput(page, "title");
+        await page.keyboard.type("Updated");
+        await page.keyboard.press("Enter");
+        await page.keyboard.press("j");
+
+        const navigationState = await page.evaluate(() => {
+            const activeElement = document.activeElement as HTMLElement | null;
+            const renamedKeyInput = document.querySelector<HTMLTextAreaElement>(
+                '[data-frontmatter-field-key="titleUpdated"] [data-frontmatter-focus-role="key"].fmv-inline-text-control',
+            );
+            const widget = document.querySelector(".cm-frontmatter-widget");
+            const editorText = document.querySelector(".cm-content")?.textContent ?? "";
+
+            return {
+                activeFieldKey: activeElement?.getAttribute("data-frontmatter-field-key") ?? null,
+                activeParentFieldKey: activeElement?.closest?.("[data-frontmatter-field-key]")?.getAttribute("data-frontmatter-field-key") ?? null,
+                renamedKeyValue: renamedKeyInput?.value ?? null,
+                widgetVisible: widget instanceof HTMLElement,
+                editorText,
+            };
+        });
+
+        expect(navigationState.widgetVisible).toBe(true);
+        expect(navigationState.renamedKeyValue).toBe("titleUpdated");
         expect(navigationState.activeParentFieldKey ?? navigationState.activeFieldKey).toBe("category");
         expect(navigationState.editorText.startsWith("j---")).toBe(false);
     });
