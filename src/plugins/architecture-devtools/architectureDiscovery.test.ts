@@ -135,6 +135,33 @@ describe("architectureDiscovery", () => {
         })).toBe(true);
     });
 
+    it("应将内置插件注册入口识别为 plugin，而不是 ui-module", async () => {
+        const slice = createAutoDiscoveredArchitectureSlice({
+            frontendModules: await collectRawModules("src/**/*.{ts,tsx}"),
+            backendModules: await collectRawModules("src-tauri/src/**/*.rs"),
+        });
+
+        expect(slice.nodes.some((node) => {
+            return (
+                node.kind === "plugin" &&
+                node.title === "registerBuiltinEditPlugins" &&
+                node.location === "src/plugins/markdown-codemirror/editor/registerBuiltinEditPlugins.ts"
+            );
+        })).toBe(true);
+
+        expect(slice.nodes.some((node) => {
+            return (
+                node.kind === "plugin" &&
+                node.title === "registerBuiltinSyntaxRenderers" &&
+                node.location === "src/plugins/markdown-codemirror/editor/registerBuiltinSyntaxRenderers.ts"
+            );
+        })).toBe(true);
+
+        expect(slice.nodes.some((node) => {
+            return node.kind === "ui-module" && node.title === "registerBuiltinEditPlugins";
+        })).toBe(false);
+    });
+
     it("应将后端模块与命令连接起来，并把边界规则保留在模块详情中", async () => {
         const slice = createAutoDiscoveredArchitectureSlice({
             frontendModules: await collectRawModules("src/**/*.{ts,tsx}"),

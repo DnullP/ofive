@@ -1788,9 +1788,17 @@ function normalizeSymbolName(value: string): string {
     return value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
 }
 
+/** @function isBuiltinPluginRegistrationFile */
+function isBuiltinPluginRegistrationFile(path: string): boolean {
+    return /^src\/plugins\/(?:.+\/)?registerBuiltin[A-Za-z0-9_$-]+\.tsx?$/.test(path);
+}
+
 /** @function isPluginFile */
 function isPluginFile(path: string): boolean {
-    return /^src\/plugins\/(?:.+\/)?[A-Za-z0-9_$-]+Plugin\.tsx?$/.test(path);
+    return (
+        /^src\/plugins\/(?:.+\/)?[A-Za-z0-9_$-]+Plugin\.tsx?$/.test(path) ||
+        isBuiltinPluginRegistrationFile(path)
+    );
 }
 
 /** @function isStoreFile */

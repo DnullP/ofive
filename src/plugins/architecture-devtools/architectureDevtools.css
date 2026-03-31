@@ -295,6 +295,39 @@
     gap: 10px;
 }
 
+/* architecture-dag-copy-action: 复制红色依赖详情按钮 */
+.architecture-dag-copy-action {
+    padding: 8px 12px;
+    border: 1px solid color-mix(in srgb, var(--error-color) 28%, var(--architecture-border-color));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--error-color) 10%, var(--architecture-surface-card));
+    color: var(--architecture-text-strong);
+    cursor: pointer;
+}
+
+/* architecture-dag-copy-action:hover: 复制按钮悬停态 */
+.architecture-dag-copy-action:hover {
+    border-color: color-mix(in srgb, var(--error-color) 48%, var(--architecture-border-color-hover));
+}
+
+/* architecture-dag-copy-action:disabled: 无红色依赖时禁用按钮 */
+.architecture-dag-copy-action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* architecture-dag-copy-action--copied: 复制成功反馈态 */
+.architecture-dag-copy-action--copied {
+    border-color: var(--architecture-accent-border);
+    background: var(--architecture-accent-surface);
+}
+
+/* architecture-dag-copy-action--error: 复制失败反馈态 */
+.architecture-dag-copy-action--error {
+    color: var(--error-color);
+    border-color: color-mix(in srgb, var(--error-color) 42%, var(--architecture-border-color));
+}
+
 /* architecture-dag-meta: DAG 辅助统计文案 */
 .architecture-dag-meta {
     color: var(--architecture-text-secondary);
@@ -328,10 +361,33 @@
     position: relative;
 }
 
-/* architecture-dag-canvas: SVG 画布 */
-.architecture-dag-canvas {
-    display: block;
+/* architecture-dag-stage: DAG 逻辑舞台，承载 canvas 边层与 SVG 节点层 */
+.architecture-dag-stage {
+    position: relative;
+    transform-origin: top left;
     will-change: transform;
+}
+
+/* architecture-dag-edge-canvas: canvas 边层，批量绘制所有连线以减少 DOM path 数量 */
+.architecture-dag-edge-canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    pointer-events: none;
+    transition: opacity 80ms linear;
+}
+
+/* architecture-dag-edge-canvas--highlight: 高亮边叠层，始终位于普通边之上 */
+.architecture-dag-edge-canvas--highlight {
+    z-index: 1;
+}
+
+/* architecture-dag-overlay: SVG 叠加层，负责列标题与节点交互 */
+.architecture-dag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: block;
 }
 
 /* architecture-column-label: DAG 列标题 */
@@ -351,27 +407,6 @@
 /* architecture-column-label--infrastructure-side: 基础设施侧列标题强调色 */
 .architecture-column-label--infrastructure-side {
     fill: var(--architecture-infrastructure-accent);
-}
-
-/* architecture-edge: DAG 边基础样式 */
-.architecture-edge {
-    fill: none;
-    stroke: var(--architecture-edge-dim);
-    stroke-width: 2;
-    opacity: 0.72;
-    transition: opacity 160ms ease, stroke 160ms ease;
-}
-
-/* architecture-edge--highlighted: 选中关联边 */
-.architecture-edge--highlighted {
-    stroke: var(--architecture-edge-highlight);
-    opacity: 1;
-}
-
-/* architecture-edge--dimmed: 非选中关联边 */
-.architecture-edge--dimmed {
-    stroke: var(--architecture-edge-dim);
-    opacity: 0.4;
 }
 
 /* architecture-node: SVG 节点组 */
@@ -514,6 +549,7 @@
 .architecture-node-title-box {
     display: -webkit-box;
     overflow: hidden;
+    pointer-events: none;
     color: var(--architecture-text-strong);
     font-size: 15px;
     font-weight: 700;
@@ -529,6 +565,7 @@
 .architecture-node-summary-box {
     display: -webkit-box;
     overflow: hidden;
+    pointer-events: none;
     color: var(--architecture-text-soft);
     font-size: 12px;
     line-height: 1.25;

@@ -18,10 +18,16 @@
  *   - ArchitectureDevtoolsTab
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactElement } from "react";
 import type { IDockviewPanelProps } from "dockview";
 import i18n from "../../i18n";
 import { useActivities, usePanels, useTabComponents } from "../../host/registry";
+import { ArchitectureDagEdgeCanvas } from "./ArchitectureDagEdgeCanvas";
+import {
+    buildArchitectureEdgeAdjacencyIndex,
+    collectArchitectureHighlightedNodeIds,
+    getArchitectureNodeRelatedEdges,
+} from "./architectureEdgeIndex";
 import {
     useArchitectureSnapshot,
     type ArchitectureEdge,
@@ -33,6 +39,11 @@ import {
     buildTransitiveVisibleNodeIds,
     type GraphTraversalMode,
 } from "./architectureGraphTraversal";
+import { buildLayeredEdges } from "./architectureLayeredEdges";
+import {
+    collectReverseModuleDependencyDetails,
+    formatReverseModuleDependencyDetailsForClipboard,
+} from "./architectureReverseDependency";
 import "./architectureDevtools.css";
 
 const NODE_WIDTH = 236;
@@ -41,6 +52,7 @@ const COLUMN_GAP = 64;
 const ROW_GAP = 20;
 const PADDING_X = 32;
 const PADDING_Y = 28;
+const DAG_HOVER_CLEAR_DELAY_MS = 42;
 
 const KIND_ORDER: ArchitectureNodeKind[] = [
     "plugin",
@@ -91,6 +103,21 @@ interface LayoutColumn {
     x: number;
     layer?: number;
     moduleLayer?: ArchitectureModuleLayer;
+}
+
+/**
+ * @interface ArchitectureDagNodeProps
+ * @description 单个 DAG 节点的渲染参数，收敛 hover/focus 与检查器交互。
+ */
+interface ArchitectureDagNodeProps {
+    /** 当前节点布局信息。 */
+    layoutNode: LayoutNode;
+    /** 当前节点是否为直接聚焦节点。 */
+    isFocused: boolean;
+    /** 当前节点是否与聚焦节点相关联。 */
+    isRelated: boolean;
+    /** 打开节点检查器。 */
+    onOpenInspector(nodeId: string): void;
 }
 
 /**
@@ -443,6 +470,33 @@ function formatEdgeDescription(
 }
 
 /**
+ * @function getArchitectureEdgeKey
+ * @description 生成架构边的稳定键，用于渲染和状态映射。
+ * @param edge 架构边。
+ * @returns 稳定键。
+ */
+function getArchitectureEdgeKey(edge: ArchitectureEdge): string {
+    return `${edge.from}-${edge.to}-${edge.kind}-${edge.label ?? ""}`;
+}
+
+/**
+ * @function resolveHoveredArchitectureNodeId
+ * @description 从当前事件目标向上解析命中的 DAG 节点 ID，供舞台级 hover 委托复用。
+ * @param target 当前事件目标。
+ * @returns 命中的节点 ID；未命中时返回 null。
+ */
+function resolveHoveredArchitectureNodeId(target: EventTarget | null): string | null {
+    if (!(target instanceof Element)) {
+        return null;
+    }
+
+    const nodeElement = target.closest("[data-architecture-node-id]");
+    return nodeElement instanceof Element
+        ? nodeElement.getAttribute("data-architecture-node-id")
+        : null;
+}
+
+/**
  * @function buildKindLayerMap
  * @description 基于同类节点之间的依赖推导层级，确保展示时同层节点不产生依赖边。
  * @param nodes 当前节点集合。
@@ -499,43 +553,6 @@ function buildKindLayerMaps(
         maps.set(kind, buildKindLayerMap(nodes, edges, kind));
     });
     return maps;
-}
-
-/**
- * @function buildLayeredEdges
- * @description 对同类节点依赖边执行分层约束，仅保留跨层同类依赖。
- * @param nodes 当前节点集合。
- * @param edges 当前边集合。
- * @param kindLayerMaps 各类别层级映射。
- * @returns 过滤后的边集合。
- */
-function buildLayeredEdges(
-    nodes: ArchitectureNode[],
-    edges: ArchitectureEdge[],
-    kindLayerMaps: Map<ArchitectureNodeKind, Map<string, number>>,
-): ArchitectureEdge[] {
-    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-    return edges.filter((edge) => {
-        const fromNode = nodeMap.get(edge.from);
-        const toNode = nodeMap.get(edge.to);
-        if (!fromNode || !toNode) {
-            return false;
-        }
-
-        if (fromNode.kind !== toNode.kind) {
-            return true;
-        }
-
-        if (
-            fromNode.kind === "ui-module" &&
-            getNodeModuleLayer(fromNode) !== getNodeModuleLayer(toNode)
-        ) {
-            return true;
-        }
-
-        const layerMap = kindLayerMaps.get(fromNode.kind);
-        return (layerMap?.get(edge.to) ?? 0) > (layerMap?.get(edge.from) ?? 0);
-    });
 }
 
 /**
@@ -777,28 +794,6 @@ function buildLayout(nodes: ArchitectureNode[], edges: ArchitectureEdge[]): {
 }
 
 /**
- * @function edgePath
- * @description 生成两点间的平滑贝塞尔路径。
- * @param from 起点。
- * @param to 终点。
- * @returns SVG path 字符串。
- */
-function edgePath(from: LayoutNode, to: LayoutNode): string {
-    const startX = from.x + NODE_WIDTH;
-    const startY = from.y + NODE_HEIGHT / 2;
-    const endX = to.x;
-    const endY = to.y + NODE_HEIGHT / 2;
-    const controlOffset = Math.max(48, (endX - startX) / 2);
-
-    return [
-        `M ${startX} ${startY}`,
-        `C ${startX + controlOffset} ${startY}`,
-        `${endX - controlOffset} ${endY}`,
-        `${endX} ${endY}`,
-    ].join(" ");
-}
-
-/**
  * @function clampDagZoom
  * @description 限制 DAG 缩放范围，避免过小或过大导致不可用。
  * @param value 候选缩放值。
@@ -833,24 +828,6 @@ function getTouchCenter(first: TouchPointLike, second: TouchPointLike): { x: num
         x: (first.clientX + second.clientX) / 2,
         y: (first.clientY + second.clientY) / 2,
     };
-}
-
-/**
- * @function collectRelatedEdges
- * @description 收集与选中节点相关的边。
- * @param edges 全部边。
- * @param nodeId 选中节点 ID。
- * @returns 相关边集合。
- */
-function collectRelatedEdges(
-    edges: ArchitectureEdge[],
-    nodeId: string | null,
-): ArchitectureEdge[] {
-    if (!nodeId) {
-        return [];
-    }
-
-    return edges.filter((edge) => edge.from === nodeId || edge.to === nodeId);
 }
 
 /**
@@ -937,6 +914,84 @@ function InventorySection(props: {
 }
 
 /**
+ * @function ArchitectureDagNode
+ * @description 渲染单个 DAG 节点，并将 hover/focus 交互保持在稳定回调之上，减少整图重渲染时的无效更新。
+ * @param props 节点渲染参数。
+ * @returns ReactElement。
+ */
+const ArchitectureDagNode = memo(function ArchitectureDagNode(
+    props: ArchitectureDagNodeProps,
+): ReactElement {
+    const { layoutNode } = props;
+
+    return (
+        <g
+            className={[
+                "architecture-node",
+                getKindColorClass(layoutNode.node.kind),
+                getNodeSemanticColorClass(layoutNode.node),
+                props.isFocused
+                    ? "architecture-node--selected"
+                    : props.isRelated
+                        ? "architecture-node--related"
+                        : "architecture-node--idle",
+            ].join(" ")}
+            data-architecture-node-id={layoutNode.node.id}
+            onClick={() => props.onOpenInspector(layoutNode.node.id)}
+            onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    props.onOpenInspector(layoutNode.node.id);
+                }
+            }}
+            role="button"
+            tabIndex={0}
+        >
+            <title>{`${layoutNode.node.title}: ${layoutNode.node.summary}`}</title>
+            <rect
+                height={NODE_HEIGHT}
+                rx={18}
+                width={NODE_WIDTH}
+                x={layoutNode.x}
+                y={layoutNode.y}
+            />
+            <text
+                className="architecture-node-kind"
+                x={layoutNode.x + 16}
+                y={layoutNode.y + 24}
+            >
+                {getKindLabel(layoutNode.node.kind)}
+            </text>
+            <foreignObject
+                height={28}
+                width={NODE_WIDTH - 32}
+                x={layoutNode.x + 16}
+                y={layoutNode.y + 31}
+            >
+                <div className="architecture-node-title-box">
+                    {layoutNode.node.title}
+                </div>
+            </foreignObject>
+            <foreignObject
+                height={38}
+                width={NODE_WIDTH - 32}
+                x={layoutNode.x + 16}
+                y={layoutNode.y + 58}
+            >
+                <div className="architecture-node-summary-box">
+                    {layoutNode.node.summary}
+                </div>
+            </foreignObject>
+        </g>
+    );
+}, (previousProps, nextProps) => {
+    return previousProps.layoutNode === nextProps.layoutNode
+        && previousProps.isFocused === nextProps.isFocused
+        && previousProps.isRelated === nextProps.isRelated
+    && previousProps.onOpenInspector === nextProps.onOpenInspector;
+});
+
+/**
  * @function ArchitectureDevtoolsTab
  * @description 渲染架构可视化中心。
  * @returns DevTools tab 组件。
@@ -958,11 +1013,17 @@ export function ArchitectureDevtoolsTab(
     const [graphTraversalMode, setGraphTraversalMode] = useState<GraphTraversalMode>("dependencies");
     const [dagZoom, setDagZoom] = useState(1);
     const [pinchMode, setPinchMode] = useState<"none" | "touch" | "gesture">("none");
+    const [reverseDependencyCopyState, setReverseDependencyCopyState] = useState<"idle" | "copied" | "error">("idle");
     const dagScrollRef = useRef<HTMLDivElement | null>(null);
+    const dagViewportRef = useRef<HTMLDivElement | null>(null);
+    const dagStageRef = useRef<HTMLDivElement | null>(null);
     const dagZoomRef = useRef(1);
+    const dagLayoutSizeRef = useRef({ width: 0, height: 0 });
     const dagScrollPositionRef = useRef({ left: 0, top: 0 });
     const pinchScrollRestoreFrameRef = useRef<number | null>(null);
-    const pendingDagScrollTargetRef = useRef<{ left: number; top: number } | null>(null);
+    const dagZoomPreviewFrameRef = useRef<number | null>(null);
+    const pendingDagZoomPreviewRef = useRef<{ zoom: number; left: number; top: number } | null>(null);
+    const dagZoomCommitTimerRef = useRef<number | null>(null);
     const touchPinchStateRef = useRef<{ distance: number; anchor: DagPinchAnchor } | null>(null);
     const gesturePinchStateRef = useRef<DagPinchAnchor | null>(null);
     const globalPointerPositionRef = useRef<{ clientX: number; clientY: number } | null>(null);
@@ -971,6 +1032,131 @@ export function ArchitectureDevtoolsTab(
     const wheelZoomSuppressionUntilRef = useRef(0);
     const pinchModeRef = useRef<"none" | "touch" | "gesture">("none");
     const suppressScrollSyncRef = useRef(false);
+    const focusedNodeIdRef = useRef<string | null>(null);
+    const pendingFocusedNodeIdRef = useRef<string | null>(null);
+    const focusedNodeFrameRef = useRef<number | null>(null);
+    const focusedNodeClearTimerRef = useRef<number | null>(null);
+    const hoveredDagNodeIdRef = useRef<string | null>(null);
+
+    /**
+     * @function applyFocusedNodeIdState
+     * @description 立即提交聚焦节点状态，并同步 ref，供 hover 帧合并与失效清理共享。
+     * @param nextNodeId 目标聚焦节点 ID。
+     */
+    const applyFocusedNodeIdState = useCallback((nextNodeId: string | null): void => {
+        focusedNodeIdRef.current = nextNodeId;
+        pendingFocusedNodeIdRef.current = nextNodeId;
+        setFocusedNodeId((currentNodeId) => {
+            return currentNodeId === nextNodeId ? currentNodeId : nextNodeId;
+        });
+    }, []);
+
+    /**
+     * @function commitFocusedNodeId
+     * @description 使用 requestAnimationFrame 合并同一帧内的多次 hover 更新，避免节点切换时重复重渲染。
+     * @param nextNodeId 目标聚焦节点 ID。
+     */
+    const commitFocusedNodeId = useCallback((nextNodeId: string | null): void => {
+        pendingFocusedNodeIdRef.current = nextNodeId;
+        if (focusedNodeFrameRef.current !== null) {
+            return;
+        }
+
+        focusedNodeFrameRef.current = requestAnimationFrame(() => {
+            focusedNodeFrameRef.current = null;
+            applyFocusedNodeIdState(pendingFocusedNodeIdRef.current ?? null);
+        });
+    }, [applyFocusedNodeIdState]);
+
+    /**
+     * @function scheduleFocusedNodeId
+     * @description 调度 hover/focus 造成的聚焦节点变更；清空动作延迟一小段时间，避免相邻节点切换时出现 null 抖动。
+     * @param nextNodeId 目标聚焦节点 ID。
+     * @param options 可选调度参数。
+     */
+    const scheduleFocusedNodeId = useCallback((
+        nextNodeId: string | null,
+        options?: { delayMs?: number },
+    ): void => {
+        if (focusedNodeClearTimerRef.current !== null) {
+            window.clearTimeout(focusedNodeClearTimerRef.current);
+            focusedNodeClearTimerRef.current = null;
+        }
+
+        const delayMs = options?.delayMs ?? 0;
+        if (nextNodeId === null && delayMs > 0) {
+            focusedNodeClearTimerRef.current = window.setTimeout(() => {
+                focusedNodeClearTimerRef.current = null;
+                commitFocusedNodeId(null);
+            }, delayMs);
+            return;
+        }
+
+        commitFocusedNodeId(nextNodeId);
+    }, [commitFocusedNodeId]);
+
+    /**
+     * @function handleDagOverlayMouseMove
+     * @description 通过 DAG 叠加层统一处理 hover，避免每个节点单独绑定 enter/leave 事件。
+     * @param event 当前鼠标移动事件。
+     */
+    const handleDagOverlayMouseMove = useCallback((event: ReactMouseEvent<SVGSVGElement>): void => {
+        const nextNodeId = resolveHoveredArchitectureNodeId(event.target);
+        if (hoveredDagNodeIdRef.current === nextNodeId) {
+            return;
+        }
+
+        hoveredDagNodeIdRef.current = nextNodeId;
+        scheduleFocusedNodeId(nextNodeId, nextNodeId === null
+            ? { delayMs: DAG_HOVER_CLEAR_DELAY_MS }
+            : undefined);
+    }, [scheduleFocusedNodeId]);
+
+    /**
+     * @function handleDagOverlayMouseLeave
+     * @description 鼠标离开 DAG 叠加层时延迟清空 hover 聚焦，避免快速划过时出现 null 抖动。
+     */
+    const handleDagOverlayMouseLeave = useCallback((): void => {
+        if (hoveredDagNodeIdRef.current === null) {
+            return;
+        }
+
+        hoveredDagNodeIdRef.current = null;
+        scheduleFocusedNodeId(null, { delayMs: DAG_HOVER_CLEAR_DELAY_MS });
+    }, [scheduleFocusedNodeId]);
+
+    /**
+     * @function handleDagNodeFocus
+     * @description 处理键盘焦点进入某个节点时的聚焦状态同步。
+     * @param event 当前焦点事件。
+     */
+    const handleDagNodeFocus = useCallback((event: Event): void => {
+        const nextNodeId = resolveHoveredArchitectureNodeId(event.target);
+        if (!nextNodeId) {
+            return;
+        }
+
+        hoveredDagNodeIdRef.current = nextNodeId;
+        scheduleFocusedNodeId(nextNodeId);
+    }, [scheduleFocusedNodeId]);
+
+    /**
+     * @function handleDagNodeBlur
+     * @description 在键盘焦点离开 DAG 节点时清理聚焦态。
+     * @param event 当前失焦事件。
+     */
+    const handleDagNodeBlur = useCallback((event: FocusEvent): void => {
+        const nextTarget = event.relatedTarget;
+        const nextNodeId = resolveHoveredArchitectureNodeId(nextTarget);
+        if (nextNodeId) {
+            hoveredDagNodeIdRef.current = nextNodeId;
+            scheduleFocusedNodeId(nextNodeId);
+            return;
+        }
+
+        hoveredDagNodeIdRef.current = null;
+        scheduleFocusedNodeId(null, { delayMs: DAG_HOVER_CLEAR_DELAY_MS });
+    }, [scheduleFocusedNodeId]);
 
     /**
      * @function resolveDesktopAnchorPoint
@@ -1057,6 +1243,13 @@ export function ArchitectureDevtoolsTab(
     const endDagPinch = (): void => {
         pinchModeRef.current = "none";
         setPinchMode("none");
+
+        if (dagZoomCommitTimerRef.current !== null) {
+            window.clearTimeout(dagZoomCommitTimerRef.current);
+            dagZoomCommitTimerRef.current = null;
+        }
+
+        setDagZoom(dagZoomRef.current);
     };
 
     /**
@@ -1064,36 +1257,123 @@ export function ArchitectureDevtoolsTab(
      * @description 选中指定节点并打开检查器弹窗。
      * @param nodeId 节点 ID。
      */
-    const openInspectorForNode = (nodeId: string): void => {
+    const openInspectorForNode = useCallback((nodeId: string): void => {
         setSelectedNodeId(nodeId);
         setIsInspectorOpen(true);
-    };
+    }, []);
 
     /**
      * @function closeInspectorModal
      * @description 关闭检查器弹窗，但保留当前选中节点高亮。
      */
-    const closeInspectorModal = (): void => {
+    const closeInspectorModal = useCallback((): void => {
         setIsInspectorOpen(false);
-    };
+    }, []);
 
     /**
      * @function focusNodeDependencyTree
      * @description 以指定节点为精确根节点，切换到下游依赖树视图并关闭检查器。
      * @param node 目标节点。
      */
-    const focusNodeDependencyTree = (node: ArchitectureNode): void => {
+    const focusNodeDependencyTree = useCallback((node: ArchitectureNode): void => {
         setActiveKind(node.kind);
         setQuery(node.title);
         setExactRootNodeId(node.id);
         setGraphTraversalMode("dependencies");
-        setFocusedNodeId(null);
+        applyFocusedNodeIdState(null);
         setIsInspectorOpen(false);
-    };
+    }, [applyFocusedNodeIdState]);
 
     /**
      * @function commitDagZoomTarget
      * @description 提交新的缩放值与目标滚动位置，并在下一次布局提交后统一写回 DOM。
+     * @param nextZoom 目标缩放值。
+     * @param nextScrollLeft 目标横向滚动位置。
+     * @param nextScrollTop 目标纵向滚动位置。
+     */
+    const syncDagZoomPreviewToDom = (
+        nextZoom: number,
+        nextScrollLeft: number,
+        nextScrollTop: number,
+    ): void => {
+        const container = dagScrollRef.current;
+        const viewport = dagViewportRef.current;
+        const stage = dagStageRef.current;
+        const { width, height } = dagLayoutSizeRef.current;
+
+        if (viewport) {
+            viewport.style.width = `${String(width * nextZoom)}px`;
+            viewport.style.height = `${String(height * nextZoom)}px`;
+        }
+
+        if (stage) {
+            stage.style.width = `${String(width)}px`;
+            stage.style.height = `${String(height)}px`;
+            stage.style.transform = `scale(${String(nextZoom)})`;
+        }
+
+        if (container) {
+            suppressScrollSyncRef.current = true;
+            container.scrollLeft = nextScrollLeft;
+            container.scrollTop = nextScrollTop;
+        }
+    };
+
+    /**
+     * @function scheduleDagZoomPreview
+     * @description 使用 requestAnimationFrame 合并缩放过程中的 DOM 写入，避免每次输入事件都触发同步布局。
+     * @param nextZoom 目标缩放值。
+     * @param nextScrollLeft 目标横向滚动位置。
+     * @param nextScrollTop 目标纵向滚动位置。
+     */
+    const scheduleDagZoomPreview = (
+        nextZoom: number,
+        nextScrollLeft: number,
+        nextScrollTop: number,
+    ): void => {
+        pendingDagZoomPreviewRef.current = {
+            zoom: nextZoom,
+            left: nextScrollLeft,
+            top: nextScrollTop,
+        };
+
+        if (dagZoomPreviewFrameRef.current !== null) {
+            return;
+        }
+
+        dagZoomPreviewFrameRef.current = requestAnimationFrame(() => {
+            dagZoomPreviewFrameRef.current = null;
+            const pendingPreview = pendingDagZoomPreviewRef.current;
+            if (!pendingPreview) {
+                return;
+            }
+
+            syncDagZoomPreviewToDom(
+                pendingPreview.zoom,
+                pendingPreview.left,
+                pendingPreview.top,
+            );
+        });
+    };
+
+    /**
+     * @function scheduleDagZoomCommit
+     * @description 在缩放输入短暂静止后再提交 React 状态，避免连续缩放期间整棵组件树频繁重渲染。
+     */
+    const scheduleDagZoomCommit = (): void => {
+        if (dagZoomCommitTimerRef.current !== null) {
+            window.clearTimeout(dagZoomCommitTimerRef.current);
+        }
+
+        dagZoomCommitTimerRef.current = window.setTimeout(() => {
+            dagZoomCommitTimerRef.current = null;
+            setDagZoom(dagZoomRef.current);
+        }, 120);
+    };
+
+    /**
+     * @function commitDagZoomTarget
+     * @description 提交新的缩放值与目标滚动位置，实时预览直接写入 DOM，React 状态延迟到缩放停顿后更新。
      * @param nextZoom 目标缩放值。
      * @param nextScrollLeft 目标横向滚动位置。
      * @param nextScrollTop 目标纵向滚动位置。
@@ -1108,11 +1388,8 @@ export function ArchitectureDevtoolsTab(
             left: nextScrollLeft,
             top: nextScrollTop,
         };
-        pendingDagScrollTargetRef.current = {
-            left: nextScrollLeft,
-            top: nextScrollTop,
-        };
-        setDagZoom(nextZoom);
+        scheduleDagZoomPreview(nextZoom, nextScrollLeft, nextScrollTop);
+        scheduleDagZoomCommit();
     };
 
     /**
@@ -1207,21 +1484,16 @@ export function ArchitectureDevtoolsTab(
         dagZoomRef.current = dagZoom;
     }, [dagZoom]);
 
-    useLayoutEffect(() => {
-        const container = dagScrollRef.current;
-        const pendingTarget = pendingDagScrollTargetRef.current;
-        if (!container || !pendingTarget) {
-            return;
-        }
+    useEffect(() => {
+        focusedNodeIdRef.current = focusedNodeId;
+    }, [focusedNodeId]);
 
-        suppressScrollSyncRef.current = true;
-        container.scrollLeft = pendingTarget.left;
-        container.scrollTop = pendingTarget.top;
-        dagScrollPositionRef.current = {
-            left: container.scrollLeft,
-            top: container.scrollTop,
-        };
-        pendingDagScrollTargetRef.current = null;
+    useLayoutEffect(() => {
+        syncDagZoomPreviewToDom(
+            dagZoom,
+            dagScrollPositionRef.current.left,
+            dagScrollPositionRef.current.top,
+        );
     }, [dagZoom]);
 
     useEffect(() => {
@@ -1240,8 +1512,50 @@ export function ArchitectureDevtoolsTab(
                 cancelAnimationFrame(pinchScrollRestoreFrameRef.current);
                 pinchScrollRestoreFrameRef.current = null;
             }
+
+            if (dagZoomPreviewFrameRef.current !== null) {
+                cancelAnimationFrame(dagZoomPreviewFrameRef.current);
+                dagZoomPreviewFrameRef.current = null;
+            }
+
+            if (dagZoomCommitTimerRef.current !== null) {
+                window.clearTimeout(dagZoomCommitTimerRef.current);
+                dagZoomCommitTimerRef.current = null;
+            }
+
+            if (focusedNodeFrameRef.current !== null) {
+                cancelAnimationFrame(focusedNodeFrameRef.current);
+                focusedNodeFrameRef.current = null;
+            }
+
+            if (focusedNodeClearTimerRef.current !== null) {
+                window.clearTimeout(focusedNodeClearTimerRef.current);
+                focusedNodeClearTimerRef.current = null;
+            }
         };
-    }, []);
+    }, [handleDagNodeBlur, handleDagNodeFocus]);
+
+    useEffect(() => {
+        const stageElement = dagStageRef.current;
+        if (!stageElement) {
+            return;
+        }
+
+        const handleFocusIn = (event: FocusEvent): void => {
+            handleDagNodeFocus(event);
+        };
+        const handleFocusOut = (event: FocusEvent): void => {
+            handleDagNodeBlur(event);
+        };
+
+        stageElement.addEventListener("focusin", handleFocusIn);
+        stageElement.addEventListener("focusout", handleFocusOut);
+
+        return () => {
+            stageElement.removeEventListener("focusin", handleFocusIn);
+            stageElement.removeEventListener("focusout", handleFocusOut);
+        };
+    }, [handleDagNodeBlur, handleDagNodeFocus]);
 
     useEffect(() => {
         const handleWindowMouseMove = (event: MouseEvent): void => {
@@ -1342,7 +1656,7 @@ export function ArchitectureDevtoolsTab(
                 setSelectedNodeId(null);
             }
             if (focusedNodeId !== null) {
-                setFocusedNodeId(null);
+                applyFocusedNodeIdState(null);
             }
             if (isInspectorOpen) {
                 setIsInspectorOpen(false);
@@ -1360,9 +1674,9 @@ export function ArchitectureDevtoolsTab(
         }
 
         if (focusedNodeId && !snapshot.nodes.some((node) => node.id === focusedNodeId)) {
-            setFocusedNodeId(null);
+            applyFocusedNodeIdState(null);
         }
-    }, [focusedNodeId, isInspectorOpen, selectedNodeId, snapshot.nodes]);
+    }, [applyFocusedNodeIdState, focusedNodeId, isInspectorOpen, selectedNodeId, snapshot.nodes]);
 
     useEffect(() => {
         if (!isInspectorOpen) {
@@ -1381,6 +1695,20 @@ export function ArchitectureDevtoolsTab(
             window.removeEventListener("keydown", handleWindowKeyDown);
         };
     }, [isInspectorOpen]);
+
+    useEffect(() => {
+        if (reverseDependencyCopyState === "idle") {
+            return;
+        }
+
+        const resetTimer = window.setTimeout(() => {
+            setReverseDependencyCopyState("idle");
+        }, 1800);
+
+        return () => {
+            window.clearTimeout(resetTimer);
+        };
+    }, [reverseDependencyCopyState]);
 
     const nodeMap = useMemo(() => {
         return new Map(snapshot.nodes.map((node) => [node.id, node]));
@@ -1427,7 +1755,7 @@ export function ArchitectureDevtoolsTab(
                 setSelectedNodeId(null);
             }
             if (focusedNodeId !== null) {
-                setFocusedNodeId(null);
+                applyFocusedNodeIdState(null);
             }
             if (isInspectorOpen) {
                 setIsInspectorOpen(false);
@@ -1450,9 +1778,9 @@ export function ArchitectureDevtoolsTab(
         }
 
         if (focusedNodeId && !visibleNodeIds.has(focusedNodeId)) {
-            setFocusedNodeId(null);
+            applyFocusedNodeIdState(null);
         }
-    }, [focusedNodeId, isInspectorOpen, matchedNodes, selectedNodeId, snapshot.nodes, visibleNodeIds]);
+    }, [applyFocusedNodeIdState, focusedNodeId, isInspectorOpen, matchedNodes, selectedNodeId, snapshot.nodes, visibleNodeIds]);
 
     const visibleNodes = useMemo(() => {
         return snapshot.nodes.filter((node) => visibleNodeIds.has(node.id));
@@ -1473,21 +1801,39 @@ export function ArchitectureDevtoolsTab(
         });
     }, [layeredEdges, matchedNodes, snapshot.nodes.length, visibleNodeIds]);
 
+    const visibleEdgeAdjacencyIndex = useMemo(() => {
+        return buildArchitectureEdgeAdjacencyIndex(visibleEdges);
+    }, [visibleEdges]);
+
     const layout = useMemo(() => buildLayout(visibleNodes, visibleEdges), [visibleEdges, visibleNodes]);
+    useLayoutEffect(() => {
+        dagLayoutSizeRef.current = {
+            width: layout.width,
+            height: layout.height,
+        };
+        syncDagZoomPreviewToDom(
+            dagZoomRef.current,
+            dagScrollPositionRef.current.left,
+            dagScrollPositionRef.current.top,
+        );
+    }, [layout.height, layout.width]);
+
+    const reverseModuleDependencyDetails = useMemo(() => {
+        return collectReverseModuleDependencyDetails(visibleEdges, nodeMap, layout.positions);
+    }, [layout.positions, nodeMap, visibleEdges]);
+    const reverseModuleDependencyEdgeIds = useMemo(() => {
+        return new Set(reverseModuleDependencyDetails.map((detail) => getArchitectureEdgeKey(detail.edge)));
+    }, [reverseModuleDependencyDetails]);
     const selectedNode = nodeMap.get(selectedNodeId ?? "") ?? null;
-    const selectedNodeRelatedEdges = collectRelatedEdges(visibleEdges, selectedNodeId);
-    const focusedNodeRelatedEdges = collectRelatedEdges(visibleEdges, focusedNodeId);
+    const selectedNodeRelatedEdges = useMemo(() => {
+        return getArchitectureNodeRelatedEdges(visibleEdgeAdjacencyIndex, selectedNodeId);
+    }, [selectedNodeId, visibleEdgeAdjacencyIndex]);
+    const focusedNodeRelatedEdges = useMemo(() => {
+        return getArchitectureNodeRelatedEdges(visibleEdgeAdjacencyIndex, focusedNodeId);
+    }, [focusedNodeId, visibleEdgeAdjacencyIndex]);
 
     const highlightedNodeIds = useMemo(() => {
-        const next = new Set<string>();
-        if (focusedNodeId) {
-            next.add(focusedNodeId);
-        }
-        focusedNodeRelatedEdges.forEach((edge) => {
-            next.add(edge.from);
-            next.add(edge.to);
-        });
-        return next;
+        return collectArchitectureHighlightedNodeIds(focusedNodeId, focusedNodeRelatedEdges);
     }, [focusedNodeId, focusedNodeRelatedEdges]);
 
     const inventoryNodes = useMemo(() => {
@@ -1512,6 +1858,47 @@ export function ArchitectureDevtoolsTab(
             items: tabComponents.map((tabComponent) => tabComponent.id),
         },
     ];
+
+    const handleOpenInspectorForNode = useCallback((nodeId: string): void => {
+        openInspectorForNode(nodeId);
+    }, [openInspectorForNode]);
+
+    /**
+     * @function handleCopyReverseModuleDependencies
+     * @description 将当前可见红色依赖关系复制到系统剪贴板。
+     * @returns Promise<void>
+     */
+    const handleCopyReverseModuleDependencies = async (): Promise<void> => {
+        const clipboardText = formatReverseModuleDependencyDetailsForClipboard(
+            reverseModuleDependencyDetails,
+        );
+        if (!clipboardText) {
+            console.warn("[architectureDevtools] reverse dependency copy skipped: no reverse module dependencies");
+            return;
+        }
+
+        try {
+            console.info("[architectureDevtools] copying reverse module dependencies", {
+                count: reverseModuleDependencyDetails.length,
+            });
+            await navigator.clipboard.writeText(clipboardText);
+            setReverseDependencyCopyState("copied");
+            console.info("[architectureDevtools] copied reverse module dependencies", {
+                count: reverseModuleDependencyDetails.length,
+            });
+        } catch (copyError) {
+            setReverseDependencyCopyState("error");
+            console.error("[architectureDevtools] copy reverse module dependencies failed", {
+                error: copyError instanceof Error ? copyError.message : String(copyError),
+            });
+        }
+    };
+
+    const reverseDependencyCopyLabel = reverseDependencyCopyState === "copied"
+        ? t("architectureDevtools.copyReverseModuleDependenciesCopied")
+        : reverseDependencyCopyState === "error"
+            ? t("architectureDevtools.copyReverseModuleDependenciesFailed")
+            : t("architectureDevtools.copyReverseModuleDependencies");
 
     return (
         /* architecture-devtools: 页面根容器 */
@@ -1681,6 +2068,23 @@ export function ArchitectureDevtoolsTab(
                             {t("architectureDevtools.dagTitle")}
                         </div>
                         <div className="architecture-dag-actions">
+                            <button
+                                className={[
+                                    "architecture-dag-copy-action",
+                                    reverseDependencyCopyState === "copied"
+                                        ? "architecture-dag-copy-action--copied"
+                                        : reverseDependencyCopyState === "error"
+                                            ? "architecture-dag-copy-action--error"
+                                            : "",
+                                ].join(" ").trim()}
+                                disabled={reverseModuleDependencyDetails.length === 0}
+                                onClick={() => {
+                                    void handleCopyReverseModuleDependencies();
+                                }}
+                                type="button"
+                            >
+                                {reverseDependencyCopyLabel}
+                            </button>
                             <div className="architecture-dag-meta">
                                 {matchedNodes.length === 0
                                     ? t("architectureDevtools.noMatches")
@@ -1689,6 +2093,11 @@ export function ArchitectureDevtoolsTab(
                                             ? focusedNodeRelatedEdges.length
                                             : visibleEdges.length,
                                     })}
+                                {reverseModuleDependencyDetails.length > 0
+                                    ? ` · ${t("architectureDevtools.reverseModuleDependencies", {
+                                        count: reverseModuleDependencyDetails.length,
+                                    })}`
+                                    : ""}
                                 {matchedNodes.length > 0 ? ` · ${String(Math.round(dagZoom * 100))}%` : ""}
                             </div>
                         </div>
@@ -1816,19 +2225,39 @@ export function ArchitectureDevtoolsTab(
                         ) : (
                             <div
                                 className="architecture-dag-viewport"
+                                ref={dagViewportRef}
                                 style={{
                                     width: `${String(layout.width * dagZoom)}px`,
                                     height: `${String(layout.height * dagZoom)}px`,
                                 }}
                             >
-                                <svg
-                                    className="architecture-dag-canvas"
-                                    height={layout.height}
-                                    preserveAspectRatio="xMinYMin meet"
+                                <div
+                                    className="architecture-dag-stage"
+                                    ref={dagStageRef}
                                     style={{
+                                        width: `${String(layout.width)}px`,
+                                        height: `${String(layout.height)}px`,
                                         transform: `scale(${String(dagZoom)})`,
-                                        transformOrigin: "top left",
                                     }}
+                                >
+                                    <ArchitectureDagEdgeCanvas
+                                        edges={visibleEdges}
+                                        focusedEdges={focusedNodeRelatedEdges}
+                                        focusedNodeId={focusedNodeId}
+                                        getEdgeKey={getArchitectureEdgeKey}
+                                        height={layout.height}
+                                        nodeHeight={NODE_HEIGHT}
+                                        nodeWidth={NODE_WIDTH}
+                                        positions={layout.positions}
+                                        reverseModuleDependencyEdgeIds={reverseModuleDependencyEdgeIds}
+                                        width={layout.width}
+                                    />
+                                <svg
+                                    className="architecture-dag-overlay"
+                                    height={layout.height}
+                                    onMouseLeave={handleDagOverlayMouseLeave}
+                                    onMouseMove={handleDagOverlayMouseMove}
+                                    preserveAspectRatio="xMinYMin meet"
                                     viewBox={`0 0 ${layout.width} ${layout.height}`}
                                     width={layout.width}
                                 >
@@ -1848,107 +2277,19 @@ export function ArchitectureDevtoolsTab(
                                         );
                                     })}
 
-                                    {visibleEdges.map((edge) => {
-                                        const from = layout.positions.get(edge.from);
-                                        const to = layout.positions.get(edge.to);
-                                        if (!from || !to) {
-                                            return null;
-                                        }
-
-                                        const isHighlighted =
-                                            focusedNodeId !== null &&
-                                            (edge.from === focusedNodeId || edge.to === focusedNodeId);
-
+                                    {layout.layoutNodes.map((layoutNode) => {
                                         return (
-                                            <path
-                                                className={[
-                                                    "architecture-edge",
-                                                    focusedNodeId === null
-                                                        ? ""
-                                                        : isHighlighted
-                                                            ? "architecture-edge--highlighted"
-                                                            : "architecture-edge--dimmed",
-                                                ].join(" ")}
-                                                d={edgePath(from, to)}
-                                                key={`${edge.from}-${edge.to}-${edge.kind}-${edge.label ?? ""}`}
+                                            <ArchitectureDagNode
+                                                isFocused={focusedNodeId === layoutNode.node.id}
+                                                isRelated={highlightedNodeIds.has(layoutNode.node.id)}
+                                                key={layoutNode.node.id}
+                                                layoutNode={layoutNode}
+                                                onOpenInspector={handleOpenInspectorForNode}
                                             />
                                         );
                                     })}
-
-                                    {layout.layoutNodes.map((layoutNode) => {
-                                        const isFocused = focusedNodeId === layoutNode.node.id;
-                                        const isRelated = highlightedNodeIds.has(layoutNode.node.id);
-
-                                        return (
-                                            <g
-                                                className={[
-                                                    "architecture-node",
-                                                    getKindColorClass(layoutNode.node.kind),
-                                                    getNodeSemanticColorClass(layoutNode.node),
-                                                    isFocused
-                                                        ? "architecture-node--selected"
-                                                        : isRelated
-                                                            ? "architecture-node--related"
-                                                            : "architecture-node--idle",
-                                                ].join(" ")}
-                                                key={layoutNode.node.id}
-                                                onClick={() => openInspectorForNode(layoutNode.node.id)}
-                                                onFocus={() => setFocusedNodeId(layoutNode.node.id)}
-                                                onKeyDown={(event) => {
-                                                    if (event.key === "Enter" || event.key === " ") {
-                                                        event.preventDefault();
-                                                        openInspectorForNode(layoutNode.node.id);
-                                                    }
-                                                }}
-                                                onMouseEnter={() => setFocusedNodeId(layoutNode.node.id)}
-                                                onMouseLeave={() => setFocusedNodeId((currentNodeId) => {
-                                                    return currentNodeId === layoutNode.node.id ? null : currentNodeId;
-                                                })}
-                                                onBlur={() => setFocusedNodeId((currentNodeId) => {
-                                                    return currentNodeId === layoutNode.node.id ? null : currentNodeId;
-                                                })}
-                                                role="button"
-                                                tabIndex={0}
-                                            >
-                                                <title>{`${layoutNode.node.title}: ${layoutNode.node.summary}`}</title>
-                                                <rect
-                                                    height={NODE_HEIGHT}
-                                                    rx={18}
-                                                    width={NODE_WIDTH}
-                                                    x={layoutNode.x}
-                                                    y={layoutNode.y}
-                                                />
-                                                <text
-                                                    className="architecture-node-kind"
-                                                    x={layoutNode.x + 16}
-                                                    y={layoutNode.y + 24}
-                                                >
-                                                    {getKindLabel(layoutNode.node.kind)}
-                                                </text>
-                                                <foreignObject
-                                                    height={28}
-                                                    width={NODE_WIDTH - 32}
-                                                    x={layoutNode.x + 16}
-                                                    y={layoutNode.y + 31}
-                                                >
-                                                    <div className="architecture-node-title-box">
-                                                        {layoutNode.node.title}
-                                                    </div>
-                                                </foreignObject>
-                                                <foreignObject
-                                                    height={38}
-                                                    width={NODE_WIDTH - 32}
-                                                    x={layoutNode.x + 16}
-                                                    y={layoutNode.y + 58}
-                                                >
-                                                    <div className="architecture-node-summary-box">
-                                                        {layoutNode.node.summary}
-                                                    </div>
-                                                </foreignObject>
-                                            </g>
-                                        );
-                                    })}
                                 </svg>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -2038,7 +2379,7 @@ export function ArchitectureDevtoolsTab(
                                     {selectedNodeRelatedEdges.map((edge) => (
                                         <div
                                             className="architecture-inspector-item"
-                                            key={`${edge.from}-${edge.to}-${edge.kind}-${edge.label ?? ""}`}
+                                            key={getArchitectureEdgeKey(edge)}
                                         >
                                             <div className="architecture-inspector-item-title">
                                                 {formatEdgeDescription(edge, nodeMap)}
@@ -2114,7 +2455,7 @@ export function ArchitectureDevtoolsTab(
                         emptyMessage={t("architectureDevtools.noMatches")}
                         key={section.kind}
                         nodes={section.nodes}
-                        onFocusNode={setFocusedNodeId}
+                        onFocusNode={scheduleFocusedNodeId}
                         onSelect={openInspectorForNode}
                         sectionTitle={section.label}
                         selectedNodeId={selectedNodeId}
