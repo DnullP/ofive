@@ -12,6 +12,7 @@ import React, {
     type KeyboardEvent,
     type ReactNode,
 } from "react";
+import type { IDockviewPanelProps } from "dockview";
 import { ArrowUp, Bot, Check, Copy, Plus, Sparkles, X } from "lucide-react";
 import {
     getAiChatHistory,
@@ -65,6 +66,11 @@ import { AiChatMessageMarkdown } from "./aiChatMessageMarkdown";
 import { buildConfirmationPreview } from "./aiChatConfirmationPreview";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerPanel } from "../../host/registry/panelRegistry";
+import { registerTabComponent } from "../../host/registry/tabComponentRegistry";
+import {
+    buildConvertibleViewTabParams,
+    registerConvertibleView,
+} from "../../host/registry";
 import { registerSettingsItem, registerSettingsSection } from "../../host/settings/settingsRegistry";
 import { registerPluginOwnedStore } from "../../host/store/storeRegistry";
 import { useVaultState } from "../../host/vault/vaultStore";
@@ -73,6 +79,8 @@ import "./aiChatPlugin.css";
 
 const AI_CHAT_PANEL_ID = "ai-chat";
 const AI_CHAT_PLUGIN_ID = "ai-chat";
+const AI_CHAT_TAB_COMPONENT_ID = "ai-chat-tab";
+const AI_CHAT_CONVERTIBLE_ID = "ai-chat";
 
 interface QuickPromptDefinition {
     id: string;
@@ -87,6 +95,30 @@ const QUICK_PROMPTS: QuickPromptDefinition[] = [
     { id: "refine", translationKey: "aiChatPlugin.quickPromptRefine" },
     { id: "plan", translationKey: "aiChatPlugin.quickPromptPlan" },
 ];
+
+/**
+ * @function openAiChatTab
+ * @description 统一打开 AI chat 标签页，供 activity icon 复用。
+ * @param openTab 宿主打开 tab 能力。
+ */
+function openAiChatTab(
+    openTab: ((tab: { id: string; title: string; component: string; params?: Record<string, unknown> }) => void) | undefined,
+): void {
+    if (!openTab) {
+        console.warn("[aiChatPlugin] open tab skipped: openTab missing");
+        return;
+    }
+
+    openTab({
+        id: AI_CHAT_PANEL_ID,
+        title: i18n.t("aiChatPlugin.title"),
+        component: AI_CHAT_TAB_COMPONENT_ID,
+        params: buildConvertibleViewTabParams({
+            descriptorId: AI_CHAT_CONVERTIBLE_ID,
+            stateKey: AI_CHAT_CONVERTIBLE_ID,
+        }),
+    });
+}
 
 /**
  * @function nextChatMessageId
@@ -119,11 +151,11 @@ function nextChatDebugEntryId(): string {
 }
 
 /**
- * @function ChatPanel
- * @description 渲染右侧 AI 聊天面板。
- * @returns 面板 React 节点。
+ * @function AiChatView
+ * @description 渲染可在 pane 和 tab 之间复用的 AI 聊天视图。
+ * @returns React 节点。
  */
-function ChatPanel(): ReactNode {
+function AiChatView(): ReactNode {
     const { currentVaultPath } = useVaultState();
     const [historyState, setHistoryState] = useState<AiChatHistoryState | null>(null);
     const [debugEntriesByConversation, setDebugEntriesByConversation] = useState<Record<string, ChatDebugEntry[]>>({});
@@ -1030,6 +1062,16 @@ function ChatPanel(): ReactNode {
 }
 
 /**
+ * @function AiChatTab
+ * @description 渲染主区域中的 AI 聊天标签页。
+ * @param _props Dockview 面板属性；当前实现不依赖额外参数。
+ * @returns React 节点。
+ */
+function AiChatTab(_props: IDockviewPanelProps<Record<string, unknown>>): ReactNode {
+    return <AiChatView />;
+}
+
+/**
  * @function AiChatSettingsSection
  * @description 渲染 AI 设置页，按照后端返回的 schema 动态生成表单。
  * @returns 设置页 React 节点。
@@ -1402,14 +1444,23 @@ function registerAiChatSettingsSection(): () => void {
  * @returns 插件清理函数。
  */
 export function activatePlugin(): () => void {
+    const unregisterTabComponent = registerTabComponent({
+        id: AI_CHAT_TAB_COMPONENT_ID,
+        component: AiChatTab,
+        lifecycleScope: "vault",
+    });
+
     const unregisterActivity = registerActivity({
-        type: "panel-container",
+        type: "callback",
         id: AI_CHAT_PANEL_ID,
         title: () => i18n.t("aiChatPlugin.title"),
         icon: React.createElement(Bot, { size: 18, strokeWidth: 1.8 }),
         defaultSection: "top",
         defaultBar: "right",
         defaultOrder: 1,
+        onActivate: (context) => {
+            openAiChatTab(context.openTab);
+        },
     });
 
     const unregisterPanel = registerPanel({
@@ -1418,7 +1469,23 @@ export function activatePlugin(): () => void {
         activityId: AI_CHAT_PANEL_ID,
         defaultPosition: "right",
         defaultOrder: 1,
-        render: () => <ChatPanel />,
+        render: () => <AiChatView />,
+    });
+
+    const unregisterConvertibleView = registerConvertibleView({
+        id: AI_CHAT_CONVERTIBLE_ID,
+        tabComponentId: AI_CHAT_TAB_COMPONENT_ID,
+        panelId: AI_CHAT_PANEL_ID,
+        defaultMode: "panel",
+        buildTabInstance: ({ stateKey, params }) => ({
+            id: AI_CHAT_PANEL_ID,
+            title: i18n.t("aiChatPlugin.title"),
+            component: AI_CHAT_TAB_COMPONENT_ID,
+            params: buildConvertibleViewTabParams({
+                descriptorId: AI_CHAT_CONVERTIBLE_ID,
+                stateKey,
+            }, params),
+        }),
     });
 
     const unregisterAiChatSettingsStore = registerPluginOwnedStore(AI_CHAT_PLUGIN_ID, {
@@ -1537,8 +1604,10 @@ export function activatePlugin(): () => void {
 
     return () => {
         unregisterAiChatSettingsStore();
+        unregisterConvertibleView();
         unregisterPanel();
         unregisterActivity();
+        unregisterTabComponent();
         console.info("[aiChatPlugin] unregistered ai chat plugin");
     };
 }
