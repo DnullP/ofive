@@ -1,16 +1,16 @@
 /**
- * @module plugins/pluginRuntime.test
+ * @module host/pluginRuntime.test
  * @description 插件运行时单元测试：覆盖首次激活、热重载替换、整体清理与失败隔离。
  * @dependencies
  *   - bun:test
- *   - ./pluginRuntime
+ *   - ../host/pluginRuntime
  *
  * @example
  *   bun test src/plugins/pluginRuntime.test.ts
  */
 
 import { afterAll, afterEach, describe, expect, it, mock } from "bun:test";
-import { createPluginRuntime, type PluginModuleRecord } from "./pluginRuntime";
+import { createPluginRuntime, type PluginModuleRecord } from "../host/pluginRuntime";
 
 describe("pluginRuntime", () => {
     const infoSpy = mock(() => undefined);

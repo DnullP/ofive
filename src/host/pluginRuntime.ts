@@ -1,5 +1,5 @@
 /**
- * @module plugins/pluginRuntime
+ * @module host/pluginRuntime
  * @description 插件运行时：统一负责插件入口的激活、卸载与热更新重载。
  *
  *   设计目标：
@@ -224,8 +224,8 @@ export function createPluginRuntime(initialModules: PluginModuleRecord): PluginR
  */
 export async function startDiscoveredPlugins(): Promise<PluginRuntime> {
     const discoveredModules = import.meta.glob<RuntimePluginModule>([
-        "./**/*Plugin.{ts,tsx}",
-        "!./**/editPlugins/*",
+        "../plugins/**/*Plugin.{ts,tsx}",
+        "!../plugins/**/editPlugins/*",
     ], {
         eager: true,
     });

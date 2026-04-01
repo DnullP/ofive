@@ -59,6 +59,7 @@ import {
     saveVaultMarkdownFile,
 } from "../../api/vaultApi";
 import {
+    emitCustomActivityRemovalRequestedEvent,
     emitEditorCommandRequestedEvent,
     subscribeVaultFsBusEvent,
 } from "../events/appEventBus";
@@ -139,7 +140,6 @@ import {
     removeActivityReferencesFromPanelStates,
     repairUnknownActivityReferencesInPanelStates,
 } from "./layoutStateReducers";
-import { removeCustomActivityFromVaultConfig } from "../../plugins/custom-activity/customActivityConfig";
 import {
     getSidebarLayoutFromVaultConfig,
     mergePanelStatesWithSidebarLayoutFallback,
@@ -4166,7 +4166,9 @@ export function DockviewLayout({
             paneSizeStateRef.current.delete(deletedPanelId);
             paneExpandedStateRef.current.delete(deletedPanelId);
 
-            await removeCustomActivityFromVaultConfig(configId);
+            emitCustomActivityRemovalRequestedEvent({
+                activityConfigId: configId,
+            });
             console.info("[activity-bar] custom activity deleted", { itemId: item.id, configId });
         } else if (selectedId === "create-custom-activity") {
             executeCommand(CUSTOM_ACTIVITY_CREATE_COMMAND_ID, buildCommandContext());

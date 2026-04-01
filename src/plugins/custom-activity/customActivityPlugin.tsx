@@ -22,6 +22,7 @@
 
 import React from "react";
 import { registerCommand } from "../../host/commands/commandSystem";
+import { subscribeCustomActivityRemovalRequestedEvent } from "../../host/events/appEventBus";
 import {
     registerActivity,
     registerOverlay,
@@ -33,6 +34,7 @@ import { requestCustomActivityModalOpen } from "./customActivityEvents";
 import {
     CUSTOM_ACTIVITY_CONFIG_KEY,
     getCustomActivitiesFromVaultConfig,
+    removeCustomActivityFromVaultConfig,
     type CustomActivityDefinition,
 } from "./customActivityConfig";
 import { renderCustomActivityIcon } from "./iconCatalog";
@@ -148,9 +150,19 @@ export function activatePlugin(): () => void {
         rerenderRuntimeActivities();
     });
 
+    const unsubscribeRemovalRequest = subscribeCustomActivityRemovalRequestedEvent((payload) => {
+        void removeCustomActivityFromVaultConfig(payload.activityConfigId).catch((error) => {
+            console.error("[custom-activity] remove requested activity failed", {
+                activityConfigId: payload.activityConfigId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        });
+    });
+
     console.info("[custom-activity] plugin activated");
 
     return () => {
+        unsubscribeRemovalRequest();
         unsubscribeConfig();
         dynamicCleanup.forEach((dispose) => {
             dispose();

@@ -25,6 +25,8 @@
  *  - subscribeEditorCommandRequestedEvent: 订阅编辑器原生命令执行请求事件
  *  - emitFileTreeRenameRequestedEvent: 发布文件树重命名请求事件
  *  - subscribeFileTreeRenameRequestedEvent: 订阅文件树重命名请求事件
+ *  - emitCustomActivityRemovalRequestedEvent: 发布删除自定义 activity 的请求事件
+ *  - subscribeCustomActivityRemovalRequestedEvent: 订阅删除自定义 activity 的请求事件
  *  - emitPersistedContentUpdatedEvent: 发布持久态内容更新事件
  *  - subscribePersistedContentUpdatedEvent: 订阅持久态内容更新事件
  */
@@ -76,6 +78,17 @@ export interface FileTreeRenameRequestedBusEvent {
 }
 
 /**
+ * @interface CustomActivityRemovalRequestedBusEvent
+ * @description 请求删除指定自定义 activity 配置的事件。
+ * @field eventId - 事件唯一标识
+ * @field activityConfigId - 待删除的自定义 activity 配置 ID
+ */
+export interface CustomActivityRemovalRequestedBusEvent {
+    eventId: string;
+    activityConfigId: string;
+}
+
+/**
  * @interface EditorRevealRequestedBusEvent
  * @description 请求当前活跃编辑器定位到指定行的事件。
  * @field eventId - 事件唯一标识
@@ -120,6 +133,7 @@ type AppBusEventMap = {
     "editor.content.changed": EditorContentChangedBusEvent;
     "editor.focus.changed": EditorFocusChangedBusEvent;
     "fileTree.rename.requested": FileTreeRenameRequestedBusEvent;
+    "customActivity.removal.requested": CustomActivityRemovalRequestedBusEvent;
     "editor.reveal.requested": EditorRevealRequestedBusEvent;
     "editor.command.requested": EditorCommandRequestedBusEvent;
     "persisted.content.updated": PersistedContentUpdatedBusEvent;
@@ -368,6 +382,32 @@ export function subscribeFileTreeRenameRequestedEvent(
     listener: (payload: FileTreeRenameRequestedBusEvent) => void,
 ): () => void {
     return subscribeBusEvent("fileTree.rename.requested", listener);
+}
+
+/**
+ * @function emitCustomActivityRemovalRequestedEvent
+ * @description 发布删除自定义 activity 的请求事件。
+ * @param payload 事件负载，包含自定义 activity 配置 ID。
+ */
+export function emitCustomActivityRemovalRequestedEvent(payload: {
+    activityConfigId: string;
+}): void {
+    dispatchBusEvent("customActivity.removal.requested", {
+        eventId: nextFrontendEventId(),
+        ...payload,
+    });
+}
+
+/**
+ * @function subscribeCustomActivityRemovalRequestedEvent
+ * @description 订阅删除自定义 activity 的请求事件。
+ * @param listener 监听器。
+ * @returns 取消订阅函数。
+ */
+export function subscribeCustomActivityRemovalRequestedEvent(
+    listener: (payload: CustomActivityRemovalRequestedBusEvent) => void,
+): () => void {
+    return subscribeBusEvent("customActivity.removal.requested", listener);
 }
 
 /**

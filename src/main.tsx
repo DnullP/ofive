@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { startDiscoveredPlugins } from "./plugins/pluginRuntime";
+import { startDiscoveredPlugins } from "./host/pluginRuntime";
 import { setupFrontendLogBridge } from "./utils/frontendLogBridge";
 import { setupFrontendPerfMonitoring } from "./utils/perfMetrics";
 /* 初始化 i18n —— 必须在 App 渲染之前引入 */
@@ -19,7 +19,7 @@ const strictModeEnabled = import.meta.env.VITE_DISABLE_STRICT_MODE !== "true";
 await startDiscoveredPlugins();
 
 if (import.meta.hot) {
-  import.meta.hot.accept("./plugins/pluginRuntime", async (nextModule) => {
+  import.meta.hot.accept("./host/pluginRuntime", async (nextModule) => {
     if (!nextModule) {
       return;
     }

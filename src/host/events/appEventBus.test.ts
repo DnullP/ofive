@@ -39,10 +39,12 @@ mock.module("../../api/vaultApi", () => ({
 }));
 
 const {
+    emitCustomActivityRemovalRequestedEvent,
     emitEditorContentChangedEvent,
     emitEditorFocusChangedEvent,
     emitEditorRevealRequestedEvent,
     emitFileTreeRenameRequestedEvent,
+    subscribeCustomActivityRemovalRequestedEvent,
     subscribeEditorContentBusEvent,
     subscribeEditorFocusBusEvent,
     subscribeEditorRevealRequestedEvent,
@@ -160,5 +162,29 @@ describe("appEventBus editor event flow", () => {
         expect(capturedEventId).not.toBeNull();
         expect((capturedEventId ?? "").startsWith("frontend-")).toBe(true);
         expect(capturedPath).toBe("notes/rename-me.md");
+    });
+
+    /**
+     * @function should_publish_custom_activity_removal_request_event_with_target_id
+     * @description 发布删除自定义 activity 请求后，订阅者应收到目标配置 ID。
+     */
+    it("should publish custom activity removal request event with target id", () => {
+        let capturedEventId: string | null = null;
+        let capturedActivityConfigId = "";
+
+        const unlisten = subscribeCustomActivityRemovalRequestedEvent((payload) => {
+            capturedEventId = payload.eventId;
+            capturedActivityConfigId = payload.activityConfigId;
+        });
+
+        emitCustomActivityRemovalRequestedEvent({
+            activityConfigId: "custom-calendar",
+        });
+
+        unlisten();
+
+        expect(capturedEventId).not.toBeNull();
+        expect((capturedEventId ?? "").startsWith("frontend-")).toBe(true);
+        expect(capturedActivityConfigId).toBe("custom-calendar");
     });
 });
