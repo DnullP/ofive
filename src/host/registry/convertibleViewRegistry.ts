@@ -54,6 +54,8 @@ export interface ConvertibleViewTabState {
     descriptorId: string;
     /** 用于组件内部选择性共享状态的键。 */
     stateKey: string;
+    /** 关闭该 tab 时是否应恢复回对应 panel。 */
+    restorePanelOnClose?: boolean;
 }
 
 /**
@@ -149,7 +151,16 @@ export function readConvertibleViewTabState(
         return null;
     }
 
-    return { descriptorId, stateKey };
+    const restorePanelOnClose = (rawValue as Record<string, unknown>).restorePanelOnClose;
+    if (restorePanelOnClose !== undefined && typeof restorePanelOnClose !== "boolean") {
+        return null;
+    }
+
+    return {
+        descriptorId,
+        stateKey,
+        restorePanelOnClose,
+    };
 }
 
 /**

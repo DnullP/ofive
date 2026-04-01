@@ -131,6 +131,7 @@ import {
     buildConvertibleViewTabParams,
     readConvertibleViewTabState,
 } from "../registry";
+import type { ConvertibleViewDescriptor } from "../registry";
 import { getTabComponentById } from "../registry/tabComponentRegistry";
 import {
     buildInitialPanelStates,
@@ -855,6 +856,11 @@ export function DockviewLayout({
     const [mainDockWorkspaceDropPreview, setMainDockWorkspaceDropPreview] = useState<MainDockWorkspaceDropPreview | null>(null);
 
     const dockviewApiRef = useRef<DockviewApi | null>(null);
+    const panelStatesRef = useRef<PanelRuntimeState[]>([]);
+    const panelByIdRef = useRef<Map<string, PanelDefinition>>(new Map());
+    const convertibleByTabComponentIdRef = useRef<Map<string, ConvertibleViewDescriptor>>(new Map());
+    const convertibleViewRuntimeRef = useRef<Record<string, ConvertibleViewRuntimeState>>({});
+    const suppressedConvertibleRestoreTabIdsRef = useRef<Set<string>>(new Set());
     const leftPaneApiRef = useRef<PaneviewApi | null>(null);
     const rightPaneApiRef = useRef<PaneviewApi | null>(null);
     const dockviewLayoutDisposeRef = useRef<{ dispose: () => void } | null>(null);
@@ -899,6 +905,14 @@ export function DockviewLayout({
     useEffect(() => {
         dockviewApiRef.current = dockviewApi;
     }, [dockviewApi]);
+
+    useEffect(() => {
+        panelStatesRef.current = panelStates;
+    }, [panelStates]);
+
+    useEffect(() => {
+        convertibleViewRuntimeRef.current = convertibleViewRuntime;
+    }, [convertibleViewRuntime]);
 
     useEffect(() => {
         mainDockWorkspaceDropPreviewRef.current = mainDockWorkspaceDropPreview;
@@ -1032,6 +1046,10 @@ export function DockviewLayout({
         );
 
         panelsToClose.forEach((panel) => {
+            suppressedConvertibleRestoreTabIdsRef.current.add(panel.id);
+        });
+
+        panelsToClose.forEach((panel) => {
             panel.api.close();
         });
 
@@ -1106,6 +1124,9 @@ export function DockviewLayout({
     }, []);
 
     const panelById = useMemo(() => new Map(panels.map((panel) => [panel.id, panel])), [panels]);
+    useEffect(() => {
+        panelByIdRef.current = panelById;
+    }, [panelById]);
     const activityDescriptorById = useMemo(
         () => new Map(registeredActivities.map((activity) => [activity.id, activity] as const)),
         [registeredActivities],
@@ -1252,6 +1273,9 @@ export function DockviewLayout({
         () => new Map(registeredConvertibleViews.map((descriptor) => [descriptor.tabComponentId, descriptor] as const)),
         [registeredConvertibleViews],
     );
+    useEffect(() => {
+        convertibleByTabComponentIdRef.current = convertibleByTabComponentId;
+    }, [convertibleByTabComponentId]);
 
     const getConvertibleRuntimeState = (
         descriptorId: string,
@@ -2164,8 +2188,22 @@ export function DockviewLayout({
             panelId: descriptor.panelId,
             params: runtime?.sourceParams,
         });
+        const tabState = readConvertibleViewTabState(tabDefinition.params) ?? {
+            descriptorId: descriptor.id,
+            stateKey: runtime?.stateKey ?? descriptor.getInitialStateKey?.() ?? descriptor.id,
+        };
+        const restorableTabDefinition = {
+            ...tabDefinition,
+            params: buildConvertibleViewTabParams(
+                {
+                    ...tabState,
+                    restorePanelOnClose: true,
+                },
+                tabDefinition.params,
+            ),
+        };
 
-        openTabAtDropTarget(tabDefinition, {
+        openTabAtDropTarget(restorableTabDefinition, {
             referencePanel: dropEvent?.panel ?? dropEvent?.group?.activePanel,
             position: dropEvent?.position,
         });
@@ -2173,7 +2211,7 @@ export function DockviewLayout({
         console.info("[DockviewLayout] converted panel to tab", {
             descriptorId: descriptor.id,
             panelId: descriptor.panelId,
-            tabId: tabDefinition.id,
+            tabId: restorableTabDefinition.id,
             dropPosition: dropEvent?.position,
             dropTargetPanelId: dropEvent?.panel?.id,
         });
@@ -3018,6 +3056,60 @@ export function DockviewLayout({
     const closeTab = (tabId: string): void => {
         captureDockviewLayoutAnimation("split-settling", "programmatic");
         dockviewApiRef.current?.getPanel(tabId)?.api.close();
+    };
+
+    const restoreConvertiblePanelAfterTabClosed = (panel: IDockviewPanel): void => {
+        if (suppressedConvertibleRestoreTabIdsRef.current.has(panel.id)) {
+            suppressedConvertibleRestoreTabIdsRef.current.delete(panel.id);
+            return;
+        }
+
+        const descriptor = convertibleByTabComponentIdRef.current.get(panel.view.contentComponent);
+        if (!descriptor) {
+            return;
+        }
+
+        const tabParams = panel.params as Record<string, unknown> | undefined;
+        const tabState = readConvertibleViewTabState(tabParams);
+        if (!tabState?.restorePanelOnClose) {
+            return;
+        }
+
+        const runtime = convertibleViewRuntimeRef.current[descriptor.id] ?? null;
+        if (runtime?.mode === "panel") {
+            return;
+        }
+
+        const stateKey = tabState.stateKey
+            ?? runtime?.stateKey
+            ?? descriptor.getInitialStateKey?.()
+            ?? descriptor.id;
+        const sourceParams = stripConvertibleViewTabParam(tabParams);
+        const panelState = panelStatesRef.current.find((item) => item.id === descriptor.panelId);
+        const panelDefinition = panelByIdRef.current.get(descriptor.panelId);
+        const targetPosition = panelState?.position ?? panelDefinition?.position ?? "right";
+        const activityId = panelState?.activityId ?? panelDefinition?.activityId ?? descriptor.panelId;
+
+        setConvertibleViewRuntime((previous) => ({
+            ...previous,
+            [descriptor.id]: {
+                descriptorId: descriptor.id,
+                mode: "panel",
+                stateKey,
+                sourceParams,
+                sourceTabId: panel.id,
+            },
+        }));
+        setActivePanelId(descriptor.panelId);
+
+        if (targetPosition === "right") {
+            setIsRightSidebarVisible(true);
+            setActiveRightActivityId(activityId);
+            return;
+        }
+
+        setIsLeftSidebarVisible(true);
+        setActiveActivityId(activityId);
     };
 
     useEffect(() => {
@@ -5272,6 +5364,13 @@ export function DockviewLayout({
                 articleId: panel.id,
                 path: panelPath,
             });
+        });
+
+        api.onDidRemovePanel((panel) => {
+            recordDockviewTimelineEntry("remove-panel", {
+                panelId: panel.id,
+            });
+            restoreConvertiblePanelAfterTabClosed(panel);
         });
 
         if (initialTabs.length === 0) {

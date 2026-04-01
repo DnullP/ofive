@@ -97,30 +97,6 @@ const QUICK_PROMPTS: QuickPromptDefinition[] = [
 ];
 
 /**
- * @function openAiChatTab
- * @description 统一打开 AI chat 标签页，供 activity icon 复用。
- * @param openTab 宿主打开 tab 能力。
- */
-function openAiChatTab(
-    openTab: ((tab: { id: string; title: string; component: string; params?: Record<string, unknown> }) => void) | undefined,
-): void {
-    if (!openTab) {
-        console.warn("[aiChatPlugin] open tab skipped: openTab missing");
-        return;
-    }
-
-    openTab({
-        id: AI_CHAT_PANEL_ID,
-        title: i18n.t("aiChatPlugin.title"),
-        component: AI_CHAT_TAB_COMPONENT_ID,
-        params: buildConvertibleViewTabParams({
-            descriptorId: AI_CHAT_CONVERTIBLE_ID,
-            stateKey: AI_CHAT_CONVERTIBLE_ID,
-        }),
-    });
-}
-
-/**
  * @function nextChatMessageId
  * @description 生成面板内消息唯一 ID。
  * @returns 消息 ID。
@@ -1451,16 +1427,13 @@ export function activatePlugin(): () => void {
     });
 
     const unregisterActivity = registerActivity({
-        type: "callback",
+        type: "panel-container",
         id: AI_CHAT_PANEL_ID,
         title: () => i18n.t("aiChatPlugin.title"),
         icon: React.createElement(Bot, { size: 18, strokeWidth: 1.8 }),
         defaultSection: "top",
         defaultBar: "right",
         defaultOrder: 1,
-        onActivate: (context) => {
-            openAiChatTab(context.openTab);
-        },
     });
 
     const unregisterPanel = registerPanel({

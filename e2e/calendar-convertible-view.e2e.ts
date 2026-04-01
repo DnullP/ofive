@@ -83,6 +83,36 @@ test.describe("日历 tab/panel 转换", () => {
         ).toHaveCount(0);
     });
 
+    test("calendar panel 转成 tab 后关闭应恢复回右侧 panel", async ({ page }) => {
+        await gotoMockVaultPage(page, "calendar-close-restores-panel");
+        await waitForLayoutReady(page);
+
+        await page.getByTestId("activity-bar-item-calendar").click();
+        const calendarTab = page.locator(".dv-tab", { hasText: "Calendar" });
+        await expect(calendarTab).toBeVisible();
+
+        const backlinksHeader = page.locator(".dv-pane-header", { hasText: "Backlinks" });
+        await dockviewDragPanel(page, calendarTab, backlinksHeader);
+
+        const calendarPanel = page.locator("[aria-label='Right Extension Panel'] .dv-pane-header", {
+            hasText: "Calendar",
+        });
+        await expect(calendarPanel).toBeVisible();
+
+        const dockviewContent = page.locator("[aria-label='Dockview Main Area'] .dv-content-container");
+        await dockviewDragPanel(page, calendarPanel, dockviewContent, { x: 0.82, y: 0.5 });
+
+        const restoredCalendarTab = page.locator(".dv-tab", { hasText: "Calendar" });
+        await expect(restoredCalendarTab).toBeVisible();
+        await restoredCalendarTab.hover();
+        await restoredCalendarTab.locator(".dv-default-tab-action").click({ force: true });
+
+        await expect(page.locator(".dv-tab", { hasText: "Calendar" })).toHaveCount(0);
+        await expect(page.locator("[aria-label='Right Extension Panel'] .dv-pane-header", {
+            hasText: "Calendar",
+        })).toBeVisible();
+    });
+
     test("calendar activity icon 在 panel 模式下仍应打开 tab 而不是接管左侧 sidebar", async ({ page }) => {
         await gotoMockVaultPage(page, "calendar-panel-icon-behavior");
         await waitForLayoutReady(page);
