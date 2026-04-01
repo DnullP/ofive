@@ -437,6 +437,62 @@
     gap: 10px;
 }
 
+/* ai-chat-message-markdown-streaming：流式阶段的消息容器，避免完整 Markdown 渲染带来的高频开销 */
+.ai-chat-message-markdown-streaming {
+    gap: 8px;
+}
+
+/* ai-chat-message-markdown-reasoning-only：仅有推理文本时的消息容器 */
+.ai-chat-message-markdown-reasoning-only {
+    gap: 0;
+}
+
+/* ai-chat-message-reasoning-panel：原生 details 容器，承载可折叠推理内容 */
+.ai-chat-message-reasoning-panel {
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-primary));
+}
+
+/* ai-chat-message-reasoning-summary：推理折叠标题，提供紧凑的展开入口 */
+.ai-chat-message-reasoning-summary {
+    cursor: pointer;
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary);
+    list-style: none;
+}
+
+/* ai-chat-message-reasoning-summary::-webkit-details-marker：移除原生 marker 以统一样式 */
+.ai-chat-message-reasoning-summary::-webkit-details-marker {
+    display: none;
+}
+
+/* ai-chat-message-reasoning-summary::before：展示推理折叠状态箭头 */
+.ai-chat-message-reasoning-summary::before {
+    content: "▸";
+    margin-right: 6px;
+    color: var(--text-tertiary);
+}
+
+/* ai-chat-message-reasoning-panel[open] .ai-chat-message-reasoning-summary::before：展开时旋转箭头方向 */
+.ai-chat-message-reasoning-panel[open] .ai-chat-message-reasoning-summary::before {
+    content: "▾";
+}
+
+/* ai-chat-message-reasoning：推理阶段纯文本展示区，避免与最终 Markdown 回答混排 */
+.ai-chat-message-reasoning {
+    margin: 0;
+    padding: 0 10px 10px;
+    overflow: auto;
+    font: 11px/1.6 "SFMono-Regular", "Consolas", "Menlo", monospace;
+    color: color-mix(in srgb, var(--text-primary) 88%, var(--text-secondary));
+    white-space: pre-wrap;
+}
+
 /* ai-chat-message-markdown > *：Markdown 顶层元素默认边距清零，改由 gap 控制间距 */
 .ai-chat-message-markdown > * {
     margin: 0;
@@ -446,6 +502,14 @@
 .ai-chat-message-paragraph {
     margin: 0;
     white-space: pre-wrap;
+}
+
+/* ai-chat-message-streaming-text：流式阶段的轻量纯文本内容，保留换行且不触发 Markdown 解析 */
+.ai-chat-message-streaming-text {
+    white-space: pre-wrap;
+    line-height: 1.6;
+    color: var(--text-primary);
+    word-break: break-word;
 }
 
 /* ai-chat-message-heading：标题基础样式 */

@@ -229,6 +229,53 @@ describe("aiChatShared", () => {
         expect(persistable.conversations[0]?.messages[0]?.interruptedByUser).toBe(true);
     });
 
+    it("应在持久化历史时为旧会话回填协议消息块", () => {
+        const history: AiChatHistoryState = {
+            activeConversationId: "c1",
+            conversations: [
+                {
+                    id: "c1",
+                    sessionId: "s1",
+                    title: "stale",
+                    createdAtUnixMs: 1,
+                    updatedAtUnixMs: 2,
+                    messages: [
+                        {
+                            id: "m1",
+                            role: "user",
+                            text: "Explain the code path",
+                            createdAtUnixMs: 1,
+                        },
+                        {
+                            id: "m2",
+                            role: "assistant",
+                            text: "",
+                            reasoningText: "Inspect runtime state before answering",
+                            createdAtUnixMs: 2,
+                        },
+                    ],
+                },
+            ],
+        };
+
+        const persistable = buildPersistableHistory(history);
+        const firstConversation = persistable.conversations[0]!;
+
+        expect(firstConversation.protocolMessages).toHaveLength(2);
+        expect(firstConversation.protocolMessages?.[0]?.contentBlocks).toEqual([
+            {
+                kind: "text",
+                text: "Explain the code path",
+            },
+        ]);
+        expect(firstConversation.protocolMessages?.[1]?.contentBlocks).toEqual([
+            {
+                kind: "thinking",
+                text: "Inspect runtime state before answering",
+            },
+        ]);
+    });
+
     it("应按摘要与详情拆分错误文本", () => {
         expect(formatAiPanelError("backend failed: timeout")).toEqual({
             summary: "backend failed",

@@ -24,6 +24,7 @@ import {
     submitAiChatConfirmation,
     subscribeAiChatStreamEvents,
     type AiChatConversationRecord,
+    type AiChatHistoryContentBlock,
     type AiChatHistoryMessage,
     type AiChatHistoryState,
     type AiChatSettings,
@@ -67,6 +68,12 @@ import { formatAiChatDebugEntriesForClipboard } from "./aiChatDebugExport";
 import { shouldSubmitAiChatComposer } from "./aiChatInputPolicy";
 import { AiChatMessageMarkdown } from "./aiChatMessageMarkdown";
 import { buildConfirmationPreview } from "./aiChatConfirmationPreview";
+import {
+    advanceAiChatSmoothedMessageState,
+    isAiChatSmoothedMessageSettled,
+    syncAiChatSmoothedMessageTargets,
+    type AiChatSmoothedMessageState,
+} from "./aiChatStreamSmoothing";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerPanel } from "../../host/registry/panelRegistry";
 import { registerTabComponent } from "../../host/registry/tabComponentRegistry";
@@ -92,6 +99,7 @@ interface QuickPromptDefinition {
 
 let chatMessageSequence = 1;
 let chatDebugSequence = 1;
+const AI_CHAT_CONFIRMATION_TOOL_NAME = "adk_request_confirmation";
 
 const QUICK_PROMPTS: QuickPromptDefinition[] = [
     { id: "summarize", translationKey: "aiChatPlugin.quickPromptSummarize" },
@@ -157,6 +165,142 @@ function findBindingForStreamEvent(
 }
 
 /**
+ * @function createProtocolUserTextMessage
+ * @description 将可见用户消息映射为协议历史消息。
+ * @param message 可见用户消息。
+ * @returns 协议历史消息。
+ */
+function createProtocolUserTextMessage(message: AiChatHistoryMessage): AiChatHistoryMessage {
+    return {
+        ...message,
+        contentBlocks: [{
+            kind: "text",
+            text: message.text,
+        }],
+    };
+}
+
+/**
+ * @function createProtocolAssistantMessage
+ * @description 将流式事件中的内容块快照映射为协议历史中的助手消息。
+ * @param assistantMessage 可见助手消息。
+ * @param payload 流事件。
+ * @returns 协议历史助手消息，不可构建时返回 null。
+ */
+function createProtocolAssistantMessage(
+    assistantMessage: AiChatHistoryMessage,
+    payload: Parameters<typeof reduceAiChatStreamEvent>[0]["payload"],
+): AiChatHistoryMessage | null {
+    const contentBlocks = parseHistoryContentBlocksJson(payload.historyContentBlocksJson);
+    if (contentBlocks.length === 0) {
+        if (!(payload.accumulatedText ?? "").trim() && !(payload.reasoningAccumulatedText ?? "").trim()) {
+            return null;
+        }
+
+        return {
+            id: `${assistantMessage.id}:${payload.streamId}:${payload.eventType}`,
+            role: "assistant",
+            text: payload.accumulatedText ?? assistantMessage.text,
+            reasoningText: payload.reasoningAccumulatedText ?? assistantMessage.reasoningText,
+            createdAtUnixMs: Date.now(),
+            contentBlocks: [
+                ...((payload.reasoningAccumulatedText ?? "").trim()
+                    ? [{ kind: "thinking" as const, text: payload.reasoningAccumulatedText ?? "" }]
+                    : []),
+                ...((payload.accumulatedText ?? "").trim()
+                    ? [{ kind: "text" as const, text: payload.accumulatedText ?? "" }]
+                    : []),
+            ],
+        };
+    }
+
+    return {
+        id: `${assistantMessage.id}:${payload.streamId}:${payload.eventType}`,
+        role: "assistant",
+        text: payload.accumulatedText ?? assistantMessage.text,
+        reasoningText: payload.reasoningAccumulatedText ?? assistantMessage.reasoningText,
+        createdAtUnixMs: Date.now(),
+        contentBlocks,
+    };
+}
+
+/**
+ * @function createProtocolConfirmationResultMessage
+ * @description 将确认结果映射为隐藏协议历史中的 tool-result 消息。
+ * @param confirmation 确认请求。
+ * @param approved 用户是否批准。
+ * @returns 协议历史消息。
+ */
+function createProtocolConfirmationResultMessage(
+    confirmation: PendingToolConfirmation,
+    approved: boolean,
+): AiChatHistoryMessage {
+    return {
+        id: `${confirmation.assistantMessageId}:${confirmation.confirmationId}:result`,
+        role: "user",
+        text: "",
+        createdAtUnixMs: Date.now(),
+        contentBlocks: [{
+            kind: "tool-result",
+            toolUseId: confirmation.confirmationId,
+            toolName: AI_CHAT_CONFIRMATION_TOOL_NAME,
+            resultJson: JSON.stringify({ confirmed: approved }),
+        }],
+    };
+}
+
+/**
+ * @function parseHistoryContentBlocksJson
+ * @description 解析流事件中的协议历史块 JSON。
+ * @param rawJson 原始 JSON。
+ * @returns 内容块数组。
+ */
+function parseHistoryContentBlocksJson(rawJson: string | null): AiChatHistoryContentBlock[] {
+    if (!rawJson?.trim()) {
+        return [];
+    }
+
+    try {
+        const parsed = JSON.parse(rawJson) as unknown;
+        if (!Array.isArray(parsed)) {
+            return [];
+        }
+
+        return parsed.filter((item): item is AiChatHistoryContentBlock => {
+            return typeof item === "object"
+                && item !== null
+                && typeof (item as Partial<AiChatHistoryContentBlock>).kind === "string";
+        });
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * @function shouldKeepAnimatingMessage
+ * @description 判断一条平滑消息是否仍需保留在展示层状态中。
+ * @param state 平滑消息状态。
+ * @returns 若消息仍在接收或尚未追平则返回 true。
+ */
+function shouldKeepAnimatingMessage(state: AiChatSmoothedMessageState): boolean {
+    return state.active || !isAiChatSmoothedMessageSettled(state);
+}
+
+/**
+ * @function hasPendingSmoothedMessages
+ * @description 判断当前是否存在尚未追平的展示层流式消息。
+ * @param states 全部平滑消息状态。
+ * @returns 若至少有一条消息仍需 reveal 则返回 true。
+ */
+function hasPendingSmoothedMessages(
+    states: Record<string, AiChatSmoothedMessageState>,
+): boolean {
+    return Object.values(states).some((messageState) => {
+        return !isAiChatSmoothedMessageSettled(messageState);
+    });
+}
+
+/**
  * @function AiChatView
  * @description 渲染可在 pane 和 tab 之间复用的 AI 聊天视图。
  * @returns React 节点。
@@ -165,6 +309,7 @@ function AiChatView(): ReactNode {
     const { currentVaultPath } = useVaultState();
     const [historyState, setHistoryState] = useState<AiChatHistoryState | null>(null);
     const [bindingsByConversation, setBindingsByConversation] = useState<Record<string, PendingStreamBinding>>({});
+    const [smoothedMessagesById, setSmoothedMessagesById] = useState<Record<string, AiChatSmoothedMessageState>>({});
     const [debugEntriesByConversation, setDebugEntriesByConversation] = useState<Record<string, ChatDebugEntry[]>>({});
     const [pendingConfirmations, setPendingConfirmations] = useState<Record<string, PendingToolConfirmation>>({});
     const [activeTab, setActiveTab] = useState<"history" | "chat" | "debug">("chat");
@@ -176,10 +321,13 @@ function AiChatView(): ReactNode {
     const [settings, setSettings] = useState<AiChatSettings | null>(null);
     const [vendorCatalog, setVendorCatalog] = useState<AiVendorDefinition[]>([]);
     const bindingsRef = useRef<Record<string, PendingStreamBinding>>({});
+    const smoothedMessagesRef = useRef<Record<string, AiChatSmoothedMessageState>>({});
     const historyLoadedRef = useRef(false);
     const historySaveTimerRef = useRef<number | null>(null);
     const threadViewportRef = useRef<HTMLDivElement | null>(null);
     const debugViewportRef = useRef<HTMLDivElement | null>(null);
+    const smoothingFrameRef = useRef<number | null>(null);
+    const smoothingLastFrameAtRef = useRef<number | null>(null);
 
     /**
      * @function commitBindings
@@ -313,6 +461,122 @@ function AiChatView(): ReactNode {
         }));
     };
 
+    /**
+     * @function commitSmoothedMessages
+     * @description 原子更新全部流式平滑消息状态，并同步 ref 快照。
+     * @param updater 更新函数。
+     */
+    const commitSmoothedMessages = (
+        updater: (
+            currentMessages: Record<string, AiChatSmoothedMessageState>,
+        ) => Record<string, AiChatSmoothedMessageState>,
+    ): void => {
+        setSmoothedMessagesById((currentMessages) => {
+            const nextMessages = updater(currentMessages);
+            smoothedMessagesRef.current = nextMessages;
+            return nextMessages;
+        });
+    };
+
+    /**
+     * @function scheduleSmoothingFrame
+     * @description 在存在未追平文本时启动 requestAnimationFrame 循环推进展示层 reveal。
+     */
+    const scheduleSmoothingFrame = (): void => {
+        if (smoothingFrameRef.current !== null) {
+            return;
+        }
+
+        const animate = (timestamp: number): void => {
+            const previousTimestamp = smoothingLastFrameAtRef.current;
+            smoothingLastFrameAtRef.current = timestamp;
+            const elapsedMs = previousTimestamp === null
+                ? 16
+                : timestamp - previousTimestamp;
+
+            commitSmoothedMessages((currentMessages) => {
+                let changed = false;
+                const nextMessages: Record<string, AiChatSmoothedMessageState> = {};
+
+                Object.entries(currentMessages).forEach(([messageId, messageState]) => {
+                    const nextMessageState = advanceAiChatSmoothedMessageState(
+                        messageState,
+                        elapsedMs,
+                    );
+
+                    if (nextMessageState !== messageState) {
+                        changed = true;
+                    }
+
+                    if (shouldKeepAnimatingMessage(nextMessageState)) {
+                        nextMessages[messageId] = nextMessageState;
+                        return;
+                    }
+
+                    changed = true;
+                });
+
+                return changed ? nextMessages : currentMessages;
+            });
+
+            const hasPendingMessages = Object.values(smoothedMessagesRef.current).some((messageState) => {
+                return !isAiChatSmoothedMessageSettled(messageState);
+            });
+
+            if (!hasPendingMessages) {
+                smoothingFrameRef.current = null;
+                smoothingLastFrameAtRef.current = null;
+                return;
+            }
+
+            smoothingFrameRef.current = window.requestAnimationFrame(animate);
+        };
+
+        smoothingFrameRef.current = window.requestAnimationFrame(animate);
+    };
+
+    /**
+     * @function syncSmoothedAssistantMessage
+     * @description 将后端累计文本同步到对应助手消息的平滑展示状态。
+     * @param messageId 助手消息 ID。
+     * @param targetText 最新累计答案文本。
+     * @param targetReasoningText 最新累计 reasoning 文本。
+     * @param active 当前是否仍在接收后端流式输出。
+     */
+    const syncSmoothedAssistantMessage = (
+        messageId: string,
+        targetText: string | null,
+        targetReasoningText: string | null,
+        active: boolean,
+    ): void => {
+        commitSmoothedMessages((currentMessages) => {
+            const nextMessageState = syncAiChatSmoothedMessageTargets(
+                currentMessages[messageId],
+                {
+                    messageId,
+                    targetText,
+                    targetReasoningText,
+                    active,
+                },
+            );
+
+            if (!shouldKeepAnimatingMessage(nextMessageState)) {
+                if (!(messageId in currentMessages)) {
+                    return currentMessages;
+                }
+
+                const nextMessages = { ...currentMessages };
+                delete nextMessages[messageId];
+                return nextMessages;
+            }
+
+            return {
+                ...currentMessages,
+                [messageId]: nextMessageState,
+            };
+        });
+    };
+
     const selectedVendor = useMemo(() => {
         if (!settings) {
             return null;
@@ -406,6 +670,8 @@ function AiChatView(): ReactNode {
             setHistoryState(null);
             setBindingsByConversation({});
             bindingsRef.current = {};
+            setSmoothedMessagesById({});
+            smoothedMessagesRef.current = {};
             setSettings(null);
             historyLoadedRef.current = false;
             resetAiChatSettingsStore();
@@ -426,6 +692,8 @@ function AiChatView(): ReactNode {
                 setHistoryState(ensureHistoryState(history));
                 setBindingsByConversation({});
                 bindingsRef.current = {};
+                setSmoothedMessagesById({});
+                smoothedMessagesRef.current = {};
                 setDebugEntriesByConversation({});
                 setPendingConfirmations({});
                 setDebugFilter("all");
@@ -537,16 +805,60 @@ function AiChatView(): ReactNode {
                         return {
                             ...message,
                             text: transition.nextAssistantText ?? message.text,
+                            reasoningText: transition.nextAssistantReasoningText ?? message.reasoningText,
+                        };
+                    }),
+                }));
+            } else if (transition.nextAssistantReasoningText) {
+                updateConversation(binding.conversationId!, (conversation) => ({
+                    ...conversation,
+                    updatedAtUnixMs: Date.now(),
+                    messages: conversation.messages.map((message) => {
+                        if (message.id !== binding.assistantMessageId) {
+                            return message;
+                        }
+                        return {
+                            ...message,
+                            reasoningText: transition.nextAssistantReasoningText ?? message.reasoningText,
                         };
                     }),
                 }));
             }
+
+            const shouldKeepSmoothedMessageActive = !(
+                transition.isDone
+                || transition.wasStopped
+                || payload.eventType === "error"
+                || transition.nextConfirmation !== null
+            );
+            syncSmoothedAssistantMessage(
+                binding.assistantMessageId!,
+                transition.nextAssistantText,
+                transition.nextAssistantReasoningText,
+                shouldKeepSmoothedMessageActive,
+            );
 
             if (transition.nextConfirmation) {
                 console.info("[aiChatPlugin] stream confirmation requested", {
                     streamId: payload.streamId,
                     confirmationId: transition.nextConfirmation.confirmationId,
                     toolName: transition.nextConfirmation.toolName || null,
+                });
+                updateConversation(binding.conversationId!, (conversation) => {
+                    const assistantMessage = conversation.messages.find((message) => {
+                        return message.id === binding.assistantMessageId;
+                    });
+                    const protocolMessage = assistantMessage
+                        ? createProtocolAssistantMessage(assistantMessage, payload)
+                        : null;
+
+                    return protocolMessage ? {
+                        ...conversation,
+                        protocolMessages: [
+                            ...(conversation.protocolMessages ?? []),
+                            protocolMessage,
+                        ],
+                    } : conversation;
                 });
                 setPendingConfirmationState(transition.nextConfirmation);
             }
@@ -596,6 +908,22 @@ function AiChatView(): ReactNode {
             }
 
             if (transition.isDone) {
+                updateConversation(binding.conversationId!, (conversation) => {
+                    const assistantMessage = conversation.messages.find((message) => {
+                        return message.id === binding.assistantMessageId;
+                    });
+                    const protocolMessage = assistantMessage
+                        ? createProtocolAssistantMessage(assistantMessage, payload)
+                        : null;
+
+                    return protocolMessage ? {
+                        ...conversation,
+                        protocolMessages: [
+                            ...(conversation.protocolMessages ?? []),
+                            protocolMessage,
+                        ],
+                    } : conversation;
+                });
                 console.info("[aiChatPlugin] stream completed", {
                     streamId: payload.streamId,
                     conversationId: binding.conversationId,
@@ -612,11 +940,45 @@ function AiChatView(): ReactNode {
     }, []);
 
     useEffect(() => {
+        if (!hasPendingSmoothedMessages(smoothedMessagesById)) {
+            return;
+        }
+
+        scheduleSmoothingFrame();
+    }, [smoothedMessagesById]);
+
+    useEffect(() => {
+        return () => {
+            if (smoothingFrameRef.current !== null) {
+                window.cancelAnimationFrame(smoothingFrameRef.current);
+                smoothingFrameRef.current = null;
+            }
+            smoothingLastFrameAtRef.current = null;
+        };
+    }, []);
+
+    const activeConversationDisplaySignature = useMemo(() => {
+        if (!activeConversation) {
+            return "";
+        }
+
+        return activeConversation.messages.map((message) => {
+            const smoothedMessage = smoothedMessagesById[message.id];
+            const displayText = smoothedMessage?.displayText ?? message.text;
+            const displayReasoningText = smoothedMessage?.displayReasoningText
+                ?? message.reasoningText
+                ?? "";
+
+            return [message.id, displayText, displayReasoningText].join(":");
+        }).join("|");
+    }, [activeConversation, smoothedMessagesById]);
+
+    useEffect(() => {
         const viewport = threadViewportRef.current;
         if (viewport) {
             viewport.scrollTop = viewport.scrollHeight;
         }
-    }, [activeConversation?.messages, pendingConfirmations]);
+    }, [activeConversationDisplaySignature, pendingConfirmations]);
 
     useEffect(() => {
         const viewport = debugViewportRef.current;
@@ -723,6 +1085,13 @@ function AiChatView(): ReactNode {
                 }
             }
             clearPendingConfirmationState(confirmation.assistantMessageId);
+            updateConversation(confirmation.conversationId, (conversation) => ({
+                ...conversation,
+                protocolMessages: [
+                    ...(conversation.protocolMessages ?? []),
+                    createProtocolConfirmationResultMessage(confirmation, approved),
+                ],
+            }));
         } catch (submitError) {
             setError(submitError instanceof Error ? submitError.message : String(submitError));
             setPendingConfirmationState({
@@ -804,7 +1173,9 @@ function AiChatView(): ReactNode {
             text: "",
             createdAtUnixMs: Date.now(),
         };
-        const history = activeConversation.messages;
+        const history = activeConversation.protocolMessages?.length
+            ? activeConversation.protocolMessages
+            : activeConversation.messages;
 
         setDraft("");
         setError(null);
@@ -813,6 +1184,10 @@ function AiChatView(): ReactNode {
             ...conversation,
             updatedAtUnixMs: Date.now(),
             messages: [...conversation.messages, userMessage, assistantMessage],
+            protocolMessages: [
+                ...(conversation.protocolMessages ?? []),
+                createProtocolUserTextMessage(userMessage),
+            ],
         }));
 
         setConversationBinding(activeConversation.id, createPendingStreamBinding(
@@ -1056,6 +1431,16 @@ function AiChatView(): ReactNode {
                             const confirmationPreview = confirmation
                                 ? buildConfirmationPreview(confirmation)
                                 : null;
+                            const smoothedMessage = smoothedMessagesById[message.id];
+                            const renderedMessageText = smoothedMessage?.displayText ?? message.text;
+                            const renderedReasoningText = smoothedMessage?.displayReasoningText
+                                ?? message.reasoningText
+                                ?? "";
+                            const isStreamingMessage = message.role === "assistant"
+                                && Boolean(
+                                    smoothedMessage
+                                    && (smoothedMessage.active || !isAiChatSmoothedMessageSettled(smoothedMessage)),
+                                );
 
                             return (
                                 <div key={message.id} className={`ai-chat-message ${message.role}`}>
@@ -1072,8 +1457,10 @@ function AiChatView(): ReactNode {
                                         </div>
                                         <div className="ai-chat-message-bubble">
                                             <AiChatMessageMarkdown
-                                                content={message.text}
+                                                content={renderedMessageText}
+                                                reasoningContent={renderedReasoningText}
                                                 role={message.role}
+                                                streaming={isStreamingMessage}
                                             />
                                         </div>
                                         {confirmation ? (

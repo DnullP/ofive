@@ -17,10 +17,9 @@
  *  - toggleStrikethrough — 切换删除线 `~~text~~`
  *  - toggleInlineCode   — 切换行内代码 `` `text` ``
  *  - toggleHighlight    — 切换高亮 `==text==`
+ *  - toggleWikiLink     — 切换双中括号链接 `[[text]]`
  *  - insertLink         — 插入/包裹链接 `[text](url)`
  *  - insertTask         — 在当前光标或选区快速创建任务 `- [ ] content`
- *  - insertFrontmatter  — 若文档缺少 frontmatter，则在顶部插入空 frontmatter 模板
- *  - insertTable        — 在当前光标或选区插入基础 Markdown 表格
  *  - insertFrontmatter  — 若文档缺少 frontmatter，则在顶部插入空 frontmatter 模板
  *  - insertTable        — 在当前光标或选区插入基础 Markdown 表格
  */
@@ -149,15 +148,17 @@ function hasFrontmatterBlock(docText: string): boolean {
 }
 
 /**
- * @function toggleDelimiter
- * @description 通用分隔符切换逻辑：如果已被包裹则移除，否则添加。
+ * @function toggleWrapPair
+ * @description 通用包裹标记切换逻辑：如果已被包裹则移除，否则添加。
  * @param view 编辑器视图。
- * @param delimiter 分隔符字符串（如 `**`、`*`、`~~`、`` ` ``、`==`）。
+ * @param openMarker 起始标记字符串。
+ * @param closeMarker 结束标记字符串。
  * @returns 是否成功执行。
  */
-function toggleDelimiter(view: EditorView, delimiter: string): boolean {
+function toggleWrapPair(view: EditorView, openMarker: string, closeMarker: string): boolean {
     const selection = view.state.selection.main;
-    const dLen = delimiter.length;
+    const openLength = openMarker.length;
+    const closeLength = closeMarker.length;
 
     let from: number;
     let to: number;
@@ -171,14 +172,14 @@ function toggleDelimiter(view: EditorView, delimiter: string): boolean {
 
     const selectedText = view.state.doc.sliceString(from, to);
 
-    /* 检查是否已经被包裹：选区内部包含分隔符 */
+    /* 检查是否已经被包裹：选区内部包含包裹标记 */
     if (
-        selectedText.length >= dLen * 2 &&
-        selectedText.startsWith(delimiter) &&
-        selectedText.endsWith(delimiter)
+        selectedText.length >= openLength + closeLength &&
+        selectedText.startsWith(openMarker) &&
+        selectedText.endsWith(closeMarker)
     ) {
-        /* 移除内部分隔符 */
-        const inner = selectedText.slice(dLen, selectedText.length - dLen);
+        /* 移除内部包裹标记 */
+        const inner = selectedText.slice(openLength, selectedText.length - closeLength);
         view.dispatch({
             changes: { from, to, insert: inner },
             selection: { anchor: from, head: from + inner.length },
@@ -187,15 +188,15 @@ function toggleDelimiter(view: EditorView, delimiter: string): boolean {
     }
 
     /* 检查外部是否已包裹 */
-    const outerFrom = from - dLen;
-    const outerTo = to + dLen;
+    const outerFrom = from - openLength;
+    const outerTo = to + closeLength;
     if (
         outerFrom >= 0 &&
         outerTo <= view.state.doc.length &&
-        view.state.doc.sliceString(outerFrom, from) === delimiter &&
-        view.state.doc.sliceString(to, outerTo) === delimiter
+        view.state.doc.sliceString(outerFrom, from) === openMarker &&
+        view.state.doc.sliceString(to, outerTo) === closeMarker
     ) {
-        /* 移除外部分隔符 */
+        /* 移除外部包裹标记 */
         view.dispatch({
             changes: [
                 { from: outerFrom, to: from, insert: "" },
@@ -208,21 +209,32 @@ function toggleDelimiter(view: EditorView, delimiter: string): boolean {
 
     /* 添加分隔符 */
     if (from === to) {
-        /* 空选区：插入分隔符对并将光标放在中间 */
-        const insertText = delimiter + delimiter;
+        /* 空选区：插入包裹标记并将光标放在中间 */
+        const insertText = openMarker + closeMarker;
         view.dispatch({
             changes: { from, to, insert: insertText },
-            selection: { anchor: from + dLen },
+            selection: { anchor: from + openLength },
         });
     } else {
-        const wrappedText = delimiter + selectedText + delimiter;
+        const wrappedText = openMarker + selectedText + closeMarker;
         view.dispatch({
             changes: { from, to, insert: wrappedText },
-            selection: { anchor: from + dLen, head: from + dLen + selectedText.length },
+            selection: { anchor: from + openLength, head: from + openLength + selectedText.length },
         });
     }
 
     return true;
+}
+
+/**
+ * @function toggleDelimiter
+ * @description 对称分隔符切换逻辑：例如 `**text**`、`==text==`。
+ * @param view 编辑器视图。
+ * @param delimiter 分隔符字符串（如 `**`、`*`、`~~`、`` ` ``、`==`）。
+ * @returns 是否成功执行。
+ */
+function toggleDelimiter(view: EditorView, delimiter: string): boolean {
+    return toggleWrapPair(view, delimiter, delimiter);
 }
 
 /* ================================================================== */
@@ -277,6 +289,16 @@ export function toggleInlineCode(view: EditorView): boolean {
  */
 export function toggleHighlight(view: EditorView): boolean {
     return toggleDelimiter(view, "==");
+}
+
+/**
+ * @function toggleWikiLink
+ * @description 切换 WikiLink 格式 `[[text]]`。
+ * @param view 编辑器视图。
+ * @returns 是否执行成功。
+ */
+export function toggleWikiLink(view: EditorView): boolean {
+    return toggleWrapPair(view, "[[", "]]");
 }
 
 /**

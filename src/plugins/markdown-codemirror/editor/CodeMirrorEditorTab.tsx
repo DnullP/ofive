@@ -54,6 +54,7 @@ import {
     toggleStrikethrough,
     toggleInlineCode,
     toggleHighlight,
+    toggleWikiLink,
     insertLink,
     insertTask,
     insertFrontmatter,
@@ -252,6 +253,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         "editor.toggleStrikethrough": "Cmd+Shift+X",
         "editor.toggleInlineCode": "Cmd+E",
         "editor.toggleHighlight": "Cmd+Shift+H",
+        "editor.toggleWikiLink": "Cmd+Alt+K",
         "editor.insertLink": "Cmd+K",
         "editor.insertTask": "",
         "editor.insertFrontmatter": "",
@@ -612,6 +614,10 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
 
         if (commandId === "editor.toggleHighlight") {
             return toggleHighlight(view);
+        }
+
+        if (commandId === "editor.toggleWikiLink") {
+            return toggleWikiLink(view);
         }
 
         if (commandId === "editor.insertLink") {

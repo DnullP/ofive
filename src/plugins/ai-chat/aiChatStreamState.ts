@@ -57,6 +57,7 @@ export interface AiChatStreamTransition {
     matchesBinding: boolean;
     nextBinding: PendingStreamBinding;
     nextAssistantText: string | null;
+    nextAssistantReasoningText: string | null;
     nextDebugEntry: ChatDebugEntry | null;
     nextConfirmation: PendingToolConfirmation | null;
     errorMessage: string | null;
@@ -128,6 +129,7 @@ export function reduceAiChatStreamEvent(
             matchesBinding: false,
             nextBinding: binding,
             nextAssistantText: null,
+            nextAssistantReasoningText: null,
             nextDebugEntry: null,
             nextConfirmation: null,
             errorMessage: null,
@@ -150,6 +152,7 @@ export function reduceAiChatStreamEvent(
             matchesBinding: false,
             nextBinding,
             nextAssistantText: null,
+            nextAssistantReasoningText: null,
             nextDebugEntry: null,
             nextConfirmation: null,
             errorMessage: null,
@@ -165,6 +168,7 @@ export function reduceAiChatStreamEvent(
             matchesBinding: true,
             nextBinding,
             nextAssistantText: null,
+            nextAssistantReasoningText: null,
             nextDebugEntry: {
                 id: debugEntryId,
                 streamId: payload.streamId,
@@ -199,6 +203,7 @@ export function reduceAiChatStreamEvent(
             matchesBinding: true,
             nextBinding: createEmptyPendingStreamBinding(),
             nextAssistantText: payload.confirmationHint ?? confirmationFallbackHint,
+            nextAssistantReasoningText: payload.reasoningAccumulatedText,
             nextDebugEntry: null,
             nextConfirmation: confirmation,
             errorMessage: confirmation ? null : "AI confirmation payload is incomplete",
@@ -214,6 +219,7 @@ export function reduceAiChatStreamEvent(
             matchesBinding: true,
             nextBinding: createEmptyPendingStreamBinding(),
             nextAssistantText: null,
+            nextAssistantReasoningText: null,
             nextDebugEntry: null,
             nextConfirmation: null,
             errorMessage: null,
@@ -229,6 +235,7 @@ export function reduceAiChatStreamEvent(
             matchesBinding: true,
             nextBinding: createEmptyPendingStreamBinding(),
             nextAssistantText: null,
+            nextAssistantReasoningText: null,
             nextDebugEntry: null,
             nextConfirmation: null,
             errorMessage: payload.error ?? "AI stream failed",
@@ -246,6 +253,7 @@ export function reduceAiChatStreamEvent(
                 ? createEmptyPendingStreamBinding()
                 : nextBinding,
             nextAssistantText: payload.accumulatedText,
+            nextAssistantReasoningText: payload.reasoningAccumulatedText,
             nextDebugEntry: null,
             nextConfirmation: null,
             errorMessage: null,
@@ -260,6 +268,7 @@ export function reduceAiChatStreamEvent(
         matchesBinding: true,
         nextBinding,
         nextAssistantText: null,
+        nextAssistantReasoningText: null,
         nextDebugEntry: null,
         nextConfirmation: null,
         errorMessage: null,

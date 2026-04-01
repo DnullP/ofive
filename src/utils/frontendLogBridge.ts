@@ -12,6 +12,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { publishNotification } from "../host/notifications/notificationCenter";
 
 /**
  * @type LogLevel
@@ -99,6 +100,14 @@ async function sendLogToBackend(level: LogLevel, message: string, context: strin
 function patchConsoleMethod(level: LogLevel, original: ConsoleMethod): void {
     const wrapped: ConsoleMethod = (...args: unknown[]) => {
         original(...args);
+
+        if ((level === "warn" || level === "error") && !isTauriRuntime()) {
+            publishNotification({
+                level,
+                message: stringifyLogArgs(args),
+                source: "frontend-log",
+            });
+        }
 
         if (!isTauriRuntime()) {
             return;

@@ -4,6 +4,7 @@
 
 use crate::app::vault::query_app_service;
 use crate::host::window_effects;
+use crate::infra::logging;
 use crate::state::AppState;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -39,6 +40,8 @@ pub(crate) fn spawn_startup_background_tasks() {
 pub(crate) fn setup_main_window(
     app: &mut App,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    logging::install_tauri_log_notification_sink(app.handle().clone());
+
     let Some(main_window) = app.get_webview_window("main") else {
         log::warn!("[window] setup warning: main window not found");
         return Ok(());

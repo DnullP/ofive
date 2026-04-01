@@ -52,6 +52,17 @@ import {
     isMarkdownTableEditorFocused,
 } from "./markdownTableWidgetRegistry";
 
+interface ClosestCapableTarget extends EventTarget {
+    closest(selector: string): Element | null;
+}
+
+function isClosestCapableTarget(target: EventTarget | null): target is ClosestCapableTarget {
+    return typeof target === "object"
+        && target !== null
+        && "closest" in target
+        && typeof target.closest === "function";
+}
+
 /**
  * @interface EditorKeyboardEventLike
  * @description 键盘桥接处理所需的最小事件接口，兼容真实 KeyboardEvent 与测试桩。
@@ -73,6 +84,8 @@ export interface EditorKeyboardEventLike {
     shiftKey: boolean;
     /** 当前事件目标。 */
     target: EventTarget | null;
+    /** 查询附加修饰键状态，例如 AltGraph。 */
+    getModifierState?: (key: string) => boolean;
     /** 阻止浏览器默认行为。 */
     preventDefault(): void;
     /** 阻止事件冒泡。 */
@@ -248,10 +261,9 @@ export function handleEditorKeydown(options: HandleEditorKeydownOptions): void {
         return;
     }
 
-    const eventTarget =
-        typeof HTMLElement !== "undefined" && event.target instanceof HTMLElement
-            ? event.target
-            : null;
+    const eventTarget = isClosestCapableTarget(event.target)
+        ? event.target
+        : null;
     const isFrontmatterNavigationTarget = !!eventTarget?.closest(options.frontmatterSelectors.navigation);
     const isFrontmatterFieldTarget = !!eventTarget?.closest(options.frontmatterSelectors.focusable);
 

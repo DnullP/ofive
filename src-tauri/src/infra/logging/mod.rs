@@ -8,10 +8,13 @@
 //! - 日志文件大小限制 5MB，超限后自动轮转
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
+use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
+use tauri::{AppHandle, Emitter};
 
 /// 日志文件最大大小（5 MB）。
 const MAX_LOG_FILE_SIZE: u64 = 5 * 1024 * 1024;
@@ -22,8 +25,48 @@ const ROTATED_LOG_FILE_NAME: &str = "ofive.log.old";
 /// 当前日志文件名。
 const LOG_FILE_NAME: &str = "ofive.log";
 
+/// 前端订阅后端日志通知所使用的事件名。
+pub(crate) const BACKEND_LOG_NOTIFICATION_EVENT_NAME: &str = "host://log-notification";
+
+/// WARN 日志默认自动关闭时间。
+const WARN_NOTIFICATION_AUTO_CLOSE_MS: u64 = 6000;
+
+/// ERROR 日志默认自动关闭时间。
+const ERROR_NOTIFICATION_AUTO_CLOSE_MS: u64 = 9000;
+
 /// 全局日志文件目录路径。
 static LOG_FILE_PATH: RwLock<Option<PathBuf>> = RwLock::new(None);
+
+type LogNotificationSink = dyn Fn(BackendLogNotificationEventPayload) + Send + Sync + 'static;
+
+/// 后端日志通知序列号。
+static LOG_NOTIFICATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+/// 日志通知下沉器；在生产环境中由 Tauri 事件桥接实现，在测试中可替换为捕获器。
+static LOG_NOTIFICATION_SINK: RwLock<Option<Arc<LogNotificationSink>>> = RwLock::new(None);
+
+/// 从后端转发到前端消息插件的日志通知负载。
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct BackendLogNotificationEventPayload {
+    /// 消息唯一 ID。
+    pub notification_id: String,
+    /// 日志级别，仅限 warn / error。
+    pub level: String,
+    /// 可选标题。
+    pub title: Option<String>,
+    /// 消息正文。
+    pub message: String,
+    /// 原始日志 target。
+    pub target: String,
+    /// 日志来源，区分前端桥接日志与后端原生日志。
+    pub source: String,
+    /// 自动关闭时间。
+    pub auto_close_ms: u64,
+    /// 可选进度；普通日志通知为空。
+    pub progress: Option<u8>,
+    /// 创建时间戳。
+    pub created_at: u64,
+}
 
 /// 自定义日志记录器。
 struct OfiveLogger;
@@ -41,9 +84,9 @@ impl Log for OfiveLogger {
         let timestamp = current_timestamp();
         let level = record.level();
         let target = record.target();
-        let message = record.args();
+        let raw_message = record.args().to_string();
 
-        let formatted = format!("{timestamp} [{level}] [{target}] {message}");
+        let formatted = format!("{timestamp} [{level}] [{target}] {raw_message}");
 
         write_console_line(level, &formatted);
 
@@ -51,6 +94,10 @@ impl Log for OfiveLogger {
             if let Some(ref dir) = *guard {
                 let _ = write_to_log_file(dir, &formatted);
             }
+        }
+
+        if let Some(payload) = build_log_notification_payload(level, target, &raw_message, current_unix_ms()) {
+            emit_log_notification(payload);
         }
     }
 
@@ -78,6 +125,81 @@ pub fn set_vault_log_path(dir: Option<PathBuf>) {
     if let Ok(mut guard) = LOG_FILE_PATH.write() {
         *guard = dir;
     }
+}
+
+/// 为生产环境安装基于 Tauri AppHandle 的日志通知下沉器。
+pub fn install_tauri_log_notification_sink(app_handle: AppHandle) {
+    set_log_notification_sink(Some(Arc::new(move |payload| {
+        if let Err(error) = app_handle.emit(BACKEND_LOG_NOTIFICATION_EVENT_NAME, payload) {
+            write_internal_stderr(&format!(
+                "[logging] 日志通知事件发送失败: {error}"
+            ));
+        }
+    })));
+}
+
+/// 设置日志通知下沉器。
+pub fn set_log_notification_sink(sink: Option<Arc<LogNotificationSink>>) {
+    if let Ok(mut guard) = LOG_NOTIFICATION_SINK.write() {
+        *guard = sink;
+    }
+}
+
+/// 测试辅助：将日志通知写入指定捕获容器。
+pub fn set_log_notification_capture(
+    capture: Option<Arc<Mutex<Vec<BackendLogNotificationEventPayload>>>>,
+) {
+    match capture {
+        Some(capture) => {
+            set_log_notification_sink(Some(Arc::new(move |payload| {
+                if let Ok(mut guard) = capture.lock() {
+                    guard.push(payload);
+                }
+            })));
+        }
+        None => {
+            set_log_notification_sink(None);
+        }
+    }
+}
+
+/// 根据日志记录构造前端消息插件可消费的通知负载。
+pub fn build_log_notification_payload(
+    level: Level,
+    target: &str,
+    message: &str,
+    created_at: u64,
+) -> Option<BackendLogNotificationEventPayload> {
+    let level_text = match level {
+        Level::Warn => "warn",
+        Level::Error => "error",
+        _ => return None,
+    };
+    let auto_close_ms = if level == Level::Error {
+        ERROR_NOTIFICATION_AUTO_CLOSE_MS
+    } else {
+        WARN_NOTIFICATION_AUTO_CLOSE_MS
+    };
+    let source = if target == "frontend" {
+        "frontend-log"
+    } else {
+        "backend-log"
+    };
+
+    Some(BackendLogNotificationEventPayload {
+        notification_id: format!(
+            "backend-log-{}",
+            LOG_NOTIFICATION_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ),
+        level: level_text.to_string(),
+        title: None,
+        message: message.to_string(),
+        target: target.to_string(),
+        source: source.to_string(),
+        auto_close_ms,
+        progress: None,
+        created_at,
+    })
 }
 
 /// 将 AI sidecar 的 stdout/stderr 内容转发到标准日志流。
@@ -152,6 +274,17 @@ fn write_console_line(level: Level, line: &str) {
     }
 }
 
+fn emit_log_notification(payload: BackendLogNotificationEventPayload) {
+    let sink = LOG_NOTIFICATION_SINK
+        .read()
+        .ok()
+        .and_then(|guard| guard.clone());
+
+    if let Some(sink) = sink {
+        sink(payload);
+    }
+}
+
 fn write_internal_stderr(line: &str) {
     let mut stderr = io::stderr().lock();
     let _ = writeln!(stderr, "{line}");
@@ -172,6 +305,15 @@ fn current_timestamp() -> String {
     let (year, month, day) = days_to_date(days);
 
     format!("{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02}")
+}
+
+fn current_unix_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }
 
 fn days_to_date(days: u64) -> (u64, u64, u64) {
@@ -269,6 +411,24 @@ mod tests {
         assert!(!new_content.contains(&large_content));
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn build_log_notification_payload_should_skip_non_warn_levels() {
+        assert!(build_log_notification_payload(Level::Info, "vault", "ok", 1).is_none());
+        assert!(build_log_notification_payload(Level::Debug, "vault", "ok", 1).is_none());
+    }
+
+    #[test]
+    fn build_log_notification_payload_should_map_frontend_target_to_frontend_source() {
+        let payload = build_log_notification_payload(Level::Warn, "frontend", "warn text", 42)
+            .expect("warn payload should exist");
+
+        assert_eq!(payload.level, "warn");
+        assert_eq!(payload.source, "frontend-log");
+        assert_eq!(payload.auto_close_ms, WARN_NOTIFICATION_AUTO_CLOSE_MS);
+        assert_eq!(payload.message, "warn text");
+        assert_eq!(payload.created_at, 42);
     }
 
     #[test]

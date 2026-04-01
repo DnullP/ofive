@@ -40,6 +40,8 @@ message ChatHistoryEntry {
   string text = 2;
   // interrupted_by_user marks assistant output that was manually stopped before completion.
   bool interrupted_by_user = 3;
+  string reasoning_text = 4;
+  string content_blocks_json = 5;
 }
 
 message ChatRequest {
@@ -91,4 +93,7 @@ message ChatChunk {
   string confirmation_tool_name = 12;
   string confirmation_tool_args_json = 13;
   string debug_level = 14;
+  string reasoning_delta_text = 15;
+  string reasoning_accumulated_text = 16;
+  string history_content_blocks_json = 17;
 }

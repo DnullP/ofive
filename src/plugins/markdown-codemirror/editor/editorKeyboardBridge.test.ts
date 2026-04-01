@@ -58,6 +58,7 @@ function createEventStub(
         altKey: false,
         shiftKey: false,
         target: null,
+        getModifierState: () => false,
         preventDefault: mock(() => undefined),
         stopPropagation: mock(() => undefined),
         ...overrides,
@@ -191,5 +192,33 @@ describe("handleEditorKeydown", () => {
         expect(executeEditorCommand).toHaveBeenCalledWith("sidebar.left.toggle");
         expect(event.preventDefault).toHaveBeenCalled();
         expect(event.stopPropagation).toHaveBeenCalled();
+    });
+
+    test("should ignore non-element event targets without closest", () => {
+        const view = createViewStub("# Demo");
+        const event = createEventStub({
+            key: "j",
+            target: { nodeType: 9 } as unknown as EventTarget,
+        });
+
+        expect(() => {
+            handleEditorKeydown({
+                articleId: "file:demo",
+                event,
+                view,
+                getBindings: () => ({}),
+                getManagedShortcutCandidates: () => [],
+                getCurrentVaultPath: () => "/vault",
+                getDisplayMode: () => "edit",
+                isVimModeEnabled: () => false,
+                executeSegmentedDeleteBackward: mock(async () => undefined),
+                executeEditorCommand: mock(() => undefined),
+                focusFrontmatterNavigationTarget: mock(() => false),
+                frontmatterSelectors: {
+                    focusable: "[data-frontmatter-field-focusable='true']",
+                    navigation: "[data-frontmatter-vim-nav='true']",
+                },
+            });
+        }).not.toThrow();
     });
 });

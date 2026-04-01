@@ -18,12 +18,16 @@
  */
 
 import {
+    useContext,
     useEffect,
+    useLayoutEffect,
     useMemo,
+    useRef,
     useState,
     type ComponentPropsWithoutRef,
     type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import type { DockviewApi } from "dockview";
 import katex from "katex";
 import ReactMarkdown from "react-markdown";
@@ -31,7 +35,9 @@ import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import i18n from "../../../i18n";
 import {
+    readVaultMarkdownFile,
     readVaultBinaryFile,
+    resolveWikiLinkTarget,
     resolveMediaEmbedTarget,
 } from "../../../api/vaultApi";
 import { resolveParentDirectory } from "./pathUtils";
@@ -48,6 +54,680 @@ import {
 } from "./markdownReadTransform";
 import { computeTagColorStyles } from "./utils/tagColor";
 import { shouldSkipWikiLinkNavigationForSelection } from "./readModeSelectionPolicy";
+import {
+    createWikiLinkPreviewId,
+    hasWikiLinkPreviewDescendant,
+    registerWikiLinkPreview,
+    subscribeWikiLinkPreviewHierarchy,
+    unregisterWikiLinkPreview,
+    WikiLinkPreviewParentContext,
+} from "./wikiLinkPreviewHierarchy";
+
+const READ_MODE_WIKILINK_PREVIEW_HIDE_DELAY_MS = 500;
+const READ_MODE_WIKILINK_PREVIEW_EXIT_ANIMATION_MS = 140;
+const READ_MODE_WIKILINK_PREVIEW_GAP_PX = 4;
+const READ_MODE_WIKILINK_PREVIEW_INTERACTION_GRACE_MS = 700;
+
+type ReadModeWikiLinkPreviewData =
+    | { status: "loading" }
+    | { status: "not-found" }
+    | { status: "error"; message: string }
+    | {
+        status: "ready";
+        resolvedPath: string;
+        content: string;
+    };
+
+interface ReadModeWikiLinkAnchorProps extends ComponentPropsWithoutRef<"a"> {
+    /** WikiLink 原始目标。 */
+    wikiLinkTarget: string;
+    /** 当前文档路径。 */
+    currentFilePath: string;
+    /** Dockview 容器 API。 */
+    containerApi: DockviewApi;
+    /** 父级 preview id。 */
+    parentPreviewId: string | null;
+}
+
+const readModeWikiLinkPreviewCache = new Map<string, ReadModeWikiLinkPreviewData>();
+
+function isApplePlatform(platform: string): boolean {
+    return /(Mac|iPhone|iPad|iPod)/i.test(platform);
+}
+
+function isWikiLinkPreviewModifierPressed(
+    metaKey: boolean,
+    ctrlKey: boolean,
+    platform: string = globalThis.navigator?.platform ?? "",
+): boolean {
+    return isApplePlatform(platform) ? metaKey : ctrlKey;
+}
+
+function buildReadModeWikiLinkPreviewCacheKey(currentFilePath: string, target: string): string {
+    return `${resolveParentDirectory(currentFilePath)}::${target}`;
+}
+
+/**
+ * @function shouldKeepReadModeWikiLinkPreviewHovered
+ * @description 判断鼠标离开锚点或预览时，是否仍应视为停留在同一预览链路内。
+ * @param isTransitioningIntoPreview `relatedTarget` 是否仍在当前 preview DOM 内。
+ * @param isPointerInsidePreview 当前指针坐标是否仍命中 preview 盒模型。
+ * @returns 若应继续保活当前 preview，则返回 true。
+ */
+export function shouldKeepReadModeWikiLinkPreviewHovered(
+    isTransitioningIntoPreview: boolean,
+    isPointerInsidePreview: boolean,
+): boolean {
+    return isTransitioningIntoPreview || isPointerInsidePreview;
+}
+
+function ReadModeWikiLinkAnchor(props: ReadModeWikiLinkAnchorProps): ReactNode {
+    const {
+        wikiLinkTarget,
+        currentFilePath,
+        containerApi,
+        parentPreviewId,
+        children,
+        className,
+        onClick,
+        onMouseEnter,
+        onMouseLeave,
+        onMouseMove,
+        ...anchorProps
+    } = props;
+    const anchorRef = useRef<HTMLAnchorElement | null>(null);
+    const previewRef = useRef<HTMLDivElement | null>(null);
+    const previewIdRef = useRef<string>(createWikiLinkPreviewId());
+    const pointerPositionRef = useRef<{ clientX: number; clientY: number } | null>(null);
+    const lastPreviewInteractionAtRef = useRef(0);
+    const hideTimerRef = useRef<number | null>(null);
+    const unmountTimerRef = useRef<number | null>(null);
+    const isAnchorHoveredRef = useRef(false);
+    const isPreviewHoveredRef = useRef(false);
+    const modifierPressedRef = useRef(false);
+    const requestSequenceRef = useRef(0);
+    const [previewMounted, setPreviewMounted] = useState(false);
+    const [previewVisible, setPreviewVisible] = useState(false);
+    const [interactionActive, setInteractionActive] = useState(false);
+    const [previewPlacement, setPreviewPlacement] = useState<"above" | "below">("below");
+    const [previewPosition, setPreviewPosition] = useState<{ left: number; top: number } | null>(null);
+    const [previewData, setPreviewData] = useState<ReadModeWikiLinkPreviewData>({ status: "loading" });
+
+    const hasDescendantPreview = (): boolean => hasWikiLinkPreviewDescendant(previewIdRef.current);
+
+    const cancelScheduledHide = (): void => {
+        if (hideTimerRef.current === null) {
+            return;
+        }
+
+        window.clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+    };
+
+    const markPreviewInteraction = (): void => {
+        lastPreviewInteractionAtRef.current = Date.now();
+    };
+
+    const hasRecentPreviewInteraction = (): boolean => {
+        return Date.now() - lastPreviewInteractionAtRef.current
+            <= READ_MODE_WIKILINK_PREVIEW_INTERACTION_GRACE_MS;
+    };
+
+    const cancelScheduledUnmount = (): void => {
+        if (unmountTimerRef.current === null) {
+            return;
+        }
+
+        window.clearTimeout(unmountTimerRef.current);
+        unmountTimerRef.current = null;
+    };
+
+    const revivePreviewVisibility = (): void => {
+        cancelScheduledUnmount();
+        if (previewMounted) {
+            setPreviewVisible(true);
+        }
+        markPreviewInteraction();
+    };
+
+    const hidePreview = (): void => {
+        cancelScheduledHide();
+        setPreviewVisible(false);
+        setInteractionActive(false);
+        isPreviewHoveredRef.current = false;
+        cancelScheduledUnmount();
+        unmountTimerRef.current = window.setTimeout(() => {
+            unmountTimerRef.current = null;
+            setPreviewMounted(false);
+        }, READ_MODE_WIKILINK_PREVIEW_EXIT_ANIMATION_MS);
+    };
+
+    const scheduleHidePreview = (): void => {
+        if (!previewMounted || isPreviewHoveredRef.current || hasDescendantPreview()) {
+            return;
+        }
+
+        if (hideTimerRef.current !== null) {
+            return;
+        }
+
+        hideTimerRef.current = window.setTimeout(() => {
+            hideTimerRef.current = null;
+            syncPreviewHoverStateFromPointer();
+            if (isPreviewHoveredRef.current) {
+                return;
+            }
+            if (isAnchorHoveredRef.current && modifierPressedRef.current) {
+                return;
+            }
+            if (hasDescendantPreview()) {
+                return;
+            }
+            if (hasRecentPreviewInteraction()) {
+                scheduleHidePreview();
+                return;
+            }
+            hidePreview();
+        }, READ_MODE_WIKILINK_PREVIEW_HIDE_DELAY_MS);
+    };
+
+    const updatePreviewPosition = (): void => {
+        const anchorElement = anchorRef.current;
+        const previewElement = previewRef.current;
+        if (!anchorElement || !previewElement) {
+            return;
+        }
+
+        const anchorRect = anchorElement.getBoundingClientRect();
+        const previewWidth = previewElement.offsetWidth;
+        const previewHeight = previewElement.offsetHeight;
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const viewportPadding = 12;
+
+        let left = Math.min(
+            Math.max(viewportPadding, anchorRect.left),
+            Math.max(viewportPadding, viewportWidth - previewWidth - viewportPadding),
+        );
+
+        let placement: "above" | "below" = "below";
+        let top = anchorRect.bottom + READ_MODE_WIKILINK_PREVIEW_GAP_PX;
+
+        if (
+            top + previewHeight > viewportHeight - viewportPadding
+            && anchorRect.top - previewHeight - READ_MODE_WIKILINK_PREVIEW_GAP_PX >= viewportPadding
+        ) {
+            placement = "above";
+            top = anchorRect.top - previewHeight - READ_MODE_WIKILINK_PREVIEW_GAP_PX;
+        }
+
+        if (top + previewHeight > viewportHeight - viewportPadding) {
+            top = Math.max(viewportPadding, viewportHeight - previewHeight - viewportPadding);
+        }
+
+        if (left + previewWidth > viewportWidth - viewportPadding) {
+            left = Math.max(viewportPadding, viewportWidth - previewWidth - viewportPadding);
+        }
+
+        setPreviewPlacement(placement);
+        setPreviewPosition({
+            left: Math.round(left),
+            top: Math.round(top),
+        });
+    };
+
+    const isPointerInsidePreview = (clientX: number, clientY: number): boolean => {
+        const previewElement = previewRef.current;
+        if (!previewElement || typeof document === "undefined") {
+            return false;
+        }
+
+        const hoveredElement = document.elementFromPoint(clientX, clientY);
+        if (hoveredElement instanceof Node && previewElement.contains(hoveredElement)) {
+            return true;
+        }
+
+        const rect = previewElement.getBoundingClientRect();
+        return clientX >= rect.left
+            && clientX <= rect.right
+            && clientY >= rect.top
+            && clientY <= rect.bottom;
+    };
+
+    const resolvePointerCoords = (clientX: number, clientY: number): { clientX: number; clientY: number } => {
+        if (clientX !== 0 || clientY !== 0) {
+            return { clientX, clientY };
+        }
+
+        return pointerPositionRef.current ?? { clientX, clientY };
+    };
+
+    const isEventTransitioningIntoPreview = (relatedTarget: EventTarget | null): boolean => {
+        const previewElement = previewRef.current;
+        if (!previewElement || !(relatedTarget instanceof Node)) {
+            return false;
+        }
+
+        return previewElement.contains(relatedTarget);
+    };
+
+    const syncPreviewHoverStateFromPointer = (): void => {
+        const pointerPosition = pointerPositionRef.current;
+        if (!pointerPosition) {
+            return;
+        }
+
+        const isPointerInside = isPointerInsidePreview(
+            pointerPosition.clientX,
+            pointerPosition.clientY,
+        );
+
+        if (!isPointerInside) {
+            isPreviewHoveredRef.current = false;
+            return;
+        }
+
+        isPreviewHoveredRef.current = true;
+        setInteractionActive(true);
+        cancelScheduledHide();
+        markPreviewInteraction();
+        revivePreviewVisibility();
+    };
+
+    const syncPreviewHoverStateFromCoords = (clientX: number, clientY: number): void => {
+        const isPointerInside = isPointerInsidePreview(clientX, clientY);
+
+        if (!isPointerInside) {
+            isPreviewHoveredRef.current = false;
+            return;
+        }
+
+        pointerPositionRef.current = { clientX, clientY };
+        isPreviewHoveredRef.current = true;
+        setInteractionActive(true);
+        cancelScheduledHide();
+        markPreviewInteraction();
+        revivePreviewVisibility();
+    };
+
+    const showPreview = (): void => {
+        cancelScheduledHide();
+        cancelScheduledUnmount();
+        setInteractionActive(true);
+        setPreviewMounted(true);
+        setPreviewVisible(true);
+        markPreviewInteraction();
+
+        const cacheKey = buildReadModeWikiLinkPreviewCacheKey(currentFilePath, wikiLinkTarget);
+        const cachedPreview = readModeWikiLinkPreviewCache.get(cacheKey);
+        if (cachedPreview) {
+            setPreviewData(cachedPreview);
+            return;
+        }
+
+        setPreviewData({ status: "loading" });
+        const currentDirectory = resolveParentDirectory(currentFilePath);
+        const requestToken = requestSequenceRef.current + 1;
+        requestSequenceRef.current = requestToken;
+
+        void resolveWikiLinkTarget(currentDirectory, wikiLinkTarget)
+            .then(async (resolved) => {
+                if (requestSequenceRef.current !== requestToken) {
+                    return;
+                }
+
+                if (!resolved) {
+                    const notFoundData: ReadModeWikiLinkPreviewData = { status: "not-found" };
+                    readModeWikiLinkPreviewCache.set(cacheKey, notFoundData);
+                    setPreviewData(notFoundData);
+                    return;
+                }
+
+                const file = await readVaultMarkdownFile(resolved.relativePath);
+                if (requestSequenceRef.current !== requestToken) {
+                    return;
+                }
+
+                const readyData: ReadModeWikiLinkPreviewData = {
+                    status: "ready",
+                    resolvedPath: resolved.relativePath,
+                    content: file.content,
+                };
+                readModeWikiLinkPreviewCache.set(cacheKey, readyData);
+                setPreviewData(readyData);
+            })
+            .catch((error) => {
+                if (requestSequenceRef.current !== requestToken) {
+                    return;
+                }
+
+                setPreviewData({
+                    status: "error",
+                    message: error instanceof Error ? error.message : String(error),
+                });
+            });
+    };
+
+    useEffect(() => {
+        if (!previewMounted) {
+            return;
+        }
+
+        registerWikiLinkPreview(previewIdRef.current, parentPreviewId);
+
+        return () => {
+            unregisterWikiLinkPreview(previewIdRef.current);
+        };
+    }, [parentPreviewId, previewMounted]);
+
+    useEffect(() => {
+        if (!previewMounted) {
+            return;
+        }
+
+        return subscribeWikiLinkPreviewHierarchy(() => {
+            if (hasDescendantPreview()) {
+                cancelScheduledHide();
+                return;
+            }
+
+            if (!isAnchorHoveredRef.current && !isPreviewHoveredRef.current) {
+                scheduleHidePreview();
+            }
+        });
+    }, [previewMounted]);
+
+    useEffect(() => {
+        if (!previewMounted) {
+            return;
+        }
+
+        const frameId = window.requestAnimationFrame(() => {
+            updatePreviewPosition();
+            syncPreviewHoverStateFromPointer();
+        });
+
+        return () => {
+            window.cancelAnimationFrame(frameId);
+        };
+    }, [previewMounted, previewVisible, previewData]);
+
+    useLayoutEffect(() => {
+        if (!interactionActive) {
+            return;
+        }
+
+        const handleWindowKeyChange = (event: KeyboardEvent): void => {
+            modifierPressedRef.current = isWikiLinkPreviewModifierPressed(
+                event.metaKey,
+                event.ctrlKey,
+            );
+            if (modifierPressedRef.current) {
+                if (isAnchorHoveredRef.current || isPreviewHoveredRef.current) {
+                    showPreview();
+                }
+                return;
+            }
+
+            if (!isPreviewHoveredRef.current) {
+                scheduleHidePreview();
+            }
+        };
+
+        const handleViewportChange = (): void => {
+            updatePreviewPosition();
+        };
+
+        const handleWindowWheel = (event: WheelEvent): void => {
+            const pointerCoords = resolvePointerCoords(event.clientX, event.clientY);
+            syncPreviewHoverStateFromCoords(pointerCoords.clientX, pointerCoords.clientY);
+        };
+
+        window.addEventListener("keydown", handleWindowKeyChange, true);
+        window.addEventListener("keyup", handleWindowKeyChange, true);
+        window.addEventListener("resize", handleViewportChange, true);
+        window.addEventListener("scroll", handleViewportChange, true);
+        window.addEventListener("wheel", handleWindowWheel, true);
+
+        return () => {
+            window.removeEventListener("keydown", handleWindowKeyChange, true);
+            window.removeEventListener("keyup", handleWindowKeyChange, true);
+            window.removeEventListener("resize", handleViewportChange, true);
+            window.removeEventListener("scroll", handleViewportChange, true);
+            window.removeEventListener("wheel", handleWindowWheel, true);
+        };
+    }, [interactionActive, previewMounted]);
+
+    useEffect(() => () => {
+        cancelScheduledHide();
+        cancelScheduledUnmount();
+    }, []);
+
+    return (
+        <>
+            <a
+                {...anchorProps}
+                ref={anchorRef}
+                className={className}
+                onClick={(event) => {
+                    onClick?.(event);
+                    if (event.defaultPrevented) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    if (shouldSkipWikiLinkNavigationForSelection(
+                        window.getSelection(),
+                        event.currentTarget,
+                    )) {
+                        return;
+                    }
+
+                    void openWikiLinkTarget(
+                        containerApi,
+                        () => currentFilePath,
+                        wikiLinkTarget,
+                    );
+                }}
+                onMouseEnter={(event) => {
+                    isAnchorHoveredRef.current = true;
+                    setInteractionActive(true);
+                    markPreviewInteraction();
+                    pointerPositionRef.current = {
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                    };
+                    modifierPressedRef.current = isWikiLinkPreviewModifierPressed(
+                        event.metaKey,
+                        event.ctrlKey,
+                    );
+                    onMouseEnter?.(event);
+                    if (modifierPressedRef.current) {
+                        showPreview();
+                    }
+                }}
+                onMouseMove={(event) => {
+                    pointerPositionRef.current = {
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                    };
+                    markPreviewInteraction();
+                    modifierPressedRef.current = isWikiLinkPreviewModifierPressed(
+                        event.metaKey,
+                        event.ctrlKey,
+                    );
+                    onMouseMove?.(event);
+                    if (modifierPressedRef.current) {
+                        showPreview();
+                    } else if (!isPreviewHoveredRef.current) {
+                        scheduleHidePreview();
+                    }
+                }}
+                onMouseLeave={(event) => {
+                    const transitioningIntoPreview = isEventTransitioningIntoPreview(
+                        event.relatedTarget,
+                    );
+                    const pointerInsidePreview = isPointerInsidePreview(
+                        event.clientX,
+                        event.clientY,
+                    );
+                    isAnchorHoveredRef.current = false;
+                    pointerPositionRef.current = {
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                    };
+                    onMouseLeave?.(event);
+                    if (shouldKeepReadModeWikiLinkPreviewHovered(
+                        transitioningIntoPreview,
+                        pointerInsidePreview,
+                    )) {
+                        isPreviewHoveredRef.current = true;
+                        setInteractionActive(true);
+                        cancelScheduledHide();
+                        revivePreviewVisibility();
+                        return;
+                    }
+                    if (!previewMounted && !isPreviewHoveredRef.current) {
+                        setInteractionActive(false);
+                    }
+                    scheduleHidePreview();
+                }}
+            >
+                {children}
+            </a>
+            {previewMounted && typeof document !== "undefined"
+                ? createPortal(
+                    <div
+                        ref={previewRef}
+                        className={`cm-wikilink-preview-tooltip${previewVisible ? " is-visible" : " is-hiding"}`}
+                        data-floating-surface="true"
+                        data-placement={previewPlacement}
+                        style={previewPosition ? {
+                            left: `${previewPosition.left}px`,
+                            top: `${previewPosition.top}px`,
+                        } : undefined}
+                        onMouseEnter={(event) => {
+                            event.stopPropagation();
+                            isPreviewHoveredRef.current = true;
+                            setInteractionActive(true);
+                            markPreviewInteraction();
+                            pointerPositionRef.current = {
+                                clientX: event.clientX,
+                                clientY: event.clientY,
+                            };
+                            cancelScheduledHide();
+                            revivePreviewVisibility();
+                        }}
+                        onMouseMove={(event) => {
+                            event.stopPropagation();
+                            markPreviewInteraction();
+                            pointerPositionRef.current = {
+                                clientX: event.clientX,
+                                clientY: event.clientY,
+                            };
+                        }}
+                        onWheel={(event) => {
+                            event.stopPropagation();
+                            const pointerCoords = resolvePointerCoords(
+                                event.clientX,
+                                event.clientY,
+                            );
+                            isPreviewHoveredRef.current = true;
+                            setInteractionActive(true);
+                            markPreviewInteraction();
+                            pointerPositionRef.current = {
+                                clientX: pointerCoords.clientX,
+                                clientY: pointerCoords.clientY,
+                            };
+                            cancelScheduledHide();
+                            revivePreviewVisibility();
+                        }}
+                        onMouseLeave={(event) => {
+                            event.stopPropagation();
+                            const transitioningWithinPreview = isEventTransitioningIntoPreview(
+                                event.relatedTarget,
+                            );
+                            const pointerInsidePreview = isPointerInsidePreview(
+                                event.clientX,
+                                event.clientY,
+                            );
+                            pointerPositionRef.current = {
+                                clientX: event.clientX,
+                                clientY: event.clientY,
+                            };
+                            if (shouldKeepReadModeWikiLinkPreviewHovered(
+                                transitioningWithinPreview,
+                                pointerInsidePreview,
+                            )) {
+                                isPreviewHoveredRef.current = true;
+                                setInteractionActive(true);
+                                cancelScheduledHide();
+                                revivePreviewVisibility();
+                                return;
+                            }
+                            isPreviewHoveredRef.current = false;
+                            if (isAnchorHoveredRef.current && modifierPressedRef.current) {
+                                return;
+                            }
+                            if (!isAnchorHoveredRef.current) {
+                                setInteractionActive(false);
+                            }
+                            scheduleHidePreview();
+                        }}
+                    >
+                        <div className="cm-wikilink-preview">
+                            <div className="cm-wikilink-preview__header">
+                                <div className="cm-wikilink-preview__title">{children}</div>
+                                <div className="cm-wikilink-preview__path">
+                                    {previewData.status === "ready"
+                                        ? previewData.resolvedPath
+                                        : wikiLinkTarget}
+                                </div>
+                            </div>
+                            <div
+                                className="cm-wikilink-preview__body"
+                                onScroll={(event) => {
+                                    event.stopPropagation();
+                                    isPreviewHoveredRef.current = true;
+                                    setInteractionActive(true);
+                                    markPreviewInteraction();
+                                    cancelScheduledHide();
+                                    revivePreviewVisibility();
+                                }}
+                            >
+                                {previewData.status === "loading" ? (
+                                    <div className="cm-wikilink-preview__status">
+                                        {i18n.t("editor.wikilinkPreviewLoading")}
+                                    </div>
+                                ) : null}
+                                {previewData.status === "not-found" ? (
+                                    <div className="cm-wikilink-preview__status">
+                                        {i18n.t("editor.wikilinkPreviewNotFound")}
+                                    </div>
+                                ) : null}
+                                {previewData.status === "error" ? (
+                                    <div className="cm-wikilink-preview__status">
+                                        {`${i18n.t("editor.wikilinkPreviewError")} ${previewData.message}`}
+                                    </div>
+                                ) : null}
+                                {previewData.status === "ready" ? (
+                                    <WikiLinkPreviewParentContext.Provider value={previewIdRef.current}>
+                                        <MarkdownReadView
+                                            content={previewData.content}
+                                            currentFilePath={previewData.resolvedPath}
+                                            containerApi={containerApi}
+                                        />
+                                    </WikiLinkPreviewParentContext.Provider>
+                                ) : null}
+                            </div>
+                        </div>
+                    </div>,
+                    document.body,
+                )
+                : null}
+        </>
+    );
+}
 
 interface MarkdownReadViewProps {
     /** 阅读态 Markdown 正文。 */
@@ -65,22 +745,142 @@ interface MarkdownReadViewProps {
  * @returns React 节点。
  */
 export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
+    const parentPreviewId = useContext(WikiLinkPreviewParentContext);
     const preparedMarkdown = useMemo(
         () => prepareMarkdownForReadMode(props.content),
         [props.content],
     );
+    const markdownComponents = useMemo(() => ({
+        p: ({ node, children, ...componentProps }) => {
+            const blockLatexSource = extractBlockLatexFromParagraph(node);
+            if (blockLatexSource) {
+                return <ReadModeLatex latex={blockLatexSource} displayMode />;
+            }
 
-    const renderInlineCode = (
-        componentProps: ComponentPropsWithoutRef<"code">,
-    ): ReactNode => {
-        const { className, children, ...restProps } = componentProps;
+            return <p {...componentProps}>{children}</p>;
+        },
+        h1: ({ node: _node, ...componentProps }) => <h1 className="cm-rendered-header cm-rendered-header-h1" {...componentProps} />,
+        h2: ({ node: _node, ...componentProps }) => <h2 className="cm-rendered-header cm-rendered-header-h2" {...componentProps} />,
+        h3: ({ node: _node, ...componentProps }) => <h3 className="cm-rendered-header cm-rendered-header-h3" {...componentProps} />,
+        h4: ({ node: _node, ...componentProps }) => <h4 className="cm-rendered-header cm-rendered-header-h4" {...componentProps} />,
+        h5: ({ node: _node, ...componentProps }) => <h5 className="cm-rendered-header cm-rendered-header-h5" {...componentProps} />,
+        h6: ({ node: _node, ...componentProps }) => <h6 className="cm-rendered-header cm-rendered-header-h6" {...componentProps} />,
+        strong: ({ node: _node, ...componentProps }) => <strong className="cm-rendered-bold" {...componentProps} />,
+        em: ({ node: _node, ...componentProps }) => <em className="cm-rendered-italic" {...componentProps} />,
+        del: ({ node: _node, ...componentProps }) => <del className="cm-rendered-strikethrough" {...componentProps} />,
+        blockquote: ({ node: _node, ...componentProps }) => <blockquote className="cm-rendered-blockquote" {...componentProps} />,
+        hr: ({ node: _node, ...componentProps }) => <hr className="cm-rendered-horizontal-rule" {...componentProps} />,
+        code: ({ node: _node, className, children, ...componentProps }: ComponentPropsWithoutRef<"code"> & { node?: unknown }) => {
+            const isInline = !String(className ?? "").includes("language-");
+            if (isInline) {
+                return (
+                    <code
+                        className={`cm-rendered-inline-code ${className ?? ""}`.trim()}
+                        {...componentProps}
+                    >
+                        {children}
+                    </code>
+                );
+            }
 
-        return (
-            <code className={`cm-rendered-inline-code ${className ?? ""}`.trim()} {...restProps}>
-                {children}
-            </code>
-        );
-    };
+            return (
+                <code className={`cm-tab-reader-code ${className ?? ""}`.trim()} {...componentProps}>
+                    {children}
+                </code>
+            );
+        },
+        pre: ({ node: _node, ...componentProps }) => <pre className="cm-tab-reader-pre" {...componentProps} />,
+        ul: ({ node: _node, ...componentProps }) => <ul className="cm-tab-reader-list cm-tab-reader-list-unordered" {...componentProps} />,
+        ol: ({ node: _node, ...componentProps }) => <ol className="cm-tab-reader-list cm-tab-reader-list-ordered" {...componentProps} />,
+        img: ({ node: _node, src, alt, ...componentProps }) => {
+            const mediaTarget = decodeReadModeMediaEmbedHref(src);
+            if (mediaTarget) {
+                return (
+                    <ReadModeImageEmbed
+                        alt={alt ?? mediaTarget}
+                        currentFilePath={props.currentFilePath}
+                        rawTarget={mediaTarget}
+                    />
+                );
+            }
+
+            return (
+                <img
+                    {...componentProps}
+                    alt={alt ?? ""}
+                    className="cm-tab-reader-image"
+                    src={src}
+                />
+            );
+        },
+        li: ({ node: _node, className, ...componentProps }) => (
+            <li
+                className={className
+                    ? `cm-tab-reader-list-item ${className}`
+                    : "cm-tab-reader-list-item"}
+                {...componentProps}
+            />
+        ),
+        a: ({ node: _node, href, children, ...componentProps }) => {
+            const wikiLinkTarget = decodeReadModeWikiLinkHref(href);
+            if (wikiLinkTarget) {
+                return (
+                    <ReadModeWikiLinkAnchor
+                        {...componentProps}
+                        href={href}
+                        className="cm-rendered-wikilink"
+                        wikiLinkTarget={wikiLinkTarget}
+                        currentFilePath={props.currentFilePath}
+                        containerApi={props.containerApi}
+                        parentPreviewId={parentPreviewId}
+                    >
+                        {children}
+                    </ReadModeWikiLinkAnchor>
+                );
+            }
+
+            if (decodeReadModeHighlightHref(href) !== null) {
+                return (
+                    <mark className="cm-rendered-highlight">
+                        {children}
+                    </mark>
+                );
+            }
+
+            const tagTarget = decodeReadModeTagHref(href);
+            if (tagTarget !== null) {
+                const styles = computeTagColorStyles(tagTarget);
+                const styleAttr = {
+                    background: styles.background,
+                    borderColor: styles.border,
+                    color: styles.text,
+                } as React.CSSProperties;
+
+                return (
+                    <span className="cm-rendered-tag" style={styleAttr}>
+                        {children}
+                    </span>
+                );
+            }
+
+            const inlineLatexSource = decodeReadModeInlineLatexHref(href);
+            if (inlineLatexSource !== null) {
+                return <ReadModeLatex latex={inlineLatexSource} displayMode={false} />;
+            }
+
+            return (
+                <a
+                    {...componentProps}
+                    href={href}
+                    className="cm-rendered-link"
+                    target="_blank"
+                    rel="noreferrer"
+                >
+                    {children}
+                </a>
+            );
+        },
+    }), [parentPreviewId, props.containerApi, props.currentFilePath]);
 
     return (
         <div className="cm-tab-reader">
@@ -90,144 +890,7 @@ export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
                 ) : null}
                 <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkBreaks]}
-                    components={{
-                        p: ({ node, children, ...componentProps }) => {
-                            const blockLatexSource = extractBlockLatexFromParagraph(node);
-                            if (blockLatexSource) {
-                                return <ReadModeLatex latex={blockLatexSource} displayMode />;
-                            }
-
-                            return <p {...componentProps}>{children}</p>;
-                        },
-                        h1: ({ node: _node, ...componentProps }) => <h1 className="cm-rendered-header cm-rendered-header-h1" {...componentProps} />,
-                        h2: ({ node: _node, ...componentProps }) => <h2 className="cm-rendered-header cm-rendered-header-h2" {...componentProps} />,
-                        h3: ({ node: _node, ...componentProps }) => <h3 className="cm-rendered-header cm-rendered-header-h3" {...componentProps} />,
-                        h4: ({ node: _node, ...componentProps }) => <h4 className="cm-rendered-header cm-rendered-header-h4" {...componentProps} />,
-                        h5: ({ node: _node, ...componentProps }) => <h5 className="cm-rendered-header cm-rendered-header-h5" {...componentProps} />,
-                        h6: ({ node: _node, ...componentProps }) => <h6 className="cm-rendered-header cm-rendered-header-h6" {...componentProps} />,
-                        strong: ({ node: _node, ...componentProps }) => <strong className="cm-rendered-bold" {...componentProps} />,
-                        em: ({ node: _node, ...componentProps }) => <em className="cm-rendered-italic" {...componentProps} />,
-                        del: ({ node: _node, ...componentProps }) => <del className="cm-rendered-strikethrough" {...componentProps} />,
-                        blockquote: ({ node: _node, ...componentProps }) => <blockquote className="cm-rendered-blockquote" {...componentProps} />,
-                        hr: ({ node: _node, ...componentProps }) => <hr className="cm-rendered-horizontal-rule" {...componentProps} />,
-                        code: ({ node: _node, className, children, ...componentProps }: ComponentPropsWithoutRef<"code"> & { node?: unknown }) => {
-                            const isInline = !String(className ?? "").includes("language-");
-                            if (isInline) {
-                                return renderInlineCode({
-                                    className,
-                                    children,
-                                    ...componentProps,
-                                });
-                            }
-
-                            return (
-                                <code className={`cm-tab-reader-code ${className ?? ""}`.trim()} {...componentProps}>
-                                    {children}
-                                </code>
-                            );
-                        },
-                        pre: ({ node: _node, ...componentProps }) => <pre className="cm-tab-reader-pre" {...componentProps} />,
-                        ul: ({ node: _node, ...componentProps }) => <ul className="cm-tab-reader-list cm-tab-reader-list-unordered" {...componentProps} />,
-                        ol: ({ node: _node, ...componentProps }) => <ol className="cm-tab-reader-list cm-tab-reader-list-ordered" {...componentProps} />,
-                        img: ({ node: _node, src, alt, ...componentProps }) => {
-                            const mediaTarget = decodeReadModeMediaEmbedHref(src);
-                            if (mediaTarget) {
-                                return (
-                                    <ReadModeImageEmbed
-                                        alt={alt ?? mediaTarget}
-                                        currentFilePath={props.currentFilePath}
-                                        rawTarget={mediaTarget}
-                                    />
-                                );
-                            }
-
-                            return (
-                                <img
-                                    {...componentProps}
-                                    alt={alt ?? ""}
-                                    className="cm-tab-reader-image"
-                                    src={src}
-                                />
-                            );
-                        },
-                        li: ({ node: _node, className, ...componentProps }) => (
-                            <li
-                                className={className
-                                    ? `cm-tab-reader-list-item ${className}`
-                                    : "cm-tab-reader-list-item"}
-                                {...componentProps}
-                            />
-                        ),
-                        a: ({ node: _node, href, children, ...componentProps }) => {
-                            const wikiLinkTarget = decodeReadModeWikiLinkHref(href);
-                            if (wikiLinkTarget) {
-                                return (
-                                    <a
-                                        {...componentProps}
-                                        href={href}
-                                        className="cm-rendered-wikilink"
-                                        onClick={(event) => {
-                                            event.preventDefault();
-                                            if (shouldSkipWikiLinkNavigationForSelection(
-                                                window.getSelection(),
-                                                event.currentTarget,
-                                            )) {
-                                                return;
-                                            }
-                                            void openWikiLinkTarget(
-                                                props.containerApi,
-                                                () => props.currentFilePath,
-                                                wikiLinkTarget,
-                                            );
-                                        }}
-                                    >
-                                        {children}
-                                    </a>
-                                );
-                            }
-
-                            if (decodeReadModeHighlightHref(href) !== null) {
-                                return (
-                                    <mark className="cm-rendered-highlight">
-                                        {children}
-                                    </mark>
-                                );
-                            }
-
-                            const tagTarget = decodeReadModeTagHref(href);
-                            if (tagTarget !== null) {
-                                const styles = computeTagColorStyles(tagTarget);
-                                const styleAttr = {
-                                    background: styles.background,
-                                    borderColor: styles.border,
-                                    color: styles.text,
-                                } as React.CSSProperties;
-
-                                return (
-                                    <span className="cm-rendered-tag" style={styleAttr}>
-                                        {children}
-                                    </span>
-                                );
-                            }
-
-                            const inlineLatexSource = decodeReadModeInlineLatexHref(href);
-                            if (inlineLatexSource !== null) {
-                                return <ReadModeLatex latex={inlineLatexSource} displayMode={false} />;
-                            }
-
-                            return (
-                                <a
-                                    {...componentProps}
-                                    href={href}
-                                    className="cm-rendered-link"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                >
-                                    {children}
-                                </a>
-                            );
-                        },
-                    }}
+                    components={markdownComponents}
                 >
                     {preparedMarkdown.renderedMarkdown}
                 </ReactMarkdown>

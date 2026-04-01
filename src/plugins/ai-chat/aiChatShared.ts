@@ -26,6 +26,7 @@
 
 import type {
     AiChatConversationRecord,
+    AiChatHistoryContentBlock,
     AiChatHistoryMessage,
     AiChatHistoryState,
     AiChatSettings,
@@ -165,7 +166,60 @@ export function createConversationRecord(): AiChatConversationRecord {
         createdAtUnixMs: now,
         updatedAtUnixMs: now,
         messages: [],
+        protocolMessages: [],
     };
+}
+
+/**
+ * @function buildFallbackProtocolMessages
+ * @description 从可见消息构建最小可用的协议历史，兼容旧版持久化数据。
+ * @param messages 可见消息列表。
+ * @returns 协议历史消息列表。
+ */
+function buildFallbackProtocolMessages(
+    messages: AiChatHistoryMessage[],
+): AiChatHistoryMessage[] {
+    return messages
+        .filter((message) => {
+            return message.text.trim().length > 0 ||
+                (message.reasoningText ?? "").trim().length > 0 ||
+                (message.contentBlocks?.length ?? 0) > 0;
+        })
+        .map((message) => {
+            const contentBlocks = message.contentBlocks?.length
+                ? message.contentBlocks
+                : buildContentBlocksFromVisibleMessage(message);
+
+            return {
+                ...message,
+                contentBlocks,
+            };
+        });
+}
+
+/**
+ * @function buildContentBlocksFromVisibleMessage
+ * @description 从当前可见消息派生最小协议块集合。
+ * @param message 可见消息。
+ * @returns 协议内容块。
+ */
+function buildContentBlocksFromVisibleMessage(
+    message: AiChatHistoryMessage,
+): AiChatHistoryContentBlock[] {
+    const blocks: AiChatHistoryContentBlock[] = [];
+    if ((message.reasoningText ?? "").trim()) {
+        blocks.push({
+            kind: "thinking",
+            text: message.reasoningText?.trim(),
+        });
+    }
+    if (message.text.trim()) {
+        blocks.push({
+            kind: "text",
+            text: message.text.trim(),
+        });
+    }
+    return blocks;
 }
 
 /**
@@ -234,7 +288,12 @@ export function ensureHistoryState(
 
     return {
         activeConversationId,
-        conversations: sortConversations(history.conversations),
+        conversations: sortConversations(history.conversations.map((conversation) => ({
+            ...conversation,
+            protocolMessages: conversation.protocolMessages?.length
+                ? conversation.protocolMessages
+                : buildFallbackProtocolMessages(conversation.messages),
+        }))),
     };
 }
 
@@ -254,7 +313,16 @@ export function buildPersistableHistory(
                 ...conversation,
                 title: deriveConversationTitle(conversation.messages),
                 messages: conversation.messages.filter((message) => {
-                    return message.text.trim().length > 0;
+                    return message.text.trim().length > 0 ||
+                        (message.reasoningText ?? "").trim().length > 0;
+                }),
+                protocolMessages: (conversation.protocolMessages?.length
+                    ? conversation.protocolMessages
+                    : buildFallbackProtocolMessages(conversation.messages)
+                ).filter((message) => {
+                    return message.text.trim().length > 0 ||
+                        (message.reasoningText ?? "").trim().length > 0 ||
+                        (message.contentBlocks?.length ?? 0) > 0;
                 }),
             }),
         ),
@@ -283,7 +351,8 @@ export function filterConversations(
         }
 
         return conversation.messages.some((message) => {
-            return message.text.toLocaleLowerCase().includes(normalizedQuery);
+            return message.text.toLocaleLowerCase().includes(normalizedQuery) ||
+                (message.reasoningText ?? "").toLocaleLowerCase().includes(normalizedQuery);
         });
     });
 }

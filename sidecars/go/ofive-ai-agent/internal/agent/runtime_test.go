@@ -15,7 +15,7 @@ func TestEmitStreamTextDeltaReturnsIncrementalSuffix(t *testing.T) {
 
 	emitted := "hello"
 	var chunk StreamChunk
-	err := emitStreamTextDelta("agent", "hello world", &emitted, func(next StreamChunk) error {
+	err := emitStreamTextDelta("agent", "hello world", &emitted, false, func(next StreamChunk) error {
 		chunk = next
 		return nil
 	})
@@ -30,6 +30,32 @@ func TestEmitStreamTextDeltaReturnsIncrementalSuffix(t *testing.T) {
 	}
 	if chunk.AccumulatedText != "hello world" {
 		t.Fatalf("unexpected accumulated text: %q", chunk.AccumulatedText)
+	}
+	if chunk.ReasoningDeltaText != "" || chunk.ReasoningAccumulatedText != "" {
+		t.Fatalf("expected no reasoning payload on answer delta, got %+v", chunk)
+	}
+}
+
+func TestEmitStreamTextDeltaReturnsReasoningSuffix(t *testing.T) {
+	t.Parallel()
+
+	emitted := "plan"
+	var chunk StreamChunk
+	err := emitStreamTextDelta("agent", "plan more", &emitted, true, func(next StreamChunk) error {
+		chunk = next
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("emitStreamTextDelta returned error: %v", err)
+	}
+	if chunk.ReasoningDeltaText != " more" {
+		t.Fatalf("unexpected reasoning delta text: %q", chunk.ReasoningDeltaText)
+	}
+	if chunk.ReasoningAccumulatedText != "plan more" {
+		t.Fatalf("unexpected reasoning accumulated text: %q", chunk.ReasoningAccumulatedText)
+	}
+	if chunk.DeltaText != "" || chunk.AccumulatedText != "" {
+		t.Fatalf("expected answer payload to stay empty on reasoning delta, got %+v", chunk)
 	}
 }
 

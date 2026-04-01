@@ -219,9 +219,7 @@ pub(crate) fn list_extension_private_states(
 ) -> Result<Vec<ExtensionPrivateStateRecord>, String> {
     validate_extension_private_store_segment(owner, "owner")?;
 
-    let owner_dir = vault_root
-        .join(EXTENSION_PRIVATE_STORE_ROOT_DIR)
-        .join(owner);
+    let owner_dir = extension_private_owner_dir(vault_root, owner)?;
     if !owner_dir.exists() {
         return Ok(Vec::new());
     }
@@ -260,6 +258,18 @@ pub(crate) fn list_extension_private_states(
 
     records.sort_by(|left, right| left.state_key.cmp(&right.state_key));
     Ok(records)
+}
+
+/// 返回扩展 owner 对应的私有目录路径。
+pub(crate) fn extension_private_owner_dir(
+    vault_root: &Path,
+    owner: &str,
+) -> Result<PathBuf, String> {
+    validate_extension_private_store_segment(owner, "owner")?;
+
+    Ok(vault_root
+        .join(EXTENSION_PRIVATE_STORE_ROOT_DIR)
+        .join(owner))
 }
 
 /// 解析扩展私有状态文件路径。

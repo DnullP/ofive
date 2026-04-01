@@ -8,9 +8,16 @@
 //! use ofive_lib::test_support::{
 //!     create_vault_markdown_file_in_root,
 //!     get_current_vault_tree_in_root,
+//!     upsert_indexed_markdown_document,
 //! };
 //! ```
 
+pub use crate::app::semantic_index::index_facade::delete_indexed_markdown_document;
+pub use crate::app::semantic_index::index_facade::load_indexed_markdown_document;
+pub use crate::app::semantic_index::index_facade::load_semantic_index_settings;
+pub use crate::app::semantic_index::index_facade::save_semantic_index_settings;
+pub use crate::app::semantic_index::index_facade::search_markdown_chunks_for_consumer;
+pub use crate::app::semantic_index::index_facade::upsert_indexed_markdown_document;
 pub use crate::app::vault::query_app_service::get_backlinks_for_file_in_root;
 pub use crate::app::vault::query_app_service::get_current_vault_markdown_graph_in_root;
 pub use crate::app::vault::query_app_service::get_vault_markdown_ast_in_root;
@@ -53,11 +60,19 @@ pub use crate::app::vault::vault_app_service::save_vault_markdown_file_in_root;
 pub use crate::app::vault::vault_app_service::set_current_vault_precheck;
 pub use crate::host::commands::frontend_log_commands::forward_frontend_log;
 pub use crate::host::commands::vault_commands::segment_chinese_text;
+pub use crate::infra::logging::build_log_notification_payload;
+pub use crate::infra::logging::set_log_notification_capture;
+pub use crate::infra::logging::BackendLogNotificationEventPayload;
 pub use crate::infra::logging::init as init_logging;
 pub use crate::infra::query::query_index::ensure_query_index_current;
 pub use crate::infra::query::query_index::list_markdown_files;
 pub use crate::infra::query::query_index::load_markdown_graph;
 pub use crate::infra::query::wikilink::resolve_wikilink_target_path_in_vault;
+pub use crate::shared::semantic_index_contracts::ChunkingStrategyKind;
+pub use crate::shared::semantic_index_contracts::EmbeddingProviderKind;
+pub use crate::shared::semantic_index_contracts::SemanticIndexSettings;
+pub use crate::shared::semantic_index_contracts::SemanticSearchRequest;
+pub use crate::shared::semantic_index_contracts::VectorStoreKind;
 pub use crate::shared::vault_contracts::ApplyMarkdownPatchResponse;
 pub use crate::shared::vault_contracts::ReadCanvasDocumentResponse;
 pub use crate::shared::vault_contracts::VaultCanvasDocument;
@@ -69,3 +84,22 @@ pub use crate::shared::vault_contracts::VaultCanvasNodeKind;
 pub use crate::shared::vault_contracts::VaultConfig;
 pub use crate::shared::vault_contracts::VaultSearchScope;
 pub use crate::shared::vault_contracts::VaultTaskItem;
+
+/// 返回当前测试环境下 sqlite-vec 运行时版本。
+pub fn semantic_index_sqlite_vec_runtime_version() -> Result<String, String> {
+	crate::infra::vector::ensure_sqlite_vec_runtime()
+}
+
+/// 返回指定 Vault 下 semantic-index 的 sqlite 文件路径。
+pub fn semantic_index_vector_store_path_in_root(
+	vault_root: &std::path::Path,
+) -> Result<std::path::PathBuf, String> {
+	crate::infra::vector::semantic_index_vector_store_path(vault_root, "semantic-index")
+}
+
+/// 返回指定 Vault 下 semantic-index 的 fastembed 模型缓存目录。
+pub fn semantic_index_embedding_cache_dir_in_root(
+	vault_root: &std::path::Path,
+) -> Result<std::path::PathBuf, String> {
+	crate::infra::vector::semantic_index_embedding_cache_dir(vault_root)
+}

@@ -6,5 +6,6 @@ pub(crate) mod ai_commands;
 pub(crate) mod capability_commands;
 pub(crate) mod frontend_log_commands;
 pub(crate) mod persistence_commands;
+pub(crate) mod semantic_index_commands;
 pub(crate) mod vault_commands;
 pub(crate) mod window_commands;

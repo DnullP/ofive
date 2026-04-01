@@ -146,6 +146,40 @@
   --floating-surface-border: var(--border-color);
   --floating-surface-shadow: var(--overlay-shadow-strong);
   --floating-backdrop-bg: rgba(0, 0, 0, 0.22);
+  --notification-surface-border: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  --notification-surface-background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-elevated-strong) 94%, transparent),
+      color-mix(in srgb, var(--shell-surface-muted) 92%, transparent)
+    ),
+    color-mix(in srgb, var(--surface-overlay-panel-bg) 94%, transparent);
+  --notification-surface-shadow: 0 18px 38px color-mix(in srgb, var(--bg-primary) 38%, transparent);
+  --notification-accent-info: color-mix(in srgb, var(--accent-primary) 42%, var(--text-link-color));
+  --notification-accent-warn: color-mix(in srgb, var(--text-warning) 72%, transparent);
+  --notification-accent-error: color-mix(in srgb, var(--error-color) 74%, transparent);
+  --notification-icon-bg: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --notification-icon-text: color-mix(in srgb, var(--text-primary) 94%, white 6%);
+  --notification-meta-text: color-mix(in srgb, var(--text-secondary) 78%, transparent);
+  --notification-title-text: color-mix(in srgb, var(--text-primary) 94%, white 6%);
+  --notification-message-text: color-mix(in srgb, var(--text-primary) 84%, var(--text-secondary) 16%);
+  --notification-dismiss-bg: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --notification-dismiss-text: color-mix(in srgb, var(--text-secondary) 82%, transparent);
+  --notification-dismiss-bg-hover: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  --notification-dismiss-text-hover: color-mix(in srgb, var(--text-primary) 96%, white 4%);
+  --notification-progress-track: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --notification-progress-fill: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent-primary) 82%, white 18%),
+    color-mix(in srgb, var(--accent-primary) 62%, #6ee7b7 38%)
+  );
+  --notification-progress-text: color-mix(in srgb, var(--text-secondary) 82%, transparent);
+  --notification-timer-track: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --notification-timer-fill: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--text-warning) 88%, white 12%),
+    color-mix(in srgb, var(--error-color) 76%, #ff7a59 24%)
+  );
   --sidebar-drop-bg: rgba(83, 89, 93, 0.25);
   --sidebar-icon-drop-bg: rgba(83, 89, 93, 0.2);
 
@@ -428,13 +462,45 @@
   --window-glass-bg-rgb: 245, 247, 250;
   --window-glass-elevated-rgb: 255, 255, 255;
   --window-glass-border-rgb: 15, 23, 42;
-  --bg-primary: #f5f7fa;
-  --bg-secondary: #ffffff;
-  --bg-hover: #eef2f6;
-  --border-color: #d7dce3;
+  --bg-primary: #fbfcfd;
+  --bg-secondary: #f5f7fa;
+  --bg-hover: #edf1f5;
+  --border-color: #dbe2ea;
   --text-primary: #1f2937;
   --text-secondary: #4b5563;
   --text-tertiary: #6b7280;
+
+  --surface-base: #f3f5f8;
+  --surface-elevated: #f7f9fb;
+  --surface-elevated-strong: #eef2f6;
+  --surface-hover-accent: color-mix(in srgb, var(--accent-primary-soft-weak) 32%, #edf2f7);
+  --surface-active-accent: color-mix(in srgb, var(--accent-primary-soft) 26%, #f1f5f9);
+  --surface-input-bg: #ffffff;
+  --surface-input-border: color-mix(in srgb, var(--border-color) 82%, transparent);
+  --surface-card-bg: color-mix(in srgb, #ffffff 80%, var(--surface-base));
+  --surface-card-bg-muted: color-mix(in srgb, var(--surface-base) 92%, white 8%);
+  --surface-card-border: color-mix(in srgb, var(--border-color) 84%, transparent);
+  --surface-list-hover-bg: color-mix(in srgb, var(--accent-primary-soft-weak) 42%, #eef2f6);
+  --surface-list-active-bg: color-mix(in srgb, var(--accent-primary-soft) 24%, #eef3f8);
+  --surface-chip-bg: color-mix(in srgb, #eef2f6 88%, white 12%);
+
+  --shell-surface-muted: #fcfdff;
+  --shell-surface-raised: #eef2f6;
+  --shell-stroke-soft: rgba(148, 163, 184, 0.24);
+  --shell-stroke-strong: rgba(148, 163, 184, 0.34);
+  --chrome-titlebar-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), transparent 100%),
+    var(--shell-surface-muted);
+  --chrome-sidebar-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), transparent 22%),
+    var(--shell-surface-muted);
+  --chrome-sidebar-header-bg: color-mix(in srgb, var(--shell-surface-muted) 82%, var(--surface-base));
+  --chrome-activity-bar-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.76), transparent 18%),
+    var(--shell-surface-muted);
+  --chrome-tabstrip-bg: #eceff3;
+  --chrome-tab-active-bg: #f4f6f9;
+  --chrome-tab-inactive-bg: color-mix(in srgb, #eceff3 84%, white 16%);
 
   --accent-primary: #0b6dff;
   --accent-primary-foreground: #ffffff;

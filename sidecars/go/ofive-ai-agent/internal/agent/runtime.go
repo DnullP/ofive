@@ -52,7 +52,20 @@ type ToolDescriptor struct {
 type HistoryEntry struct {
 	Role              string
 	Text              string
+	ReasoningText     string
+	ContentBlocks     []HistoryContentBlock
 	InterruptedByUser bool
+}
+
+// HistoryContentBlock preserves protocol-level message blocks for vendor-compatible history replay.
+type HistoryContentBlock struct {
+	Kind       string `json:"kind"`
+	Text       string `json:"text,omitempty"`
+	Signature  string `json:"signature,omitempty"`
+	ToolUseID  string `json:"toolUseId,omitempty"`
+	ToolName   string `json:"toolName,omitempty"`
+	InputJSON  string `json:"inputJson,omitempty"`
+	ResultJSON string `json:"resultJson,omitempty"`
 }
 
 // CapabilityBridgeConfig contains callback settings for Rust capability execution.
@@ -77,6 +90,9 @@ type StreamChunk struct {
 	AgentName                string
 	DeltaText                string
 	AccumulatedText          string
+	ReasoningDeltaText       string
+	ReasoningAccumulatedText string
+	HistoryContentBlocksJSON string
 	DebugTitle               string
 	DebugLevel               string
 	DebugText                string
@@ -96,9 +112,12 @@ type pendingToolConfirmation struct {
 }
 
 type streamADKState struct {
-	responseText string
-	emittedText  string
-	confirmation *pendingToolConfirmation
+	responseText         string
+	emittedText          string
+	reasoningText        string
+	emittedReasoningText string
+	historyContentBlocks []HistoryContentBlock
+	confirmation         *pendingToolConfirmation
 }
 
 // DebugTraceEvent represents one raw trace emitted during a model-backed turn.
@@ -397,22 +416,20 @@ func (r *Runtime) seedSessionHistory(
 	}
 
 	for index, item := range history {
-		text := strings.TrimSpace(item.Text)
-		if text == "" {
+		content := historyEntryToGenAIContent(item)
+		if content == nil || len(content.Parts) == 0 {
 			continue
 		}
 
-		contentRole := genai.Role(genai.RoleUser)
 		author := "user"
 		if strings.TrimSpace(item.Role) == "assistant" {
-			contentRole = genai.Role(genai.RoleModel)
 			author = agentName
 		}
 
 		event := session.NewEvent(fmt.Sprintf("history-seed-%d", index+1))
 		event.Author = author
 		event.LLMResponse = model.LLMResponse{
-			Content:      genai.NewContentFromText(text, contentRole),
+			Content:      content,
 			TurnComplete: true,
 		}
 
@@ -547,6 +564,143 @@ func (r *Runtime) StreamConfirmation(
 	)
 }
 
+func historyEntryToGenAIContent(entry HistoryEntry) *genai.Content {
+	parts := historyContentBlocksToParts(entry.ContentBlocks)
+	if len(parts) == 0 {
+		if strings.TrimSpace(entry.ReasoningText) != "" {
+			parts = append(parts, &genai.Part{
+				Text:    entry.ReasoningText,
+				Thought: true,
+			})
+		}
+		if strings.TrimSpace(entry.Text) != "" {
+			parts = append(parts, genai.NewPartFromText(entry.Text))
+		}
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+
+	role := genai.RoleUser
+	if strings.TrimSpace(entry.Role) == "assistant" {
+		role = genai.RoleModel
+	}
+
+	return &genai.Content{
+		Role:  role,
+		Parts: parts,
+	}
+}
+
+func historyContentBlocksToParts(blocks []HistoryContentBlock) []*genai.Part {
+	parts := make([]*genai.Part, 0, len(blocks))
+	for _, block := range blocks {
+		switch strings.TrimSpace(block.Kind) {
+		case "thinking":
+			if strings.TrimSpace(block.Text) == "" {
+				continue
+			}
+			parts = append(parts, &genai.Part{
+				Text:             block.Text,
+				Thought:          true,
+				ThoughtSignature: []byte(block.Signature),
+			})
+		case "text":
+			if strings.TrimSpace(block.Text) == "" {
+				continue
+			}
+			parts = append(parts, genai.NewPartFromText(block.Text))
+		case "tool-use":
+			args := map[string]any{}
+			if strings.TrimSpace(block.InputJSON) != "" {
+				_ = json.Unmarshal([]byte(block.InputJSON), &args)
+			}
+			parts = append(parts, &genai.Part{FunctionCall: &genai.FunctionCall{
+				ID:   block.ToolUseID,
+				Name: block.ToolName,
+				Args: args,
+			}})
+		case "tool-result":
+			response := map[string]any{}
+			if strings.TrimSpace(block.ResultJSON) != "" {
+				_ = json.Unmarshal([]byte(block.ResultJSON), &response)
+			}
+			parts = append(parts, &genai.Part{FunctionResponse: &genai.FunctionResponse{
+				ID:       block.ToolUseID,
+				Name:     block.ToolName,
+				Response: response,
+			}})
+		}
+	}
+	return parts
+}
+
+func buildHistoryContentBlocksFromParts(parts []*genai.Part) []HistoryContentBlock {
+	blocks := make([]HistoryContentBlock, 0, len(parts))
+	for _, part := range parts {
+		if part == nil {
+			continue
+		}
+		if part.FunctionCall != nil {
+			blocks = append(blocks, HistoryContentBlock{
+				Kind:      "tool-use",
+				ToolUseID: strings.TrimSpace(part.FunctionCall.ID),
+				ToolName:  strings.TrimSpace(part.FunctionCall.Name),
+				InputJSON: marshalJSONObject(part.FunctionCall.Args),
+			})
+			continue
+		}
+		if part.FunctionResponse != nil {
+			blocks = append(blocks, HistoryContentBlock{
+				Kind:       "tool-result",
+				ToolUseID:  strings.TrimSpace(part.FunctionResponse.ID),
+				ToolName:   strings.TrimSpace(part.FunctionResponse.Name),
+				ResultJSON: marshalJSONObject(part.FunctionResponse.Response),
+			})
+			continue
+		}
+		if strings.TrimSpace(part.Text) == "" {
+			continue
+		}
+		if part.Thought {
+			blocks = append(blocks, HistoryContentBlock{
+				Kind:      "thinking",
+				Text:      part.Text,
+				Signature: string(part.ThoughtSignature),
+			})
+			continue
+		}
+		blocks = append(blocks, HistoryContentBlock{
+			Kind: "text",
+			Text: part.Text,
+		})
+	}
+	return blocks
+}
+
+func marshalHistoryContentBlocks(blocks []HistoryContentBlock) string {
+	if len(blocks) == 0 {
+		return ""
+	}
+	encoded, err := json.Marshal(blocks)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
+// marshalJSONObject normalizes tool payload maps into stable JSON strings.
+func marshalJSONObject(value map[string]any) string {
+	if len(value) == 0 {
+		return ""
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
 func emitChunkedTextResponse(
 	responseText string,
 	agentDisplayName string,
@@ -572,7 +726,11 @@ func emitChunkedTextResponse(
 		AgentName:       agentDisplayName,
 		DeltaText:       "",
 		AccumulatedText: responseText,
-		Done:            true,
+		HistoryContentBlocksJSON: marshalHistoryContentBlocks([]HistoryContentBlock{{
+			Kind: "text",
+			Text: responseText,
+		}}),
+		Done: true,
 	})
 }
 
@@ -626,6 +784,8 @@ func streamADKContent(
 			EventType:                "confirmation",
 			AgentName:                agentDisplayName,
 			AccumulatedText:          state.responseText,
+			ReasoningAccumulatedText: state.reasoningText,
+			HistoryContentBlocksJSON: marshalHistoryContentBlocks(state.historyContentBlocks),
 			ConfirmationID:           state.confirmation.ID,
 			ConfirmationHint:         state.confirmation.Hint,
 			ConfirmationToolName:     state.confirmation.ToolName,
@@ -644,11 +804,13 @@ func streamADKContent(
 	}
 
 	return emit(StreamChunk{
-		EventType:       "done",
-		AgentName:       agentDisplayName,
-		DeltaText:       "",
-		AccumulatedText: state.responseText,
-		Done:            true,
+		EventType:                "done",
+		AgentName:                agentDisplayName,
+		DeltaText:                "",
+		AccumulatedText:          state.responseText,
+		ReasoningAccumulatedText: state.reasoningText,
+		HistoryContentBlocksJSON: marshalHistoryContentBlocks(state.historyContentBlocks),
+		Done:                     true,
 	})
 }
 
@@ -678,21 +840,48 @@ func processADKEventContent(
 		}
 	}
 
-	var parts []string
+	var reasoningParts []string
+	var textParts []string
 	for _, part := range content.Parts {
-		if part != nil && strings.TrimSpace(part.Text) != "" {
-			parts = append(parts, part.Text)
+		if part == nil || strings.TrimSpace(part.Text) == "" {
+			continue
 		}
+		if part.Thought {
+			reasoningParts = append(reasoningParts, part.Text)
+			continue
+		}
+		textParts = append(textParts, part.Text)
 	}
-	if len(parts) == 0 {
+	if len(reasoningParts) == 0 && len(textParts) == 0 {
+		state.historyContentBlocks = buildHistoryContentBlocksFromParts(content.Parts)
 		return nil
 	}
 
-	state.responseText = strings.Join(parts, "\n")
+	state.historyContentBlocks = buildHistoryContentBlocksFromParts(content.Parts)
+
+	if len(reasoningParts) > 0 {
+		state.reasoningText = strings.Join(reasoningParts, "\n")
+		if err := emitStreamTextDelta(
+			agentDisplayName,
+			state.reasoningText,
+			&state.emittedReasoningText,
+			true,
+			emit,
+		); err != nil {
+			return err
+		}
+	}
+
+	if len(textParts) == 0 {
+		return nil
+	}
+
+	state.responseText = strings.Join(textParts, "\n")
 	return emitStreamTextDelta(
 		agentDisplayName,
 		state.responseText,
 		&state.emittedText,
+		false,
 		emit,
 	)
 }
@@ -1254,6 +1443,7 @@ func emitStreamTextDelta(
 	agentDisplayName string,
 	nextText string,
 	emittedText *string,
+	reasoning bool,
 	emit func(StreamChunk) error,
 ) error {
 	if emittedText == nil {
@@ -1275,11 +1465,13 @@ func emitStreamTextDelta(
 	}
 
 	return emit(StreamChunk{
-		EventType:       "delta",
-		AgentName:       agentDisplayName,
-		DeltaText:       deltaText,
-		AccumulatedText: nextText,
-		Done:            false,
+		EventType:                "delta",
+		AgentName:                agentDisplayName,
+		DeltaText:                map[bool]string{true: "", false: deltaText}[reasoning],
+		AccumulatedText:          map[bool]string{true: "", false: nextText}[reasoning],
+		ReasoningDeltaText:       map[bool]string{true: deltaText, false: ""}[reasoning],
+		ReasoningAccumulatedText: map[bool]string{true: nextText, false: ""}[reasoning],
+		Done:                     false,
 	})
 }
 

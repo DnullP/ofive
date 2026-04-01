@@ -56,11 +56,34 @@ pub struct AiChatSettings {
 /// AI 对话消息记录。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AiChatHistoryContentBlock {
+    pub kind: String,
+    #[serde(default)]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub signature: Option<String>,
+    #[serde(default)]
+    pub tool_use_id: Option<String>,
+    #[serde(default)]
+    pub tool_name: Option<String>,
+    #[serde(default)]
+    pub input_json: Option<String>,
+    #[serde(default)]
+    pub result_json: Option<String>,
+}
+
+/// AI 对话消息记录。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiChatHistoryMessage {
     pub id: String,
     pub role: String,
     pub text: String,
     pub created_at_unix_ms: i64,
+    #[serde(default)]
+    pub reasoning_text: Option<String>,
+    #[serde(default)]
+    pub content_blocks: Vec<AiChatHistoryContentBlock>,
     #[serde(default)]
     pub interrupted_by_user: bool,
 }
@@ -75,6 +98,8 @@ pub struct AiChatConversationRecord {
     pub created_at_unix_ms: i64,
     pub updated_at_unix_ms: i64,
     pub messages: Vec<AiChatHistoryMessage>,
+    #[serde(default)]
+    pub protocol_messages: Vec<AiChatHistoryMessage>,
 }
 
 /// AI 对话历史仓库级状态。
@@ -121,6 +146,9 @@ pub struct AiChatStreamEventPayload {
     pub agent_name: Option<String>,
     pub delta_text: Option<String>,
     pub accumulated_text: Option<String>,
+    pub reasoning_delta_text: Option<String>,
+    pub reasoning_accumulated_text: Option<String>,
+    pub history_content_blocks_json: Option<String>,
     pub debug_title: Option<String>,
     pub debug_level: Option<String>,
     pub debug_text: Option<String>,

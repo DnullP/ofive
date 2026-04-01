@@ -1,0 +1,99 @@
+/* semantic-index-settings-form：语义索引设置卡片容器，承载开关、状态和模型列表。 */
+.semantic-index-settings-form {
+    gap: 0;
+}
+
+/* semantic-index-settings-meta：右侧摘要信息，显示已安装模型数量或后端摘要。 */
+.semantic-index-settings-meta {
+    color: var(--text-secondary);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* semantic-index-settings-model-row：模型行的纵向布局，避免安装说明被动作区压缩。 */
+.semantic-index-settings-model-row {
+    align-items: stretch;
+    flex-direction: column;
+}
+
+/* semantic-index-settings-model-top：模型行顶部，左侧安装动作，右侧选择动作。 */
+.semantic-index-settings-model-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+/* semantic-index-settings-model-main：模型主信息区，容纳安装按钮与模型说明。 */
+.semantic-index-settings-model-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 0;
+}
+
+/* semantic-index-settings-install-btn：模型安装按钮，固定最小宽度以减少抖动。 */
+.semantic-index-settings-install-btn {
+    min-width: 72px;
+}
+
+/* semantic-index-settings-select：模型选择区，仅允许已安装模型进入活跃配置。 */
+.semantic-index-settings-select {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* semantic-index-settings-detail：模型补充说明区，用于展示安装状态和维度。 */
+.semantic-index-settings-detail {
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+/* semantic-index-settings-feedback-row：反馈与动作区纵向排布，便于显示错误与保存入口。 */
+.semantic-index-settings-feedback-row {
+    align-items: stretch;
+    flex-direction: column;
+}
+
+/* semantic-index-settings-feedback：普通反馈文本，例如保存成功或状态提示。 */
+.semantic-index-settings-feedback {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+/* semantic-index-settings-feedback.error：错误反馈文本，强调需要用户处理。 */
+.semantic-index-settings-feedback.error {
+    color: #b42318;
+}
+
+/* semantic-index-settings-actions：底部动作区，承载刷新和保存按钮。 */
+.semantic-index-settings-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* semantic-index-settings-primary-action：主按钮样式，用于保存语义索引配置。 */
+.semantic-index-settings-primary-action {
+    border: none;
+    border-radius: 6px;
+    background: var(--accent-primary);
+    color: var(--accent-primary-foreground);
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* semantic-index-settings-primary-action:disabled：主按钮禁用态，避免误触发无效保存。 */
+.semantic-index-settings-primary-action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

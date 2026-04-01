@@ -5,6 +5,7 @@
 
 use std::collections::HashSet;
 
+use crate::infra::logging::BACKEND_LOG_NOTIFICATION_EVENT_NAME;
 use crate::module_contribution::{
 	BackendEventDescriptor, BackendEventKind, BackendModuleContribution,
 };
@@ -15,6 +16,10 @@ pub(crate) mod ai_events;
 pub(crate) fn builtin_host_events() -> Vec<BackendEventDescriptor> {
 	let mut events = Vec::new();
 	events.extend(ai_events::AI_EVENTS.iter().copied());
+	events.push(BackendEventDescriptor::new(
+		BACKEND_LOG_NOTIFICATION_EVENT_NAME,
+		BackendEventKind::UiBridge,
+	));
 	events
 }
 

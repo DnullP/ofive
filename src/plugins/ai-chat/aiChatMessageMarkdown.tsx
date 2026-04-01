@@ -22,6 +22,10 @@ import remarkGfm from "remark-gfm";
 interface AiChatMessageMarkdownProps {
     /** 原始 Markdown 文本。 */
     content: string;
+    /** 推理阶段的原始纯文本。 */
+    reasoningContent?: string;
+    /** 是否仍处于流式输出阶段。 */
+    streaming?: boolean;
     /** 消息角色，用于辅助样式区分。 */
     role: "assistant" | "user";
 }
@@ -36,6 +40,8 @@ export function AiChatMessageMarkdown(
     props: AiChatMessageMarkdownProps,
 ): ReactNode {
     const normalizedContent = props.content.trim();
+    const normalizedReasoningContent = (props.reasoningContent ?? "").trim();
+    const shouldKeepReasoningExpanded = !normalizedContent;
 
     const renderInlineCode = (
         componentProps: ComponentPropsWithoutRef<"code">,
@@ -56,6 +62,17 @@ export function AiChatMessageMarkdown(
     };
 
     if (!normalizedContent) {
+        if (normalizedReasoningContent) {
+            return (
+                <div className="ai-chat-message-markdown ai-chat-message-markdown-reasoning-only">
+                    <details className="ai-chat-message-reasoning-panel" open>
+                        <summary className="ai-chat-message-reasoning-summary">思考过程</summary>
+                        <pre className="ai-chat-message-reasoning">{normalizedReasoningContent}</pre>
+                    </details>
+                </div>
+            );
+        }
+
         return <span className="ai-chat-message-placeholder">...</span>;
     }
 
@@ -63,9 +80,22 @@ export function AiChatMessageMarkdown(
         <div
             className={[
                 "ai-chat-message-markdown",
+                props.streaming ? "ai-chat-message-markdown-streaming" : "",
                 `ai-chat-message-markdown-${props.role}`,
             ].join(" ")}
         >
+            {normalizedReasoningContent ? (
+                <details
+                    className="ai-chat-message-reasoning-panel"
+                    open={shouldKeepReasoningExpanded}
+                >
+                    <summary className="ai-chat-message-reasoning-summary">思考过程</summary>
+                    <pre className="ai-chat-message-reasoning">{normalizedReasoningContent}</pre>
+                </details>
+            ) : null}
+            {props.streaming ? (
+                <div className="ai-chat-message-streaming-text">{props.content}</div>
+            ) : (
             <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkBreaks]}
                 components={{
@@ -147,6 +177,7 @@ export function AiChatMessageMarkdown(
             >
                 {normalizedContent}
             </ReactMarkdown>
+            )}
         </div>
     );
 }

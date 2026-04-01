@@ -5,6 +5,7 @@
 use tokio::sync::oneshot;
 use tauri::{AppHandle, Manager, State};
 use tonic::Request;
+use serde_json;
 
 use crate::shared::ai_service::{
     pb, AiChatHistoryMessage, AiChatStreamEventPayload, AiChatStreamStartResponse,
@@ -181,6 +182,9 @@ pub(crate) async fn start_ai_chat_stream(
             agent_name: None,
             delta_text: None,
             accumulated_text: None,
+            reasoning_delta_text: None,
+            reasoning_accumulated_text: None,
+            history_content_blocks_json: None,
             debug_title: None,
             debug_level: None,
             debug_text: None,
@@ -221,6 +225,9 @@ pub(crate) async fn start_ai_chat_stream(
                     role: item.role,
                     text: item.text,
                     interrupted_by_user: item.interrupted_by_user,
+                    reasoning_text: item.reasoning_text.unwrap_or_default(),
+                    content_blocks_json: serde_json::to_string(&item.content_blocks)
+                        .unwrap_or_else(|_| "[]".to_string()),
                 })
                 .collect(),
         };
@@ -255,6 +262,21 @@ pub(crate) async fn start_ai_chat_stream(
                         agent_name: Some(chunk.agent_name),
                         delta_text: Some(chunk.delta_text),
                         accumulated_text: Some(chunk.accumulated_text),
+                        reasoning_delta_text: if chunk.reasoning_delta_text.is_empty() {
+                            None
+                        } else {
+                            Some(chunk.reasoning_delta_text)
+                        },
+                        reasoning_accumulated_text: if chunk.reasoning_accumulated_text.is_empty() {
+                            None
+                        } else {
+                            Some(chunk.reasoning_accumulated_text)
+                        },
+                        history_content_blocks_json: if chunk.history_content_blocks_json.is_empty() {
+                            None
+                        } else {
+                            Some(chunk.history_content_blocks_json)
+                        },
                         debug_title: if chunk.debug_title.is_empty() {
                             None
                         } else {
@@ -333,6 +355,9 @@ pub(crate) async fn start_ai_chat_stream(
                         agent_name: None,
                         delta_text: None,
                         accumulated_text: None,
+                        reasoning_delta_text: None,
+                        reasoning_accumulated_text: None,
+                        history_content_blocks_json: None,
                         debug_title: None,
                         debug_level: None,
                         debug_text: None,
@@ -355,6 +380,9 @@ pub(crate) async fn start_ai_chat_stream(
                         agent_name: None,
                         delta_text: None,
                         accumulated_text: None,
+                        reasoning_delta_text: None,
+                        reasoning_accumulated_text: None,
+                        history_content_blocks_json: None,
                         debug_title: None,
                         debug_level: None,
                         debug_text: None,
@@ -473,6 +501,9 @@ pub(crate) async fn submit_ai_chat_confirmation(
             agent_name: None,
             delta_text: None,
             accumulated_text: None,
+            reasoning_delta_text: None,
+            reasoning_accumulated_text: None,
+            history_content_blocks_json: None,
             debug_title: None,
             debug_level: None,
             debug_text: None,
@@ -538,6 +569,22 @@ pub(crate) async fn submit_ai_chat_confirmation(
                         agent_name: Some(chunk.agent_name),
                         delta_text: Some(chunk.delta_text),
                         accumulated_text: Some(chunk.accumulated_text),
+                        reasoning_delta_text: if chunk.reasoning_delta_text.is_empty() {
+                            None
+                        } else {
+                            Some(chunk.reasoning_delta_text)
+                        },
+                        reasoning_accumulated_text: if chunk.reasoning_accumulated_text.is_empty()
+                        {
+                            None
+                        } else {
+                            Some(chunk.reasoning_accumulated_text)
+                        },
+                        history_content_blocks_json: if chunk.history_content_blocks_json.is_empty() {
+                            None
+                        } else {
+                            Some(chunk.history_content_blocks_json)
+                        },
                         debug_title: if chunk.debug_title.is_empty() {
                             None
                         } else {
@@ -616,6 +663,9 @@ pub(crate) async fn submit_ai_chat_confirmation(
                         agent_name: None,
                         delta_text: None,
                         accumulated_text: None,
+                        reasoning_delta_text: None,
+                        reasoning_accumulated_text: None,
+                        history_content_blocks_json: None,
                         debug_title: None,
                         debug_level: None,
                         debug_text: None,
@@ -638,6 +688,9 @@ pub(crate) async fn submit_ai_chat_confirmation(
                         agent_name: None,
                         delta_text: None,
                         accumulated_text: None,
+                        reasoning_delta_text: None,
+                        reasoning_accumulated_text: None,
+                        history_content_blocks_json: None,
                         debug_title: None,
                         debug_level: None,
                         debug_text: None,

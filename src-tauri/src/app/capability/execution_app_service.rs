@@ -140,6 +140,29 @@ mod tests {
     }
 
     #[test]
+    fn execute_capability_in_root_should_allow_sidecar_semantic_search() {
+        let root = create_test_root();
+
+        let output = execute_capability_in_root(
+            &root,
+            CapabilityExecutionRequest {
+                capability_id: "semantic.search_markdown_chunks".to_string(),
+                consumer: CapabilityConsumer::Sidecar,
+                input: json!({
+                    "query": "ofive",
+                    "limit": 4,
+                }),
+            },
+        )
+        .expect("sidecar semantic search capability should execute successfully");
+
+        assert_eq!(output["status"], "disabled");
+        assert_eq!(output["results"], json!([]));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn execute_capability_in_root_should_create_markdown_file() {
         let root = create_test_root();
 

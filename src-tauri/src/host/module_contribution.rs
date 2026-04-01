@@ -9,7 +9,10 @@ use crate::host::commands::capability_commands::CAPABILITY_COMMAND_IDS;
 use crate::host::commands::frontend_log_commands::FRONTEND_LOG_COMMAND_IDS;
 use crate::host::commands::persistence_commands::PERSISTENCE_COMMAND_IDS;
 use crate::host::commands::window_commands::WINDOW_COMMAND_IDS;
-use crate::module_contribution::BackendModuleContribution;
+use crate::infra::logging::BACKEND_LOG_NOTIFICATION_EVENT_NAME;
+use crate::module_contribution::{
+    BackendEventDescriptor, BackendEventKind, BackendModuleContribution,
+};
 
 const HOST_PLATFORM_COMMAND_IDS: &[&str] = &[
     CAPABILITY_COMMAND_IDS[0],
@@ -17,6 +20,11 @@ const HOST_PLATFORM_COMMAND_IDS: &[&str] = &[
     WINDOW_COMMAND_IDS[0],
     FRONTEND_LOG_COMMAND_IDS[0],
 ];
+
+const HOST_PLATFORM_EVENTS: &[BackendEventDescriptor] = &[BackendEventDescriptor::new(
+    BACKEND_LOG_NOTIFICATION_EVENT_NAME,
+    BackendEventKind::UiBridge,
+)];
 
 const HOST_PLATFORM_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[
     BackendModulePublicSurface {
@@ -36,6 +44,7 @@ const HOST_PLATFORM_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[
             "src/domain/capability/",
             "src/app/capability/",
             "src/app/ai/",
+            "src/app/semantic_index/",
             "src/app/vault/",
             "src/host/commands/capability_commands.rs",
             "src/module_contribution.rs",
@@ -71,6 +80,7 @@ const HOST_PLATFORM_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[
             "src/module_contribution.rs",
             "src/module_boundary_template.rs",
             "src/app/ai/module_contribution.rs",
+            "src/app/semantic_index/module_contribution.rs",
             "src/app/sync/module_contribution.rs",
             "src/app/vault/module_contribution.rs",
             "src/host/module_contribution.rs",
@@ -85,6 +95,7 @@ const HOST_PLATFORM_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[
             "src/host/",
             "src/module_boundary_template.rs",
             "src/app/ai/module_contribution.rs",
+            "src/app/semantic_index/module_contribution.rs",
             "src/app/sync/module_contribution.rs",
             "src/app/vault/module_contribution.rs",
             "src/app/persistence/persistence_app_service.rs",
@@ -112,7 +123,7 @@ pub(crate) fn host_platform_backend_module_contribution() -> BackendModuleContri
     BackendModuleContribution {
         module_id: "host-platform",
         command_ids: HOST_PLATFORM_COMMAND_IDS,
-        events: &[],
+        events: HOST_PLATFORM_EVENTS,
         persistence_owners: &[],
         capability_catalog: None,
         capability_execute: None,

@@ -15,6 +15,7 @@ import {
     toggleStrikethrough,
     toggleInlineCode,
     toggleHighlight,
+    toggleWikiLink,
     insertLink,
     insertTask,
     insertFrontmatter,
@@ -196,6 +197,39 @@ describe("toggleHighlight", () => {
         toggleHighlight(view);
         expect(dispatches).toHaveLength(1);
         expect(dispatches[0]!.changes).toEqual({ from: 0, to: 9, insert: "hello" });
+    });
+});
+
+/* ================================================================== */
+/*  toggleWikiLink 测试                                                */
+/* ================================================================== */
+
+describe("toggleWikiLink", () => {
+    test("选中文本时包裹 [[ ]]", () => {
+        const { view, dispatches } = createMockView("hello world", 0, 5);
+        toggleWikiLink(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({ from: 0, to: 5, insert: "[[hello]]" });
+    });
+
+    test("已被 [[ ]] 包裹的选中文本移除标记", () => {
+        const { view, dispatches } = createMockView("[[hello]]", 0, 9);
+        toggleWikiLink(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({ from: 0, to: 9, insert: "hello" });
+    });
+
+    test("选区外部已有 [[ ]] 时移除外部标记", () => {
+        const { view, dispatches } = createMockView("[[hello]]", 2, 7);
+        toggleWikiLink(view);
+        expect(dispatches).toHaveLength(1);
+    });
+
+    test("空选区时包裹当前词为 wikilink", () => {
+        const { view, dispatches } = createMockView("hello world", 5, 5);
+        toggleWikiLink(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({ from: 0, to: 5, insert: "[[hello]]" });
     });
 });
 

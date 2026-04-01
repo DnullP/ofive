@@ -137,6 +137,14 @@ export const EDITOR_COMMAND_DEFINITIONS = {
             editableInSettings: true,
         },
     }),
+    "editor.toggleWikiLink": createEditorNativeCommandDefinition({
+        id: "editor.toggleWikiLink",
+        title: "commands.toggleWikiLink",
+        shortcut: {
+            defaultBinding: "Cmd+Alt+K",
+            editableInSettings: true,
+        },
+    }),
     "editor.insertLink": createEditorNativeCommandDefinition({
         id: "editor.insertLink",
         title: "commands.insertLink",

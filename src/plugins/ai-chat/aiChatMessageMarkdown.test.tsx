@@ -54,4 +54,49 @@ describe("AiChatMessageMarkdown", () => {
         expect(html).toContain("ai-chat-message-placeholder");
         expect(html).toContain("...");
     });
+
+    it("应在最终回答前渲染独立 reasoning 文本块", () => {
+        const html = renderToStaticMarkup(
+            <AiChatMessageMarkdown
+                role="assistant"
+                content="最终回答"
+                reasoningContent="先分析上下文\n再给出结论"
+            />,
+        );
+
+        expect(html).toContain("ai-chat-message-reasoning-panel");
+        expect(html).toContain("ai-chat-message-reasoning-summary");
+        expect(html).toContain("ai-chat-message-reasoning");
+        expect(html).toContain("先分析上下文");
+        expect(html).toContain("最终回答");
+    });
+
+    it("应在仅有 reasoning 时默认展开推理面板", () => {
+        const html = renderToStaticMarkup(
+            <AiChatMessageMarkdown
+                role="assistant"
+                content="   "
+                reasoningContent="先收集约束\n再生成答案"
+            />,
+        );
+
+        expect(html).toContain("<details class=\"ai-chat-message-reasoning-panel\" open=\"\"");
+        expect(html).toContain("思考过程");
+        expect(html).toContain("先收集约束");
+    });
+
+    it("应在流式阶段使用轻量纯文本渲染而不是 Markdown", () => {
+        const html = renderToStaticMarkup(
+            <AiChatMessageMarkdown
+                role="assistant"
+                content="**pending** answer"
+                streaming
+            />,
+        );
+
+        expect(html).toContain("ai-chat-message-markdown-streaming");
+        expect(html).toContain("ai-chat-message-streaming-text");
+        expect(html).toContain("**pending** answer");
+        expect(html).not.toContain("<strong>pending</strong>");
+    });
 });

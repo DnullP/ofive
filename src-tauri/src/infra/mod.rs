@@ -8,3 +8,4 @@ pub(crate) mod fs;
 pub(crate) mod logging;
 pub(crate) mod persistence;
 pub(crate) mod query;
+pub(crate) mod vector;

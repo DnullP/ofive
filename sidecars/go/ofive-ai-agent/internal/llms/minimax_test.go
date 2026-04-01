@@ -118,6 +118,142 @@ func TestMinimaxGenerateContentStreamsVendorResponseIntoMultipleYields(t *testin
 	}
 }
 
+func TestMinimaxGenerateContentParsesThinkingBlocks(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":"msg_1","type":"message","role":"assistant","model":"MiniMax-M2.7","content":[{"type":"thinking","thinking":"step one","signature":"sig-1"},{"type":"text","text":"final answer"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer server.Close()
+
+	llm := NewMinimaxLLM("minimax-anthropic", server.URL, "MiniMax-M2.7", "test-key")
+	request := &model.LLMRequest{
+		Model: "minimax-anthropic",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("你好", genai.RoleUser),
+		},
+	}
+
+	var responses []*model.LLMResponse
+	for response, err := range llm.GenerateContent(context.Background(), request, false) {
+		if err != nil {
+			t.Fatalf("GenerateContent returned error: %v", err)
+		}
+		responses = append(responses, response)
+	}
+
+	if len(responses) != 1 {
+		t.Fatalf("expected one response, got %d", len(responses))
+	}
+	if len(responses[0].Content.Parts) != 2 {
+		t.Fatalf("expected thinking + text parts, got %+v", responses[0].Content)
+	}
+	if !responses[0].Content.Parts[0].Thought || responses[0].Content.Parts[0].Text != "step one" {
+		t.Fatalf("expected first part to be thinking, got %+v", responses[0].Content.Parts[0])
+	}
+	if string(responses[0].Content.Parts[0].ThoughtSignature) != "sig-1" {
+		t.Fatalf("unexpected thought signature: %q", string(responses[0].Content.Parts[0].ThoughtSignature))
+	}
+	if responses[0].Content.Parts[1].Text != "final answer" {
+		t.Fatalf("expected second part to be final text, got %+v", responses[0].Content.Parts[1])
+	}
+}
+
+func TestBuildMinimaxMessagesPreservesThinkingBlocks(t *testing.T) {
+	t.Parallel()
+
+	_, messages := buildMinimaxMessages(&model.LLMRequest{
+		Contents: []*genai.Content{
+			genai.NewContentFromText("问题", genai.RoleUser),
+			{
+				Role: genai.RoleModel,
+				Parts: []*genai.Part{
+					{
+						Text:             "先推理",
+						Thought:          true,
+						ThoughtSignature: []byte("sig-1"),
+					},
+					genai.NewPartFromText("再回答"),
+				},
+			},
+		},
+	})
+
+	if len(messages) != 2 {
+		t.Fatalf("expected user + assistant messages, got %+v", messages)
+	}
+	assistant := messages[1]
+	if len(assistant.Content) != 2 {
+		t.Fatalf("expected thinking + text blocks, got %+v", assistant.Content)
+	}
+	if assistant.Content[0].Type != "thinking" || assistant.Content[0].Thinking != "先推理" {
+		t.Fatalf("expected first block to be thinking, got %+v", assistant.Content[0])
+	}
+	if assistant.Content[0].Signature != "sig-1" {
+		t.Fatalf("unexpected thinking signature: %q", assistant.Content[0].Signature)
+	}
+	if assistant.Content[1].Type != "text" || assistant.Content[1].Text != "再回答" {
+		t.Fatalf("expected second block to be text, got %+v", assistant.Content[1])
+	}
+}
+
+func TestMinimaxGenerateContentStreamsThinkingDeltas(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("event: message_start\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"MiniMax-M2.7\",\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_start\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_delta\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"step one\"}}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_delta\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"sig-1\"}}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_stop\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_stop\",\"index\":0}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_start\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_delta\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"answer\"}}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_stop\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_stop\",\"index\":1}\n\n"))
+		_, _ = writer.Write([]byte("event: message_stop\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"message_stop\"}\n\n"))
+	}))
+	defer server.Close()
+
+	llm := NewMinimaxLLM("minimax-anthropic", server.URL, "MiniMax-M2.7", "test-key")
+	request := &model.LLMRequest{
+		Model: "minimax-anthropic",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("你好", genai.RoleUser),
+		},
+	}
+
+	responses := make([]*model.LLMResponse, 0)
+	for response, err := range llm.GenerateContent(context.Background(), request, false) {
+		if err != nil {
+			t.Fatalf("GenerateContent returned error: %v", err)
+		}
+		responses = append(responses, response)
+	}
+
+	if len(responses) != 3 {
+		t.Fatalf("expected thinking, text, and final completion responses, got %d", len(responses))
+	}
+	if !responses[0].Content.Parts[0].Thought || responses[0].Content.Parts[0].Text != "step one" {
+		t.Fatalf("expected first streamed response to be thinking, got %+v", responses[0].Content)
+	}
+	if responses[1].Content.Parts[1].Text != "answer" {
+		t.Fatalf("expected second streamed response to include answer text, got %+v", responses[1].Content)
+	}
+	if !responses[2].TurnComplete {
+		t.Fatalf("expected final streamed response to be complete, got %+v", responses[2])
+	}
+}
+
 func TestMinimaxGenerateContentSendsToolsAndToolMessages(t *testing.T) {
 	t.Parallel()
 

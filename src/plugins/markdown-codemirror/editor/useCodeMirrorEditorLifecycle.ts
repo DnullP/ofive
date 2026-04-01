@@ -88,6 +88,7 @@ import { createLatexSyntaxExtension } from "./syntaxPlugins/latexSyntaxExtension
 import { createMarkdownTableSyntaxExtension } from "./syntaxPlugins/markdownTableSyntaxExtension";
 import { createTaskCheckboxToggleExtension } from "./syntaxPlugins/listSyntaxRenderer";
 import { createWikiLinkNavigationExtension } from "./syntaxPlugins/wikiLinkSyntaxRenderer";
+import { createWikiLinkPreviewExtension } from "./syntaxPlugins/wikiLinkPreviewExtension";
 import {
     registerVimTokenProvider,
     unregisterVimTokenProvider,
@@ -315,6 +316,10 @@ export function useCodeMirrorEditorLifecycle(
                 options.registeredLineSyntaxRenderExtension,
                 createTaskCheckboxToggleExtension(),
                 createImageEmbedSyntaxExtension(() => options.currentFilePathRef.current),
+                createWikiLinkPreviewExtension(
+                    options.containerApi,
+                    () => options.currentFilePathRef.current,
+                ),
                 createWikiLinkNavigationExtension(
                     options.containerApi,
                     () => options.currentFilePathRef.current,

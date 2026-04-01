@@ -245,6 +245,8 @@ func (m *MinimaxLLM) streamResponse(
 				Delta struct {
 					Type        string `json:"type"`
 					Text        string `json:"text"`
+					Thinking    string `json:"thinking"`
+					Signature   string `json:"signature"`
 					PartialJSON string `json:"partial_json"`
 				} `json:"delta"`
 			}
@@ -253,6 +255,21 @@ func (m *MinimaxLLM) streamResponse(
 			}
 			block := state.ensureBlock(payload.Index)
 			switch payload.Delta.Type {
+			case "thinking_delta":
+				block.block.Type = "thinking"
+				block.block.Thinking += payload.Delta.Thinking
+				if payload.Delta.Signature != "" {
+					block.block.Signature += payload.Delta.Signature
+				}
+				if strings.TrimSpace(block.block.Thinking) != "" {
+					emitted = true
+					if !yield(buildMinimaxLLMResponse(state.snapshot(), state.stopReason, state.inputTokens, state.outputTokens, false), nil) {
+						return io.EOF
+					}
+				}
+			case "signature_delta":
+				block.block.Type = "thinking"
+				block.block.Signature += payload.Delta.Signature
 			case "text_delta":
 				block.block.Type = "text"
 				block.block.Text += payload.Delta.Text
@@ -521,6 +538,14 @@ func convertContentToMinimaxMessage(
 		if part == nil {
 			continue
 		}
+		if part.Thought && part.Text != "" {
+			message.Content = append(message.Content, minimaxContentBlock{
+				Type:      "thinking",
+				Thinking:  part.Text,
+				Signature: string(part.ThoughtSignature),
+			})
+			continue
+		}
 		if part.Text != "" {
 			message.Content = append(message.Content, minimaxContentBlock{
 				Type: "text",
@@ -587,6 +612,14 @@ func buildMinimaxResponseParts(content []minimaxContentBlock) []*genai.Part {
 	state := &toolCallHistoryState{}
 	for _, block := range content {
 		switch block.Type {
+		case "thinking":
+			if strings.TrimSpace(block.Thinking) != "" {
+				parts = append(parts, &genai.Part{
+					Text:             block.Thinking,
+					Thought:          true,
+					ThoughtSignature: []byte(block.Signature),
+				})
+			}
 		case "text":
 			if strings.TrimSpace(block.Text) != "" {
 				parts = append(parts, genai.NewPartFromText(block.Text))
@@ -738,6 +771,8 @@ type minimaxMessage struct {
 type minimaxContentBlock struct {
 	Type      string `json:"type"`
 	Text      string `json:"text,omitempty"`
+	Thinking  string `json:"thinking,omitempty"`
+	Signature string `json:"signature,omitempty"`
 	ID        string `json:"id,omitempty"`
 	Name      string `json:"name,omitempty"`
 	ToolUseID string `json:"tool_use_id,omitempty"`

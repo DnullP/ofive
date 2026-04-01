@@ -1,0 +1,183 @@
+/* 右上角消息栈容器：固定在标题栏下方，承载所有提示卡片。 */
+.log-notification-stack {
+    position: fixed;
+    top: calc(var(--custom-titlebar-height, 36px) + 14px);
+    right: 16px;
+    z-index: 1300;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: min(380px, calc(100vw - 24px));
+    pointer-events: none;
+}
+
+/* 单条消息卡片：提供玻璃感背景、边框和阴影。 */
+.log-notification-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--notification-surface-border);
+    border-radius: 16px;
+    background: var(--notification-surface-background);
+    box-shadow: var(--notification-surface-shadow);
+    backdrop-filter: blur(18px);
+    pointer-events: auto;
+}
+
+/* 警告态卡片：使用偏琥珀色强调。 */
+.log-notification-card--warn {
+    border-color: var(--notification-accent-warn);
+}
+
+/* 错误态卡片：使用偏红色强调。 */
+.log-notification-card--error {
+    border-color: var(--notification-accent-error);
+}
+
+/* 信息态卡片：使用偏蓝绿色强调。 */
+.log-notification-card--info {
+    border-color: var(--notification-accent-info);
+}
+
+/* 卡片主内容行：控制图标、正文和关闭按钮布局。 */
+.log-notification-card__row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 14px 12px;
+}
+
+/* 卡片图标区：负责展示等级图标。 */
+.log-notification-card__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: var(--notification-icon-bg);
+    color: var(--notification-icon-text);
+    flex: 0 0 auto;
+}
+
+/* 卡片正文区：承载来源、标题、正文和进度条。 */
+.log-notification-card__body {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* 卡片元信息区：展示来源和剩余倒计时。 */
+.log-notification-card__meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--notification-meta-text);
+}
+
+/* 卡片来源标签：突出消息来源类别。 */
+.log-notification-card__source {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* 卡片倒计时标签：展示剩余关闭时间。 */
+.log-notification-card__countdown {
+    font-variant-numeric: tabular-nums;
+}
+
+/* 卡片标题：用于强调短标题。 */
+.log-notification-card__title {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.25;
+    font-weight: 700;
+    color: var(--notification-title-text);
+}
+
+/* 卡片正文：展示核心日志或业务消息内容。 */
+.log-notification-card__message {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--notification-message-text);
+    word-break: break-word;
+}
+
+/* 关闭按钮：允许用户主动关闭消息。 */
+.log-notification-card__dismiss {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--notification-dismiss-bg);
+    color: var(--notification-dismiss-text);
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+    flex: 0 0 auto;
+}
+
+/* 关闭按钮悬停态：提升可点击反馈。 */
+.log-notification-card__dismiss:hover {
+    background: var(--notification-dismiss-bg-hover);
+    color: var(--notification-dismiss-text-hover);
+}
+
+/* 进度容器：承载进度条与进度百分比。 */
+.log-notification-card__progress {
+    position: relative;
+    overflow: hidden;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--notification-progress-track);
+}
+
+/* 进度条：根据 progress 宽度显示当前进度。 */
+.log-notification-card__progress-bar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: 999px;
+    background: var(--notification-progress-fill);
+}
+
+/* 进度标签：展示数值百分比。 */
+.log-notification-card__progress-label {
+    position: absolute;
+    top: -18px;
+    right: 0;
+    font-size: 11px;
+    color: var(--notification-progress-text);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 倒计时轨道：显示自动关闭剩余比例。 */
+.log-notification-card__timer-track {
+    height: 3px;
+    background: var(--notification-timer-track);
+}
+
+/* 倒计时进度条：随着剩余时间减少而缩短。 */
+.log-notification-card__timer-bar {
+    height: 100%;
+    background: var(--notification-timer-fill);
+    transition: width 100ms linear;
+}
+
+/* 移动端适配：减小边距并撑满可视宽度。 */
+@media (max-width: 640px) {
+    .log-notification-stack {
+        top: calc(var(--custom-titlebar-height, 36px) + 10px);
+        right: 12px;
+        left: 12px;
+        width: auto;
+    }
+}

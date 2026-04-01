@@ -102,7 +102,23 @@ export interface AiChatHistoryMessage {
     role: "assistant" | "user";
     text: string;
     createdAtUnixMs: number;
+    reasoningText?: string;
+    contentBlocks?: AiChatHistoryContentBlock[];
     interruptedByUser?: boolean;
+}
+
+/**
+ * @interface AiChatHistoryContentBlock
+ * @description 协议历史中的单个内容块，用于在重建 vendor 对话上下文时保留 thinking、tool_use 与 tool_result。
+ */
+export interface AiChatHistoryContentBlock {
+    kind: "text" | "thinking" | "tool-use" | "tool-result";
+    text?: string;
+    signature?: string;
+    toolUseId?: string;
+    toolName?: string;
+    inputJson?: string;
+    resultJson?: string;
 }
 
 /**
@@ -116,6 +132,7 @@ export interface AiChatConversationRecord {
     createdAtUnixMs: number;
     updatedAtUnixMs: number;
     messages: AiChatHistoryMessage[];
+    protocolMessages?: AiChatHistoryMessage[];
 }
 
 /**
@@ -138,6 +155,9 @@ export interface AiChatStreamEventPayload {
     agentName: string | null;
     deltaText: string | null;
     accumulatedText: string | null;
+    reasoningDeltaText: string | null;
+    reasoningAccumulatedText: string | null;
+    historyContentBlocksJson: string | null;
     debugTitle: string | null;
     debugLevel: string | null;
     debugText: string | null;

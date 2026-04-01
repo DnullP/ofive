@@ -26,7 +26,7 @@ const WIKI_LINK_PATTERN = /(\[\[)([^\]\n]+?)(\]\])/g;
  * @interface WikiLinkMatch
  * @description Wiki link 匹配结果。
  */
-interface WikiLinkMatch {
+export interface WikiLinkMatch {
     from: number;
     to: number;
     target: string;
@@ -169,7 +169,7 @@ export async function openWikiLinkTarget(
  * @param position 文档偏移位置。
  * @returns 命中的 wiki link 信息，不命中返回 null。
  */
-function findWikiLinkAtPosition(state: EditorState, position: number): WikiLinkMatch | null {
+export function findWikiLinkAtPosition(state: EditorState, position: number): WikiLinkMatch | null {
     const line = state.doc.lineAt(position);
     const lineText = line.text;
     const matches = Array.from(lineText.matchAll(WIKI_LINK_PATTERN));

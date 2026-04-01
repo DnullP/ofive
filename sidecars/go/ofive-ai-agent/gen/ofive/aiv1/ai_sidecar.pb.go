@@ -231,7 +231,9 @@ type ChatHistoryEntry struct {
 	Role  string                 `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
 	Text  string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
 	// interrupted_by_user marks assistant output that was manually stopped before completion.
-	InterruptedByUser bool `protobuf:"varint,3,opt,name=interrupted_by_user,json=interruptedByUser,proto3" json:"interrupted_by_user,omitempty"`
+	InterruptedByUser bool   `protobuf:"varint,3,opt,name=interrupted_by_user,json=interruptedByUser,proto3" json:"interrupted_by_user,omitempty"`
+	ReasoningText     string `protobuf:"bytes,4,opt,name=reasoning_text,json=reasoningText,proto3" json:"reasoning_text,omitempty"`
+	ContentBlocksJson string `protobuf:"bytes,5,opt,name=content_blocks_json,json=contentBlocksJson,proto3" json:"content_blocks_json,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -285,6 +287,20 @@ func (x *ChatHistoryEntry) GetInterruptedByUser() bool {
 		return x.InterruptedByUser
 	}
 	return false
+}
+
+func (x *ChatHistoryEntry) GetReasoningText() string {
+	if x != nil {
+		return x.ReasoningText
+	}
+	return ""
+}
+
+func (x *ChatHistoryEntry) GetContentBlocksJson() string {
+	if x != nil {
+		return x.ContentBlocksJson
+	}
+	return ""
 }
 
 type ChatRequest struct {
@@ -599,6 +615,9 @@ type ChatChunk struct {
 	ConfirmationToolName     string                 `protobuf:"bytes,12,opt,name=confirmation_tool_name,json=confirmationToolName,proto3" json:"confirmation_tool_name,omitempty"`
 	ConfirmationToolArgsJson string                 `protobuf:"bytes,13,opt,name=confirmation_tool_args_json,json=confirmationToolArgsJson,proto3" json:"confirmation_tool_args_json,omitempty"`
 	DebugLevel               string                 `protobuf:"bytes,14,opt,name=debug_level,json=debugLevel,proto3" json:"debug_level,omitempty"`
+	ReasoningDeltaText       string                 `protobuf:"bytes,15,opt,name=reasoning_delta_text,json=reasoningDeltaText,proto3" json:"reasoning_delta_text,omitempty"`
+	ReasoningAccumulatedText string                 `protobuf:"bytes,16,opt,name=reasoning_accumulated_text,json=reasoningAccumulatedText,proto3" json:"reasoning_accumulated_text,omitempty"`
+	HistoryContentBlocksJson string                 `protobuf:"bytes,17,opt,name=history_content_blocks_json,json=historyContentBlocksJson,proto3" json:"history_content_blocks_json,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -731,6 +750,27 @@ func (x *ChatChunk) GetDebugLevel() string {
 	return ""
 }
 
+func (x *ChatChunk) GetReasoningDeltaText() string {
+	if x != nil {
+		return x.ReasoningDeltaText
+	}
+	return ""
+}
+
+func (x *ChatChunk) GetReasoningAccumulatedText() string {
+	if x != nil {
+		return x.ReasoningAccumulatedText
+	}
+	return ""
+}
+
+func (x *ChatChunk) GetHistoryContentBlocksJson() string {
+	if x != nil {
+		return x.HistoryContentBlocksJson
+	}
+	return ""
+}
+
 var File_ai_sidecar_proto protoreflect.FileDescriptor
 
 const file_ai_sidecar_proto_rawDesc = "" +
@@ -753,11 +793,13 @@ const file_ai_sidecar_proto_rawDesc = "" +
 	"\n" +
 	"agent_name\x18\x02 \x01(\tR\tagentName\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\tR\aversion\x12\x10\n" +
-	"\x03pid\x18\x04 \x01(\x03R\x03pid\"j\n" +
+	"\x03pid\x18\x04 \x01(\x03R\x03pid\"\xc1\x01\n" +
 	"\x10ChatHistoryEntry\x12\x12\n" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12.\n" +
-	"\x13interrupted_by_user\x18\x03 \x01(\bR\x11interruptedByUser\"\xc8\x05\n" +
+	"\x13interrupted_by_user\x18\x03 \x01(\bR\x11interruptedByUser\x12%\n" +
+	"\x0ereasoning_text\x18\x04 \x01(\tR\rreasoningText\x12.\n" +
+	"\x13content_blocks_json\x18\x05 \x01(\tR\x11contentBlocksJson\"\xc8\x05\n" +
 	"\vChatRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
@@ -797,7 +839,7 @@ const file_ai_sidecar_proto_rawDesc = "" +
 	"\x1apersistence_callback_token\x18\x0e \x01(\tR\x18persistenceCallbackToken\x1a?\n" +
 	"\x11VendorConfigEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x88\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb7\x05\n" +
 	"\tChatChunk\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
@@ -820,7 +862,10 @@ const file_ai_sidecar_proto_rawDesc = "" +
 	"\x16confirmation_tool_name\x18\f \x01(\tR\x14confirmationToolName\x12=\n" +
 	"\x1bconfirmation_tool_args_json\x18\r \x01(\tR\x18confirmationToolArgsJson\x12\x1f\n" +
 	"\vdebug_level\x18\x0e \x01(\tR\n" +
-	"debugLevel2\xe1\x01\n" +
+	"debugLevel\x120\n" +
+	"\x14reasoning_delta_text\x18\x0f \x01(\tR\x12reasoningDeltaText\x12<\n" +
+	"\x1areasoning_accumulated_text\x18\x10 \x01(\tR\x18reasoningAccumulatedText\x12=\n" +
+	"\x1bhistory_content_blocks_json\x18\x11 \x01(\tR\x18historyContentBlocksJson2\xe1\x01\n" +
 	"\x0eAiAgentService\x12A\n" +
 	"\x06Health\x12\x1a.ofive.ai.v1.HealthRequest\x1a\x1b.ofive.ai.v1.HealthResponse\x12:\n" +
 	"\x04Chat\x12\x18.ofive.ai.v1.ChatRequest\x1a\x16.ofive.ai.v1.ChatChunk0\x01\x12P\n" +

@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -82,6 +83,9 @@ func (s *AIService) Chat(req *aiv1.ChatRequest, stream aiv1.AiAgentService_ChatS
 			DeltaText:                chunk.DeltaText,
 			AgentName:                chunk.AgentName,
 			AccumulatedText:          chunk.AccumulatedText,
+			ReasoningDeltaText:       chunk.ReasoningDeltaText,
+			ReasoningAccumulatedText: chunk.ReasoningAccumulatedText,
+			HistoryContentBlocksJson: chunk.HistoryContentBlocksJSON,
 			Done:                     chunk.Done,
 			EventType:                chunk.EventType,
 			Error:                    chunk.ErrorText,
@@ -102,9 +106,19 @@ func mapHistoryEntries(items []*aiv1.ChatHistoryEntry) []agentruntime.HistoryEnt
 		if item == nil {
 			continue
 		}
+
+		contentBlocks := make([]agentruntime.HistoryContentBlock, 0)
+		if raw := strings.TrimSpace(item.GetContentBlocksJson()); raw != "" {
+			if err := json.Unmarshal([]byte(raw), &contentBlocks); err != nil {
+				contentBlocks = nil
+			}
+		}
+
 		history = append(history, agentruntime.HistoryEntry{
 			Role:              strings.TrimSpace(item.GetRole()),
 			Text:              item.GetText(),
+			ReasoningText:     item.GetReasoningText(),
+			ContentBlocks:     contentBlocks,
 			InterruptedByUser: item.GetInterruptedByUser(),
 		})
 	}
@@ -152,6 +166,9 @@ func (s *AIService) SubmitConfirmation(req *aiv1.ConfirmationRequest, stream aiv
 			DeltaText:                chunk.DeltaText,
 			AgentName:                chunk.AgentName,
 			AccumulatedText:          chunk.AccumulatedText,
+			ReasoningDeltaText:       chunk.ReasoningDeltaText,
+			ReasoningAccumulatedText: chunk.ReasoningAccumulatedText,
+			HistoryContentBlocksJson: chunk.HistoryContentBlocksJSON,
 			Done:                     chunk.Done,
 			EventType:                chunk.EventType,
 			Error:                    chunk.ErrorText,

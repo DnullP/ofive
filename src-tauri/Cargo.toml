@@ -36,6 +36,8 @@ jieba-rs = "0.8.1"
 base64 = "0.22"
 log = "0.4"
 rusqlite = { version = "0.32", features = ["bundled"] }
+fastembed = "5.13.0"
+sqlite-vec = "0.1.9"
 pulldown-cmark = "0.9"
 prost = "0.13"
 reqwest = { version = "0.12", default-features = false, features = [

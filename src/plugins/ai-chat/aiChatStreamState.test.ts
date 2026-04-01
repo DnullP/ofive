@@ -25,6 +25,9 @@ function createPayload(
         agentName: null,
         deltaText: null,
         accumulatedText: null,
+        reasoningDeltaText: null,
+        reasoningAccumulatedText: null,
+        historyContentBlocksJson: null,
         debugTitle: null,
         debugLevel: null,
         debugText: null,
@@ -99,6 +102,23 @@ describe("aiChatStreamState", () => {
         expect(transition.shouldStopStreaming).toBe(true);
         expect(transition.shouldClearPendingConfirmation).toBe(true);
         expect(transition.nextAssistantText).toBe("final response");
+        expect(transition.nextAssistantReasoningText).toBe(null);
+    });
+
+    it("应在 delta 事件时单独透传 reasoning 文本", () => {
+        const transition = reduceAiChatStreamEvent({
+            payload: createPayload("delta", {
+                accumulatedText: null,
+                reasoningAccumulatedText: "先推理，再回答",
+            }),
+            binding: createPendingStreamBinding("conversation-1", "session-1", "assistant-1", "stream-1"),
+            debugEntryId: "debug-1",
+            debugFallbackTitle: "fallback",
+            confirmationFallbackHint: "fallback-hint",
+        });
+
+        expect(transition.nextAssistantText).toBe(null);
+        expect(transition.nextAssistantReasoningText).toBe("先推理，再回答");
     });
 
     it("应在 stopped 事件时保留已有内容并结束当前 binding", () => {

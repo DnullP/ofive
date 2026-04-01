@@ -76,6 +76,34 @@ define_app_commands![
         crate::host::commands::capability_commands::get_capability_catalog
     ),
     (
+        "get_semantic_index_backend_catalog",
+        crate::host::commands::semantic_index_commands::get_semantic_index_backend_catalog
+    ),
+    (
+        "get_semantic_index_settings",
+        crate::host::commands::semantic_index_commands::get_semantic_index_settings
+    ),
+    (
+        "save_semantic_index_settings",
+        crate::host::commands::semantic_index_commands::save_semantic_index_settings
+    ),
+    (
+        "get_semantic_index_status",
+        crate::host::commands::semantic_index_commands::get_semantic_index_status
+    ),
+    (
+        "get_semantic_index_model_catalog",
+        crate::host::commands::semantic_index_commands::get_semantic_index_model_catalog
+    ),
+    (
+        "install_semantic_index_model",
+        crate::host::commands::semantic_index_commands::install_semantic_index_model
+    ),
+    (
+        "start_semantic_index_full_sync",
+        crate::host::commands::semantic_index_commands::start_semantic_index_full_sync
+    ),
+    (
         "execute_persistence_request",
         crate::host::commands::persistence_commands::execute_persistence_request
     ),

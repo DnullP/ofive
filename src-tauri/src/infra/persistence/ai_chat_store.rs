@@ -578,6 +578,11 @@ fn sanitize_ai_chat_conversation(
         .into_iter()
         .filter_map(sanitize_ai_chat_message)
         .collect::<Vec<_>>();
+    let protocol_messages = conversation
+        .protocol_messages
+        .into_iter()
+        .filter_map(sanitize_ai_chat_message)
+        .collect::<Vec<_>>();
 
     let created_at_unix_ms = conversation.created_at_unix_ms.max(0);
     let updated_at_unix_ms = conversation.updated_at_unix_ms.max(created_at_unix_ms);
@@ -597,24 +602,38 @@ fn sanitize_ai_chat_conversation(
         created_at_unix_ms,
         updated_at_unix_ms,
         messages,
+        protocol_messages,
     })
 }
 
 /// 清洗单条历史消息。
 ///
-/// 仅保留 `user` 与 `assistant` 两种角色，且要求消息标识与文本非空；
-/// 非法消息会被整个丢弃。若消息带有 `interrupted_by_user` 标记，则在
+/// 仅保留 `user` 与 `assistant` 两种角色，且要求消息标识非空；用户消息
+/// 仍要求正文非空，助手消息则允许仅保留推理文本。非法消息会被整个丢弃。若消息带有 `interrupted_by_user` 标记，则在
 /// 持久化后继续保留，供后续恢复对话上下文时补充“上一轮被用户中断”的语义。
 fn sanitize_ai_chat_message(message: AiChatHistoryMessage) -> Option<AiChatHistoryMessage> {
     let id = message.id.trim().to_string();
     let text = message.text.trim().to_string();
+    let reasoning_text = message
+        .reasoning_text
+        .as_ref()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
     let role = match message.role.trim() {
         "assistant" => "assistant".to_string(),
         "user" => "user".to_string(),
         _ => return None,
     };
 
-    if id.is_empty() || text.is_empty() {
+    if id.is_empty() {
+        return None;
+    }
+
+    if role == "user" && text.is_empty() {
+        return None;
+    }
+
+    if role == "assistant" && text.is_empty() && reasoning_text.is_none() {
         return None;
     }
 
@@ -623,7 +642,33 @@ fn sanitize_ai_chat_message(message: AiChatHistoryMessage) -> Option<AiChatHisto
         role,
         text,
         created_at_unix_ms: message.created_at_unix_ms.max(0),
+        reasoning_text,
+        content_blocks: message
+            .content_blocks
+            .into_iter()
+            .filter_map(sanitize_ai_chat_content_block)
+            .collect(),
         interrupted_by_user: message.interrupted_by_user,
+    })
+}
+
+/// 清洗单条协议历史内容块。
+fn sanitize_ai_chat_content_block(
+    block: crate::shared::ai_service::AiChatHistoryContentBlock,
+) -> Option<crate::shared::ai_service::AiChatHistoryContentBlock> {
+    let kind = block.kind.trim().to_string();
+    if kind.is_empty() {
+        return None;
+    }
+
+    Some(crate::shared::ai_service::AiChatHistoryContentBlock {
+        kind,
+        text: block.text.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()),
+        signature: block.signature.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()),
+        tool_use_id: block.tool_use_id.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()),
+        tool_name: block.tool_name.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()),
+        input_json: block.input_json.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()),
+        result_json: block.result_json.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()),
     })
 }
 
@@ -724,8 +769,11 @@ mod tests {
                     role: "user".to_string(),
                     text: "hello".to_string(),
                     created_at_unix_ms: 10,
+                    reasoning_text: None,
+                    content_blocks: vec![],
                     interrupted_by_user: false,
                 }],
+                protocol_messages: vec![],
             }],
         };
 
@@ -855,8 +903,11 @@ mod tests {
                     role: "assistant".to_string(),
                     text: "partial answer".to_string(),
                     created_at_unix_ms: 10,
+                    reasoning_text: Some("first pass reasoning".to_string()),
+                    content_blocks: vec![],
                     interrupted_by_user: true,
                 }],
+                protocol_messages: vec![],
             }],
         };
 

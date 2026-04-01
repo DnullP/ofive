@@ -1240,6 +1240,112 @@
     line-height: 1.4;
 }
 
+/* WikiLink 预览气泡：固定在视口中并锚定到当前 link 附近。 */
+.cm-wikilink-preview-tooltip {
+    position: fixed;
+    z-index: 220;
+    width: min(420px, calc(100vw - 24px));
+    max-height: min(70vh, 560px);
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--editor-link-color) 18%, var(--editor-panel-border-color));
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--editor-panel-bg-elevated-color) 94%, transparent);
+    box-shadow: var(--overlay-shadow-strong);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+    transform-origin: top left;
+    transition: opacity 140ms ease, transform 140ms ease;
+    backdrop-filter: blur(10px);
+}
+
+/* WikiLink 预览气泡显示态：在完成定位后淡入展示。 */
+.cm-wikilink-preview-tooltip.is-visible {
+    pointer-events: auto;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+/* WikiLink 预览气泡隐藏态：播放淡出和轻微下沉动画后再卸载 DOM。 */
+.cm-wikilink-preview-tooltip.is-hiding {
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+}
+
+/* WikiLink 预览气泡上方弹出态：调整动画原点，使位移动画方向正确。 */
+.cm-wikilink-preview-tooltip[data-placement="above"] {
+    transform-origin: bottom left;
+}
+
+/* WikiLink 预览卡片：纵向组织标题区和内容区。 */
+.cm-wikilink-preview {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* WikiLink 预览头部：展示预览标题与目标路径。 */
+.cm-wikilink-preview__header {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--editor-panel-border-color) 78%, transparent);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--editor-link-color) 10%, transparent), transparent);
+}
+
+/* WikiLink 预览标题：突出当前 hover 的链接文本。 */
+.cm-wikilink-preview__title {
+    color: var(--editor-panel-text-color);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+/* WikiLink 预览路径：补充展示解析后的相对路径。 */
+.cm-wikilink-preview__path {
+    color: var(--editor-panel-muted-text-color);
+    font-size: 11px;
+    line-height: 1.4;
+    word-break: break-all;
+}
+
+/* WikiLink 预览正文容器：限制高度并允许内部滚动。 */
+.cm-wikilink-preview__body {
+    min-height: 0;
+    max-height: min(56vh, 460px);
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+/* WikiLink 预览状态文案：承载加载中、未命中与错误提示。 */
+.cm-wikilink-preview__status {
+    padding: 18px 16px;
+    color: var(--editor-panel-muted-text-color);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+/* WikiLink 预览中的阅读态根容器：移除整页阅读态的外层撑满布局。 */
+.cm-wikilink-preview .cm-tab-reader {
+    padding: 0;
+    background: transparent;
+    font-size: 14px;
+}
+
+/* WikiLink 预览中的阅读态正文：压缩版心，让卡片内容贴合气泡宽度。 */
+.cm-wikilink-preview .cm-tab-reader-content {
+    max-width: none;
+    padding: 14px 16px 16px;
+}
+
+/* WikiLink 预览中的 frontmatter 面板：缩小与正文的边距，避免气泡内部过于松散。 */
+.cm-wikilink-preview .cm-read-frontmatter-panel {
+    margin-bottom: 12px;
+}
+
 /* 空状态提示文本：无匹配笔记时显示 */
 .cm-wikilink-suggest-empty {
     padding: 8px 12px;
