@@ -19,6 +19,7 @@ import {
     getAiVendorCatalog,
     getAiVendorModels,
     saveAiChatHistory,
+    stopAiChatStream,
     startAiChatStream,
     submitAiChatConfirmation,
     subscribeAiChatStreamEvents,
@@ -38,6 +39,7 @@ import {
 } from "./aiChatSettingsStore";
 import {
     buildPersistableHistory,
+    createConversationSessionId,
     createConversationRecord,
     deriveConversationTitle,
     ensureHistoryState,
@@ -51,6 +53,7 @@ import {
 import {
     createEmptyPendingStreamBinding,
     createPendingStreamBinding,
+    isPendingStreamBindingActive,
     reduceAiChatStreamEvent,
     type ChatDebugEntry,
     type PendingStreamBinding,
@@ -127,6 +130,33 @@ function nextChatDebugEntryId(): string {
 }
 
 /**
+ * @function findBindingForStreamEvent
+ * @description 根据事件中的 streamId 或 sessionId 找到对应会话的 pending binding。
+ * @param bindings 当前全部会话 binding。
+ * @param payload 本次流事件。
+ * @returns 匹配的 binding，未找到时返回 null。
+ */
+function findBindingForStreamEvent(
+    bindings: Record<string, PendingStreamBinding>,
+    payload: Parameters<typeof reduceAiChatStreamEvent>[0]["payload"],
+): PendingStreamBinding | null {
+    const exactBinding = Object.values(bindings).find((binding) => {
+        return binding.streamId === payload.streamId;
+    });
+    if (exactBinding) {
+        return exactBinding;
+    }
+
+    if (!payload.sessionId) {
+        return null;
+    }
+
+    return Object.values(bindings).find((binding) => {
+        return !binding.streamId && binding.sessionId === payload.sessionId;
+    }) ?? null;
+}
+
+/**
  * @function AiChatView
  * @description 渲染可在 pane 和 tab 之间复用的 AI 聊天视图。
  * @returns React 节点。
@@ -134,6 +164,7 @@ function nextChatDebugEntryId(): string {
 function AiChatView(): ReactNode {
     const { currentVaultPath } = useVaultState();
     const [historyState, setHistoryState] = useState<AiChatHistoryState | null>(null);
+    const [bindingsByConversation, setBindingsByConversation] = useState<Record<string, PendingStreamBinding>>({});
     const [debugEntriesByConversation, setDebugEntriesByConversation] = useState<Record<string, ChatDebugEntry[]>>({});
     const [pendingConfirmations, setPendingConfirmations] = useState<Record<string, PendingToolConfirmation>>({});
     const [activeTab, setActiveTab] = useState<"history" | "chat" | "debug">("chat");
@@ -141,15 +172,75 @@ function AiChatView(): ReactNode {
     const [debugCopyState, setDebugCopyState] = useState<"idle" | "copied" | "error">("idle");
     const [conversationQuery, setConversationQuery] = useState("");
     const [draft, setDraft] = useState("");
-    const [isStreaming, setIsStreaming] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [settings, setSettings] = useState<AiChatSettings | null>(null);
     const [vendorCatalog, setVendorCatalog] = useState<AiVendorDefinition[]>([]);
-    const streamBindingRef = useRef<PendingStreamBinding>(createEmptyPendingStreamBinding());
+    const bindingsRef = useRef<Record<string, PendingStreamBinding>>({});
     const historyLoadedRef = useRef(false);
     const historySaveTimerRef = useRef<number | null>(null);
     const threadViewportRef = useRef<HTMLDivElement | null>(null);
     const debugViewportRef = useRef<HTMLDivElement | null>(null);
+
+    /**
+     * @function commitBindings
+     * @description 原子更新全部会话 binding，并同步 ref 快照。
+     * @param updater 更新函数。
+     */
+    const commitBindings = (
+        updater: (
+            currentBindings: Record<string, PendingStreamBinding>,
+        ) => Record<string, PendingStreamBinding>,
+    ): void => {
+        setBindingsByConversation((currentBindings) => {
+            const nextBindings = updater(currentBindings);
+            bindingsRef.current = nextBindings;
+            return nextBindings;
+        });
+    };
+
+    /**
+     * @function setConversationBinding
+     * @description 设置某个会话当前的运行 binding；若已结束则清理。
+     * @param conversationId 会话 ID。
+     * @param binding 新 binding。
+     */
+    const setConversationBinding = (
+        conversationId: string,
+        binding: PendingStreamBinding,
+    ): void => {
+        commitBindings((currentBindings) => {
+            const nextBindings = { ...currentBindings };
+            if (isPendingStreamBindingActive(binding)) {
+                nextBindings[conversationId] = binding;
+            } else {
+                delete nextBindings[conversationId];
+            }
+            return nextBindings;
+        });
+    };
+
+    /**
+     * @function updateConversationBinding
+     * @description 基于当前 binding 更新指定会话的运行状态。
+     * @param conversationId 会话 ID。
+     * @param updater 更新函数。
+     */
+    const updateConversationBinding = (
+        conversationId: string,
+        updater: (binding: PendingStreamBinding) => PendingStreamBinding,
+    ): void => {
+        commitBindings((currentBindings) => {
+            const currentBinding = currentBindings[conversationId] ?? createEmptyPendingStreamBinding();
+            const nextBinding = updater(currentBinding);
+            const nextBindings = { ...currentBindings };
+            if (isPendingStreamBindingActive(nextBinding)) {
+                nextBindings[conversationId] = nextBinding;
+            } else {
+                delete nextBindings[conversationId];
+            }
+            return nextBindings;
+        });
+    };
 
     /**
      * @function updateConversation
@@ -248,6 +339,21 @@ function AiChatView(): ReactNode {
         }) ?? null;
     }, [historyState]);
 
+    const activeConversationBinding = useMemo(() => {
+        if (!activeConversation) {
+            return null;
+        }
+        return bindingsByConversation[activeConversation.id] ?? null;
+    }, [activeConversation, bindingsByConversation]);
+
+    const isActiveConversationStreaming = useMemo(() => {
+        return isPendingStreamBindingActive(activeConversationBinding);
+    }, [activeConversationBinding]);
+
+    const isActiveConversationStopping = useMemo(() => {
+        return Boolean(activeConversationBinding?.stopRequested);
+    }, [activeConversationBinding]);
+
     const currentDebugEntries = useMemo(() => {
         if (!activeConversation) {
             return [];
@@ -285,13 +391,21 @@ function AiChatView(): ReactNode {
         return "-";
     }, [currentVaultPath, isVendorConfigured, settings?.model]);
 
-    const canSend = Boolean(currentVaultPath && activeConversation && draft.trim() && !isStreaming && isVendorConfigured);
+    const canSend = Boolean(
+        currentVaultPath
+        && activeConversation
+        && draft.trim()
+        && !isActiveConversationStreaming
+        && isVendorConfigured,
+    );
 
     useEffect(() => {
         let disposed = false;
 
         if (!currentVaultPath) {
             setHistoryState(null);
+            setBindingsByConversation({});
+            bindingsRef.current = {};
             setSettings(null);
             historyLoadedRef.current = false;
             resetAiChatSettingsStore();
@@ -310,6 +424,8 @@ function AiChatView(): ReactNode {
                 setVendorCatalog(catalog);
                 setSettings(nextSettings);
                 setHistoryState(ensureHistoryState(history));
+                setBindingsByConversation({});
+                bindingsRef.current = {};
                 setDebugEntriesByConversation({});
                 setPendingConfirmations({});
                 setDebugFilter("all");
@@ -374,7 +490,11 @@ function AiChatView(): ReactNode {
                 return;
             }
 
-            const binding = streamBindingRef.current;
+            const binding = findBindingForStreamEvent(bindingsRef.current, payload);
+            if (!binding) {
+                return;
+            }
+
             const transition = reduceAiChatStreamEvent({
                 payload,
                 binding,
@@ -383,16 +503,7 @@ function AiChatView(): ReactNode {
                 confirmationFallbackHint: i18n.t("aiChatPlugin.confirmationFallbackHint"),
             });
 
-            streamBindingRef.current = transition.nextBinding;
-
             if (!transition.matchesBinding) {
-                if (!binding.streamId && transition.nextBinding.streamId === payload.streamId) {
-                    console.info("[aiChatPlugin] stream bound", {
-                        streamId: payload.streamId,
-                        conversationId: binding.conversationId,
-                        sessionId: binding.sessionId,
-                    });
-                }
                 return;
             }
 
@@ -403,6 +514,8 @@ function AiChatView(): ReactNode {
                     sessionId: binding.sessionId,
                 });
             }
+
+            setConversationBinding(binding.conversationId!, transition.nextBinding);
 
             if (transition.nextDebugEntry) {
                 console.debug("[aiChatPlugin] stream debug chunk", {
@@ -448,15 +561,37 @@ function AiChatView(): ReactNode {
                 setError(transition.errorMessage);
             }
 
-            if (transition.shouldStopStreaming) {
-                setIsStreaming(false);
-            }
-
             if (transition.shouldClearPendingConfirmation) {
                 clearPendingConfirmationState(binding.assistantMessageId!);
             }
 
+            if (transition.wasStopped) {
+                updateConversation(binding.conversationId!, (conversation) => ({
+                    ...conversation,
+                    updatedAtUnixMs: Date.now(),
+                    messages: conversation.messages.map((message) => {
+                        if (message.id !== binding.assistantMessageId) {
+                            return message;
+                        }
+
+                        return {
+                            ...message,
+                            interruptedByUser: true,
+                        };
+                    }),
+                    sessionId: createConversationSessionId(conversation.id),
+                }));
+            }
+
             if (transition.nextConfirmation) {
+                return;
+            }
+
+            if (transition.wasStopped) {
+                console.info("[aiChatPlugin] stream stopped", {
+                    streamId: payload.streamId,
+                    conversationId: binding.conversationId,
+                });
                 return;
             }
 
@@ -509,9 +644,6 @@ function AiChatView(): ReactNode {
      * @description 创建并切换到新会话。
      */
     const handleCreateConversation = (): void => {
-        if (isStreaming) {
-            return;
-        }
         const conversation = createConversationRecord();
         setHistoryState((currentState) => {
             if (!currentState) {
@@ -537,9 +669,6 @@ function AiChatView(): ReactNode {
      * @param conversationId 会话 ID。
      */
     const handleSelectConversation = (conversationId: string): void => {
-        if (isStreaming) {
-            return;
-        }
         setHistoryState((currentState) => currentState ? {
             ...currentState,
             activeConversationId: conversationId,
@@ -564,12 +693,11 @@ function AiChatView(): ReactNode {
             ...confirmation,
             isSubmitting: true,
         });
-        setIsStreaming(true);
-        streamBindingRef.current = createPendingStreamBinding(
+        setConversationBinding(confirmation.conversationId, createPendingStreamBinding(
             confirmation.conversationId,
             confirmation.sessionId,
             confirmation.assistantMessageId,
-        );
+        ));
 
         try {
             const response = await submitAiChatConfirmation({
@@ -577,21 +705,70 @@ function AiChatView(): ReactNode {
                 confirmed: approved,
                 sessionId: confirmation.sessionId,
             });
-            streamBindingRef.current = createPendingStreamBinding(
-                confirmation.conversationId,
-                confirmation.sessionId,
-                confirmation.assistantMessageId,
-                response.streamId,
-            );
+            const currentBinding = bindingsRef.current[confirmation.conversationId];
+            if (currentBinding) {
+                const nextBinding = {
+                    ...currentBinding,
+                    streamId: response.streamId,
+                };
+                setConversationBinding(confirmation.conversationId, nextBinding);
+                if (nextBinding.stopRequested) {
+                    void stopAiChatStream(response.streamId).catch((stopError) => {
+                        setError(stopError instanceof Error ? stopError.message : String(stopError));
+                        updateConversationBinding(confirmation.conversationId, (binding) => ({
+                            ...binding,
+                            stopRequested: false,
+                        }));
+                    });
+                }
+            }
             clearPendingConfirmationState(confirmation.assistantMessageId);
         } catch (submitError) {
             setError(submitError instanceof Error ? submitError.message : String(submitError));
-            setIsStreaming(false);
             setPendingConfirmationState({
                 ...confirmation,
                 isSubmitting: false,
             });
-            streamBindingRef.current = createEmptyPendingStreamBinding();
+            setConversationBinding(
+                confirmation.conversationId,
+                createEmptyPendingStreamBinding(),
+            );
+        }
+    };
+
+    /**
+     * @function handleStopConversation
+     * @description 终止当前活动会话中仍在运行的后台流。
+     * @returns Promise<void>
+     */
+    const handleStopConversation = async (): Promise<void> => {
+        if (!activeConversation) {
+            return;
+        }
+
+        const binding = bindingsRef.current[activeConversation.id];
+        if (!binding || !isPendingStreamBindingActive(binding) || binding.stopRequested) {
+            return;
+        }
+
+        setError(null);
+        updateConversationBinding(activeConversation.id, (currentBinding) => ({
+            ...currentBinding,
+            stopRequested: true,
+        }));
+
+        if (!binding.streamId) {
+            return;
+        }
+
+        try {
+            await stopAiChatStream(binding.streamId);
+        } catch (stopError) {
+            setError(stopError instanceof Error ? stopError.message : String(stopError));
+            updateConversationBinding(activeConversation.id, (currentBinding) => ({
+                ...currentBinding,
+                stopRequested: false,
+            }));
         }
     };
 
@@ -605,7 +782,7 @@ function AiChatView(): ReactNode {
         }
 
         const trimmed = draft.trim();
-        if (!trimmed || isStreaming) {
+        if (!trimmed || isActiveConversationStreaming) {
             return;
         }
 
@@ -631,7 +808,6 @@ function AiChatView(): ReactNode {
 
         setDraft("");
         setError(null);
-        setIsStreaming(true);
         setActiveTab("chat");
         updateConversation(activeConversation.id, (conversation) => ({
             ...conversation,
@@ -639,11 +815,11 @@ function AiChatView(): ReactNode {
             messages: [...conversation.messages, userMessage, assistantMessage],
         }));
 
-        streamBindingRef.current = createPendingStreamBinding(
+        setConversationBinding(activeConversation.id, createPendingStreamBinding(
             activeConversation.id,
             activeConversation.sessionId,
             assistantMessage.id,
-        );
+        ));
 
         try {
             const response = await startAiChatStream({
@@ -651,16 +827,26 @@ function AiChatView(): ReactNode {
                 sessionId: activeConversation.sessionId,
                 history,
             });
-            streamBindingRef.current = createPendingStreamBinding(
-                activeConversation.id,
-                activeConversation.sessionId,
-                assistantMessage.id,
-                response.streamId,
-            );
+            const currentBinding = bindingsRef.current[activeConversation.id];
+            if (currentBinding) {
+                const nextBinding = {
+                    ...currentBinding,
+                    streamId: response.streamId,
+                };
+                setConversationBinding(activeConversation.id, nextBinding);
+                if (nextBinding.stopRequested) {
+                    void stopAiChatStream(response.streamId).catch((stopError) => {
+                        setError(stopError instanceof Error ? stopError.message : String(stopError));
+                        updateConversationBinding(activeConversation.id, (binding) => ({
+                            ...binding,
+                            stopRequested: false,
+                        }));
+                    });
+                }
+            }
         } catch (submitError) {
             setError(submitError instanceof Error ? submitError.message : String(submitError));
-            setIsStreaming(false);
-            streamBindingRef.current = createEmptyPendingStreamBinding();
+            setConversationBinding(activeConversation.id, createEmptyPendingStreamBinding());
         }
     };
 
@@ -721,7 +907,6 @@ function AiChatView(): ReactNode {
                     <button
                         type="button"
                         className="ai-chat-conversation-manage"
-                        disabled={isStreaming}
                         onClick={() => {
                             setActiveTab("history");
                         }}
@@ -731,7 +916,6 @@ function AiChatView(): ReactNode {
                     <button
                         type="button"
                         className="ai-chat-conversation-create"
-                        disabled={isStreaming}
                         onClick={handleCreateConversation}
                     >
                         <Plus size={13} strokeWidth={2} />
@@ -813,13 +997,22 @@ function AiChatView(): ReactNode {
                                 key={conversation.id}
                                 type="button"
                                 className={`ai-chat-history-item ${historyState?.activeConversationId === conversation.id ? "active" : ""}`}
-                                disabled={isStreaming}
                                 onClick={() => {
                                     handleSelectConversation(conversation.id);
                                 }}
                             >
+                                {/** ai-chat-history-item-title-row：标题与运行态标签，配套样式见 ai-chat-history-item-title-row / ai-chat-history-status */}
                                 <div className="ai-chat-history-item-main">
-                                    <span className="ai-chat-conversation-title">{conversation.title}</span>
+                                    <div className="ai-chat-history-item-title-row">
+                                        <span className="ai-chat-conversation-title">{conversation.title}</span>
+                                        {isPendingStreamBindingActive(bindingsByConversation[conversation.id]) ? (
+                                            <span className={`ai-chat-history-status ${bindingsByConversation[conversation.id]?.stopRequested ? "stopping" : "running"}`}>
+                                                {bindingsByConversation[conversation.id]?.stopRequested
+                                                    ? i18n.t("aiChatPlugin.conversationStopping")
+                                                    : i18n.t("aiChatPlugin.conversationRunning")}
+                                            </span>
+                                        ) : null}
+                                    </div>
                                     <span className="ai-chat-history-preview">{conversation.messages[conversation.messages.length - 1]?.text || i18n.t("aiChatPlugin.historyEmpty")}</span>
                                 </div>
                                 <span className="ai-chat-conversation-time">{formatConversationTime(conversation.updatedAtUnixMs)}</span>
@@ -1010,7 +1203,7 @@ function AiChatView(): ReactNode {
                     className="ai-chat-input"
                     value={draft}
                     placeholder={i18n.t("aiChatPlugin.draftPlaceholder")}
-                    disabled={!currentVaultPath || isStreaming || !activeConversation || activeTab === "history"}
+                    disabled={!currentVaultPath || isActiveConversationStreaming || !activeConversation || activeTab === "history"}
                     onKeyDown={handleInputKeyDown}
                     onChange={(event) => {
                         setDraft(event.target.value);
@@ -1023,13 +1216,24 @@ function AiChatView(): ReactNode {
                     <button
                         type="button"
                         className="ai-chat-send-button"
-                        disabled={!canSend}
+                        aria-busy={isActiveConversationStopping}
+                        disabled={isActiveConversationStreaming ? isActiveConversationStopping : !canSend}
                         onClick={() => {
+                            if (isActiveConversationStreaming) {
+                                void handleStopConversation();
+                                return;
+                            }
                             void handleSubmit();
                         }}
                     >
-                        <span>{isStreaming ? i18n.t("aiChatPlugin.sending") : i18n.t("aiChatPlugin.send")}</span>
-                        <ArrowUp size={14} strokeWidth={2} />
+                        <span>{isActiveConversationStreaming
+                            ? isActiveConversationStopping
+                                ? i18n.t("aiChatPlugin.stopping")
+                                : i18n.t("aiChatPlugin.stop")
+                            : i18n.t("aiChatPlugin.send")}</span>
+                        {isActiveConversationStreaming
+                            ? <X size={14} strokeWidth={2} />
+                            : <ArrowUp size={14} strokeWidth={2} />}
                     </button>
                 </div>
             </div>

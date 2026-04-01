@@ -103,8 +103,9 @@ func mapHistoryEntries(items []*aiv1.ChatHistoryEntry) []agentruntime.HistoryEnt
 			continue
 		}
 		history = append(history, agentruntime.HistoryEntry{
-			Role: strings.TrimSpace(item.GetRole()),
-			Text: item.GetText(),
+			Role:              strings.TrimSpace(item.GetRole()),
+			Text:              item.GetText(),
+			InterruptedByUser: item.GetInterruptedByUser(),
 		})
 	}
 	return history

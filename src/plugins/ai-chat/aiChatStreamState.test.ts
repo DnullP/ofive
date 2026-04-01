@@ -101,6 +101,23 @@ describe("aiChatStreamState", () => {
         expect(transition.nextAssistantText).toBe("final response");
     });
 
+    it("应在 stopped 事件时保留已有内容并结束当前 binding", () => {
+        const transition = reduceAiChatStreamEvent({
+            payload: createPayload("stopped", {
+                done: true,
+            }),
+            binding: createPendingStreamBinding("conversation-1", "session-1", "assistant-1", "stream-1", true),
+            debugEntryId: "debug-1",
+            debugFallbackTitle: "fallback",
+            confirmationFallbackHint: "fallback-hint",
+        });
+
+        expect(transition.wasStopped).toBe(true);
+        expect(transition.shouldStopStreaming).toBe(true);
+        expect(transition.shouldClearPendingConfirmation).toBe(true);
+        expect(transition.nextBinding).toEqual(createEmptyPendingStreamBinding());
+    });
+
     it("应在 error 事件时返回错误并重置 binding", () => {
         const transition = reduceAiChatStreamEvent({
             payload: createPayload("error", {

@@ -27,9 +27,14 @@ const (
 // AiAgentServiceClient is the client API for AiAgentService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// AiAgentService defines the gRPC surface used by the Rust host to talk to the Go sidecar.
 type AiAgentServiceClient interface {
+	// Health reports sidecar liveness and version metadata.
 	Health(ctx context.Context, in *HealthRequest, opts ...grpc.CallOption) (*HealthResponse, error)
+	// Chat starts one user turn and streams assistant/debug/tool-confirmation events.
 	Chat(ctx context.Context, in *ChatRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatChunk], error)
+	// SubmitConfirmation resumes a paused turn after the user approves or rejects a tool call.
 	SubmitConfirmation(ctx context.Context, in *ConfirmationRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatChunk], error)
 }
 
@@ -92,9 +97,14 @@ type AiAgentService_SubmitConfirmationClient = grpc.ServerStreamingClient[ChatCh
 // AiAgentServiceServer is the server API for AiAgentService service.
 // All implementations must embed UnimplementedAiAgentServiceServer
 // for forward compatibility.
+//
+// AiAgentService defines the gRPC surface used by the Rust host to talk to the Go sidecar.
 type AiAgentServiceServer interface {
+	// Health reports sidecar liveness and version metadata.
 	Health(context.Context, *HealthRequest) (*HealthResponse, error)
+	// Chat starts one user turn and streams assistant/debug/tool-confirmation events.
 	Chat(*ChatRequest, grpc.ServerStreamingServer[ChatChunk]) error
+	// SubmitConfirmation resumes a paused turn after the user approves or rejects a tool call.
 	SubmitConfirmation(*ConfirmationRequest, grpc.ServerStreamingServer[ChatChunk]) error
 	mustEmbedUnimplementedAiAgentServiceServer()
 }

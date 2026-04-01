@@ -201,6 +201,34 @@ describe("aiChatShared", () => {
         expect(persistable.conversations[0]?.messages).toHaveLength(1);
     });
 
+    it("应在持久化历史时保留被用户中断的消息标记", () => {
+        const history: AiChatHistoryState = {
+            activeConversationId: "c1",
+            conversations: [
+                {
+                    id: "c1",
+                    sessionId: "s1",
+                    title: "stale",
+                    createdAtUnixMs: 1,
+                    updatedAtUnixMs: 2,
+                    messages: [
+                        {
+                            id: "m1",
+                            role: "assistant",
+                            text: "Partial reply",
+                            createdAtUnixMs: 1,
+                            interruptedByUser: true,
+                        },
+                    ],
+                },
+            ],
+        };
+
+        const persistable = buildPersistableHistory(history);
+
+        expect(persistable.conversations[0]?.messages[0]?.interruptedByUser).toBe(true);
+    });
+
     it("应按摘要与详情拆分错误文本", () => {
         expect(formatAiPanelError("backend failed: timeout")).toEqual({
             summary: "backend failed",

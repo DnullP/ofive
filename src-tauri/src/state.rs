@@ -7,5 +7,5 @@ mod app_state;
 #[path = "runtime/runtime_context.rs"]
 mod runtime_context;
 
-pub use app_state::{AiSidecarRuntime, AppState, PendingVaultWriteTrace};
+pub use app_state::{AiChatStreamControl, AiSidecarRuntime, AppState, PendingVaultWriteTrace};
 pub use runtime_context::{get_vault_root, set_vault_root};

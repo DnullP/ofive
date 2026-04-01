@@ -217,6 +217,37 @@
     gap: 4px;
 }
 
+/* ai-chat-history-item-title-row：会话标题和运行状态标签行 */
+.ai-chat-history-item-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+/* ai-chat-history-status：会话运行状态标签 */
+.ai-chat-history-status {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* ai-chat-history-status.running：后台仍在生成中的状态 */
+.ai-chat-history-status.running {
+    color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-primary));
+}
+
+/* ai-chat-history-status.stopping：正在终止中的状态 */
+.ai-chat-history-status.stopping {
+    color: var(--text-warning);
+    background: color-mix(in srgb, var(--text-warning) 14%, var(--bg-primary));
+}
+
 /* ai-chat-history-preview：会话页最近消息预览 */
 .ai-chat-history-preview {
     font-size: 11px;
@@ -930,6 +961,11 @@
     color: var(--accent-primary-foreground);
     background: linear-gradient(135deg, color-mix(in srgb, var(--accent-primary) 84%, var(--bg-primary)), var(--accent-primary));
     cursor: pointer;
+}
+
+/* ai-chat-send-button:not(:disabled)[aria-busy="true"]：停止中按钮的视觉反馈 */
+.ai-chat-send-button[aria-busy="true"] {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--text-warning) 72%, var(--bg-primary)), var(--text-warning));
 }
 
 /* ai-chat-send-button:disabled：发送按钮禁用态 */

@@ -603,7 +603,8 @@ fn sanitize_ai_chat_conversation(
 /// 清洗单条历史消息。
 ///
 /// 仅保留 `user` 与 `assistant` 两种角色，且要求消息标识与文本非空；
-/// 非法消息会被整个丢弃。
+/// 非法消息会被整个丢弃。若消息带有 `interrupted_by_user` 标记，则在
+/// 持久化后继续保留，供后续恢复对话上下文时补充“上一轮被用户中断”的语义。
 fn sanitize_ai_chat_message(message: AiChatHistoryMessage) -> Option<AiChatHistoryMessage> {
     let id = message.id.trim().to_string();
     let text = message.text.trim().to_string();
@@ -622,6 +623,7 @@ fn sanitize_ai_chat_message(message: AiChatHistoryMessage) -> Option<AiChatHisto
         role,
         text,
         created_at_unix_ms: message.created_at_unix_ms.max(0),
+        interrupted_by_user: message.interrupted_by_user,
     })
 }
 
@@ -722,6 +724,7 @@ mod tests {
                     role: "user".to_string(),
                     text: "hello".to_string(),
                     created_at_unix_ms: 10,
+                    interrupted_by_user: false,
                 }],
             }],
         };
@@ -738,6 +741,10 @@ mod tests {
             Some("conversation-1")
         );
         assert_eq!(loaded.conversations.len(), 1);
+        assert!(
+            !loaded.conversations[0].messages[0].interrupted_by_user,
+            "未中断消息不应被错误标记"
+        );
         assert!(root.join(".ofive/extensions/ai-chat/history.json").exists());
 
         let migrated_config = load_vault_config(&root).expect("读取清理后配置应成功");
@@ -829,5 +836,34 @@ mod tests {
             settings.field_values.get("endpoint").map(String::as_str),
             Some("https://api.minimaxi.com/anthropic")
         );
+    }
+
+    #[test]
+    fn save_ai_chat_history_should_preserve_interrupted_message_flag() {
+        let root = create_test_root();
+
+        let history = AiChatHistoryState {
+            active_conversation_id: Some("conversation-1".to_string()),
+            conversations: vec![AiChatConversationRecord {
+                id: "conversation-1".to_string(),
+                session_id: "session-1".to_string(),
+                title: "Test".to_string(),
+                created_at_unix_ms: 10,
+                updated_at_unix_ms: 20,
+                messages: vec![AiChatHistoryMessage {
+                    id: "message-1".to_string(),
+                    role: "assistant".to_string(),
+                    text: "partial answer".to_string(),
+                    created_at_unix_ms: 10,
+                    interrupted_by_user: true,
+                }],
+            }],
+        };
+
+        let loaded = save_ai_chat_history_in_root(history, &root).expect("保存历史应成功");
+
+        assert!(loaded.conversations[0].messages[0].interrupted_by_user);
+
+        let _ = fs::remove_dir_all(root);
     }
 }

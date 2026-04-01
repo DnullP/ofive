@@ -16,6 +16,7 @@ mock.module("../../api/aiApi", () => ({
     getAiVendorCatalog: async () => ({ vendors: [] }),
     getAiVendorModels: async () => ({ models: [] }),
     saveAiChatHistory: async () => undefined,
+    stopAiChatStream: async () => true,
     startAiChatStream: async () => undefined,
     submitAiChatConfirmation: async () => undefined,
     subscribeAiChatStreamEvents: () => () => {
@@ -40,6 +41,7 @@ mock.module("./aiChatSettingsStore", () => ({
 
 mock.module("./aiChatShared", () => ({
     buildPersistableHistory: () => [],
+    createConversationSessionId: () => "session",
     createConversationRecord: () => ({ id: "conversation" }),
     deriveConversationTitle: () => "title",
     ensureHistoryState: () => ({ conversations: [], activeConversationId: null }),
@@ -54,6 +56,7 @@ mock.module("./aiChatShared", () => ({
 mock.module("./aiChatStreamState", () => ({
     createEmptyPendingStreamBinding: () => ({}),
     createPendingStreamBinding: () => ({}),
+    isPendingStreamBindingActive: () => false,
     reduceAiChatStreamEvent: (state: unknown) => state,
 }));
 
@@ -85,6 +88,13 @@ mock.module("../../host/registry/activityRegistry", () => ({
 
 mock.module("../../host/registry/panelRegistry", () => ({
     registerPanel: () => () => {
+        /* noop */
+    },
+}));
+
+mock.module("../../host/registry", () => ({
+    buildConvertibleViewTabParams: () => ({}),
+    registerConvertibleView: () => () => {
         /* noop */
     },
 }));

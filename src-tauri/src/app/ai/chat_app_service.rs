@@ -1,8 +1,9 @@
 //! # AI 对话应用服务
 //!
-//! 负责 sidecar 健康检查、聊天流启动与流事件编排。
+//! 负责 sidecar 健康检查、聊天流启动、前端终止控制与流事件编排。
 
-use tauri::{AppHandle, State};
+use tokio::sync::oneshot;
+use tauri::{AppHandle, Manager, State};
 use tonic::Request;
 
 use crate::shared::ai_service::{
@@ -16,7 +17,99 @@ use crate::app::ai::{
 use crate::host::events::ai_events;
 use crate::infra::ai::{grpc_client, sidecar_manager};
 use crate::infra::persistence::ai_chat_store;
-use crate::state::{get_vault_root, AppState};
+use crate::state::{get_vault_root, AiChatStreamControl, AppState};
+
+enum StreamTaskOutcome {
+    Completed,
+    Stopped,
+    Failed(String),
+}
+
+/// 注册一条可被前端终止的 AI 流控制句柄。
+fn register_ai_chat_stream_control(
+    app_state: &AppState,
+    stream_id: &str,
+    session_id: &str,
+    stop_tx: oneshot::Sender<()>,
+) -> Result<(), String> {
+    let mut controls = app_state
+        .ai_chat_stream_controls
+        .lock()
+        .map_err(|error| format!("锁定 AI 流控制表失败: {error}"))?;
+
+    controls.insert(
+        stream_id.to_string(),
+        AiChatStreamControl {
+            stream_id: stream_id.to_string(),
+            session_id: session_id.to_string(),
+            stop_tx,
+        },
+    );
+
+    Ok(())
+}
+
+/// 移除一条 AI 流控制句柄。
+fn remove_ai_chat_stream_control(app_state: &AppState, stream_id: &str) {
+    match app_state.ai_chat_stream_controls.lock() {
+        Ok(mut controls) => {
+            controls.remove(stream_id);
+        }
+        Err(error) => {
+            log::warn!(
+                "[ai-service] remove stream control failed: stream_id={} error={}",
+                stream_id,
+                error
+            );
+        }
+    }
+}
+
+/// 停止一条当前仍在运行的 AI 流。
+fn stop_ai_chat_stream_in_state(stream_id: &str, app_state: &AppState) -> Result<bool, String> {
+    let control = app_state
+        .ai_chat_stream_controls
+        .lock()
+        .map_err(|error| format!("锁定 AI 流控制表失败: {error}"))?
+        .remove(stream_id);
+
+    let Some(control) = control else {
+        log::info!(
+            "[ai-service] stop ignored: stream already finished or not found: {}",
+            stream_id
+        );
+        return Ok(false);
+    };
+
+    log::info!(
+        "[ai-service] stop requested: stream_id={} session_id={}",
+        control.stream_id,
+        control.session_id
+    );
+
+    if control.stop_tx.send(()).is_err() {
+        log::info!(
+            "[ai-service] stop ignored: stream task already closed: {}",
+            stream_id
+        );
+        return Ok(false);
+    }
+
+    Ok(true)
+}
+
+/// 停止一条当前仍在运行的 AI 流。
+pub(crate) fn stop_ai_chat_stream(
+    stream_id: String,
+    state: &State<'_, AppState>,
+) -> Result<bool, String> {
+    let trimmed_stream_id = stream_id.trim().to_string();
+    if trimmed_stream_id.is_empty() {
+        return Err("stream_id 不能为空".to_string());
+    }
+
+    stop_ai_chat_stream_in_state(&trimmed_stream_id, state)
+}
 
 /// 获取 AI sidecar 健康状态。
 pub(crate) async fn get_ai_sidecar_health(
@@ -100,6 +193,9 @@ pub(crate) async fn start_ai_chat_stream(
         },
     );
 
+    let (stop_tx, mut stop_rx) = oneshot::channel::<()>();
+    register_ai_chat_stream_control(&state, &stream_id, &resolved_session_id, stop_tx)?;
+
     let event_app_handle = app_handle.clone();
     let stream_id_for_task = stream_id.clone();
     tauri::async_runtime::spawn(async move {
@@ -124,6 +220,7 @@ pub(crate) async fn start_ai_chat_stream(
                 .map(|item| pb::ChatHistoryEntry {
                     role: item.role,
                     text: item.text,
+                    interrupted_by_user: item.interrupted_by_user,
                 })
                 .collect(),
         };
@@ -205,38 +302,127 @@ pub(crate) async fn start_ai_chat_stream(
             }
 
             Ok::<(), String>(())
-        }
-        .await;
+        };
+
+        let outcome = tokio::select! {
+            _ = &mut stop_rx => StreamTaskOutcome::Stopped,
+            result = stream_result => match result {
+                Ok(()) => StreamTaskOutcome::Completed,
+                Err(error) => StreamTaskOutcome::Failed(error),
+            },
+        };
 
         mcp_server_handle.shutdown();
         capability_callback_handle.shutdown();
         persistence_callback_handle.shutdown();
 
-        if let Err(error) = stream_result {
-            ai_events::emit_ai_stream_event(
-                &event_app_handle,
-                AiChatStreamEventPayload {
-                    stream_id: stream_id_for_task,
-                    event_type: "error".to_string(),
-                    session_id: Some(resolved_session_id),
-                    agent_name: None,
-                    delta_text: None,
-                    accumulated_text: None,
-                    debug_title: None,
-                    debug_level: None,
-                    debug_text: None,
-                    confirmation_id: None,
-                    confirmation_hint: None,
-                    confirmation_tool_name: None,
-                    confirmation_tool_args_json: None,
-                    error: Some(error),
-                    done: true,
-                },
-            );
+        remove_ai_chat_stream_control(
+            event_app_handle.state::<AppState>().inner(),
+            &stream_id_for_task,
+        );
+
+        match outcome {
+            StreamTaskOutcome::Completed => {}
+            StreamTaskOutcome::Stopped => {
+                ai_events::emit_ai_stream_event(
+                    &event_app_handle,
+                    AiChatStreamEventPayload {
+                        stream_id: stream_id_for_task,
+                        event_type: "stopped".to_string(),
+                        session_id: Some(resolved_session_id),
+                        agent_name: None,
+                        delta_text: None,
+                        accumulated_text: None,
+                        debug_title: None,
+                        debug_level: None,
+                        debug_text: None,
+                        confirmation_id: None,
+                        confirmation_hint: None,
+                        confirmation_tool_name: None,
+                        confirmation_tool_args_json: None,
+                        error: None,
+                        done: true,
+                    },
+                );
+            }
+            StreamTaskOutcome::Failed(error) => {
+                ai_events::emit_ai_stream_event(
+                    &event_app_handle,
+                    AiChatStreamEventPayload {
+                        stream_id: stream_id_for_task,
+                        event_type: "error".to_string(),
+                        session_id: Some(resolved_session_id),
+                        agent_name: None,
+                        delta_text: None,
+                        accumulated_text: None,
+                        debug_title: None,
+                        debug_level: None,
+                        debug_text: None,
+                        confirmation_id: None,
+                        confirmation_hint: None,
+                        confirmation_tool_name: None,
+                        confirmation_tool_args_json: None,
+                        error: Some(error),
+                        done: true,
+                    },
+                );
+            }
         }
     });
 
     Ok(AiChatStreamStartResponse { stream_id })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::host::window_effects::WindowsAcrylicEffectConfig;
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    fn new_test_app_state() -> AppState {
+        AppState {
+            current_vault: Mutex::new(None),
+            vault_watcher: Mutex::new(None),
+            pending_vault_write_trace_by_path: Mutex::new(HashMap::new()),
+            ai_sidecar_runtime: Mutex::new(None),
+            ai_chat_stream_controls: Mutex::new(HashMap::new()),
+            windows_acrylic_effect_config: Mutex::new(WindowsAcrylicEffectConfig::default()),
+        }
+    }
+
+    #[test]
+    fn stop_ai_chat_stream_in_state_should_signal_and_remove_registered_control() {
+        let app_state = new_test_app_state();
+        let (stop_tx, stop_rx) = oneshot::channel();
+
+        register_ai_chat_stream_control(&app_state, "stream-1", "session-1", stop_tx)
+            .expect("应成功注册流控制句柄");
+
+        let stopped = stop_ai_chat_stream_in_state("stream-1", &app_state)
+            .expect("停止流时不应返回错误");
+
+        assert!(stopped);
+        assert!(stop_rx.blocking_recv().is_ok());
+        assert!(
+            app_state
+                .ai_chat_stream_controls
+                .lock()
+                .expect("应成功读取流控制表")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn stop_ai_chat_stream_in_state_should_ignore_unknown_stream() {
+        let app_state = new_test_app_state();
+
+        let stopped = stop_ai_chat_stream_in_state("missing-stream", &app_state)
+            .expect("缺失流也不应返回错误");
+
+        assert!(!stopped);
+    }
+
 }
 
 /// 提交一次 AI tool 确认结果，并继续同一会话的流式对话。
@@ -298,6 +484,9 @@ pub(crate) async fn submit_ai_chat_confirmation(
             done: false,
         },
     );
+
+    let (stop_tx, mut stop_rx) = oneshot::channel::<()>();
+    register_ai_chat_stream_control(&state, &stream_id, &resolved_session_id, stop_tx)?;
 
     let event_app_handle = app_handle.clone();
     let stream_id_for_task = stream_id.clone();
@@ -396,34 +585,71 @@ pub(crate) async fn submit_ai_chat_confirmation(
             }
 
             Ok::<(), String>(())
-        }
-        .await;
+        };
+
+        let outcome = tokio::select! {
+            _ = &mut stop_rx => StreamTaskOutcome::Stopped,
+            result = stream_result => match result {
+                Ok(()) => StreamTaskOutcome::Completed,
+                Err(error) => StreamTaskOutcome::Failed(error),
+            },
+        };
 
         mcp_server_handle.shutdown();
         capability_callback_handle.shutdown();
         persistence_callback_handle.shutdown();
 
-        if let Err(error) = stream_result {
-            ai_events::emit_ai_stream_event(
-                &event_app_handle,
-                AiChatStreamEventPayload {
-                    stream_id: stream_id_for_task,
-                    event_type: "error".to_string(),
-                    session_id: Some(resolved_session_id),
-                    agent_name: None,
-                    delta_text: None,
-                    accumulated_text: None,
-                    debug_title: None,
-                    debug_level: None,
-                    debug_text: None,
-                    confirmation_id: None,
-                    confirmation_hint: None,
-                    confirmation_tool_name: None,
-                    confirmation_tool_args_json: None,
-                    error: Some(error),
-                    done: true,
-                },
-            );
+        remove_ai_chat_stream_control(
+            event_app_handle.state::<AppState>().inner(),
+            &stream_id_for_task,
+        );
+
+        match outcome {
+            StreamTaskOutcome::Completed => {}
+            StreamTaskOutcome::Stopped => {
+                ai_events::emit_ai_stream_event(
+                    &event_app_handle,
+                    AiChatStreamEventPayload {
+                        stream_id: stream_id_for_task,
+                        event_type: "stopped".to_string(),
+                        session_id: Some(resolved_session_id),
+                        agent_name: None,
+                        delta_text: None,
+                        accumulated_text: None,
+                        debug_title: None,
+                        debug_level: None,
+                        debug_text: None,
+                        confirmation_id: None,
+                        confirmation_hint: None,
+                        confirmation_tool_name: None,
+                        confirmation_tool_args_json: None,
+                        error: None,
+                        done: true,
+                    },
+                );
+            }
+            StreamTaskOutcome::Failed(error) => {
+                ai_events::emit_ai_stream_event(
+                    &event_app_handle,
+                    AiChatStreamEventPayload {
+                        stream_id: stream_id_for_task,
+                        event_type: "error".to_string(),
+                        session_id: Some(resolved_session_id),
+                        agent_name: None,
+                        delta_text: None,
+                        accumulated_text: None,
+                        debug_title: None,
+                        debug_level: None,
+                        debug_text: None,
+                        confirmation_id: None,
+                        confirmation_hint: None,
+                        confirmation_tool_name: None,
+                        confirmation_tool_args_json: None,
+                        error: Some(error),
+                        done: true,
+                    },
+                );
+            }
         }
     });
 

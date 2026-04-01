@@ -64,6 +64,10 @@ define_app_commands![
         crate::host::commands::ai_commands::start_ai_chat_stream
     ),
     (
+        "stop_ai_chat_stream",
+        crate::host::commands::ai_commands::stop_ai_chat_stream
+    ),
+    (
         "submit_ai_chat_confirmation",
         crate::host::commands::ai_commands::submit_ai_chat_confirmation
     ),

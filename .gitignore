@@ -29,6 +29,7 @@ playwright-report/
 blob-report/
 .tmp/
 tmp/
+temp/
 memories/
 .tools/
 sidecars/go/**/.bin/

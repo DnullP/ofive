@@ -61,6 +61,8 @@ pub struct AiChatHistoryMessage {
     pub role: String,
     pub text: String,
     pub created_at_unix_ms: i64,
+    #[serde(default)]
+    pub interrupted_by_user: bool,
 }
 
 /// AI 对话会话记录。
@@ -101,6 +103,15 @@ pub struct AiChatStreamStartResponse {
 }
 
 /// Rust 转发给前端的聊天流事件。
+///
+/// `event_type` 目前支持：
+/// - `started`：宿主已接受请求并为该轮分配 streamId
+/// - `delta`：流式增量文本
+/// - `done`：本轮自然完成
+/// - `stopped`：前端主动终止，后台链路已取消
+/// - `error`：本轮异常结束
+/// - `debug`：调试轨迹
+/// - `confirmation`：等待用户确认工具调用
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiChatStreamEventPayload {

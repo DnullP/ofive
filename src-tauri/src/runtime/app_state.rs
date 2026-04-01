@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri_plugin_shell::process::CommandChild;
+use tokio::sync::oneshot;
 
 /// 单次写入链路的 trace 信息。
 pub struct PendingVaultWriteTrace {
@@ -27,12 +28,23 @@ pub struct AiSidecarRuntime {
     pub child: CommandChild,
 }
 
+/// 单条 AI 对话流的宿主控制句柄。
+pub struct AiChatStreamControl {
+    /// 对应前端可见的 streamId。
+    pub stream_id: String,
+    /// 该流所属的 sidecar sessionId。
+    pub session_id: String,
+    /// 向后台任务发出停止信号。
+    pub stop_tx: oneshot::Sender<()>,
+}
+
 /// 后端共享状态。
 ///
 /// - `current_vault`：当前生效仓库路径
 /// - `vault_watcher`：当前仓库文件监听器实例
 /// - `pending_vault_write_trace_by_path`：待回填到 watcher 事件的写入 traceId（按相对路径索引，含过期时间）
 /// - `ai_sidecar_runtime`：AI sidecar 运行时状态
+/// - `ai_chat_stream_controls`：当前仍可被前端终止的 AI 流控制句柄
 /// - `windows_acrylic_effect_config`：Windows 主窗口 Acrylic 原生参数快照
 pub struct AppState {
     /// 当前生效仓库路径。
@@ -43,6 +55,8 @@ pub struct AppState {
     pub pending_vault_write_trace_by_path: Mutex<HashMap<String, PendingVaultWriteTrace>>,
     /// AI sidecar 运行时状态。
     pub ai_sidecar_runtime: Mutex<Option<AiSidecarRuntime>>,
+    /// 当前仍可被前端终止的 AI 流控制句柄。
+    pub ai_chat_stream_controls: Mutex<HashMap<String, AiChatStreamControl>>,
     /// Windows 主窗口 Acrylic 原生参数快照。
     pub windows_acrylic_effect_config: Mutex<WindowsAcrylicEffectConfig>,
 }

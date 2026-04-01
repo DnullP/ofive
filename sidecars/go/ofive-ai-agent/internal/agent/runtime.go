@@ -50,8 +50,9 @@ type ToolDescriptor struct {
 
 // HistoryEntry contains one persisted user/assistant text message used to restore context.
 type HistoryEntry struct {
-	Role string
-	Text string
+	Role              string
+	Text              string
+	InterruptedByUser bool
 }
 
 // CapabilityBridgeConfig contains callback settings for Rust capability execution.
@@ -150,6 +151,7 @@ func (r *Runtime) Chat(
 	userID string,
 	sessionID string,
 	message string,
+	history []HistoryEntry,
 	vendorConfig VendorConfig,
 	bridgeConfig CapabilityBridgeConfig,
 	trace func(DebugTraceEvent) error,
@@ -208,7 +210,13 @@ func (r *Runtime) Chat(
 		return mockEchoResponse(message), "mock-echo", nil
 	}
 
-	adkAgent, agentDisplayName, err := r.buildAgent(ctx, vendorConfig, bridgeConfig, trace)
+	adkAgent, agentDisplayName, err := r.buildAgent(
+		ctx,
+		vendorConfig,
+		bridgeConfig,
+		buildConversationStateInstruction(history),
+		trace,
+	)
 	if err != nil {
 		return "", "", err
 	}
@@ -322,6 +330,7 @@ func (r *Runtime) StreamChat(
 			userID,
 			sessionID,
 			message,
+			history,
 			vendorConfig,
 			bridgeConfig,
 			trace,
@@ -332,7 +341,13 @@ func (r *Runtime) StreamChat(
 		return emitChunkedTextResponse(responseText, agentDisplayName, emit)
 	}
 
-	adkAgent, agentDisplayName, err := r.buildAgent(ctx, vendorConfig, bridgeConfig, trace)
+	adkAgent, agentDisplayName, err := r.buildAgent(
+		ctx,
+		vendorConfig,
+		bridgeConfig,
+		buildConversationStateInstruction(history),
+		trace,
+	)
 	if err != nil {
 		return err
 	}
@@ -479,7 +494,13 @@ func (r *Runtime) StreamConfirmation(
 		)
 	}
 
-	adkAgent, agentDisplayName, err := r.buildAgent(ctx, vendorConfig, bridgeConfig, trace)
+	adkAgent, agentDisplayName, err := r.buildAgent(
+		ctx,
+		vendorConfig,
+		bridgeConfig,
+		"",
+		trace,
+	)
 	if err != nil {
 		return err
 	}
@@ -758,6 +779,7 @@ func (r *Runtime) buildAgent(
 	ctx context.Context,
 	vendorConfig VendorConfig,
 	bridgeConfig CapabilityBridgeConfig,
+	extraInstruction string,
 	trace func(DebugTraceEvent) error,
 ) (agent.Agent, string, error) {
 	_ = ctx
@@ -788,7 +810,7 @@ func (r *Runtime) buildAgent(
 		adkAgent, err := llmagent.New(llmagent.Config{
 			Name:        agentName,
 			Description: "AI assistant for ofive desktop notes.",
-			Instruction: buildAgentInstruction(bridgeConfig),
+			Instruction: buildAgentInstruction(bridgeConfig, extraInstruction),
 			Model:       llm,
 			Toolsets:    toolsets,
 			BeforeModelCallbacks: []llmagent.BeforeModelCallback{
@@ -835,7 +857,7 @@ func (r *Runtime) buildAgent(
 		adkAgent, err := llmagent.New(llmagent.Config{
 			Name:        agentName,
 			Description: "AI assistant for ofive desktop notes.",
-			Instruction: buildAgentInstruction(bridgeConfig),
+			Instruction: buildAgentInstruction(bridgeConfig, extraInstruction),
 			Model:       llm,
 			Toolsets:    toolsets,
 			BeforeModelCallbacks: []llmagent.BeforeModelCallback{
@@ -914,8 +936,14 @@ func runADKTurn(
 	return responseText, nil
 }
 
-func buildAgentInstruction(bridgeConfig CapabilityBridgeConfig) string {
+func buildAgentInstruction(
+	bridgeConfig CapabilityBridgeConfig,
+	extraInstruction string,
+) string {
 	baseInstruction := "You are the AI assistant inside ofive. Answer clearly, concisely, and stay grounded in the user's request."
+	if strings.TrimSpace(extraInstruction) != "" {
+		baseInstruction += "\n\n" + strings.TrimSpace(extraInstruction)
+	}
 	if len(bridgeConfig.Tools) == 0 {
 		return baseInstruction
 	}
@@ -952,6 +980,19 @@ func buildAgentInstruction(bridgeConfig CapabilityBridgeConfig) string {
 		"Valid section-insertion example: {\"relativePath\":\"notes/guide.md\",\"unifiedDiff\":\"--- a/notes/guide.md\\n+++ b/notes/guide.md\\n@@ -5,4 +5,7 @@\\n ## 影响因素\\n - 价格变化\\n - 需求弹性\\n - 市场结构\\n+\\n+## 具体例子\\n+\\n+示例内容\\n \\n [[供需原理]]\"}. " +
 		"If a patch fails because the context did not match, read the file again and build a new patch from the latest exact lines instead of reusing the failed hunk. " +
 		"Do not switch to vault.save_markdown_file as a fallback unless the user explicitly asked for a whole-file rewrite or explicitly approved replacing the full file content. Available tools:\n" + strings.Join(toolLines, "\n")
+}
+
+func buildConversationStateInstruction(history []HistoryEntry) string {
+	for index := len(history) - 1; index >= 0; index-- {
+		entry := history[index]
+		if strings.TrimSpace(entry.Role) != "assistant" || !entry.InterruptedByUser {
+			continue
+		}
+
+		return "Conversation state note: the latest assistant response in the restored history was explicitly interrupted by the user before it finished. Treat that response as incomplete. If the user asks why it stopped or why it has no ending, explain that it was manually interrupted by the user rather than naturally completed or silently truncated."
+	}
+
+	return ""
 }
 
 func mockToolPlanningResponse(prompt string, bridgeConfig CapabilityBridgeConfig) string {

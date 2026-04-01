@@ -225,12 +225,15 @@ func (x *HealthResponse) GetPid() int64 {
 	return 0
 }
 
+// ChatHistoryEntry carries one persisted chat message used to restore conversation context.
 type ChatHistoryEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Role          string                 `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
-	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Role  string                 `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
+	Text  string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	// interrupted_by_user marks assistant output that was manually stopped before completion.
+	InterruptedByUser bool `protobuf:"varint,3,opt,name=interrupted_by_user,json=interruptedByUser,proto3" json:"interrupted_by_user,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ChatHistoryEntry) Reset() {
@@ -275,6 +278,13 @@ func (x *ChatHistoryEntry) GetText() string {
 		return x.Text
 	}
 	return ""
+}
+
+func (x *ChatHistoryEntry) GetInterruptedByUser() bool {
+	if x != nil {
+		return x.InterruptedByUser
+	}
+	return false
 }
 
 type ChatRequest struct {
@@ -743,10 +753,11 @@ const file_ai_sidecar_proto_rawDesc = "" +
 	"\n" +
 	"agent_name\x18\x02 \x01(\tR\tagentName\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\tR\aversion\x12\x10\n" +
-	"\x03pid\x18\x04 \x01(\x03R\x03pid\":\n" +
+	"\x03pid\x18\x04 \x01(\x03R\x03pid\"j\n" +
 	"\x10ChatHistoryEntry\x12\x12\n" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x12\n" +
-	"\x04text\x18\x02 \x01(\tR\x04text\"\xc8\x05\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12.\n" +
+	"\x13interrupted_by_user\x18\x03 \x01(\bR\x11interruptedByUser\"\xc8\x05\n" +
 	"\vChatRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +

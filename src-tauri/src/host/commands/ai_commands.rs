@@ -25,6 +25,7 @@ pub(crate) const AI_COMMAND_IDS: &[&str] = &[
     "get_ai_tool_catalog",
     "get_ai_sidecar_health",
     "start_ai_chat_stream",
+    "stop_ai_chat_stream",
     "submit_ai_chat_confirmation",
 ];
 
@@ -116,6 +117,15 @@ pub async fn start_ai_chat_stream(
 ) -> Result<AiChatStreamStartResponse, String> {
     chat_app_service::start_ai_chat_stream(message, session_id, user_id, history, app_handle, state)
         .await
+}
+
+/// 终止一条当前仍在运行的 AI 流式对话。
+#[tauri::command]
+pub fn stop_ai_chat_stream(
+    stream_id: String,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    chat_app_service::stop_ai_chat_stream(stream_id, &state)
 }
 
 /// 提交一次 AI tool 确认结果，并继续同一会话的流式对话。

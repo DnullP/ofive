@@ -14,6 +14,7 @@
  *   - resolveVendor
  *   - mergeSettingsForVendor
  *   - formatAiPanelError
+ *   - createConversationSessionId
  *   - createConversationRecord
  *   - sortConversations
  *   - deriveConversationTitle
@@ -44,6 +45,20 @@ export interface AiPanelErrorDisplay {
 }
 
 let chatConversationSequence = 1;
+
+/**
+ * @function createConversationSessionId
+ * @description 为指定会话生成新的后端 sessionId。
+ * @param conversationId 会话 ID。
+ * @returns 唯一 sessionId。
+ */
+export function createConversationSessionId(conversationId: string): string {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return `ai-chat-session-${conversationId}-${crypto.randomUUID()}`;
+    }
+
+    return `ai-chat-session-${conversationId}-${Date.now()}-${String(chatConversationSequence)}`;
+}
 
 /**
  * @function nextConversationId
@@ -145,7 +160,7 @@ export function createConversationRecord(): AiChatConversationRecord {
     const id = nextConversationId();
     return {
         id,
-        sessionId: `ai-chat-session-${id}`,
+        sessionId: createConversationSessionId(id),
         title: i18n.t("aiChatPlugin.untitledConversation"),
         createdAtUnixMs: now,
         updatedAtUnixMs: now,

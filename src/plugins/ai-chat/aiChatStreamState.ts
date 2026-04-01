@@ -39,6 +39,7 @@ export interface PendingStreamBinding {
     conversationId: string | null;
     sessionId: string | null;
     assistantMessageId: string | null;
+    stopRequested: boolean;
 }
 
 export interface PendingToolConfirmation {
@@ -61,6 +62,7 @@ export interface AiChatStreamTransition {
     errorMessage: string | null;
     shouldStopStreaming: boolean;
     shouldClearPendingConfirmation: boolean;
+    wasStopped: boolean;
     isDone: boolean;
 }
 
@@ -78,6 +80,7 @@ export function createEmptyPendingStreamBinding(): PendingStreamBinding {
         conversationId: null,
         sessionId: null,
         assistantMessageId: null,
+        stopRequested: false,
     };
 }
 
@@ -86,13 +89,27 @@ export function createPendingStreamBinding(
     sessionId: string,
     assistantMessageId: string,
     streamId: string | null = null,
+    stopRequested = false,
 ): PendingStreamBinding {
     return {
         streamId,
         conversationId,
         sessionId,
         assistantMessageId,
+        stopRequested,
     };
+}
+
+/**
+ * @function isPendingStreamBindingActive
+ * @description 判断一条 binding 是否代表仍在进行中的后台流。
+ * @param binding 待判断 binding。
+ * @returns 若仍有助手消息等待完成则返回 true。
+ */
+export function isPendingStreamBindingActive(
+    binding: PendingStreamBinding | null | undefined,
+): boolean {
+    return Boolean(binding?.conversationId && binding.assistantMessageId);
 }
 
 export function reduceAiChatStreamEvent(
@@ -116,6 +133,7 @@ export function reduceAiChatStreamEvent(
             errorMessage: null,
             shouldStopStreaming: false,
             shouldClearPendingConfirmation: false,
+            wasStopped: false,
             isDone: false,
         };
     }
@@ -137,6 +155,7 @@ export function reduceAiChatStreamEvent(
             errorMessage: null,
             shouldStopStreaming: false,
             shouldClearPendingConfirmation: false,
+            wasStopped: false,
             isDone: false,
         };
     }
@@ -157,6 +176,7 @@ export function reduceAiChatStreamEvent(
             errorMessage: null,
             shouldStopStreaming: false,
             shouldClearPendingConfirmation: false,
+            wasStopped: false,
             isDone: false,
         };
     }
@@ -184,6 +204,22 @@ export function reduceAiChatStreamEvent(
             errorMessage: confirmation ? null : "AI confirmation payload is incomplete",
             shouldStopStreaming: true,
             shouldClearPendingConfirmation: false,
+            wasStopped: false,
+            isDone: false,
+        };
+    }
+
+    if (payload.eventType === "stopped") {
+        return {
+            matchesBinding: true,
+            nextBinding: createEmptyPendingStreamBinding(),
+            nextAssistantText: null,
+            nextDebugEntry: null,
+            nextConfirmation: null,
+            errorMessage: null,
+            shouldStopStreaming: true,
+            shouldClearPendingConfirmation: true,
+            wasStopped: true,
             isDone: false,
         };
     }
@@ -198,6 +234,7 @@ export function reduceAiChatStreamEvent(
             errorMessage: payload.error ?? "AI stream failed",
             shouldStopStreaming: true,
             shouldClearPendingConfirmation: true,
+            wasStopped: false,
             isDone: false,
         };
     }
@@ -214,6 +251,7 @@ export function reduceAiChatStreamEvent(
             errorMessage: null,
             shouldStopStreaming: payload.eventType === "done",
             shouldClearPendingConfirmation: payload.eventType === "done",
+            wasStopped: false,
             isDone: payload.eventType === "done",
         };
     }
@@ -227,6 +265,7 @@ export function reduceAiChatStreamEvent(
         errorMessage: null,
         shouldStopStreaming: false,
         shouldClearPendingConfirmation: false,
+        wasStopped: false,
         isDone: false,
     };
 }

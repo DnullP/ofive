@@ -1245,6 +1245,7 @@ mod tests {
             vault_watcher: Mutex::new(None),
             pending_vault_write_trace_by_path: Mutex::new(HashMap::new()),
             ai_sidecar_runtime: Mutex::new(None),
+            ai_chat_stream_controls: Mutex::new(HashMap::new()),
             windows_acrylic_effect_config: Mutex::new(WindowsAcrylicEffectConfig::default()),
         }
     }

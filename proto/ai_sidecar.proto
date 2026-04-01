@@ -4,9 +4,13 @@ package ofive.ai.v1;
 
 option go_package = "ofive/sidecars/go/ofive-ai-agent/gen/ofive/aiv1;aiv1";
 
+// AiAgentService defines the gRPC surface used by the Rust host to talk to the Go sidecar.
 service AiAgentService {
+  // Health reports sidecar liveness and version metadata.
   rpc Health(HealthRequest) returns (HealthResponse);
+  // Chat starts one user turn and streams assistant/debug/tool-confirmation events.
   rpc Chat(ChatRequest) returns (stream ChatChunk);
+  // SubmitConfirmation resumes a paused turn after the user approves or rejects a tool call.
   rpc SubmitConfirmation(ConfirmationRequest) returns (stream ChatChunk);
 }
 
@@ -30,9 +34,12 @@ message HealthResponse {
   int64 pid = 4;
 }
 
+// ChatHistoryEntry carries one persisted chat message used to restore conversation context.
 message ChatHistoryEntry {
   string role = 1;
   string text = 2;
+  // interrupted_by_user marks assistant output that was manually stopped before completion.
+  bool interrupted_by_user = 3;
 }
 
 message ChatRequest {

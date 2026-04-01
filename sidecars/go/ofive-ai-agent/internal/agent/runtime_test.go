@@ -270,7 +270,7 @@ func TestBuildAgentInstructionIncludesPatchShapeGuidance(t *testing.T) {
 			RiskLevel:            "medium",
 			RequiresConfirmation: true,
 		}},
-	})
+	}, "")
 
 	if !strings.Contains(instruction, "single-file unifiedDiff string") {
 		t.Fatalf("expected patch shape guidance in instruction, got %q", instruction)
@@ -358,6 +358,25 @@ func TestBuildAgentInstructionIncludesPatchShapeGuidance(t *testing.T) {
 	}
 	if !strings.Contains(instruction, "notes/guide.md") {
 		t.Fatalf("expected explicit patch example in instruction, got %q", instruction)
+	}
+}
+
+func TestBuildConversationStateInstructionIncludesUserInterruptionNote(t *testing.T) {
+	t.Parallel()
+
+	instruction := buildConversationStateInstruction([]HistoryEntry{
+		{
+			Role:              "assistant",
+			Text:              "partial answer",
+			InterruptedByUser: true,
+		},
+	})
+
+	if !strings.Contains(instruction, "explicitly interrupted by the user") {
+		t.Fatalf("expected interruption note in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "manually interrupted by the user") {
+		t.Fatalf("expected cause explanation guidance in instruction, got %q", instruction)
 	}
 }
 

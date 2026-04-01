@@ -25,7 +25,7 @@ export const AI_CHAT_STREAM_EVENT_NAME = "ai://chat-stream";
  * @type AiChatStreamEventType
  * @description AI 聊天流事件类型。
  */
-export type AiChatStreamEventType = "started" | "delta" | "done" | "error" | "debug" | "confirmation";
+export type AiChatStreamEventType = "started" | "delta" | "done" | "stopped" | "error" | "debug" | "confirmation";
 
 /**
  * @interface AiSidecarHealthResponse
@@ -102,6 +102,7 @@ export interface AiChatHistoryMessage {
     role: "assistant" | "user";
     text: string;
     createdAtUnixMs: number;
+    interruptedByUser?: boolean;
 }
 
 /**
@@ -313,6 +314,33 @@ export async function startAiChatStream(
     });
 
     return response;
+}
+
+/**
+ * @function stopAiChatStream
+ * @description 终止当前仍在运行的一条 AI 流式对话。
+ * @param streamId 待终止的流 ID。
+ * @returns 若成功向后端发送停止信号则返回 true。
+ */
+export async function stopAiChatStream(streamId: string): Promise<boolean> {
+    if (!isTauriRuntime()) {
+        throw new Error("AI streaming stop is only available in Tauri runtime");
+    }
+
+    console.info("[ai-api] stopAiChatStream invoke start", {
+        streamId,
+    });
+
+    const stopped = await invoke<boolean>("stop_ai_chat_stream", {
+        streamId,
+    });
+
+    console.info("[ai-api] stopAiChatStream invoke success", {
+        streamId,
+        stopped,
+    });
+
+    return stopped;
 }
 
 /**
