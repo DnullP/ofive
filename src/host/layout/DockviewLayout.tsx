@@ -2174,11 +2174,20 @@ export function DockviewLayout({
     const convertPanePanelToTab = (dropEvent?: DockviewDidDropEvent): boolean => {
         const transfer = getPaneData();
         if (!transfer) {
+            console.warn("[DockviewLayout] convert panel to tab skipped: missing pane transfer", {
+                dropPosition: dropEvent?.position ?? null,
+                dropTargetPanelId: dropEvent?.panel?.id ?? null,
+            });
             return false;
         }
 
         const descriptor = convertibleByPanelId.get(transfer.paneId);
         if (!descriptor) {
+            console.warn("[DockviewLayout] convert panel to tab skipped: pane is not convertible", {
+                paneId: transfer.paneId,
+                dropPosition: dropEvent?.position ?? null,
+                dropTargetPanelId: dropEvent?.panel?.id ?? null,
+            });
             return false;
         }
 

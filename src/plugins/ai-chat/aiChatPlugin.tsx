@@ -90,6 +90,7 @@ import "./aiChatPlugin.css";
 const AI_CHAT_PANEL_ID = "ai-chat";
 const AI_CHAT_PLUGIN_ID = "ai-chat";
 const AI_CHAT_TAB_COMPONENT_ID = "ai-chat-tab";
+const AI_CHAT_TAB_ID = "ai-chat-tab-instance";
 const AI_CHAT_CONVERTIBLE_ID = "ai-chat";
 
 interface QuickPromptDefinition {
@@ -2042,7 +2043,7 @@ export function activatePlugin(): () => void {
         panelId: AI_CHAT_PANEL_ID,
         defaultMode: "panel",
         buildTabInstance: ({ stateKey, params }) => ({
-            id: AI_CHAT_PANEL_ID,
+            id: AI_CHAT_TAB_ID,
             title: i18n.t("aiChatPlugin.title"),
             component: AI_CHAT_TAB_COMPONENT_ID,
             params: buildConvertibleViewTabParams({

@@ -31,6 +31,23 @@ async function waitForLayoutReady(page: Page): Promise<void> {
     await page.locator(".dv-pane-header").first().waitFor({ state: "visible" });
 }
 
+/**
+ * @function dismissBlockingNotifications
+ * @description 关闭会遮挡右侧 pane header 的日志通知，避免拖拽起点命中浮层而不是 Dockview 面板头。
+ * @param page Playwright 页面对象。
+ * @returns Promise<void>
+ */
+async function dismissBlockingNotifications(page: Page): Promise<void> {
+    const dismissButtons = page.locator(".log-notification-card__dismiss");
+    const dismissCount = await dismissButtons.count();
+
+    for (let index = 0; index < dismissCount; index += 1) {
+        await dismissButtons.nth(index).click();
+    }
+
+    await expect(page.locator(".log-notification-card")).toHaveCount(0);
+}
+
 test.describe("AI chat pane/tab 转换", () => {
     test("ai chat pane 可拖到主区域并可拖回右侧 sidebar", async ({ page }) => {
         await gotoMockVaultPage(page, "ai-chat-pane-back-to-tab");
@@ -43,6 +60,7 @@ test.describe("AI chat pane/tab 转换", () => {
             hasText: AI_CHAT_TITLE_PATTERN,
         });
         await expect(aiChatPaneHeader).toBeVisible();
+        await dismissBlockingNotifications(page);
 
         const dockviewContent = page.locator("[aria-label='Dockview Main Area'] .dv-content-container");
         await dockviewDragPanel(page, aiChatPaneHeader, dockviewContent, { x: 0.82, y: 0.5 });
@@ -72,6 +90,7 @@ test.describe("AI chat pane/tab 转换", () => {
             hasText: AI_CHAT_TITLE_PATTERN,
         });
         await expect(aiChatPaneHeader).toBeVisible();
+        await dismissBlockingNotifications(page);
 
         const dockviewContent = page.locator("[aria-label='Dockview Main Area'] .dv-content-container");
         await dockviewDragPanel(page, aiChatPaneHeader, dockviewContent, { x: 0.82, y: 0.5 });

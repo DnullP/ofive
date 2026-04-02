@@ -1128,6 +1128,8 @@ function parseBackendModule(
             `commands: ${commandSourcePaths.length}`,
             `events: ${eventDescriptors.length}`,
             `persistence owners: ${persistenceOwners.length}`,
+            ...buildNamespaceFamilyDetails("public surface family", publicSurfaces.map((surface) => surface.namespace)),
+            ...buildNamespaceFamilyDetails("private boundary family", privateBoundaries.map((boundary) => boundary.namespace)),
             ...publicSurfaces.map((surface) => `public surface: ${shortenRustNamespace(surface.namespace)}`),
             ...privateBoundaries.map((boundary) => `private boundary: ${shortenRustNamespace(boundary.namespace)}`),
         ],
@@ -1441,6 +1443,37 @@ function parseRustStringConstants(content: string): Map<string, string> {
  */
 function shortenRustNamespace(namespace: string): string {
     return namespace.replace(/^crate::/, "");
+}
+
+/**
+ * @function buildNamespaceFamilyDetails
+ * @description 为一组 Rust 命名空间构建更稳定的 family 级摘要，降低具体实现符号变动带来的漂移。
+ * @param label 详情标签前缀。
+ * @param namespaces 原始命名空间列表。
+ * @returns 去重后的 family 详情列表。
+ */
+function buildNamespaceFamilyDetails(label: string, namespaces: string[]): string[] {
+    return Array.from(new Set(namespaces
+        .map((namespace) => inferRustNamespaceFamily(namespace))
+        .filter((family) => Boolean(family))
+        .map((family) => `${label}: ${family}`)));
+}
+
+/**
+ * @function inferRustNamespaceFamily
+ * @description 从 Rust 命名空间中推断稳定的族级前缀，用于架构摘要展示。
+ * @param namespace 原始命名空间。
+ * @returns 推断出的命名空间族；无法归纳时返回缩短后的原值。
+ */
+function inferRustNamespaceFamily(namespace: string): string {
+    const shortenedNamespace = shortenRustNamespace(namespace).replace(/::+$/, "");
+    const segments = shortenedNamespace.split("::").filter((segment) => Boolean(segment));
+
+    if (segments.length >= 3 && (segments[0] === "app" || segments[0] === "infra")) {
+        return `${segments.slice(0, 2).join("::")}::`;
+    }
+
+    return shortenedNamespace;
 }
 
 /**

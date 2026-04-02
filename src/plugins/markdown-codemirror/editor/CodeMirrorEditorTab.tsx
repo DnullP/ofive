@@ -379,6 +379,34 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     };
 
     /**
+     * @function focusActiveEditorSurface
+     * @description 当编辑器重新成为活跃页签时，确保焦点不落入 frontmatter 隐藏源码，并在 Vim 模式下回到 normal。
+     */
+    const focusActiveEditorSurface = (): void => {
+        const liveView = viewRef.current;
+        if (!liveView) {
+            return;
+        }
+
+        const bodyAnchor = resolveEditorBodyAnchor(liveView.state);
+        const currentHead = liveView.state.selection.main.head;
+        const shouldMoveToBodyStart = bodyAnchor > 0 && currentHead < bodyAnchor;
+
+        if (vimModeEnabledRef.current) {
+            exitVimInsertMode(liveView);
+        }
+
+        if (shouldMoveToBodyStart) {
+            liveView.dispatch({
+                selection: { anchor: bodyAnchor },
+                scrollIntoView: true,
+            });
+        }
+
+        liveView.focus();
+    };
+
+    /**
      * @function focusFrontmatterVimNavigationTarget
      * @description 将焦点切入 frontmatter 的 Vim 导航层。
      * @param position 进入时优先聚焦首项或末项。
@@ -489,7 +517,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         }
 
         window.requestAnimationFrame(() => {
-            viewRef.current?.focus();
+            focusActiveEditorSurface();
         });
     }, [effectiveDisplayMode, isActiveEditor]);
 

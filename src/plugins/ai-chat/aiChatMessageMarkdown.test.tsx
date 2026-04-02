@@ -10,7 +10,21 @@
 import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { mock } from "bun:test";
+
 import { AiChatMessageMarkdown } from "./aiChatMessageMarkdown";
+
+mock.module("react-i18next", () => ({
+    useTranslation: () => ({
+        t: (key: string) => {
+            if (key === "aiChatPlugin.reasoningSummary") {
+                return "思考过程";
+            }
+
+            return key;
+        },
+    }),
+}));
 
 const STREAMING_PENDING_MARKDOWN = "**pending** answer";
 

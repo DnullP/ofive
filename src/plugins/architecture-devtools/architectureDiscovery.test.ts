@@ -179,7 +179,7 @@ describe("architectureDiscovery", () => {
         })).toBe(true);
 
         expect(vaultModule?.details?.includes("public surface: shared::vault_contracts")).toBe(true);
-        expect(vaultModule?.details?.includes("private boundary: app::vault::")).toBe(true);
+        expect(vaultModule?.details?.includes("private boundary family: app::vault::")).toBe(true);
 
         expect(slice.edges.some((edge) => {
             return (

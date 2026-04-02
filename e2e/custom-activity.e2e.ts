@@ -92,6 +92,25 @@ async function createCustomPanelContainer(page: Page, activityName: string): Pro
 }
 
 /**
+ * 通过 HTML5 DragEvent 将 Activity icon 从一个栏拖到另一个栏。
+ *
+ * @param page - Playwright 页面对象
+ * @param source - 拖拽源 icon locator
+ * @param target - 放置目标 icon bar locator
+ * @returns Promise<void>
+ */
+async function dragActivityIcon(
+    page: Page,
+    source: ReturnType<Page["locator"]>,
+    target: ReturnType<Page["locator"]>,
+): Promise<void> {
+    await source.waitFor({ state: "visible" });
+    await target.waitFor({ state: "visible" });
+    await source.dragTo(target);
+    await page.waitForTimeout(300);
+}
+
+/**
  * 将左侧 ActivityBar 中的图标拖到右侧 SidebarIconBar。
  *
  * @param page - Playwright 页面对象
@@ -100,8 +119,8 @@ async function createCustomPanelContainer(page: Page, activityName: string): Pro
  */
 async function moveActivityIconToRightBar(page: Page, activityRegistrationId: string): Promise<void> {
     const source = page.getByTestId(`activity-bar-item-${activityRegistrationId}`);
-    const target = page.locator(".sidebar-icon-bar").first();
-    await dockviewDragPanel(page, source, target);
+    const target = page.locator("[aria-label='Right Extension Panel'] .sidebar-icon-bar").first();
+    await dragActivityIcon(page, source, target);
 }
 
 /**
@@ -127,6 +146,97 @@ async function resolveActivityRegistrationIdFromButton(page: Page, activityName:
     }
 
     throw new Error(`unexpected activity button testid: ${testId}`);
+}
+
+/**
+ * @function waitForRightCustomCalendarPersistence
+ * @description 等待自定义右侧容器及其承载的日历 panel 真实写入后端配置，避免在 debounce 保存完成前 reload。
+ * @param page Playwright 页面对象。
+ * @param activityRegistrationId 自定义 activity 的运行时注册 id。
+ * @param activityConfigId 自定义 activity 的配置 id。
+ * @returns Promise<void>
+ */
+async function waitForRightCustomCalendarPersistence(
+    page: Page,
+    activityRegistrationId: string,
+    activityConfigId: string,
+): Promise<void> {
+    await expect.poll(async () => {
+        return page.evaluate(async ({ nextActivityRegistrationId, nextActivityConfigId }) => {
+            const vaultApi = await import("/src/api/vaultApi.ts");
+            const config = await vaultApi.getCurrentVaultConfig();
+
+            const activityBarItems = Array.isArray(config.entries.activityBar?.items)
+                ? config.entries.activityBar.items
+                : [];
+            const sidebarLayout = config.entries.sidebarLayout;
+            const rightRail = sidebarLayout && typeof sidebarLayout === "object"
+                ? (sidebarLayout as {
+                    right?: { activeActivityId?: string | null };
+                    panelStates?: Array<{ id?: string; position?: string; activityId?: string }>;
+                }).right
+                : undefined;
+            const panelStates = sidebarLayout && typeof sidebarLayout === "object" && Array.isArray((sidebarLayout as { panelStates?: unknown }).panelStates)
+                ? (sidebarLayout as { panelStates: Array<{ id?: string; position?: string; activityId?: string }> }).panelStates
+                : [];
+
+            const targetActivity = activityBarItems.find((item) => item?.id === nextActivityRegistrationId);
+            const calendarPanelState = panelStates.find((item) => item.id === "calendar-panel");
+            const customPanelState = panelStates.find((item) => item.id === `custom-panel:${nextActivityConfigId}`);
+
+            return Boolean(
+                targetActivity?.bar === "right" &&
+                rightRail?.activeActivityId === nextActivityRegistrationId &&
+                calendarPanelState?.position === "right" &&
+                calendarPanelState?.activityId === nextActivityRegistrationId &&
+                customPanelState?.position === "right" &&
+                customPanelState?.activityId === nextActivityRegistrationId,
+            );
+        }, {
+            nextActivityRegistrationId: activityRegistrationId,
+            nextActivityConfigId: activityConfigId,
+        });
+    }).toBe(true);
+}
+
+/**
+ * @function waitForCustomActivityRemovalPersistence
+ * @description 等待自定义 activity 从后端配置中真正移除，避免 reload 抢在异步保存完成前发生。
+ * @param page Playwright 页面对象。
+ * @param activityRegistrationId 自定义 activity 的运行时注册 id。
+ * @param activityConfigId 自定义 activity 的配置 id。
+ * @returns Promise<void>
+ */
+async function waitForCustomActivityRemovalPersistence(
+    page: Page,
+    activityRegistrationId: string,
+    activityConfigId: string,
+): Promise<void> {
+    await expect.poll(async () => {
+        return page.evaluate(async ({ nextActivityRegistrationId, nextActivityConfigId }) => {
+            const vaultApi = await import("/src/api/vaultApi.ts");
+            const config = await vaultApi.getCurrentVaultConfig();
+
+            const activityBarItems = Array.isArray(config.entries.activityBar?.items)
+                ? config.entries.activityBar.items
+                : [];
+            const customActivities = Array.isArray(config.entries.customActivities?.items)
+                ? config.entries.customActivities.items
+                : [];
+            const sidebarPanelStates = Array.isArray(config.entries.sidebarLayout?.panelStates)
+                ? config.entries.sidebarLayout.panelStates
+                : [];
+
+            const registrationStillPresent = activityBarItems.some((item) => item?.id === nextActivityRegistrationId);
+            const configStillPresent = customActivities.some((item) => item?.id === nextActivityConfigId);
+            const panelStillPresent = sidebarPanelStates.some((item) => item?.id === `custom-panel:${nextActivityConfigId}`);
+
+            return !registrationStillPresent && !configStillPresent && !panelStillPresent;
+        }, {
+            nextActivityRegistrationId: activityRegistrationId,
+            nextActivityConfigId: activityConfigId,
+        });
+    }).toBe(true);
 }
 
 test.describe("自定义 Activity", () => {
@@ -231,7 +341,7 @@ test.describe("自定义 Activity", () => {
         await deleteCustomActivity(page, createdActivityId);
 
         await expect(createdActivityButton).toHaveCount(0);
-        await page.waitForTimeout(450);
+        await waitForCustomActivityRemovalPersistence(page, createdActivityRegistrationId, createdActivityId);
         await page.reload();
         await waitForLayoutReady(page);
 

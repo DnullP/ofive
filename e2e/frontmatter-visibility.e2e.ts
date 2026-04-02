@@ -54,6 +54,55 @@ async function openMockFrontmatterNote(page: Page): Promise<void> {
 }
 
 /**
+ * @function openMockFrontmatterNoteViaQuickSwitcher
+ * @description 通过 Quick Switcher 最终复用的 openFileInDockview 路径打开带 frontmatter 的 mock 笔记。
+ *   web mock 未挂载真实 quick switch overlay，因此这里直接复用其选中候选项后的文件切换链路。
+ * @param page Playwright 页面对象。
+ * @param relativePath 目标 Markdown 相对路径。
+ * @returns Promise<void>
+ */
+async function openMockFrontmatterNoteViaQuickSwitcher(page: Page, relativePath: string): Promise<void> {
+    await page.evaluate(async (nextRelativePath) => {
+        const editorTab = document.querySelector(".cm-tab");
+        if (!(editorTab instanceof HTMLElement)) {
+            throw new Error("Active CodeMirror tab not found");
+        }
+
+        const reactFiberKey = Object.keys(editorTab).find((key) => key.startsWith("__reactFiber$"));
+        if (!reactFiberKey) {
+            throw new Error("React fiber key for CodeMirror tab not found");
+        }
+
+        let currentFiber = (editorTab as Record<string, unknown>)[reactFiberKey] as {
+            return?: unknown;
+            memoizedProps?: { containerApi?: unknown };
+        } | null;
+        let containerApi: unknown = null;
+
+        while (currentFiber) {
+            if (currentFiber.memoizedProps?.containerApi) {
+                containerApi = currentFiber.memoizedProps.containerApi;
+                break;
+            }
+
+            currentFiber = (currentFiber.return as typeof currentFiber) ?? null;
+        }
+
+        if (!containerApi) {
+            throw new Error("CodeMirror containerApi not found from React fiber chain");
+        }
+
+        const module = await import("/src/host/layout/openFileService.ts");
+        await module.openFileInDockview({
+            containerApi: containerApi as never,
+            relativePath: nextRelativePath,
+        });
+    }, relativePath);
+
+    await expect(page.locator(".cm-frontmatter-widget")).toBeVisible();
+}
+
+/**
  * @function focusFrontmatterNavigationRow
  * @description 将焦点直接放到指定 frontmatter 导航行，用于稳定验证 Vim 导航层行为。
  * @param page Playwright 页面对象。
@@ -178,13 +227,13 @@ test.describe("frontmatter 可见性", () => {
 
         await expect(frontmatterWidget.locator("textarea.fmv-input").first()).toHaveValue("Network Segment");
 
-        const bodyLine = page.locator(".cm-content").getByText("Description", { exact: true }).first();
+        const bodyLine = page.locator(".cm-line").filter({ hasText: "# Description" }).first();
         await expectVisibleWithPositiveRect(bodyLine);
 
         const relation = await page.evaluate(() => {
             const widget = document.querySelector(".cm-frontmatter-widget");
-            const bodyLine = Array.from(document.querySelectorAll(".cm-content *")).find((node) =>
-                (node.textContent || "").trim() === "Description",
+            const bodyLine = Array.from(document.querySelectorAll(".cm-line")).find((node) =>
+                (node.textContent || "").trim() === "# Description",
             );
 
             if (!(widget instanceof HTMLElement) || !(bodyLine instanceof HTMLElement)) {
@@ -339,5 +388,35 @@ test.describe("frontmatter 可见性", () => {
         expect(imeState.activeTag).toBe("TEXTAREA");
         expect(imeState.activeFocusRole).toBe("key");
         expect(imeState.activeParentFieldKey).toBe("title");
+    });
+
+    test("quick switch 同路径切换到 frontmatter 笔记后按 j 不应展开源码或写入首行", async ({ page }) => {
+        await waitForMockLayoutReady(page);
+        await enableVimMode(page);
+        await openMockFrontmatterNote(page);
+        await openMockFrontmatterNoteViaQuickSwitcher(page, "test-resources/notes/note1.md");
+        await openMockFrontmatterNoteViaQuickSwitcher(page, "test-resources/notes/network-segment.md");
+
+        await page.keyboard.press("j");
+
+        const navigationState = await page.evaluate(() => {
+            const content = document.querySelector(".cm-content") as (HTMLElement & {
+                cmTile?: { view?: { state: { doc: { toString(): string } } } };
+            }) | null;
+            const activeElement = document.activeElement as HTMLElement | null;
+            const widget = document.querySelector(".cm-frontmatter-widget");
+
+            return {
+                activeTag: activeElement?.tagName ?? null,
+                activeParentFieldKey: activeElement?.closest?.("[data-frontmatter-field-key]")?.getAttribute("data-frontmatter-field-key") ?? null,
+                docText: content?.cmTile?.view?.state.doc.toString() ?? "",
+                widgetVisible: widget instanceof HTMLElement,
+            };
+        });
+
+        expect(navigationState.widgetVisible).toBe(true);
+        expect(navigationState.docText.startsWith("j---")).toBe(false);
+        expect(navigationState.activeTag).not.toBe("TEXTAREA");
+        expect(navigationState.activeParentFieldKey).toBeNull();
     });
 });
