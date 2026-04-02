@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::infra::persistence::extension_private_store;
+use crate::app::app_storage::storage_registry_facade;
 use crate::shared::semantic_index_contracts::{
     EmbeddingProviderDescriptor, EmbeddingProviderKind,
 };
@@ -25,6 +25,7 @@ const FASTEMBED_SUPPORTED_MODEL_IDS: &[&str] = &[
     "intfloat/multilingual-e5-small",
     "BAAI/bge-small-zh-v1.5",
 ];
+const FASTEMBED_CONSUMER_MODULE_ID: &str = "semantic-index";
 #[cfg(test)]
 const FASTEMBED_PLACEHOLDER_DIMENSIONS: usize = 16;
 const FASTEMBED_OWNER: &str = "semantic-index";
@@ -208,19 +209,22 @@ impl EmbeddingProvider for FastEmbedEmbeddingProvider {
     }
 }
 
-/// 返回 semantic-index 的 fastembed 模型缓存目录。
-pub(crate) fn semantic_index_embedding_cache_dir(vault_root: &Path) -> Result<PathBuf, String> {
-    let owner_dir = extension_private_store::extension_private_owner_dir(vault_root, FASTEMBED_OWNER)?;
+/// 返回 semantic-index 的应用级 fastembed 模型缓存目录。
+pub(crate) fn semantic_index_embedding_cache_dir() -> Result<PathBuf, String> {
+    let owner_dir = storage_registry_facade::resolve_app_storage_owner_dir(
+        FASTEMBED_CONSUMER_MODULE_ID,
+        FASTEMBED_OWNER,
+    )?;
     Ok(owner_dir.join("models"))
 }
 
 /// 返回指定模型的独立缓存目录。
 #[cfg(not(test))]
 fn semantic_index_embedding_model_cache_dir(
-    vault_root: &Path,
+    _vault_root: &Path,
     model_id: &str,
 ) -> Result<PathBuf, String> {
-    let cache_root = semantic_index_embedding_cache_dir(vault_root)?;
+    let cache_root = semantic_index_embedding_cache_dir()?;
     Ok(cache_root.join(sanitize_model_id_for_cache(model_id)))
 }
 
@@ -354,8 +358,46 @@ mod tests {
         available_embedding_providers, build_embedding_provider,
         semantic_index_embedding_cache_dir,
     };
+    use crate::infra::persistence::app_private_store::set_app_private_store_test_root;
     use crate::shared::semantic_index_contracts::EmbeddingProviderKind;
+    use std::fs;
     use std::path::Path;
+    use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TEST_APP_STORAGE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    struct AppStorageTestGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        root: PathBuf,
+    }
+
+    impl AppStorageTestGuard {
+        fn new() -> Self {
+            let lock = TEST_APP_STORAGE_LOCK
+                .get_or_init(|| Mutex::new(()))
+                .lock()
+                .expect("app storage test lock should succeed");
+            let root = std::env::temp_dir().join(format!(
+                "ofive-fastembed-app-storage-{}",
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|duration| duration.as_nanos())
+                    .unwrap_or(0)
+            ));
+            set_app_private_store_test_root(Some(root.clone()))
+                .expect("test root should set");
+            Self { _lock: lock, root }
+        }
+    }
+
+    impl Drop for AppStorageTestGuard {
+        fn drop(&mut self) {
+            let _ = set_app_private_store_test_root(None);
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
 
     #[test]
     fn available_embedding_providers_should_expose_fastembed() {
@@ -398,9 +440,9 @@ mod tests {
 
     #[test]
     fn fastembed_provider_should_resolve_module_private_cache_dir() {
-        let cache_dir = semantic_index_embedding_cache_dir(Path::new("/tmp/ofive-fastembed"))
-            .expect("cache dir should resolve");
+        let _guard = AppStorageTestGuard::new();
+        let cache_dir = semantic_index_embedding_cache_dir().expect("cache dir should resolve");
 
-        assert!(cache_dir.ends_with(".ofive/extensions/semantic-index/models"));
+        assert!(cache_dir.ends_with("app-storage/extensions/semantic-index/models"));
     }
 }

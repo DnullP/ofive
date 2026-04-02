@@ -10,6 +10,9 @@ import { invoke } from "@tauri-apps/api/core";
 export type EmbeddingProviderKind = "fast-embed";
 export type VectorStoreKind = "sqlite-vec";
 export type ChunkingStrategyKind = "heading-paragraph" | "whole-document";
+export const DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT = 10;
+export const MIN_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT = 1;
+export const MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT = 50;
 export type SemanticIndexModelInstallStatus =
     | "not-installed"
     | "installing"
@@ -26,6 +29,7 @@ export interface SemanticIndexSettings {
     vectorStore: VectorStoreKind;
     chunkingStrategy: ChunkingStrategyKind;
     modelId: string;
+    searchResultLimit: number;
     chunkStrategyVersion: number;
 }
 

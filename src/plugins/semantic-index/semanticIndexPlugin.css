@@ -10,6 +10,37 @@
     white-space: nowrap;
 }
 
+/* semantic-index-settings-control-row：设置控件行纵向排布，容纳说明与输入组件。 */
+.semantic-index-settings-control-row {
+    align-items: stretch;
+}
+
+/* semantic-index-settings-field-group：策略与数量设置的字段容器，统一排列输入与帮助文本。 */
+.semantic-index-settings-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+
+/* semantic-index-settings-select-input：chunk 策略选择下拉框，提供稳定的可读输入样式。 */
+.semantic-index-settings-select-input {
+    width: 100%;
+    min-height: 32px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    padding: 0 10px;
+}
+
+/* semantic-index-settings-field-help：字段帮助文本，用于解释当前策略和数量范围。 */
+.semantic-index-settings-field-help {
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
 /* semantic-index-settings-model-row：模型行的纵向布局，避免安装说明被动作区压缩。 */
 .semantic-index-settings-model-row {
     align-items: stretch;

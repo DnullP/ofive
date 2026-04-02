@@ -2,6 +2,8 @@
 //!
 //! 提供临时 vault 构建、样例文件写入与自动清理能力，避免文件操作测试互相污染。
 
+#![allow(dead_code)]
+
 use std::fs;
 use std::net::{TcpStream, ToSocketAddrs};
 use std::path::Path;
@@ -17,6 +19,7 @@ use ofive_lib::test_support::{
 };
 
 static TEST_VAULT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static TEST_APP_STORAGE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// 测试用临时仓库。
 pub struct TestVault {
@@ -84,12 +87,24 @@ pub struct SemanticIndexTestHarness {
     pub vault: TestVault,
     pub store_path: PathBuf,
     pub embedding_cache_dir: PathBuf,
+    pub app_storage_root: PathBuf,
 }
 
 impl SemanticIndexTestHarness {
     /// 创建语义索引测试夹具并解析 sqlite 数据库路径。
     pub fn new() -> Self {
         let vault = TestVault::new();
+        let app_storage_root = std::env::temp_dir().join(format!(
+            "ofive-app-storage-int-{}-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_nanos())
+                .unwrap_or(0),
+            TEST_APP_STORAGE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        unsafe {
+            std::env::set_var("OFIVE_APP_STORAGE_ROOT", &app_storage_root);
+        }
         let store_path = semantic_index_vector_store_path_in_root(&vault.root)
             .expect("应成功解析语义索引 sqlite 文件路径");
         let embedding_cache_dir = semantic_index_embedding_cache_dir_in_root(&vault.root)
@@ -99,6 +114,7 @@ impl SemanticIndexTestHarness {
             vault,
             store_path,
             embedding_cache_dir,
+            app_storage_root,
         }
     }
 
@@ -222,6 +238,10 @@ impl SemanticIndexTestHarness {
 
 impl Drop for SemanticIndexTestHarness {
     fn drop(&mut self) {
+        std::env::remove_var("OFIVE_APP_STORAGE_ROOT");
+        if self.app_storage_root.exists() {
+            let _ = fs::remove_dir_all(&self.app_storage_root);
+        }
         self.cleanup_semantic_index_artifacts();
     }
 }

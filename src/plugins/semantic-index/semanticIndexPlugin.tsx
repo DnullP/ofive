@@ -22,11 +22,15 @@ import { useTranslation } from "react-i18next";
 
 import i18n from "../../i18n";
 import {
+    DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
     getSemanticIndexModelCatalog,
     getSemanticIndexSettings,
     getSemanticIndexStatus,
     installSemanticIndexModel,
+    MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
+    MIN_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
     saveSemanticIndexSettings,
+    type ChunkingStrategyKind,
     startSemanticIndexFullSync,
     type SemanticIndexModelCatalog,
     type SemanticIndexModelCatalogItem,
@@ -50,6 +54,22 @@ const SEMANTIC_INDEX_MANUAL_FULL_SYNC_NOTIFICATION_ID = "semantic-index-manual-f
 const SEMANTIC_INDEX_FULL_SYNC_COMMAND_ID = "semanticIndex.fullSyncRepository";
 const SEMANTIC_INDEX_FULL_SYNC_POLL_MS = 1200;
 const semanticIndexSyncPollTimerMap = new Map<string, ReturnType<typeof globalThis.setInterval>>();
+const SEMANTIC_INDEX_CHUNKING_STRATEGY_OPTIONS: Array<{
+    value: ChunkingStrategyKind;
+    labelKey: string;
+    descKey: string;
+}> = [
+    {
+        value: "heading-paragraph",
+        labelKey: "semanticIndexPlugin.chunkingStrategyHeadingParagraph",
+        descKey: "semanticIndexPlugin.chunkingStrategyHeadingParagraphDesc",
+    },
+    {
+        value: "whole-document",
+        labelKey: "semanticIndexPlugin.chunkingStrategyWholeDocument",
+        descKey: "semanticIndexPlugin.chunkingStrategyWholeDocumentDesc",
+    },
+];
 
 interface SemanticIndexSyncNotificationCopy {
     titleKey: string;
@@ -185,6 +205,63 @@ function areSemanticIndexSettingsEqual(
     }
 
     return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/**
+ * @function clampSemanticIndexSearchResultLimit
+ * @description 将语义检索返回数量输入裁剪到后端允许的范围内。
+ * @param raw 原始输入值。
+ * @param fallback 解析失败时的回退值。
+ * @returns 裁剪后的整数数量。
+ */
+function clampSemanticIndexSearchResultLimit(raw: string, fallback: number): number {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+        return fallback;
+    }
+
+    return Math.max(
+        MIN_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
+        Math.min(MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT, Math.round(parsed)),
+    );
+}
+
+/**
+ * @function buildSemanticIndexFeedbackMessage
+ * @description 基于当前设置与状态生成底部反馈文案。
+ * @param feedback 显式反馈文本。
+ * @param status 当前状态。
+ * @param needsInstalledModel 当前是否缺少可用模型。
+ * @param t i18n 翻译函数。
+ * @returns 用户可读反馈文本。
+ */
+function buildSemanticIndexFeedbackMessage(
+    feedback: string | null,
+    status: SemanticIndexStatus,
+    needsInstalledModel: boolean,
+    t: (key: string) => string,
+): string {
+    if (feedback) {
+        return feedback;
+    }
+
+    if (status.lastError) {
+        return status.lastError;
+    }
+
+    if (needsInstalledModel) {
+        return t("semanticIndexPlugin.needInstalledModel");
+    }
+
+    if (status.queueStatus.hasPendingRebuild) {
+        return t("semanticIndexPlugin.pendingRebuild");
+    }
+
+    if (status.activeModelReady) {
+        return t("semanticIndexPlugin.activeModelReady");
+    }
+
+    return t("semanticIndexPlugin.activeModelPending");
 }
 
 /**
@@ -754,6 +831,12 @@ function SemanticIndexSettingsSection(): ReactNode {
         total: modelCatalog.models.length,
     });
     const needsInstalledModel = draftSettings.enabled && !isModelInstalled(selectedModel);
+    const feedbackMessage = buildSemanticIndexFeedbackMessage(
+        feedback,
+        status,
+        needsInstalledModel,
+        t,
+    );
 
     return (
         <div className="settings-item-group semantic-index-settings-form">
@@ -803,8 +886,85 @@ function SemanticIndexSettingsSection(): ReactNode {
                     <span className="settings-compact-desc">{t("semanticIndexPlugin.runtimeDescription")}</span>
                 </div>
                 <span className="semantic-index-settings-meta">
-                    {draftSettings.embeddingProvider} / {draftSettings.vectorStore} / {draftSettings.chunkingStrategy}
+                    {draftSettings.embeddingProvider} / {draftSettings.vectorStore}
                 </span>
+            </div>
+
+            <div className="settings-compact-row settings-compact-row--stacked semantic-index-settings-control-row">
+                <div className="settings-compact-info">
+                    <span className="settings-compact-title">{t("semanticIndexPlugin.chunkingStrategyTitle")}</span>
+                    <span className="settings-compact-desc">{t("semanticIndexPlugin.chunkingStrategyDescription")}</span>
+                </div>
+                <div className="semantic-index-settings-field-group">
+                    <select
+                        className="semantic-index-settings-select-input"
+                        value={draftSettings.chunkingStrategy}
+                        disabled={isLoading || isSaving || installingModelId !== null}
+                        onChange={(event) => {
+                            const nextChunkingStrategy = event.target.value as ChunkingStrategyKind;
+                            console.info("[semanticIndexPlugin] chunking strategy draft changed", {
+                                currentVaultPath,
+                                nextChunkingStrategy,
+                            });
+                            setDraftSettings((currentSettings) => currentSettings ? {
+                                ...currentSettings,
+                                chunkingStrategy: nextChunkingStrategy,
+                            } : currentSettings);
+                        }}
+                    >
+                        {SEMANTIC_INDEX_CHUNKING_STRATEGY_OPTIONS.map((item) => (
+                            <option key={item.value} value={item.value}>
+                                {t(item.labelKey)}
+                            </option>
+                        ))}
+                    </select>
+                    <span className="semantic-index-settings-field-help">
+                        {t(
+                            SEMANTIC_INDEX_CHUNKING_STRATEGY_OPTIONS.find((item) => {
+                                return item.value === draftSettings.chunkingStrategy;
+                            })?.descKey ?? "semanticIndexPlugin.chunkingStrategyHeadingParagraphDesc",
+                        )}
+                    </span>
+                </div>
+            </div>
+
+            <div className="settings-compact-row settings-compact-row--stacked semantic-index-settings-control-row">
+                <div className="settings-compact-info">
+                    <span className="settings-compact-title">{t("semanticIndexPlugin.searchResultLimitTitle")}</span>
+                    <span className="settings-compact-desc">{t("semanticIndexPlugin.searchResultLimitDescription")}</span>
+                </div>
+                <div className="semantic-index-settings-field-group">
+                    <input
+                        className="settings-compact-number-input"
+                        type="number"
+                        min={MIN_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT}
+                        max={MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT}
+                        step={1}
+                        value={draftSettings.searchResultLimit}
+                        disabled={isLoading || isSaving || installingModelId !== null}
+                        onChange={(event) => {
+                            const nextSearchResultLimit = clampSemanticIndexSearchResultLimit(
+                                event.target.value,
+                                draftSettings.searchResultLimit
+                                    || DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
+                            );
+                            console.info("[semanticIndexPlugin] search result limit draft changed", {
+                                currentVaultPath,
+                                nextSearchResultLimit,
+                            });
+                            setDraftSettings((currentSettings) => currentSettings ? {
+                                ...currentSettings,
+                                searchResultLimit: nextSearchResultLimit,
+                            } : currentSettings);
+                        }}
+                    />
+                    <span className="semantic-index-settings-field-help">
+                        {t("semanticIndexPlugin.searchResultLimitRange", {
+                            min: MIN_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
+                            max: MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
+                        })}
+                    </span>
+                </div>
             </div>
 
             <div className="settings-compact-row">
@@ -891,13 +1051,7 @@ function SemanticIndexSettingsSection(): ReactNode {
 
             <div className="settings-compact-row semantic-index-settings-feedback-row">
                 <div className={`semantic-index-settings-feedback ${feedbackIsError ? "error" : ""}`}>
-                    {feedback
-                        ?? status.lastError
-                        ?? (needsInstalledModel
-                            ? t("semanticIndexPlugin.needInstalledModel")
-                            : status.activeModelReady
-                                ? t("semanticIndexPlugin.activeModelReady")
-                                : t("semanticIndexPlugin.activeModelPending"))}
+                    {feedbackMessage}
                 </div>
                 <div className="semantic-index-settings-actions">
                     <button

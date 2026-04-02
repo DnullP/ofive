@@ -8,6 +8,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
+use crate::app::app_storage::storage_registry_facade;
 use crate::app::vault::query_facade;
 use crate::infra::persistence::extension_private_store;
 use crate::infra::vector::{
@@ -17,6 +18,9 @@ use crate::infra::vector::{
     SemanticIndexDocumentWrite,
 };
 use crate::shared::semantic_index_contracts::{
+    DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
+    MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
+    MIN_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
     SemanticIndexBackendCatalog, SemanticIndexedChunkRecord,
     SemanticIndexedDocumentRecord, SemanticIndexModelCatalog,
     SemanticIndexModelCatalogItem, SemanticIndexModelInstallStatus,
@@ -27,6 +31,7 @@ use serde::{Deserialize, Serialize};
 
 const SEMANTIC_INDEX_SCHEMA_VERSION: u32 = 1;
 const SEMANTIC_INDEX_OWNER: &str = "semantic-index";
+const SEMANTIC_INDEX_APP_STORAGE_CONSUMER_MODULE_ID: &str = "semantic-index";
 const SEMANTIC_INDEX_SETTINGS_STATE_KEY: &str = "settings";
 const SEMANTIC_INDEX_MODEL_INSTALLS_STATE_KEY: &str = "model-installs";
 const SEMANTIC_INDEX_QUEUE_STATUS_STATE_KEY: &str = "queue-status";
@@ -71,7 +76,7 @@ pub(crate) fn get_semantic_index_model_catalog_in_root(
     let settings = load_semantic_index_settings_in_root(vault_root)?;
     let embedding_provider = build_embedding_provider(settings.embedding_provider)?;
     let descriptor = embedding_provider.descriptor();
-    let install_registry = load_semantic_index_model_install_registry(vault_root)?;
+    let install_registry = load_semantic_index_model_install_registry()?;
 
     let mut models = Vec::new();
     for model_id in descriptor.supported_model_ids {
@@ -79,7 +84,7 @@ pub(crate) fn get_semantic_index_model_catalog_in_root(
             .models
             .iter()
             .find(|record| record.model_id == model_id);
-        let install_status = resolve_model_install_status(vault_root, &model_id, install_record)?;
+        let install_status = resolve_model_install_status(&model_id, install_record)?;
         let dimensions = install_record.and_then(|record| record.dimensions);
         let installed_at_ms = install_record.and_then(|record| record.installed_at_ms);
         let last_error = install_record.and_then(|record| record.last_error.clone());
@@ -118,7 +123,7 @@ pub(crate) fn install_semantic_index_model_in_root(
     let embedding_provider = build_embedding_provider(settings.embedding_provider)?;
     embedding_provider.validate_model_id(&normalized_model_id)?;
     let dimensions = embedding_provider.embedding_dimensions(&normalized_model_id, vault_root)?;
-    let mut install_registry = load_semantic_index_model_install_registry(vault_root)?;
+    let mut install_registry = load_semantic_index_model_install_registry()?;
     let install_record = SemanticIndexInstalledModelRecord {
         model_id: normalized_model_id.clone(),
         installed_at_ms: Some(now_unix_ms()),
@@ -126,7 +131,7 @@ pub(crate) fn install_semantic_index_model_in_root(
         last_error: None,
     };
     upsert_model_install_record(&mut install_registry, install_record.clone());
-    save_semantic_index_model_install_registry(vault_root, &install_registry)?;
+    save_semantic_index_model_install_registry(&install_registry)?;
 
     Ok(SemanticIndexModelCatalogItem {
         model_id: normalized_model_id.clone(),
@@ -163,13 +168,14 @@ pub(crate) fn load_semantic_index_settings_in_root(
     let settings = sanitize_semantic_index_settings(loaded.unwrap_or_default());
 
     log::info!(
-        "[semantic-index] settings loaded: vault_root={} enabled={} embedding_provider={:?} vector_store={:?} chunking_strategy={:?} model_id={}",
+        "[semantic-index] settings loaded: vault_root={} enabled={} embedding_provider={:?} vector_store={:?} chunking_strategy={:?} model_id={} search_result_limit={}",
         vault_root.display(),
         settings.enabled,
         settings.embedding_provider,
         settings.vector_store,
         settings.chunking_strategy,
-        settings.model_id
+        settings.model_id,
+        settings.search_result_limit
     );
 
     Ok(settings)
@@ -180,6 +186,7 @@ pub(crate) fn save_semantic_index_settings_in_root(
     settings: SemanticIndexSettings,
     vault_root: &Path,
 ) -> Result<SemanticIndexSettings, String> {
+    let previous_settings = load_semantic_index_settings_in_root(vault_root).unwrap_or_default();
     let sanitized = sanitize_semantic_index_settings(settings);
     extension_private_store::save_extension_private_state(
         vault_root,
@@ -189,13 +196,14 @@ pub(crate) fn save_semantic_index_settings_in_root(
     )?;
 
     log::info!(
-        "[semantic-index] settings saved: vault_root={} enabled={} embedding_provider={:?} vector_store={:?} chunking_strategy={:?} model_id={}",
+        "[semantic-index] settings saved: vault_root={} enabled={} embedding_provider={:?} vector_store={:?} chunking_strategy={:?} model_id={} search_result_limit={}",
         vault_root.display(),
         sanitized.enabled,
         sanitized.embedding_provider,
         sanitized.vector_store,
         sanitized.chunking_strategy,
-        sanitized.model_id
+        sanitized.model_id,
+        sanitized.search_result_limit
     );
 
     if !sanitized.enabled {
@@ -203,6 +211,13 @@ pub(crate) fn save_semantic_index_settings_in_root(
             vault_root,
             &default_semantic_index_queue_status(false),
         )?;
+    } else if previous_settings.enabled
+        && settings_require_index_rebuild(&previous_settings, &sanitized)
+    {
+        let mut queue_status =
+            load_semantic_index_queue_status_in_root(vault_root, sanitized.enabled)?;
+        queue_status.has_pending_rebuild = true;
+        save_semantic_index_queue_status_in_root(vault_root, &queue_status)?;
     }
 
     Ok(sanitized)
@@ -218,7 +233,7 @@ pub(crate) fn start_semantic_index_full_sync_in_root(
     }
 
     validate_runtime_selection(&settings)?;
-    if !is_model_ready_for_sync(vault_root, &settings.model_id)? {
+    if !is_model_ready_for_sync(&settings.model_id)? {
         return Err(format!(
             "semantic index active model is not ready: {}",
             settings.model_id
@@ -327,7 +342,7 @@ pub(crate) fn get_semantic_index_status_in_root(
         settings.model_id
     );
 
-    let active_model_ready = is_model_ready_for_sync(vault_root, &settings.model_id)?;
+    let active_model_ready = is_model_ready_for_sync(&settings.model_id)?;
 
     Ok(SemanticIndexStatus {
         status: status.to_string(),
@@ -520,14 +535,15 @@ pub(crate) fn search_markdown_chunks_in_root(
     };
 
     log::info!(
-        "[semantic-index] search requested: vault_root={} query_len={} limit={:?} path_prefix={:?} exclude_paths={} threshold={:?} status={}",
+        "[semantic-index] search requested: vault_root={} query_len={} limit={:?} path_prefix={:?} exclude_paths={} threshold={:?} status={} settings_limit={}",
         vault_root.display(),
         request.query.chars().count(),
         request.limit,
         request.relative_path_prefix,
         request.exclude_paths.len(),
         request.score_threshold,
-        status
+        status,
+        settings.search_result_limit
     );
 
     if status != "ready" {
@@ -545,12 +561,13 @@ pub(crate) fn search_markdown_chunks_in_root(
         vault_root,
     )?;
     let vector_store = build_vector_store(settings.vector_store)?;
+    let normalized_request = normalize_semantic_search_request(request, &settings);
     let results = vector_store.search(
         vault_root,
         SEMANTIC_INDEX_OWNER,
         SEMANTIC_INDEX_SCHEMA_VERSION,
         &query_embedding,
-        &request,
+        &normalized_request,
     )?;
 
     Ok(SemanticSearchResponse {
@@ -613,7 +630,55 @@ fn sanitize_semantic_index_settings(settings: SemanticIndexSettings) -> Semantic
         sanitized.chunk_strategy_version = default_settings.chunk_strategy_version;
     }
 
+    if sanitized.search_result_limit == 0 {
+        log::warn!(
+            "[semantic-index] invalid search_result_limit=0, fallback to default limit={}",
+            DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT
+        );
+        sanitized.search_result_limit = default_settings.search_result_limit;
+    }
+
+    if sanitized.search_result_limit > MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT {
+        log::warn!(
+            "[semantic-index] invalid search_result_limit={}, clamp to max {}",
+            sanitized.search_result_limit,
+            MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT
+        );
+        sanitized.search_result_limit = MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT;
+    }
+
     sanitized
+}
+
+/// 归一化检索请求，确保用户设置的返回数量上限始终生效。
+fn normalize_semantic_search_request(
+    request: SemanticSearchRequest,
+    settings: &SemanticIndexSettings,
+) -> SemanticSearchRequest {
+    let effective_limit = request
+        .limit
+        .unwrap_or(settings.search_result_limit)
+        .clamp(
+            MIN_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
+            settings.search_result_limit,
+        );
+
+    SemanticSearchRequest {
+        limit: Some(effective_limit),
+        ..request
+    }
+}
+
+/// 判断设置变更是否会导致当前索引内容失效，需要重新全量构建。
+fn settings_require_index_rebuild(
+    previous: &SemanticIndexSettings,
+    next: &SemanticIndexSettings,
+) -> bool {
+    previous.embedding_provider != next.embedding_provider
+        || previous.vector_store != next.vector_store
+        || previous.chunking_strategy != next.chunking_strategy
+        || previous.model_id != next.model_id
+        || previous.chunk_strategy_version != next.chunk_strategy_version
 }
 
 /// 校验当前设置对应的可插拔后端组合是否合法。
@@ -634,11 +699,9 @@ fn validate_runtime_selection(settings: &SemanticIndexSettings) -> Result<(), St
 }
 
 /// 读取模型安装注册表。
-fn load_semantic_index_model_install_registry(
-    vault_root: &Path,
-) -> Result<SemanticIndexModelInstallRegistry, String> {
-    Ok(extension_private_store::load_extension_private_state::<SemanticIndexModelInstallRegistry>(
-        vault_root,
+fn load_semantic_index_model_install_registry() -> Result<SemanticIndexModelInstallRegistry, String> {
+    Ok(storage_registry_facade::load_app_storage_state::<SemanticIndexModelInstallRegistry>(
+        SEMANTIC_INDEX_APP_STORAGE_CONSUMER_MODULE_ID,
         SEMANTIC_INDEX_OWNER,
         SEMANTIC_INDEX_MODEL_INSTALLS_STATE_KEY,
     )?
@@ -673,11 +736,10 @@ fn save_semantic_index_queue_status_in_root(
 
 /// 保存模型安装注册表。
 fn save_semantic_index_model_install_registry(
-    vault_root: &Path,
     registry: &SemanticIndexModelInstallRegistry,
 ) -> Result<(), String> {
-    extension_private_store::save_extension_private_state(
-        vault_root,
+    storage_registry_facade::save_app_storage_state(
+        SEMANTIC_INDEX_APP_STORAGE_CONSUMER_MODULE_ID,
         SEMANTIC_INDEX_OWNER,
         SEMANTIC_INDEX_MODEL_INSTALLS_STATE_KEY,
         registry,
@@ -706,11 +768,10 @@ fn upsert_model_install_record(
 
 /// 解析模型当前安装状态。
 fn resolve_model_install_status(
-    vault_root: &Path,
     model_id: &str,
     install_record: Option<&SemanticIndexInstalledModelRecord>,
 ) -> Result<SemanticIndexModelInstallStatus, String> {
-    if is_model_cache_materialized(vault_root, model_id)? {
+    if is_model_cache_materialized(model_id)? {
         return Ok(SemanticIndexModelInstallStatus::Installed);
     }
 
@@ -732,20 +793,20 @@ fn resolve_model_install_status(
 }
 
 /// 判断指定模型是否已经满足全量同步启动条件。
-fn is_model_ready_for_sync(vault_root: &Path, model_id: &str) -> Result<bool, String> {
-    if is_model_cache_materialized(vault_root, model_id)? {
+fn is_model_ready_for_sync(model_id: &str) -> Result<bool, String> {
+    if is_model_cache_materialized(model_id)? {
         return Ok(true);
     }
 
-    let install_registry = load_semantic_index_model_install_registry(vault_root)?;
+    let install_registry = load_semantic_index_model_install_registry()?;
     Ok(install_registry.models.iter().any(|record| {
         record.model_id == model_id && record.installed_at_ms.is_some()
     }))
 }
 
 /// 判断指定模型缓存目录是否已存在有效文件。
-fn is_model_cache_materialized(vault_root: &Path, model_id: &str) -> Result<bool, String> {
-    let cache_root = semantic_index_embedding_cache_dir(vault_root)?;
+fn is_model_cache_materialized(model_id: &str) -> Result<bool, String> {
+    let cache_root = semantic_index_embedding_cache_dir()?;
     let cache_dir = cache_root.join(model_id_to_cache_segment(model_id));
     if !cache_dir.exists() {
         return Ok(false);
@@ -950,18 +1011,48 @@ mod tests {
         delete_indexed_markdown_document_in_root,
         start_semantic_index_full_sync_in_root,
     };
+    use crate::infra::persistence::app_private_store::set_app_private_store_test_root;
     use crate::shared::semantic_index_contracts::{
-        ChunkingStrategyKind, EmbeddingProviderKind, SemanticIndexModelInstallStatus,
+        ChunkingStrategyKind, DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
+        EmbeddingProviderKind, SemanticIndexModelInstallStatus,
         SemanticIndexSettings, SemanticSearchRequest, VectorStoreKind,
     };
     use std::fs;
+    use std::path::Path;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Mutex, OnceLock};
     use std::thread;
     use std::time::Duration;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(1);
+    static TEST_APP_STORAGE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    struct AppStorageTestGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        root: PathBuf,
+    }
+
+    impl AppStorageTestGuard {
+        fn new(test_root: &Path) -> Self {
+            let lock = TEST_APP_STORAGE_LOCK
+                .get_or_init(|| Mutex::new(()))
+                .lock()
+                .expect("app storage test lock should succeed");
+            let root = test_root.join(".app-storage-test");
+            set_app_private_store_test_root(Some(root.clone()))
+                .expect("test root should set");
+            Self { _lock: lock, root }
+        }
+    }
+
+    impl Drop for AppStorageTestGuard {
+        fn drop(&mut self) {
+            let _ = set_app_private_store_test_root(None);
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
 
     fn create_test_root() -> PathBuf {
         let sequence = TEST_ROOT_SEQ.fetch_add(1, Ordering::Relaxed);
@@ -980,6 +1071,7 @@ mod tests {
     #[test]
     fn load_settings_should_default_to_disabled_multilingual_model() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         let settings = load_semantic_index_settings_in_root(&root)
             .expect("default settings should load without persistence record");
 
@@ -988,6 +1080,10 @@ mod tests {
         assert_eq!(settings.vector_store, VectorStoreKind::SqliteVec);
         assert_eq!(settings.chunking_strategy, ChunkingStrategyKind::HeadingParagraph);
         assert_eq!(settings.model_id, "intfloat/multilingual-e5-small");
+        assert_eq!(
+            settings.search_result_limit,
+            DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT
+        );
         assert_eq!(settings.chunk_strategy_version, 1);
 
         let _ = fs::remove_dir_all(root);
@@ -996,6 +1092,7 @@ mod tests {
     #[test]
     fn save_settings_should_round_trip_supported_backend_selection() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         let saved = save_semantic_index_settings_in_root(
             SemanticIndexSettings {
                 enabled: true,
@@ -1003,6 +1100,7 @@ mod tests {
                 vector_store: VectorStoreKind::SqliteVec,
                 chunking_strategy: ChunkingStrategyKind::WholeDocument,
                 model_id: "BAAI/bge-small-zh-v1.5".to_string(),
+                search_result_limit: 12,
                 chunk_strategy_version: 2,
             },
             &root,
@@ -1020,6 +1118,7 @@ mod tests {
     #[test]
     fn model_catalog_should_report_default_models_as_not_installed_before_install() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         let catalog = get_semantic_index_model_catalog_in_root(&root)
             .expect("model catalog should load");
 
@@ -1036,6 +1135,7 @@ mod tests {
     #[test]
     fn install_model_should_mark_it_as_installed_in_catalog() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         let installed = install_semantic_index_model_in_root(
             "intfloat/multilingual-e5-small".to_string(),
             &root,
@@ -1059,6 +1159,7 @@ mod tests {
     #[test]
     fn indexed_document_crud_should_work_with_simple_texts() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         save_semantic_index_settings_in_root(
             SemanticIndexSettings {
                 enabled: true,
@@ -1066,6 +1167,7 @@ mod tests {
                 vector_store: VectorStoreKind::SqliteVec,
                 chunking_strategy: ChunkingStrategyKind::HeadingParagraph,
                 model_id: "intfloat/multilingual-e5-small".to_string(),
+                search_result_limit: 10,
                 chunk_strategy_version: 1,
             },
             &root,
@@ -1125,6 +1227,7 @@ mod tests {
     #[test]
     fn save_settings_should_fallback_unknown_model_to_provider_default() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         let saved = save_semantic_index_settings_in_root(
             SemanticIndexSettings {
                 enabled: true,
@@ -1132,6 +1235,7 @@ mod tests {
                 vector_store: VectorStoreKind::SqliteVec,
                 chunking_strategy: ChunkingStrategyKind::HeadingParagraph,
                 model_id: "unknown/model".to_string(),
+                search_result_limit: 10,
                 chunk_strategy_version: 1,
             },
             &root,
@@ -1155,6 +1259,7 @@ mod tests {
     #[test]
     fn status_should_report_disabled_when_settings_are_off() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         let status = get_semantic_index_status_in_root(&root)
             .expect("status should load under default settings");
 
@@ -1172,6 +1277,7 @@ mod tests {
     #[test]
     fn search_should_return_disabled_state_with_empty_results_by_default() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         let response = search_markdown_chunks_in_root(
             SemanticSearchRequest {
                 query: "semantic retrieval".to_string(),
@@ -1194,6 +1300,7 @@ mod tests {
     #[test]
     fn search_should_reject_empty_query() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         let error = search_markdown_chunks_in_root(
             SemanticSearchRequest {
                 query: "   ".to_string(),
@@ -1212,8 +1319,70 @@ mod tests {
     }
 
     #[test]
+    fn search_should_apply_settings_backed_result_limit_as_default_and_cap() {
+        let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
+        save_semantic_index_settings_in_root(
+            SemanticIndexSettings {
+                enabled: true,
+                embedding_provider: EmbeddingProviderKind::FastEmbed,
+                vector_store: VectorStoreKind::SqliteVec,
+                chunking_strategy: ChunkingStrategyKind::HeadingParagraph,
+                model_id: "intfloat/multilingual-e5-small".to_string(),
+                search_result_limit: 1,
+                chunk_strategy_version: 1,
+            },
+            &root,
+        )
+        .expect("settings save should enable semantic index for search test");
+
+        upsert_indexed_markdown_document_in_root(
+            "Notes/alpha.md".to_string(),
+            "alpha alpha alpha".to_string(),
+            &root,
+        )
+        .expect("alpha document should be indexed");
+        upsert_indexed_markdown_document_in_root(
+            "Notes/beta.md".to_string(),
+            "alpha beta".to_string(),
+            &root,
+        )
+        .expect("beta document should be indexed");
+
+        let default_limited_response = search_markdown_chunks_in_root(
+            SemanticSearchRequest {
+                query: "alpha".to_string(),
+                limit: None,
+                relative_path_prefix: None,
+                exclude_paths: Vec::new(),
+                score_threshold: None,
+            },
+            &root,
+        )
+        .expect("search without request limit should succeed");
+        assert_eq!(default_limited_response.status, "ready");
+        assert_eq!(default_limited_response.results.len(), 1);
+
+        let capped_response = search_markdown_chunks_in_root(
+            SemanticSearchRequest {
+                query: "alpha".to_string(),
+                limit: Some(9),
+                relative_path_prefix: None,
+                exclude_paths: Vec::new(),
+                score_threshold: None,
+            },
+            &root,
+        )
+        .expect("search with oversized request limit should succeed");
+        assert_eq!(capped_response.results.len(), 1);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn full_sync_should_index_all_markdown_files_and_report_progress() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         fs::create_dir_all(root.join("notes")).expect("notes directory should be created");
         fs::write(root.join("notes/alpha.md"), "# Alpha\n\nhello world")
             .expect("alpha note should be written");
@@ -1227,6 +1396,7 @@ mod tests {
                 vector_store: VectorStoreKind::SqliteVec,
                 chunking_strategy: ChunkingStrategyKind::HeadingParagraph,
                 model_id: "intfloat/multilingual-e5-small".to_string(),
+                search_result_limit: 10,
                 chunk_strategy_version: 1,
             },
             &root,

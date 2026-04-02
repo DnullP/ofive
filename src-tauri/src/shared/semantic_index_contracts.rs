@@ -5,6 +5,17 @@
 
 use serde::{Deserialize, Serialize};
 
+/// 默认检索返回数量上限。
+pub const DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT: usize = 10;
+/// 检索返回数量上限的最小值。
+pub const MIN_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT: usize = 1;
+/// 检索返回数量上限的最大值。
+pub const MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT: usize = 50;
+
+fn default_semantic_index_search_result_limit() -> usize {
+    DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT
+}
+
 /// Embedding provider 类型。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -168,6 +179,9 @@ pub struct SemanticIndexSettings {
     pub chunking_strategy: ChunkingStrategyKind,
     /// 当前 embedding 模型 ID。
     pub model_id: String,
+    /// 语义检索默认返回数量上限。
+    #[serde(default = "default_semantic_index_search_result_limit")]
+    pub search_result_limit: usize,
     /// 当前 chunk 策略版本。
     pub chunk_strategy_version: u32,
 }
@@ -180,6 +194,7 @@ impl Default for SemanticIndexSettings {
             vector_store: VectorStoreKind::SqliteVec,
             chunking_strategy: ChunkingStrategyKind::HeadingParagraph,
             model_id: "intfloat/multilingual-e5-small".to_string(),
+            search_result_limit: DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
             chunk_strategy_version: 1,
         }
     }

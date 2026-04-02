@@ -97,9 +97,9 @@ pub fn semantic_index_vector_store_path_in_root(
 	crate::infra::vector::semantic_index_vector_store_path(vault_root, "semantic-index")
 }
 
-/// 返回指定 Vault 下 semantic-index 的 fastembed 模型缓存目录。
+/// 返回 semantic-index 的应用级 fastembed 模型缓存目录。
 pub fn semantic_index_embedding_cache_dir_in_root(
-	vault_root: &std::path::Path,
+	_vault_root: &std::path::Path,
 ) -> Result<std::path::PathBuf, String> {
-	crate::infra::vector::semantic_index_embedding_cache_dir(vault_root)
+	crate::infra::vector::semantic_index_embedding_cache_dir()
 }

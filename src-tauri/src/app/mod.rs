@@ -4,6 +4,7 @@
 //! 为宿主命令层提供稳定的用例入口。
 
 pub(crate) mod ai;
+pub(crate) mod app_storage;
 pub(crate) mod capability;
 pub(crate) mod persistence;
 pub(crate) mod semantic_index;

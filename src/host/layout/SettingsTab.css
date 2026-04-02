@@ -77,39 +77,62 @@
 
 /* 设置页侧栏列表：滚动承载所有分区项。 */
 .settings-tab-sidebar-list {
+    position: relative;
     min-height: 0;
     overflow: auto;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 0;
     padding-right: 2px;
 }
 
-/* 设置页分类按钮：默认态 */
+/* 设置页分类按钮：单根底部分隔线的开放式导航项。 */
 .settings-tab-sidebar-item {
-    border: 1px solid transparent;
+    position: relative;
     text-align: left;
     background: transparent;
     color: var(--text-secondary);
-    border-radius: 12px;
-    padding: 12px;
+    border: 0;
+    padding: 14px 10px;
     cursor: pointer;
+    display: block;
+    transition:
+        color var(--motion-duration-fast) var(--motion-ease-standard),
+        transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+/* 设置页分类按钮底部分隔线：静态时只保留一根开放横线。 */
+.settings-tab-sidebar-item::after {
+    content: "";
+    position: absolute;
+    left: 18px;
+    right: 22px;
+    bottom: 0;
+    height: 1px;
+    background: color-mix(in srgb, var(--content-material-border) 86%, transparent);
+    transition:
+        background-color var(--motion-duration-fast) var(--motion-ease-standard),
+        opacity var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+/* 设置页分类内容：保证文本在横线之上并维持竖向排布。 */
+.settings-tab-sidebar-item-body {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
     gap: 4px;
-    transition:
-        background-color var(--motion-duration-fast) var(--motion-ease-standard),
-        border-color var(--motion-duration-fast) var(--motion-ease-standard),
-        transform var(--motion-duration-fast) var(--motion-ease-standard),
-        box-shadow var(--motion-duration-default) var(--motion-ease-standard);
 }
 
 /* 设置页分类标题：强调当前分区名称。 */
 .settings-tab-sidebar-item-title {
     color: var(--text-primary);
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 540;
     line-height: 1.4;
+    transition:
+        color var(--motion-duration-fast) var(--motion-ease-standard),
+        font-weight var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 /* 设置页分类描述：补充当前分区关注点。 */
@@ -117,20 +140,66 @@
     color: var(--text-secondary);
     font-size: 12px;
     line-height: 1.45;
+    transition: color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
-/* 设置页分类按钮：激活态 */
-.settings-tab-sidebar-item.active,
+/* 设置页分类按钮悬停态：轻微提亮文字，不形成块级包裹感。 */
 .settings-tab-sidebar-item:hover {
-    background: color-mix(in srgb, var(--accent-primary-soft) 46%, var(--content-material-hover-bg));
-    border-color: color-mix(in srgb, var(--accent-primary) 34%, var(--content-material-border));
     color: var(--text-primary);
     transform: translateY(-1px);
 }
 
-/* 设置页分类按钮激活态：加强边界与阴影。 */
+/* 设置页分类按钮悬停态装饰线：略微提亮，提示可点击。 */
+.settings-tab-sidebar-item:hover::after {
+    background: color-mix(in srgb, var(--accent-primary) 16%, var(--content-material-border));
+}
+
+/* 设置页分类按钮激活态：文字高亮加粗。 */
 .settings-tab-sidebar-item.active {
-    box-shadow: none;
+    color: var(--accent-primary);
+}
+
+/* 设置页分类按钮隐藏分隔线：让活动边线独占当前上下边界。 */
+.settings-tab-sidebar-item--separator-hidden::after {
+    opacity: 0;
+}
+
+/* 设置页分类标题激活态：通过颜色和字重突出当前选区。 */
+.settings-tab-sidebar-item.active .settings-tab-sidebar-item-title {
+    color: var(--accent-primary);
+    font-weight: 700;
+}
+
+/* 设置页分类说明激活态：保留次级信息，但与主色保持关联。 */
+.settings-tab-sidebar-item.active .settings-tab-sidebar-item-desc {
+    color: color-mix(in srgb, var(--accent-primary) 76%, var(--text-secondary));
+}
+
+/* 设置页活动边线：覆盖在静态分隔线上方，承载移动感动画。 */
+.settings-tab-sidebar-active-line {
+    position: absolute;
+    left: var(--settings-sidebar-line-left, 8px);
+    right: var(--settings-sidebar-line-right, 8px);
+    height: 1px;
+    background: color-mix(in srgb, var(--accent-primary) 76%, var(--content-material-border));
+    pointer-events: none;
+    transform: translateY(-0.5px);
+    transition:
+        left 90ms var(--motion-ease-standard),
+        right 90ms var(--motion-ease-standard),
+        opacity 90ms var(--motion-ease-standard);
+    z-index: 2;
+}
+
+/* 设置页旧活动边线：在收缩阶段略微减弱亮度。 */
+.settings-tab-sidebar-active-line--old {
+    background: color-mix(in srgb, var(--accent-primary) 64%, var(--content-material-border));
+}
+
+/* 设置页新活动边线：在生长阶段保持更强强调色。 */
+.settings-tab-sidebar-active-line--new,
+.settings-tab-sidebar-active-line--settled {
+    background: color-mix(in srgb, var(--accent-primary) 82%, var(--content-material-border));
 }
 
 /* 设置页右侧内容区容器 */

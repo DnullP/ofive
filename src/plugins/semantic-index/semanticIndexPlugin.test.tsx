@@ -46,7 +46,10 @@ const getSemanticIndexStatusMock = mock(async () => ({
 const publishNotificationMock = mock((payload: NotificationPublishOptions) => payload.notificationId ?? "notification-test");
 const publishProgressNotificationMock = mock((payload: NotificationProgressOptions) => payload.notificationId ?? "notification-progress-test");
 
+const actualSemanticIndexApi = await import("../../api/semanticIndexApi");
+
 mock.module("../../api/semanticIndexApi", () => ({
+    ...actualSemanticIndexApi,
     getSemanticIndexModelCatalog: async () => ({ models: [] }),
     getSemanticIndexSettings: async () => ({
         enabled: false,
@@ -54,6 +57,8 @@ mock.module("../../api/semanticIndexApi", () => ({
         embeddingProvider: "fastembed",
         vectorStore: "sqlite-vec",
         chunkingStrategy: "heading-paragraph",
+        searchResultLimit: 10,
+        chunkStrategyVersion: 1,
     }),
     getSemanticIndexStatus: (...args: []) => getSemanticIndexStatusMock(...args),
     installSemanticIndexModel: async () => ({

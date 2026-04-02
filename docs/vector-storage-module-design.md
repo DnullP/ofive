@@ -39,8 +39,9 @@
 1. 维护 Vault 持久态 Markdown 内容的 chunk 和 embedding 索引。
 2. 通过平台 capability 暴露 AI 可调用的向量检索工具。
 3. 在 Vault 切换、文件保存、重命名、删除、外部变更时维护索引一致性。
-4. 把模型缓存、索引库和模块状态收敛到模块私有持久化目录。
-5. 为前端设置页提供正式用户功能所需的设置、模型安装和状态查询接口。
+4. 把索引库和 Vault 绑定状态收敛到模块私有持久化目录。
+5. 把 embedding 模型缓存与安装注册表收敛到应用级共享存储。
+6. 为前端设置页提供正式用户功能所需的设置、模型安装和状态查询接口。
 
 ### 1.3 初版非目标
 
@@ -115,6 +116,11 @@ Vault 模块当前已经承担：
 ```text
 src-tauri/src/
   app/
+    app_storage/
+      mod.rs
+      module_contribution.rs
+      storage_registry_app_service.rs
+      storage_registry_facade.rs
     semantic_index/
       mod.rs
       module_contribution.rs
@@ -142,6 +148,9 @@ src-tauri/src/
   - 编排索引生命周期
   - 提供跨模块 facade
   - 提供 capability execution route
+- `app/app_storage/`
+  - 注册应用级共享存储 owner
+  - 为业务模块分配跨仓库复用的应用级目录与状态空间
 - `domain/capability/semantic_index_catalog.rs`
   - 维护 capability descriptor
 - `infra/vector/embedding_runtime.rs`
@@ -217,35 +226,39 @@ src-tauri/src/
 
 ### 6.2 建议磁盘布局
 
-所有模块文件收敛在当前 Vault 下：
+Vault 绑定状态保留在当前 Vault 下；模型资产迁移到应用级目录：
 
 ```text
-.ofive/
+<app-data>/app-storage/
   extensions/
     semantic-index/
-      settings.json
-      status.json
       model-installs.json
-      queue-status.json
-      vector-index.sqlite
       models/
         intfloat-multilingual-e5-small/
           ...
         BAAI-bge-small-zh-v1-5/
           ...
+
+.ofive/
+  extensions/
+    semantic-index/
+      settings.json
+      status.json
+      queue-status.json
+      vector-index.sqlite
 ```
 
 说明：
 
 1. `settings.json` 记录模型选择、chunk 策略、启用状态等。
 2. `status.json` 记录最近一次构建状态、schema 版本、错误摘要。
-3. `model-installs.json` 记录各模型的安装时间、维度与最近错误。
-4. `queue-status.json` 记录后台 worker 状态、待处理文件数与最近处理时间。
-5. `vector-index.sqlite` 保存 chunk 元数据和向量表。
-6. `models/` 作为 `fastembed-rs` 的 `cache_dir` 根目录，并按模型分子目录缓存。
+3. `queue-status.json` 记录后台 worker 状态、待处理文件数与最近处理时间。
+4. `vector-index.sqlite` 保存 chunk 元数据和向量表。
+5. 应用级 `model-installs.json` 记录各模型的安装时间、维度与最近错误。
+6. 应用级 `models/` 作为 `fastembed-rs` 的 `cache_dir` 根目录，并按模型分子目录缓存。
 
-`fastembed-rs` 已支持通过 `InitOptions::with_cache_dir(...)`
-显式指定缓存目录，因此不需要把模型文件散落到全局 cache。
+这样用户切换 Vault 时无需重新下载 embedding 模型，同时仍保持
+向量索引库与队列状态按 Vault 隔离。
 
 ## 7. 存储模型设计
 

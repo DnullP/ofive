@@ -4,6 +4,7 @@
 //! 供应用服务读取和保存产品状态。
 
 pub(crate) mod ai_chat_store;
+pub(crate) mod app_private_store;
 pub(crate) mod backend_plugin_store;
 pub(crate) mod extension_private_store;
 pub(crate) mod vault_config_store;
