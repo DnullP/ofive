@@ -18,6 +18,7 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import { useTranslation } from "react-i18next";
 
 interface AiChatMessageMarkdownProps {
     /** 原始 Markdown 文本。 */
@@ -39,6 +40,7 @@ interface AiChatMessageMarkdownProps {
 export function AiChatMessageMarkdown(
     props: AiChatMessageMarkdownProps,
 ): ReactNode {
+    const { t } = useTranslation();
     const normalizedContent = props.content.trim();
     const normalizedReasoningContent = (props.reasoningContent ?? "").trim();
     const shouldKeepReasoningExpanded = !normalizedContent;
@@ -66,7 +68,7 @@ export function AiChatMessageMarkdown(
             return (
                 <div className="ai-chat-message-markdown ai-chat-message-markdown-reasoning-only">
                     <details className="ai-chat-message-reasoning-panel" open>
-                        <summary className="ai-chat-message-reasoning-summary">思考过程</summary>
+                        <summary className="ai-chat-message-reasoning-summary">{t("aiChatPlugin.reasoningSummary")}</summary>
                         <pre className="ai-chat-message-reasoning">{normalizedReasoningContent}</pre>
                     </details>
                 </div>
@@ -89,7 +91,7 @@ export function AiChatMessageMarkdown(
                     className="ai-chat-message-reasoning-panel"
                     open={shouldKeepReasoningExpanded}
                 >
-                    <summary className="ai-chat-message-reasoning-summary">思考过程</summary>
+                    <summary className="ai-chat-message-reasoning-summary">{t("aiChatPlugin.reasoningSummary")}</summary>
                     <pre className="ai-chat-message-reasoning">{normalizedReasoningContent}</pre>
                 </details>
             ) : null}

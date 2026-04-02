@@ -617,6 +617,7 @@ const en = {
 
     aiChatPlugin: {
         title: "AI Chat",
+        reasoningSummary: "Reasoning",
         draftPlaceholder: "Ask about this vault...",
         send: "Send",
         sending: "Running...",
@@ -687,6 +688,11 @@ const en = {
         untitledConversation: "New conversation",
         emptyTitle: "Start from a quick prompt.",
         emptyBody: "You can switch conversations at any time.",
+    },
+
+    logNotification: {
+        progressAriaLabel: "Notification progress",
+        dismissAriaLabel: "Dismiss notification",
     },
 
     semanticIndexPlugin: {

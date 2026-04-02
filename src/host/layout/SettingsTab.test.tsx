@@ -12,6 +12,8 @@ import {
     registerSettingsSection,
 } from "../settings/settingsRegistry";
 
+const SETTINGS_TAB_TEST_SEARCH_ICON = "search-icon";
+
 mock.module("react-i18next", () => ({
     useTranslation: () => ({
         t: (key: string, values?: Record<string, unknown>) => {
@@ -24,7 +26,7 @@ mock.module("react-i18next", () => ({
 }));
 
 mock.module("lucide-react", () => ({
-    Search: () => <span>search-icon</span>,
+    Search: () => <span>{SETTINGS_TAB_TEST_SEARCH_ICON}</span>,
     ArrowUp: () => null,
     Bot: () => null,
     Check: () => null,

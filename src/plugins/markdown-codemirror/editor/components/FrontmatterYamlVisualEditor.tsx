@@ -26,19 +26,8 @@ import {
     type MouseEvent,
     type ReactNode,
 } from "react";
-import {
-    BookOpen,
-    CalendarDays,
-    ChevronDown,
-    ChevronRight,
-    CheckSquare,
-    FileText,
-    Hash,
-    List,
-    Minus,
-    Plus,
-    type LucideIcon,
-} from "lucide-react";
+import * as LucideIcons from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import YAML from "yaml";
 import { showNativeContextMenu } from "../../../../host/layout/nativeContextMenu";
@@ -52,6 +41,19 @@ import {
     shouldSubmitPlainEnter,
 } from "../../../../utils/imeInputGuard";
 import "./FrontmatterYamlVisualEditor.css";
+
+const {
+    BookOpen,
+    CalendarDays,
+    ChevronDown,
+    ChevronRight,
+    CheckSquare,
+    FileText,
+    Hash,
+    List,
+    Minus,
+    Plus,
+} = LucideIcons;
 
 const FRONTMATTER_WIDGET_FOCUS_CLASS = "cm-frontmatter-widget-focused";
 const FRONTMATTER_VIM_NAV_SELECTOR = "[data-frontmatter-vim-nav='true']";

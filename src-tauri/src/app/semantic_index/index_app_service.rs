@@ -8,9 +8,8 @@ use std::fs;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-use crate::app::vault::vault_app_service;
+use crate::app::vault::query_facade;
 use crate::infra::persistence::extension_private_store;
-use crate::infra::query::query_index;
 use crate::infra::vector::{
     available_chunking_strategies, available_embedding_providers, available_vector_stores,
     build_chunking_strategy, build_embedding_provider, build_vector_store,
@@ -799,8 +798,8 @@ fn run_semantic_index_full_sync_in_root(vault_root: &Path) -> Result<(), String>
     }
 
     validate_runtime_selection(&settings)?;
-    query_index::ensure_query_index_current(vault_root)?;
-    let entries = query_index::list_markdown_files(vault_root)?;
+    query_facade::ensure_query_index_ready_for_semantic_index(vault_root)?;
+    let entries = query_facade::list_indexed_markdown_files_for_semantic_index(vault_root)?;
     let total_file_count = entries.len();
     let started_at_ms = now_unix_ms();
     let mut queue_status = SemanticIndexQueueStatus {
@@ -827,7 +826,7 @@ fn run_semantic_index_full_sync_in_root(vault_root: &Path) -> Result<(), String>
         queue_status.current_file_path = Some(entry.relative_path.clone());
         save_semantic_index_queue_status_in_root(vault_root, &queue_status)?;
 
-        let step_result = vault_app_service::read_vault_markdown_file_in_root(
+        let step_result = query_facade::load_markdown_file_for_semantic_index(
             entry.relative_path.clone(),
             vault_root,
         )

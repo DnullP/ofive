@@ -4,6 +4,10 @@
  */
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import type {
+    NotificationProgressOptions,
+    NotificationPublishOptions,
+} from "../../host/notifications/notificationCenter";
 
 const startSemanticIndexFullSyncMock = mock(async () => ({
     workerStatus: "running",
@@ -39,8 +43,8 @@ const getSemanticIndexStatusMock = mock(async () => ({
     },
 }));
 
-const publishNotificationMock = mock(() => undefined);
-const publishProgressNotificationMock = mock(() => undefined);
+const publishNotificationMock = mock((payload: NotificationPublishOptions) => payload.notificationId ?? "notification-test");
+const publishProgressNotificationMock = mock((payload: NotificationProgressOptions) => payload.notificationId ?? "notification-progress-test");
 
 mock.module("../../api/semanticIndexApi", () => ({
     getSemanticIndexModelCatalog: async () => ({ models: [] }),
@@ -65,8 +69,8 @@ mock.module("../../api/semanticIndexApi", () => ({
 }));
 
 mock.module("../../host/notifications/notificationCenter", () => ({
-    publishNotification: (payload: unknown) => publishNotificationMock(payload),
-    publishProgressNotification: (payload: unknown) => publishProgressNotificationMock(payload),
+    publishNotification: (payload: NotificationPublishOptions) => publishNotificationMock(payload),
+    publishProgressNotification: (payload: NotificationProgressOptions) => publishProgressNotificationMock(payload),
 }));
 
 let resetSettingsRegistryForTests = () => {

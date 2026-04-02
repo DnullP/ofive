@@ -18,6 +18,9 @@ import {
 
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
+const GRAPH_POINT_COLOR_RGB = "rgb(11, 109, 255)";
+const GRAPH_POINT_GREYOUT_COLOR_RGB = "rgb(107, 114, 128)";
+const GRAPH_POINT_RING_FOCUS_COLOR_RGB = "rgb(31, 41, 55)";
 
 afterEach(() => {
     globalThis.window = originalWindow;
@@ -77,33 +80,33 @@ describe("knowledgeGraphSettings", () => {
                             };
                         case "var(--graph-point-color)":
                             return {
-                                color: "rgb(11, 109, 255)",
-                                backgroundColor: "rgb(11, 109, 255)",
+                                color: GRAPH_POINT_COLOR_RGB,
+                                backgroundColor: GRAPH_POINT_COLOR_RGB,
                             };
                         case "var(--graph-point-greyout-color)":
                             return {
-                                color: "rgb(107, 114, 128)",
-                                backgroundColor: "rgb(107, 114, 128)",
+                                color: GRAPH_POINT_GREYOUT_COLOR_RGB,
+                                backgroundColor: GRAPH_POINT_GREYOUT_COLOR_RGB,
                             };
                         case "var(--graph-point-ring-hover-color)":
                             return {
-                                color: "rgb(11, 109, 255)",
-                                backgroundColor: "rgb(11, 109, 255)",
+                                color: GRAPH_POINT_COLOR_RGB,
+                                backgroundColor: GRAPH_POINT_COLOR_RGB,
                             };
                         case "var(--graph-point-ring-focus-color)":
                             return {
-                                color: "rgb(31, 41, 55)",
-                                backgroundColor: "rgb(31, 41, 55)",
+                                color: GRAPH_POINT_RING_FOCUS_COLOR_RGB,
+                                backgroundColor: GRAPH_POINT_RING_FOCUS_COLOR_RGB,
                             };
                         case "var(--graph-link-color)":
                             return {
-                                color: "rgb(107, 114, 128)",
-                                backgroundColor: "rgb(107, 114, 128)",
+                                color: GRAPH_POINT_GREYOUT_COLOR_RGB,
+                                backgroundColor: GRAPH_POINT_GREYOUT_COLOR_RGB,
                             };
                         case "var(--graph-link-hover-color)":
                             return {
-                                color: "rgb(11, 109, 255)",
-                                backgroundColor: "rgb(11, 109, 255)",
+                                color: GRAPH_POINT_COLOR_RGB,
+                                backgroundColor: GRAPH_POINT_COLOR_RGB,
                             };
                         default:
                             return { color: "", backgroundColor: "" };

@@ -25,7 +25,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { FileText, Hash, Search } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import {
     searchVaultMarkdown,
     type VaultSearchMatchItem,
@@ -49,6 +49,8 @@ import {
 } from "../../host/registry/panelRegistry";
 import { UI_LANGUAGE } from "../../i18n/uiLanguage";
 import "./searchPlugin.css";
+
+const { FileText, Hash, Search } = LucideIcons;
 
 const SEARCH_SURFACE_ID = "search";
 const SEARCH_RESULT_LIMIT = 80;

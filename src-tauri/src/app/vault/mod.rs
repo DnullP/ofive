@@ -8,5 +8,6 @@ pub(crate) mod capability_execution;
 pub(crate) mod markdown_patch_app_service;
 pub(crate) mod module_contribution;
 pub(crate) mod query_app_service;
+pub(crate) mod query_facade;
 pub(crate) mod sync_facade;
 pub(crate) mod vault_app_service;

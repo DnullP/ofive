@@ -30,9 +30,11 @@
  */
 
 import i18n from "i18next";
-import { initReactI18next } from "react-i18next";
+import * as ReactI18nextInitModule from "react-i18next/initReactI18next";
 import zh from "./locales/zh";
 import en from "./locales/en";
+
+const { initReactI18next } = ReactI18nextInitModule;
 
 /**
  * 支持的语言标识。

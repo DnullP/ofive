@@ -12,6 +12,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { AiChatMessageMarkdown } from "./aiChatMessageMarkdown";
 
+const STREAMING_PENDING_MARKDOWN = "**pending** answer";
+
 describe("AiChatMessageMarkdown", () => {
     it("应渲染常见 Markdown 结构", () => {
         const html = renderToStaticMarkup(
@@ -89,14 +91,15 @@ describe("AiChatMessageMarkdown", () => {
         const html = renderToStaticMarkup(
             <AiChatMessageMarkdown
                 role="assistant"
-                content="**pending** answer"
+                content={STREAMING_PENDING_MARKDOWN}
                 streaming
             />,
         );
 
         expect(html).toContain("ai-chat-message-markdown-streaming");
         expect(html).toContain("ai-chat-message-streaming-text");
-        expect(html).toContain("**pending** answer");
+        expect(html).toContain(STREAMING_PENDING_MARKDOWN);
+        // i18n-guard-ignore-next-line: 这里断言的是渲染后的 HTML 片段，不是 UI 文案。
         expect(html).not.toContain("<strong>pending</strong>");
     });
 });

@@ -74,7 +74,10 @@ import {
 } from "../../../host/editor/editorContextStore";
 import type { EditorDisplayMode } from "../../../host/editor/editorDisplayModeStore";
 import { flushAutoSaveByPath } from "../../../host/editor/autoSaveService";
-import { createCodeMirrorThemeExtension } from "./codemirrorTheme";
+import {
+    createCodeMirrorThemeExtension,
+    createCodeMirrorTypographyThemeExtension,
+} from "./codemirrorTheme";
 import { getRegisteredEditPluginExtensions } from "./editPluginRegistry";
 import { editorBaseSetup } from "./editorBaseSetup";
 import type { EditorChineseSegmentationController } from "./editorChineseSegmentation";
@@ -289,11 +292,12 @@ export function useCodeMirrorEditorLifecycle(
                 markdown(),
                 createCodeMirrorThemeExtension(),
                 fontFamilyCompartmentRef.current.of(
-                    EditorView.theme({ ".cm-content": { fontFamily: SHARED_EDITOR_FONT_FAMILY_CSS_VALUE } }),
+                    createCodeMirrorTypographyThemeExtension(
+                        SHARED_EDITOR_FONT_FAMILY_CSS_VALUE,
+                        SHARED_EDITOR_FONT_SIZE_CSS_VALUE,
+                    ),
                 ),
-                fontSizeCompartmentRef.current.of(
-                    EditorView.theme({ ".cm-content": { fontSize: SHARED_EDITOR_FONT_SIZE_CSS_VALUE } }),
-                ),
+                fontSizeCompartmentRef.current.of([]),
                 tabSizeCompartmentRef.current.of(EditorState.tabSize.of(options.editorTabSize)),
                 lineWrappingCompartmentRef.current.of(
                     options.editorLineWrapping ? EditorView.lineWrapping : [],
@@ -525,13 +529,14 @@ export function useCodeMirrorEditorLifecycle(
 
         view.dispatch({
             effects: fontFamilyCompartmentRef.current.reconfigure(
-                EditorView.theme({ ".cm-content": { fontFamily: SHARED_EDITOR_FONT_FAMILY_CSS_VALUE } }),
+                createCodeMirrorTypographyThemeExtension(
+                    SHARED_EDITOR_FONT_FAMILY_CSS_VALUE,
+                    SHARED_EDITOR_FONT_SIZE_CSS_VALUE,
+                ),
             ),
         });
         view.dispatch({
-            effects: fontSizeCompartmentRef.current.reconfigure(
-                EditorView.theme({ ".cm-content": { fontSize: SHARED_EDITOR_FONT_SIZE_CSS_VALUE } }),
-            ),
+            effects: fontSizeCompartmentRef.current.reconfigure([]),
         });
 
         console.info("[editor] shared typography changed", {

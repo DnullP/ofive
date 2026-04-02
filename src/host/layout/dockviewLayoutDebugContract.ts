@@ -42,6 +42,7 @@ export type DockviewLayoutTimelineEntryType =
     | "pointerdrag-tab"
     | "dragstart-tab"
     | "drop-host"
+    | "remove-panel"
     | "dragend-tab"
     | "pointerup-tab"
     | "layout-change"

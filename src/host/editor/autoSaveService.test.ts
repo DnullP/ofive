@@ -20,8 +20,6 @@ import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
  */
 let savedCalls: Array<{ path: string; content: string }> = [];
 
-const actualAppEventBus = await import("../events/appEventBus");
-
 mock.module("../../api/vaultApi", () => ({
     saveVaultMarkdownFile: async (path: string, content: string) => {
         savedCalls.push({ path, content });
@@ -42,43 +40,20 @@ mock.module("../../api/vaultApi", () => ({
     isSelfTriggeredVaultConfigEvent: () => false,
 }));
 
-/** 内容变化事件监听器引用 */
-let contentListener: ((payload: unknown) => void) | null = null;
-let contentEventSeq = 1;
-
-mock.module("../events/appEventBus", () => {
-    return {
-        ...actualAppEventBus,
-        subscribeEditorContentBusEvent: (listener: (payload: unknown) => void) => {
-            contentListener = listener;
-            return () => {
-                contentListener = null;
-            };
-        },
-        emitEditorContentChangedEvent: (payload: {
-            articleId: string;
-            path: string;
-            content: string;
-            updatedAt: number;
-        }) => {
-            contentListener?.({
-                eventId: `frontend-${contentEventSeq++}`,
-                sourceTraceId: null,
-                ...payload,
-            });
-        },
-        emitPersistedContentUpdatedEvent: () => { /* noop */ },
-    };
-});
+const { emitEditorContentChangedEvent } = await import("../events/appEventBus");
 
 /**
  * 测试辅助：触发内容变化事件。
  * @param payload 事件负载。
  */
 function triggerContentEvent(payload: unknown): void {
-    if (contentListener) {
-        contentListener(payload);
-    }
+    const typedPayload = payload as {
+        articleId: string;
+        path: string;
+        content: string;
+        updatedAt: number;
+    };
+    emitEditorContentChangedEvent(typedPayload);
 }
 
 // 动态导入，确保 mock.module 已生效
@@ -98,6 +73,7 @@ describe("autoSaveService", () => {
 
     afterEach(() => {
         stopAutoSaveService();
+        mock.restore();
     });
 
     /**

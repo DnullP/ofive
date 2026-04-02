@@ -17,6 +17,7 @@ const SEMANTIC_INDEX_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[
         allowed_paths: &[
             "src/app/semantic_index/",
             "src/domain/capability/semantic_index_catalog.rs",
+            "src/host/commands/semantic_index_commands.rs",
             "src/infra/vector/",
             "src/shared/semantic_index_contracts.rs",
             "src/test_support/",
@@ -38,13 +39,18 @@ const SEMANTIC_INDEX_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[
 #[cfg(test)]
 const SEMANTIC_INDEX_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[
     ModulePrivateNamespaceTemplate {
-        namespace: "crate::app::semantic_index::",
+        namespace: "crate::app::semantic_index::index_app_service",
         allowed_paths: &[
             "src/app/semantic_index/",
             "src/domain/capability/semantic_index_catalog.rs",
             "src/test_support/",
         ],
-        rationale: "semantic-index app service 属于语义索引模块私有实现边界",
+        rationale: "semantic-index index_app_service 属于语义索引模块私有实现边界",
+    },
+    ModulePrivateNamespaceTemplate {
+        namespace: "crate::app::semantic_index::capability_execution",
+        allowed_paths: &["src/app/semantic_index/", "src/test_support/"],
+        rationale: "semantic-index capability execution 属于语义索引模块私有实现边界",
     },
     ModulePrivateNamespaceTemplate {
         namespace: "crate::infra::vector::",

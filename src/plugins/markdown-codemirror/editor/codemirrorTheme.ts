@@ -16,6 +16,7 @@
  *
  * @exports
  *  - createCodeMirrorThemeExtension
+ *  - createCodeMirrorTypographyThemeExtension
  */
 
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -91,4 +92,23 @@ export function createCodeMirrorThemeExtension() {
         }),
         syntaxHighlighting(markdownSymbolHighlightStyle),
     ];
+}
+
+/**
+ * @function createCodeMirrorTypographyThemeExtension
+ * @description 创建统一的 CodeMirror 排版主题扩展，用于按实例覆写字体族与字号。
+ * @param fontFamily 编辑器内容区字体族 CSS 值。
+ * @param fontSize 编辑器内容区字号 CSS 值。
+ * @returns CodeMirror 主题扩展。
+ */
+export function createCodeMirrorTypographyThemeExtension(
+    fontFamily: string,
+    fontSize: string,
+) {
+    return EditorView.theme({
+        ".cm-content": {
+            fontFamily,
+            fontSize,
+        },
+    });
 }

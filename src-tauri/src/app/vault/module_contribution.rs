@@ -28,12 +28,17 @@ const VAULT_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[
         allowed_paths: &["src/app/sync/", "src/app/vault/"],
         rationale: "sync facade 是 Vault 向未来同步模块暴露的受管控消费入口",
     },
+    BackendModulePublicSurface {
+        namespace: "crate::app::vault::query_facade",
+        allowed_paths: &["src/app/semantic_index/", "src/app/vault/"],
+        rationale: "query facade 是 Vault 向语义索引暴露的只读查询入口",
+    },
 ];
 
 #[cfg(test)]
 const VAULT_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[
     ModulePrivateNamespaceTemplate {
-        namespace: "crate::app::vault::",
+        namespace: "crate::app::vault::vault_app_service",
         allowed_paths: &[
             "src/app/vault/",
             "src/host/bootstrap.rs",
@@ -41,6 +46,31 @@ const VAULT_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[
             "src/test_support/",
         ],
         rationale: "vault app service 是 Vault 模块私有实现边界；宿主启动桥接仅可访问显式声明的预热入口",
+    },
+    ModulePrivateNamespaceTemplate {
+        namespace: "crate::app::vault::query_app_service",
+        allowed_paths: &[
+            "src/app/vault/",
+            "src/host/bootstrap.rs",
+            "src/host/commands/vault_commands.rs",
+            "src/test_support/",
+        ],
+        rationale: "vault query app service 是 Vault 模块私有实现边界",
+    },
+    ModulePrivateNamespaceTemplate {
+        namespace: "crate::app::vault::canvas_app_service",
+        allowed_paths: &["src/app/vault/", "src/test_support/"],
+        rationale: "vault canvas app service 是 Vault 模块私有实现边界",
+    },
+    ModulePrivateNamespaceTemplate {
+        namespace: "crate::app::vault::markdown_patch_app_service",
+        allowed_paths: &["src/app/vault/", "src/test_support/"],
+        rationale: "vault markdown patch app service 是 Vault 模块私有实现边界",
+    },
+    ModulePrivateNamespaceTemplate {
+        namespace: "crate::app::vault::capability_execution",
+        allowed_paths: &["src/app/vault/", "src/test_support/"],
+        rationale: "vault capability execution 是 Vault 模块私有实现边界",
     },
     ModulePrivateNamespaceTemplate {
         namespace: "crate::infra::fs::vault_runtime",

@@ -74,7 +74,8 @@ describe("notificationCenter", () => {
 
         unlisten();
 
-        expect(capturedProgress).toEqual(100);
+        expect(capturedProgress).not.toBeNull();
+        expect(capturedProgress ?? 0).toEqual(100);
     });
 
     /**

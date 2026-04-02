@@ -55,13 +55,15 @@ describe("logNotificationTestActivityPlugin", () => {
             activity.onActivate({
                 activeTabId: null,
                 dockviewApi: null,
+                hostPanelId: null,
+                convertibleView: null,
                 openTab: () => undefined,
                 openFile: async () => undefined,
                 closeTab: () => undefined,
                 setActiveTab: () => undefined,
+                activatePanel: () => undefined,
                 requestMoveFileToDirectory: () => undefined,
                 executeCommand: () => undefined,
-                getCommandDefinitions: () => [],
             });
         }
 

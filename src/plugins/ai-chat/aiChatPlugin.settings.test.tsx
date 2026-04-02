@@ -64,10 +64,6 @@ mock.module("./aiChatDebugFilter", () => ({
     filterChatDebugEntries: () => [],
 }));
 
-mock.module("./aiChatDebugExport", () => ({
-    formatAiChatDebugEntriesForClipboard: () => "",
-}));
-
 mock.module("./aiChatInputPolicy", () => ({
     shouldSubmitAiChatComposer: () => false,
 }));

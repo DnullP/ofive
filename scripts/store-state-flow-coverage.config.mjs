@@ -18,29 +18,45 @@ export const explicitlyGovernedStoreLogicModules = [
 ];
 
 /**
- * store 逻辑覆盖清单。
+ * 已注册 store 的逻辑覆盖清单。
+ *
+ * 使用稳定 store id 作为 key，避免实现文件迁移后清单路径漂移。
  */
-export const storeLogicCoverage = {
-    "src/host/store/configStore.ts": [
-        "src/host/store/configStore.test.ts",
+export const registeredStoreLogicCoverage = {
+    config: [
+        "src/host/config/configStore.test.ts",
         "src/host/window/useWindowEffectsSync.test.ts",
     ],
-    "src/host/store/vaultStore.ts": [
+    vault: [
         "e2e/vault-switch-regression.e2e.ts",
+        "src/plugins/vault-fs-sync/vaultFsSyncPlugin.test.ts",
     ],
+    theme: [
+        "src/host/window/useWindowEffectsSync.test.ts",
+        "e2e/glass-visual.e2e.ts",
+    ],
+    shortcut: [
+        "src/host/commands/shortcutDispatcher.test.ts",
+        "src/host/commands/shortcutGovernance.test.ts",
+    ],
+    "ai-chat:settings": [
+        "src/plugins/ai-chat/aiChatSettingsStore.test.ts",
+    ],
+    "knowledge-graph:settings": [
+        "src/plugins/knowledge-graph/tab/knowledgeGraphSettings.test.ts",
+        "tests/knowledgeGraphInteractions.test.ts",
+    ],
+};
+
+/**
+ * 显式治理的非注册状态模块逻辑覆盖清单。
+ */
+export const explicitStoreLogicCoverage = {
     "src/host/store/storeRegistry.ts": [
         "src/host/store/storeRegistry.test.ts",
     ],
     "src/host/store/registerBuiltinManagedStores.ts": [
         "src/host/store/registerBuiltinManagedStores.test.ts",
-    ],
-    "src/host/theme/themeStore.ts": [
-        "src/host/window/useWindowEffectsSync.test.ts",
-        "e2e/glass-visual.e2e.ts",
-    ],
-    "src/host/commands/shortcutStore.ts": [
-        "src/host/commands/shortcutDispatcher.test.ts",
-        "src/host/commands/shortcutGovernance.test.ts",
     ],
     "src/host/layout/activityBarStore.ts": [
         "src/host/layout/activityBarStore.test.ts",
@@ -57,59 +73,52 @@ export const storeLogicCoverage = {
     "src/host/editor/autoSaveService.ts": [
         "src/host/editor/autoSaveService.test.ts",
     ],
-    "src/plugins/ai-chat/aiChatSettingsStore.ts": [
-        "src/plugins/ai-chat/aiChatSettingsStore.test.ts",
-    ],
-    "src/plugins/knowledge-graph/store/graphSettingsStore.ts": [
-        "src/plugins/knowledge-graph/tab/knowledgeGraphSettings.test.ts",
-        "tests/knowledgeGraphInteractions.test.ts",
-    ],
 };
 
 /**
  * 已注册 store 的 schema 覆盖清单。
  * 每个 action / flow 触发 / failure mode 都必须绑定真实测试锚点。
  */
-export const storeSchemaCoverage = {
-    "src/host/store/configStore.ts": {
+export const registeredStoreSchemaCoverage = {
+    config: {
         actions: {
             "load-config": [
-                "src/host/store/configStore.test.ts",
+                "src/host/config/configStore.test.ts",
             ],
             "update-backend-config": [
-                "src/host/store/configStore.test.ts",
+                "src/host/config/configStore.test.ts",
             ],
             "update-frontend-settings": [
-                "src/host/store/configStore.test.ts",
+                "src/host/config/configStore.test.ts",
             ],
             "reset-config": [
-                "src/host/store/configStore.test.ts",
+                "src/host/config/configStore.test.ts",
             ],
         },
         flow: {
             "hydrate-active-vault": [
-                "src/host/store/configStore.test.ts",
+                "src/host/config/configStore.test.ts",
             ],
             "hydrate-success": [
-                "src/host/store/configStore.test.ts",
+                "src/host/config/configStore.test.ts",
             ],
             "hydrate-failure": [
-                "src/host/store/configStore.test.ts",
+                "src/host/config/configStore.test.ts",
             ],
             "reset-context": [
-                "src/host/store/configStore.test.ts",
+                "src/host/config/configStore.test.ts",
             ],
         },
         failureModes: {
             "backend read/write failure leaves normalized defaults plus error message": [
-                "src/host/store/configStore.test.ts",
+                "src/host/config/configStore.test.ts",
             ],
             "vault switches can invalidate in-flight config results and require reset before next hydrate": [
-                "src/host/store/configStore.test.ts",
+                "src/host/config/configStore.test.ts",
             ],
         },
     },
-    "src/host/store/vaultStore.ts": {
+    vault: {
         actions: {
             "set-current-vault": [
                 "e2e/vault-switch-regression.e2e.ts",
@@ -150,7 +159,7 @@ export const storeSchemaCoverage = {
             ],
         },
     },
-    "src/host/theme/themeStore.ts": {
+    theme: {
         actions: {
             "update-theme-mode": [
                 "src/host/window/useWindowEffectsSync.test.ts",
@@ -174,7 +183,7 @@ export const storeSchemaCoverage = {
             ],
         },
     },
-    "src/host/commands/shortcutStore.ts": {
+    shortcut: {
         actions: {
             "load-shortcuts": [
                 "src/host/commands/shortcutDispatcher.test.ts",
@@ -219,7 +228,7 @@ export const storeSchemaCoverage = {
             ],
         },
     },
-    "src/plugins/ai-chat/aiChatSettingsStore.ts": {
+    "ai-chat:settings": {
         actions: {
             "ensure-loaded": [
                 "src/plugins/ai-chat/aiChatSettingsStore.test.ts",
@@ -254,7 +263,7 @@ export const storeSchemaCoverage = {
             ],
         },
     },
-    "src/plugins/knowledge-graph/store/graphSettingsStore.ts": {
+    "knowledge-graph:settings": {
         actions: {
             "load-settings": [
                 "src/plugins/knowledge-graph/tab/knowledgeGraphSettings.test.ts",
@@ -312,7 +321,7 @@ export const storeConsumerCoverage = {
     ],
     "src/host/store/registrations/configManagedStoreRegistration.ts": [
         "src/host/store/registerBuiltinManagedStores.test.ts",
-        "src/host/store/configStore.test.ts",
+        "src/host/config/configStore.test.ts",
     ],
     "src/host/store/registrations/vaultManagedStoreRegistration.ts": [
         "src/host/store/registerBuiltinManagedStores.test.ts",
@@ -389,7 +398,13 @@ export const storeConsumerCoverage = {
         "src/plugins/markdown-codemirror/editor/lineNumbersModeExtension.test.ts",
         "e2e/frontmatter-visibility.e2e.ts",
     ],
+    "src/plugins/markdown-codemirror/editor/useCodeMirrorEditorLifecycle.ts": [
+        "src/plugins/markdown-codemirror/editor/useCodeMirrorEditorLifecycle.test.ts",
+    ],
     "src/plugins/search/searchPlugin.tsx": [
         "src/plugins/search/searchPlugin.test.ts",
+    ],
+    "src/plugins/semantic-index/semanticIndexPlugin.tsx": [
+        "src/plugins/semantic-index/semanticIndexPlugin.test.tsx",
     ],
 };

@@ -16,7 +16,7 @@
  */
 
 import React from "react";
-import { Hand } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 
 import { publishNotification } from "../../host/notifications/notificationCenter";
 import { registerActivity } from "../../host/registry/activityRegistry";
@@ -46,7 +46,7 @@ export function activatePlugin(): () => void {
         type: "callback",
         id: LOG_NOTIFICATION_TEST_ACTIVITY_ID,
         title: "Test Message",
-        icon: React.createElement(Hand, { size: 18, strokeWidth: 1.8 }),
+        icon: React.createElement(LucideIcons.Hand, { size: 18, strokeWidth: 1.8 }),
         defaultSection: "bottom",
         defaultBar: "left",
         defaultOrder: 999,

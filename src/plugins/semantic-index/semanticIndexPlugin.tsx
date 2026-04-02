@@ -49,7 +49,7 @@ const SEMANTIC_INDEX_INITIAL_FULL_SYNC_NOTIFICATION_ID = "semantic-index-initial
 const SEMANTIC_INDEX_MANUAL_FULL_SYNC_NOTIFICATION_ID = "semantic-index-manual-full-sync";
 const SEMANTIC_INDEX_FULL_SYNC_COMMAND_ID = "semanticIndex.fullSyncRepository";
 const SEMANTIC_INDEX_FULL_SYNC_POLL_MS = 1200;
-const semanticIndexSyncPollTimerMap = new Map<string, number>();
+const semanticIndexSyncPollTimerMap = new Map<string, ReturnType<typeof globalThis.setInterval>>();
 
 interface SemanticIndexSyncNotificationCopy {
     titleKey: string;

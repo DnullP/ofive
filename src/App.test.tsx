@@ -6,6 +6,16 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+const actualAppEventBus = await import("./host/events/appEventBus");
+const actualConfigStore = await import("./host/config/configStore");
+const actualThemeStore = await import("./host/theme/themeStore");
+const actualAutoSaveService = await import("./host/editor/autoSaveService");
+const actualVaultStore = await import("./host/vault/vaultStore");
+const actualWindowEffectsSync = await import("./host/window/useWindowEffectsSync");
+const APP_TEST_TITLEBAR = "titlebar";
+const APP_TEST_DOCKVIEW = "dockview-layout";
+const APP_TEST_SETTINGS_TAB = "settings-tab";
+
 mock.module("react-i18next", () => ({
     useTranslation: () => ({
         t: (key: string) => key,
@@ -13,18 +23,20 @@ mock.module("react-i18next", () => ({
 }));
 
 mock.module("./host/layout", () => ({
-    CustomTitlebar: () => <div>titlebar</div>,
-    DockviewLayout: () => <div>dockview-layout</div>,
-    SettingsTab: () => <div>settings-tab</div>,
+    CustomTitlebar: () => <div>{APP_TEST_TITLEBAR}</div>,
+    DockviewLayout: () => <div>{APP_TEST_DOCKVIEW}</div>,
+    SettingsTab: () => <div>{APP_TEST_SETTINGS_TAB}</div>,
 }));
 
 mock.module("./host/events/appEventBus", () => ({
+    ...actualAppEventBus,
     useBackendEventBridge: () => {
         /* noop */
     },
 }));
 
 mock.module("./host/vault/vaultStore", () => ({
+    ...actualVaultStore,
     useVaultTreeSync: () => {
         /* noop */
     },
@@ -36,18 +48,21 @@ mock.module("./host/vault/vaultStore", () => ({
 }));
 
 mock.module("./host/config/configStore", () => ({
+    ...actualConfigStore,
     useConfigSync: () => {
         /* noop */
     },
 }));
 
 mock.module("./host/theme/themeStore", () => ({
+    ...actualThemeStore,
     useThemeSync: () => {
         /* noop */
     },
 }));
 
 mock.module("./host/editor/autoSaveService", () => ({
+    ...actualAutoSaveService,
     useAutoSaveLifecycle: () => {
         /* noop */
     },
@@ -66,6 +81,7 @@ mock.module("./host/registry/registerBuiltinComponents", () => ({
 }));
 
 mock.module("./host/window/useWindowEffectsSync", () => ({
+    ...actualWindowEffectsSync,
     useWindowEffectsSync: () => {
         /* noop */
     },

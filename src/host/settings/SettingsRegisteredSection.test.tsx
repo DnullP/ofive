@@ -6,6 +6,8 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+const SETTINGS_REGISTERED_SECTION_CUSTOM_PANEL = "custom-settings-panel";
+
 mock.module("react-i18next", () => ({
     useTranslation: () => ({
         t: (key: string) => key,
@@ -43,7 +45,7 @@ describe("SettingsRegisteredSection", () => {
                             order: 20,
                             kind: "custom",
                             title: "settings.demoCustom",
-                            render: () => <div>custom-settings-panel</div>,
+                            render: () => <div>{SETTINGS_REGISTERED_SECTION_CUSTOM_PANEL}</div>,
                         },
                     ],
                 }}
@@ -52,6 +54,6 @@ describe("SettingsRegisteredSection", () => {
 
         expect(markup).toContain("settings.demoToggle");
         expect(markup).toContain("settings.demoToggleDesc");
-        expect(markup).toContain("custom-settings-panel");
+        expect(markup).toContain(SETTINGS_REGISTERED_SECTION_CUSTOM_PANEL);
     });
 });

@@ -594,7 +594,7 @@
 .cm-tab-reader .cm-rendered-tag:hover {
     transform: scale(1.06);
     filter: brightness(1.06) saturate(1.06);
-    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+    box-shadow: var(--editor-panel-shadow-light);
     z-index: 1;
     opacity: 1;
 }

@@ -627,6 +627,7 @@ const zh = {
 
     aiChatPlugin: {
         title: "AI 对话",
+        reasoningSummary: "思考过程",
         draftPlaceholder: "询问这个仓库里的内容...",
         send: "发送",
         sending: "执行中...",
@@ -697,6 +698,11 @@ const zh = {
         untitledConversation: "新对话",
         emptyTitle: "从一个快捷提示开始。",
         emptyBody: "你可以随时切换会话继续聊。",
+    },
+
+    logNotification: {
+        progressAriaLabel: "通知进度",
+        dismissAriaLabel: "关闭通知",
     },
 
     semanticIndexPlugin: {

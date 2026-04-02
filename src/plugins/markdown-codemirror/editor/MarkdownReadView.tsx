@@ -30,7 +30,7 @@ import {
 import { createPortal } from "react-dom";
 import type { DockviewApi } from "dockview";
 import katex from "katex";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import i18n from "../../../i18n";
@@ -750,26 +750,27 @@ export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
         () => prepareMarkdownForReadMode(props.content),
         [props.content],
     );
-    const markdownComponents = useMemo(() => ({
-        p: ({ node, children, ...componentProps }) => {
+    const markdownComponents = useMemo<Components>(() => ({
+        p: (componentProps) => {
+            const { node, children, ...restProps } = componentProps;
             const blockLatexSource = extractBlockLatexFromParagraph(node);
             if (blockLatexSource) {
                 return <ReadModeLatex latex={blockLatexSource} displayMode />;
             }
 
-            return <p {...componentProps}>{children}</p>;
+            return <p {...restProps}>{children}</p>;
         },
-        h1: ({ node: _node, ...componentProps }) => <h1 className="cm-rendered-header cm-rendered-header-h1" {...componentProps} />,
-        h2: ({ node: _node, ...componentProps }) => <h2 className="cm-rendered-header cm-rendered-header-h2" {...componentProps} />,
-        h3: ({ node: _node, ...componentProps }) => <h3 className="cm-rendered-header cm-rendered-header-h3" {...componentProps} />,
-        h4: ({ node: _node, ...componentProps }) => <h4 className="cm-rendered-header cm-rendered-header-h4" {...componentProps} />,
-        h5: ({ node: _node, ...componentProps }) => <h5 className="cm-rendered-header cm-rendered-header-h5" {...componentProps} />,
-        h6: ({ node: _node, ...componentProps }) => <h6 className="cm-rendered-header cm-rendered-header-h6" {...componentProps} />,
-        strong: ({ node: _node, ...componentProps }) => <strong className="cm-rendered-bold" {...componentProps} />,
-        em: ({ node: _node, ...componentProps }) => <em className="cm-rendered-italic" {...componentProps} />,
-        del: ({ node: _node, ...componentProps }) => <del className="cm-rendered-strikethrough" {...componentProps} />,
-        blockquote: ({ node: _node, ...componentProps }) => <blockquote className="cm-rendered-blockquote" {...componentProps} />,
-        hr: ({ node: _node, ...componentProps }) => <hr className="cm-rendered-horizontal-rule" {...componentProps} />,
+        h1: (componentProps) => <h1 className="cm-rendered-header cm-rendered-header-h1" {...componentProps} />,
+        h2: (componentProps) => <h2 className="cm-rendered-header cm-rendered-header-h2" {...componentProps} />,
+        h3: (componentProps) => <h3 className="cm-rendered-header cm-rendered-header-h3" {...componentProps} />,
+        h4: (componentProps) => <h4 className="cm-rendered-header cm-rendered-header-h4" {...componentProps} />,
+        h5: (componentProps) => <h5 className="cm-rendered-header cm-rendered-header-h5" {...componentProps} />,
+        h6: (componentProps) => <h6 className="cm-rendered-header cm-rendered-header-h6" {...componentProps} />,
+        strong: (componentProps) => <strong className="cm-rendered-bold" {...componentProps} />,
+        em: (componentProps) => <em className="cm-rendered-italic" {...componentProps} />,
+        del: (componentProps) => <del className="cm-rendered-strikethrough" {...componentProps} />,
+        blockquote: (componentProps) => <blockquote className="cm-rendered-blockquote" {...componentProps} />,
+        hr: (componentProps) => <hr className="cm-rendered-horizontal-rule" {...componentProps} />,
         code: ({ node: _node, className, children, ...componentProps }: ComponentPropsWithoutRef<"code"> & { node?: unknown }) => {
             const isInline = !String(className ?? "").includes("language-");
             if (isInline) {
@@ -789,10 +790,11 @@ export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
                 </code>
             );
         },
-        pre: ({ node: _node, ...componentProps }) => <pre className="cm-tab-reader-pre" {...componentProps} />,
-        ul: ({ node: _node, ...componentProps }) => <ul className="cm-tab-reader-list cm-tab-reader-list-unordered" {...componentProps} />,
-        ol: ({ node: _node, ...componentProps }) => <ol className="cm-tab-reader-list cm-tab-reader-list-ordered" {...componentProps} />,
-        img: ({ node: _node, src, alt, ...componentProps }) => {
+        pre: (componentProps) => <pre className="cm-tab-reader-pre" {...componentProps} />,
+        ul: (componentProps) => <ul className="cm-tab-reader-list cm-tab-reader-list-unordered" {...componentProps} />,
+        ol: (componentProps) => <ol className="cm-tab-reader-list cm-tab-reader-list-ordered" {...componentProps} />,
+        img: (componentProps) => {
+            const { src, alt, ...restProps } = componentProps;
             const mediaTarget = decodeReadModeMediaEmbedHref(src);
             if (mediaTarget) {
                 return (
@@ -806,27 +808,31 @@ export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
 
             return (
                 <img
-                    {...componentProps}
+                    {...restProps}
                     alt={alt ?? ""}
                     className="cm-tab-reader-image"
                     src={src}
                 />
             );
         },
-        li: ({ node: _node, className, ...componentProps }) => (
+        li: (componentProps) => {
+            const { className, ...restProps } = componentProps;
+            return (
             <li
                 className={className
                     ? `cm-tab-reader-list-item ${className}`
                     : "cm-tab-reader-list-item"}
-                {...componentProps}
+                {...restProps}
             />
-        ),
-        a: ({ node: _node, href, children, ...componentProps }) => {
+            );
+        },
+        a: (componentProps) => {
+            const { href, children, ...restProps } = componentProps;
             const wikiLinkTarget = decodeReadModeWikiLinkHref(href);
             if (wikiLinkTarget) {
                 return (
                     <ReadModeWikiLinkAnchor
-                        {...componentProps}
+                        {...restProps}
                         href={href}
                         className="cm-rendered-wikilink"
                         wikiLinkTarget={wikiLinkTarget}
@@ -870,7 +876,7 @@ export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
 
             return (
                 <a
-                    {...componentProps}
+                    {...restProps}
                     href={href}
                     className="cm-rendered-link"
                     target="_blank"

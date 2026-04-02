@@ -9,9 +9,7 @@
  *   bun test src/host/config/configStore.test.ts
  */
 
-import { beforeEach, describe, expect, it, mock } from "bun:test";
-
-const actualAppEventBus = await import("../events/appEventBus");
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 interface MockVaultConfig {
     schemaVersion: number;
@@ -32,16 +30,17 @@ mock.module("../../api/vaultApi", () => ({
         currentVaultConfig = structuredClone(nextConfig);
         return structuredClone(nextConfig);
     },
-    isSelfTriggeredVaultConfigEvent: () => false,
-}));
-
-mock.module("../events/appEventBus", () => ({
-    ...actualAppEventBus,
-    subscribeVaultConfigBusEvent: () => {
+    subscribeVaultFsEvents: async () => {
         return () => {
             /* noop */
         };
     },
+    subscribeVaultConfigEvents: async () => {
+        return () => {
+            /* noop */
+        };
+    },
+    isSelfTriggeredVaultConfigEvent: () => false,
 }));
 
 const {
@@ -49,6 +48,11 @@ const {
     syncConfigStateForVault,
     DEFAULT_FEATURE_SETTINGS,
 } = await import("./configStore");
+
+afterEach(async () => {
+    await syncConfigStateForVault("", true);
+    mock.restore();
+});
 
 describe("configStore defaults", () => {
     beforeEach(async () => {

@@ -18,6 +18,7 @@
 
 import { CircleAlert, Info, TriangleAlert, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
     dismissNotification,
     subscribeNotificationCenter,
@@ -85,6 +86,7 @@ function resolveTimerPercent(item: NotificationViewModel): number {
  * @returns 浮层节点；无消息时返回 null。
  */
 export function LogNotificationOverlay(): ReactNode {
+    const { t } = useTranslation();
     const [items, setItems] = useState<NotificationViewModel[]>([]);
 
     useEffect(() => {
@@ -140,7 +142,10 @@ export function LogNotificationOverlay(): ReactNode {
                                 ) : null}
                                 <p className="log-notification-card__message">{item.message}</p>
                                 {item.progress !== null ? (
-                                    <div className="log-notification-card__progress" aria-label="notification-progress">
+                                    <div
+                                        className="log-notification-card__progress"
+                                        aria-label={t("logNotification.progressAriaLabel")}
+                                    >
                                         <div
                                             className="log-notification-card__progress-bar"
                                             style={{ width: `${item.progress}%` }}
@@ -154,7 +159,7 @@ export function LogNotificationOverlay(): ReactNode {
                             <button
                                 type="button"
                                 className="log-notification-card__dismiss"
-                                aria-label="dismiss notification"
+                                aria-label={t("logNotification.dismissAriaLabel")}
                                 onClick={() => {
                                     dismissNotification(item.notificationId);
                                 }}

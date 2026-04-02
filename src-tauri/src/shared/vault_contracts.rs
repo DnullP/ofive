@@ -50,6 +50,13 @@ pub struct ReadMarkdownResponse {
     pub numbered_content: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultIndexedMarkdownFile {
+    pub relative_path: String,
+    pub title: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadBinaryFileResponse {

@@ -69,7 +69,7 @@
 
 /* semantic-index-settings-feedback.error：错误反馈文本，强调需要用户处理。 */
 .semantic-index-settings-feedback.error {
-    color: #b42318;
+    color: var(--error-color);
 }
 
 /* semantic-index-settings-actions：底部动作区，承载刷新和保存按钮。 */

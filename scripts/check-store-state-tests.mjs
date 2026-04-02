@@ -9,9 +9,10 @@ import path from "node:path";
 
 import {
     explicitlyGovernedStoreLogicModules,
+    explicitStoreLogicCoverage,
+    registeredStoreLogicCoverage,
+    registeredStoreSchemaCoverage,
     storeConsumerCoverage,
-    storeLogicCoverage,
-    storeSchemaCoverage,
 } from "./store-state-flow-coverage.config.mjs";
 
 const ROOT = process.cwd();
@@ -102,6 +103,41 @@ function parseImportedBindings(fromFile, content) {
     return bindings;
 }
 
+function resolveStaticStringExpression(content, expression) {
+    const normalizedExpression = expression.trim();
+    const literalMatch = normalizedExpression.match(/^['"]([^'"]+)['"]$/);
+    if (literalMatch) {
+        return literalMatch[1];
+    }
+
+    const identifierMatch = normalizedExpression.match(/^([A-Za-z_$][A-Za-z0-9_$]*)$/);
+    if (!identifierMatch) {
+        return null;
+    }
+
+    const identifier = identifierMatch[1];
+    const declarationPattern = new RegExp(
+        `(?:export\\s+)?(?:const|let|var)\\s+${identifier}\\s*=\\s*['\"]([^'\"]+)['\"]`,
+    );
+    return declarationPattern.exec(content)?.[1] ?? null;
+}
+
+function inferRegisteredStoreCoverageKey(relativeSourceFile, content) {
+    const pluginRegistrationMatch = content.match(/\bregisterPluginOwnedStore\s*\(\s*([^,\n]+)\s*,/);
+    if (pluginRegistrationMatch) {
+        const pluginId = resolveStaticStringExpression(content, pluginRegistrationMatch[1] ?? "");
+        const storeId = content.match(/\bstoreId\s*:\s*"([^"]+)"/)?.[1] ?? null;
+        if (!storeId) {
+            return relativeSourceFile;
+        }
+
+        return pluginId ? `${pluginId}:${storeId}` : `${relativeSourceFile}::${storeId}`;
+    }
+
+    const managedStoreId = content.match(/\bid\s*:\s*"([^"]+)"/)?.[1] ?? null;
+    return managedStoreId ?? relativeSourceFile;
+}
+
 function extractIdentifiers(content, pattern) {
     const identifiers = new Set();
     pattern.lastIndex = 0;
@@ -118,8 +154,8 @@ function extractIdentifiers(content, pattern) {
 }
 
 function discoverRegisteredStoreModules(sourceFiles) {
-    const discoveredModules = new Set();
-    const schemaCoverageByModule = new Map();
+    const discoveredStores = new Map();
+    const storeCoverageKeyByModule = new Map();
     const failures = [];
 
     for (const sourceFile of sourceFiles) {
@@ -151,6 +187,11 @@ function discoverRegisteredStoreModules(sourceFiles) {
             continue;
         }
 
+        const coverageKey = inferRegisteredStoreCoverageKey(
+            toRelative(sourceFile),
+            content,
+        );
+
         const resolvedModules = new Set();
         identifiers.forEach((identifier) => {
             const resolvedImport = importedBindings.get(identifier);
@@ -165,14 +206,25 @@ function discoverRegisteredStoreModules(sourceFiles) {
         }
 
         resolvedModules.forEach((modulePath) => {
-            discoveredModules.add(modulePath);
-            schemaCoverageByModule.set(modulePath, parsedSchemaCoverage);
+            const existingStore = discoveredStores.get(coverageKey);
+            if (existingStore && existingStore.modulePath !== modulePath) {
+                failures.push(
+                    `registered store coverage key collision: ${coverageKey} maps to both ${existingStore.modulePath} and ${modulePath}`,
+                );
+                return;
+            }
+
+            discoveredStores.set(coverageKey, {
+                modulePath,
+                schemaCoverage: parsedSchemaCoverage,
+            });
+            storeCoverageKeyByModule.set(modulePath, coverageKey);
         });
     }
 
     return {
-        discoveredModules,
-        schemaCoverageByModule,
+        discoveredStores,
+        storeCoverageKeyByModule,
         failures,
     };
 }
@@ -328,28 +380,69 @@ function ensureCoverageEntriesExist(coverageMap, label) {
     return failures;
 }
 
+function ensureNamedCoverageEntriesExist(coverageMap, label) {
+    const failures = [];
+
+    Object.entries(coverageMap).forEach(([coverageKey, tests]) => {
+        if (!Array.isArray(tests) || tests.length === 0) {
+            failures.push(`${label} entry has no tests: ${coverageKey}`);
+            return;
+        }
+
+        tests.forEach((testPath) => {
+            if (!TEST_FILE_RE.test(testPath)) {
+                failures.push(`${label} test path is not a test file: ${coverageKey} -> ${testPath}`);
+                return;
+            }
+            if (!existsSync(path.join(ROOT, testPath))) {
+                failures.push(`${label} test file missing: ${coverageKey} -> ${testPath}`);
+            }
+        });
+    });
+
+    return failures;
+}
+
 const sourceFiles = walkFiles(SRC_ROOT)
     .filter((filePath) => /\.(ts|tsx)$/.test(filePath))
     .filter((filePath) => !TEST_FILE_RE.test(filePath));
 
 const {
-    discoveredModules: discoveredRegisteredStoreModules,
-    schemaCoverageByModule,
+    discoveredStores: discoveredRegisteredStores,
+    storeCoverageKeyByModule,
     failures: registrationDiscoveryFailures,
 } = discoverRegisteredStoreModules(sourceFiles);
+
+const discoveredRegisteredStoreCoverageKeys = new Set(discoveredRegisteredStores.keys());
+const discoveredRegisteredStoreModules = new Set(
+    Array.from(discoveredRegisteredStores.values()).map((store) => store.modulePath),
+);
 
 const discoveredStoreLogicModules = new Set(discoveredRegisteredStoreModules);
 explicitlyGovernedStoreLogicModules.forEach((modulePath) => discoveredStoreLogicModules.add(modulePath));
 
 const storeLogicFailures = [];
-for (const modulePath of discoveredStoreLogicModules) {
-    if (!storeLogicCoverage[modulePath]) {
+for (const coverageKey of discoveredRegisteredStoreCoverageKeys) {
+    if (!registeredStoreLogicCoverage[coverageKey]) {
+        const modulePath = discoveredRegisteredStores.get(coverageKey)?.modulePath ?? "unknown";
+        storeLogicFailures.push(`missing registered store logic coverage entry: ${coverageKey} -> ${modulePath}`);
+    }
+}
+
+Object.keys(registeredStoreLogicCoverage).forEach((coverageKey) => {
+    if (!discoveredRegisteredStoreCoverageKeys.has(coverageKey)) {
+        storeLogicFailures.push(`stale registered store logic coverage entry: ${coverageKey}`);
+    }
+});
+
+for (const modulePath of explicitlyGovernedStoreLogicModules) {
+    if (!explicitStoreLogicCoverage[modulePath]) {
         storeLogicFailures.push(`missing store logic coverage entry: ${modulePath}`);
     }
 }
 
-Object.keys(storeLogicCoverage).forEach((modulePath) => {
-    if (!discoveredStoreLogicModules.has(modulePath)) {
+Object.keys(explicitStoreLogicCoverage).forEach((modulePath) => {
+    if (!explicitlyGovernedStoreLogicModules.includes(modulePath)) {
         storeLogicFailures.push(`stale store logic coverage entry: ${modulePath}`);
     }
 });
@@ -399,66 +492,68 @@ Object.keys(storeConsumerCoverage).forEach((modulePath) => {
 });
 
 const coverageFailures = [
-    ...ensureCoverageEntriesExist(storeLogicCoverage, "store logic"),
+    ...ensureNamedCoverageEntriesExist(registeredStoreLogicCoverage, "registered store logic"),
+    ...ensureCoverageEntriesExist(explicitStoreLogicCoverage, "store logic"),
     ...ensureCoverageEntriesExist(storeConsumerCoverage, "store consumer"),
-    ...ensureNestedCoverageEntriesExist(storeSchemaCoverage, "store schema"),
+    ...ensureNestedCoverageEntriesExist(registeredStoreSchemaCoverage, "store schema"),
 ];
 
 const storeSchemaFailures = [];
-for (const modulePath of discoveredRegisteredStoreModules) {
-    const expectedSchemaCoverage = schemaCoverageByModule.get(modulePath);
-    const configuredSchemaCoverage = storeSchemaCoverage[modulePath];
+for (const [coverageKey, storeDescriptor] of discoveredRegisteredStores.entries()) {
+    const expectedSchemaCoverage = storeDescriptor.schemaCoverage;
+    const configuredSchemaCoverage = registeredStoreSchemaCoverage[coverageKey];
+    const modulePath = storeDescriptor.modulePath;
 
     if (!expectedSchemaCoverage) {
-        storeSchemaFailures.push(`missing parsed store schema requirements: ${modulePath}`);
+        storeSchemaFailures.push(`missing parsed store schema requirements: ${coverageKey} -> ${modulePath}`);
         continue;
     }
 
     if (!configuredSchemaCoverage) {
-        storeSchemaFailures.push(`missing store schema coverage entry: ${modulePath}`);
+        storeSchemaFailures.push(`missing store schema coverage entry: ${coverageKey} -> ${modulePath}`);
         continue;
     }
 
     expectedSchemaCoverage.actionIds.forEach((actionId) => {
         if (!configuredSchemaCoverage.actions?.[actionId]) {
-            storeSchemaFailures.push(`missing store action coverage entry: ${modulePath} -> ${actionId}`);
+            storeSchemaFailures.push(`missing store action coverage entry: ${coverageKey} -> ${actionId}`);
         }
     });
 
     Object.keys(configuredSchemaCoverage.actions ?? {}).forEach((actionId) => {
         if (!expectedSchemaCoverage.actionIds.includes(actionId)) {
-            storeSchemaFailures.push(`stale store action coverage entry: ${modulePath} -> ${actionId}`);
+            storeSchemaFailures.push(`stale store action coverage entry: ${coverageKey} -> ${actionId}`);
         }
     });
 
     expectedSchemaCoverage.flowEntries.forEach((flowEntry) => {
         if (!configuredSchemaCoverage.flow?.[flowEntry]) {
-            storeSchemaFailures.push(`missing store flow coverage entry: ${modulePath} -> ${flowEntry}`);
+            storeSchemaFailures.push(`missing store flow coverage entry: ${coverageKey} -> ${flowEntry}`);
         }
     });
 
     Object.keys(configuredSchemaCoverage.flow ?? {}).forEach((flowEntry) => {
         if (!expectedSchemaCoverage.flowEntries.includes(flowEntry)) {
-            storeSchemaFailures.push(`stale store flow coverage entry: ${modulePath} -> ${flowEntry}`);
+            storeSchemaFailures.push(`stale store flow coverage entry: ${coverageKey} -> ${flowEntry}`);
         }
     });
 
     expectedSchemaCoverage.failureModes.forEach((failureMode) => {
         if (!configuredSchemaCoverage.failureModes?.[failureMode]) {
-            storeSchemaFailures.push(`missing store failure-mode coverage entry: ${modulePath} -> ${failureMode}`);
+            storeSchemaFailures.push(`missing store failure-mode coverage entry: ${coverageKey} -> ${failureMode}`);
         }
     });
 
     Object.keys(configuredSchemaCoverage.failureModes ?? {}).forEach((failureMode) => {
         if (!expectedSchemaCoverage.failureModes.includes(failureMode)) {
-            storeSchemaFailures.push(`stale store failure-mode coverage entry: ${modulePath} -> ${failureMode}`);
+            storeSchemaFailures.push(`stale store failure-mode coverage entry: ${coverageKey} -> ${failureMode}`);
         }
     });
 }
 
-Object.keys(storeSchemaCoverage).forEach((modulePath) => {
-    if (!discoveredRegisteredStoreModules.has(modulePath)) {
-        storeSchemaFailures.push(`stale store schema coverage entry: ${modulePath}`);
+Object.keys(registeredStoreSchemaCoverage).forEach((coverageKey) => {
+    if (!discoveredRegisteredStoreCoverageKeys.has(coverageKey)) {
+        storeSchemaFailures.push(`stale store schema coverage entry: ${coverageKey}`);
     }
 });
 
@@ -479,5 +574,5 @@ if (failures.length > 0) {
 }
 
 console.info(
-    `[store-state-test-guard] passed (${discoveredRegisteredStoreModules.size} registered store modules, ${explicitlyGovernedStoreLogicModules.length} explicit governed state modules, ${discoveredConsumerModules.size} consumer modules)`,
+    `[store-state-test-guard] passed (${discoveredRegisteredStoreCoverageKeys.size} registered stores, ${explicitlyGovernedStoreLogicModules.length} explicit governed state modules, ${discoveredConsumerModules.size} consumer modules)`,
 );

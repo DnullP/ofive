@@ -10,7 +10,7 @@
  *   bun test src/plugins/vault-fs-sync/vaultFsSyncPlugin.test.ts
  */
 
-import { describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it, mock } from "bun:test";
 import type { VaultFsEventPayload } from "../../api/vaultApi";
 
 mock.module("../../api/vaultApi", () => ({
@@ -30,23 +30,13 @@ mock.module("../../api/vaultApi", () => ({
     isSelfTriggeredVaultConfigEvent: () => false,
 }));
 
-mock.module("../../host/events/appEventBus", () => ({
-    emitPersistedContentUpdatedEvent: () => undefined,
-    subscribeVaultFsBusEvent: () => {
-        return () => {
-            /* noop */
-        };
-    },
-}));
-
-mock.module("../../host/editor/editorContextStore", () => ({
-    getFocusedArticleSnapshot: () => null,
-    reportArticleContentByPath: () => undefined,
-}));
-
 const {
     activateVaultFsSyncPluginRuntime,
 } = await import("./vaultFsSyncPlugin");
+
+afterEach(() => {
+    mock.restore();
+});
 
 type VaultFsSyncPluginDependencies = import("./vaultFsSyncPlugin").VaultFsSyncPluginDependencies;
 

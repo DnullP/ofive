@@ -9,7 +9,7 @@
  *   bun test src/host/window/useWindowEffectsSync.test.ts
  */
 
-import { describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it, mock } from "bun:test";
 import type { FeatureSettings } from "../config/configStore";
 
 const actualThemeStore = await import("../theme/themeStore");
@@ -30,6 +30,10 @@ const {
     detectWindowRuntimeInfo,
     shouldSyncNativeWindowEffects,
 } = await import("./useWindowEffectsSync");
+
+afterEach(() => {
+    mock.restore();
+});
 
 /**
  * @function createFeatureSettings

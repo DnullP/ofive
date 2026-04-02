@@ -13,13 +13,15 @@
  */
 
 import React from "react";
-import { CheckSquare } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import type { ReactNode } from "react";
 import type { IDockviewPanelProps } from "dockview";
 import i18n from "../../i18n";
 import type { CommandDefinition } from "../../host/commands/commandSystem";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerTabComponent } from "../../host/registry/tabComponentRegistry";
+
+const { CheckSquare } = LucideIcons;
 
 const TASK_BOARD_TAB_ID = "task-board-tab";
 const TASK_BOARD_ACTIVITY_ID = "task-board";
