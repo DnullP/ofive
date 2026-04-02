@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import path from "node:path";
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -33,6 +34,10 @@ function getNodeModulesPackageName(id: string): string | null {
 
 function resolveManualChunk(id: string): string | undefined {
   const normalizedId = id.split("?")[0].replace(/\\/g, "/");
+
+  if (normalizedId.includes("/vendor/dockview/") || normalizedId.includes("/vendor/dockview-core/")) {
+    return "dockview-vendor";
+  }
 
   if (normalizedId.includes("/src/plugins/markdown-codemirror/")) {
     return "markdown-editor";
@@ -110,6 +115,18 @@ function resolveManualChunk(id: string): string | undefined {
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
+  resolve: {
+    alias: [
+      {
+        find: /^dockview$/,
+        replacement: path.resolve(__dirname, "vendor/dockview/src/index.ts"),
+      },
+      {
+        find: /^dockview-core$/,
+        replacement: path.resolve(__dirname, "vendor/dockview-core/src/index.ts"),
+      },
+    ],
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

@@ -9,7 +9,7 @@
  *  - ./MockVaultPanel
  */
 
-import React, { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import React, { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { Bot, Compass, FolderOpen, Link2, Orbit, Plus } from "lucide-react";
 import {
     DockviewLayout,
@@ -18,9 +18,15 @@ import {
 import type {
     DockviewLayoutAnimationObservation,
     DockviewLayoutDebugApi,
+    DockviewLayoutHealthSnapshot,
     DockviewLayoutSnapshot,
+    DockviewTabReorderAuditEntry,
     DockviewLayoutTimelineEntry,
 } from "../../src/host/layout/dockviewLayoutDebugContract";
+import {
+    DOCKVIEW_LAYOUT_RUNTIME_EVENT,
+    type DockviewLayoutRuntimeEvent,
+} from "../../src/host/layout/dockviewLayoutRuntime";
 import { buildGlassRuntimeStyle } from "../../src/host/layout/glassRuntimeStyle";
 import { CodeMirrorEditorTab } from "../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
 import { KnowledgeGraphTab } from "../../src/plugins/knowledge-graph/tab/KnowledgeGraphTab";
@@ -81,6 +87,12 @@ interface MockDockviewWindowApi {
     getTimelineEntries: () => DockviewLayoutTimelineEntry[];
     clearTimelineEntries: () => void;
     getLayoutSnapshot: () => DockviewLayoutSnapshot;
+    getHealthSnapshot: () => DockviewLayoutHealthSnapshot | null;
+    recoverInteractionState: () => void;
+    getRuntimeEvents: () => DockviewLayoutRuntimeEvent[];
+    clearRuntimeEvents: () => void;
+    getTabReorderAuditEntries: () => DockviewTabReorderAuditEntry[];
+    clearTabReorderAuditEntries: () => void;
 }
 
 declare global {
@@ -474,6 +486,8 @@ export function MockApp(): ReactNode {
     const [glassInactiveSurfaceOpacity, setGlassInactiveSurfaceOpacity] = useState<number>(() => resolveInitialNumberFlag("inactiveSurface", 0.12));
     const [glassBlurRadius, setGlassBlurRadius] = useState<number>(() => resolveInitialNumberFlag("blur", 16));
     const [isSplitReplayRunning, setIsSplitReplayRunning] = useState(false);
+    const [healthSnapshot, setHealthSnapshot] = useState<DockviewLayoutHealthSnapshot | null>(null);
+    const [runtimeEvents, setRuntimeEvents] = useState<DockviewLayoutRuntimeEvent[]>([]);
 
     useConfigSync(mockVaultPath, true);
     ensureMockComponentsRegistered();
@@ -511,10 +525,55 @@ export function MockApp(): ReactNode {
             getLayoutSnapshot: () => {
                 return dockviewDebugApiRef.current?.getLayoutSnapshot() ?? { groups: [] };
             },
+            getHealthSnapshot: () => {
+                return dockviewDebugApiRef.current?.getHealthSnapshot() ?? null;
+            },
+            recoverInteractionState: () => {
+                dockviewDebugApiRef.current?.recoverInteractionState();
+            },
+            getRuntimeEvents: () => {
+                return dockviewDebugApiRef.current?.getRuntimeEvents() ?? [];
+            },
+            clearRuntimeEvents: () => {
+                dockviewDebugApiRef.current?.clearRuntimeEvents();
+            },
+            getTabReorderAuditEntries: () => {
+                return dockviewDebugApiRef.current?.getTabReorderAuditEntries() ?? [];
+            },
+            clearTabReorderAuditEntries: () => {
+                dockviewDebugApiRef.current?.clearTabReorderAuditEntries();
+            },
         };
 
         return () => {
             delete window.__OFIVE_MOCK_DOCKVIEW__;
+        };
+    }, []);
+
+    useEffect(() => {
+        let frameId: number | null = null;
+
+        const syncDebugState = (): void => {
+            if (frameId !== null) {
+                window.cancelAnimationFrame(frameId);
+            }
+
+            frameId = window.requestAnimationFrame(() => {
+                frameId = null;
+                startTransition(() => {
+                    setHealthSnapshot(dockviewDebugApiRef.current?.getHealthSnapshot() ?? null);
+                    setRuntimeEvents(dockviewDebugApiRef.current?.getRuntimeEvents() ?? []);
+                });
+            });
+        };
+
+        syncDebugState();
+        window.addEventListener(DOCKVIEW_LAYOUT_RUNTIME_EVENT, syncDebugState);
+        return () => {
+            if (frameId !== null) {
+                window.cancelAnimationFrame(frameId);
+            }
+            window.removeEventListener(DOCKVIEW_LAYOUT_RUNTIME_EVENT, syncDebugState);
         };
     }, []);
 
@@ -697,6 +756,139 @@ export function MockApp(): ReactNode {
                         </button>
                         <div style={{ color: "rgba(245, 247, 251, 0.72)", lineHeight: 1.5 }}>
                             使用这组按钮可以稳定复现 Dockview split 创建与回收动画，不必依赖拖拽操作。
+                        </div>
+                    </div>
+                    <div
+                        style={{
+                            display: "grid",
+                            gap: 8,
+                            padding: 10,
+                            borderRadius: 12,
+                            background: "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
+                            border: "1px solid rgba(255,255,255,0.12)",
+                        }}
+                    >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                            <strong style={{ fontSize: 12 }}>Dockview Health</strong>
+                            <span
+                                style={{
+                                    padding: "3px 8px",
+                                    borderRadius: 999,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    background: healthSnapshot && healthSnapshot.issues.length > 0
+                                        ? "rgba(255, 153, 102, 0.22)"
+                                        : "rgba(116, 208, 170, 0.22)",
+                                    color: healthSnapshot && healthSnapshot.issues.length > 0
+                                        ? "#ffd4c3"
+                                        : "#d5ffe9",
+                                }}
+                            >
+                                {healthSnapshot && healthSnapshot.issues.length > 0 ? "Issues" : "Healthy"}
+                            </span>
+                        </div>
+                        <div
+                            style={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                                gap: 6,
+                                fontSize: 11,
+                            }}
+                        >
+                            {[
+                                ["Groups", String(healthSnapshot?.groupCount ?? 0)],
+                                ["Tabs", String(healthSnapshot?.tabCount ?? 0)],
+                                ["Content previews", String(healthSnapshot?.contentPreviewCount ?? 0)],
+                                ["Drag previews", String(healthSnapshot?.dragPreviewCount ?? 0)],
+                            ].map(([label, value]) => (
+                                <div
+                                    key={label}
+                                    style={{
+                                        padding: 8,
+                                        borderRadius: 10,
+                                        background: "rgba(8, 12, 18, 0.24)",
+                                        border: "1px solid rgba(255,255,255,0.08)",
+                                    }}
+                                >
+                                    <div style={{ color: "rgba(245, 247, 251, 0.62)", marginBottom: 4 }}>{label}</div>
+                                    <div style={{ fontSize: 14, fontWeight: 700 }}>{value}</div>
+                                </div>
+                            ))}
+                        </div>
+                        <div style={{ display: "grid", gap: 6 }}>
+                            {(healthSnapshot?.issues.length ?? 0) > 0 ? healthSnapshot?.issues.map((issue) => (
+                                <div
+                                    key={issue.code}
+                                    style={{
+                                        padding: 8,
+                                        borderRadius: 10,
+                                        background: issue.severity === "error"
+                                            ? "rgba(255, 113, 113, 0.12)"
+                                            : "rgba(255, 196, 120, 0.12)",
+                                        border: "1px solid rgba(255,255,255,0.08)",
+                                        fontSize: 11,
+                                        lineHeight: 1.5,
+                                    }}
+                                >
+                                    <div style={{ fontWeight: 700 }}>{issue.code}</div>
+                                    <div>{issue.message}</div>
+                                </div>
+                            )) : (
+                                <div style={{ fontSize: 11, color: "rgba(245, 247, 251, 0.66)", lineHeight: 1.5 }}>
+                                    当前未检测到 Dockview 拖拽残留或布局健康问题。
+                                </div>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                dockviewDebugApiRef.current?.recoverInteractionState();
+                                setHealthSnapshot(dockviewDebugApiRef.current?.getHealthSnapshot() ?? null);
+                                setRuntimeEvents(dockviewDebugApiRef.current?.getRuntimeEvents() ?? []);
+                            }}
+                        >
+                            Recover Interaction State
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                dockviewDebugApiRef.current?.clearRuntimeEvents();
+                                setRuntimeEvents([]);
+                            }}
+                        >
+                            Clear Runtime Events
+                        </button>
+                        <div style={{ display: "grid", gap: 6 }}>
+                            <strong style={{ fontSize: 12 }}>Runtime Events</strong>
+                            <div style={{ fontSize: 11, color: "rgba(245, 247, 251, 0.66)" }}>
+                                {runtimeEvents.length} events buffered
+                            </div>
+                            <div
+                                style={{
+                                    display: "grid",
+                                    gap: 6,
+                                    maxHeight: 220,
+                                    overflow: "auto",
+                                    paddingRight: 4,
+                                }}
+                            >
+                                {runtimeEvents.slice(-8).reverse().map((event) => (
+                                    <div
+                                        key={`${event.sequence}-${event.type}`}
+                                        style={{
+                                            padding: 8,
+                                            borderRadius: 10,
+                                            background: "rgba(8, 12, 18, 0.24)",
+                                            border: "1px solid rgba(255,255,255,0.08)",
+                                            fontSize: 11,
+                                            lineHeight: 1.5,
+                                        }}
+                                    >
+                                        <div style={{ fontWeight: 700 }}>{event.type}</div>
+                                        <div style={{ color: "rgba(245, 247, 251, 0.62)" }}>#{event.sequence}</div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>

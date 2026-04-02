@@ -77,7 +77,6 @@
 
 /* 设置页侧栏列表：滚动承载所有分区项。 */
 .settings-tab-sidebar-list {
-    position: relative;
     min-height: 0;
     overflow: auto;
     display: flex;
@@ -101,18 +100,30 @@
         transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
-/* 设置页分类按钮底部分隔线：静态时只保留一根开放横线。 */
+/* 设置页分类按钮激活横线：默认隐藏，选中时淡入。 */
+.settings-tab-sidebar-item::before,
 .settings-tab-sidebar-item::after {
     content: "";
     position: absolute;
-    left: 18px;
-    right: 22px;
-    bottom: 0;
+    left: 8px;
+    right: 8px;
     height: 1px;
-    background: color-mix(in srgb, var(--content-material-border) 86%, transparent);
+    background: color-mix(in srgb, var(--accent-primary) 78%, var(--content-material-border));
+    opacity: 0;
     transition:
-        background-color var(--motion-duration-fast) var(--motion-ease-standard),
-        opacity var(--motion-duration-fast) var(--motion-ease-standard);
+        opacity 160ms var(--motion-ease-standard),
+        background-color var(--motion-duration-fast) var(--motion-ease-standard);
+    pointer-events: none;
+}
+
+/* 设置页分类按钮上横线：仅在选中态出现。 */
+.settings-tab-sidebar-item::before {
+    top: 0;
+}
+
+/* 设置页分类按钮下横线：选中时作为强调边线覆盖默认分隔线。 */
+.settings-tab-sidebar-item::after {
+    bottom: 0;
 }
 
 /* 设置页分类内容：保证文本在横线之上并维持竖向排布。 */
@@ -122,6 +133,22 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+}
+
+/* 设置页分类按钮基础分隔线：未选中时保留单根开放横线。 */
+.settings-tab-sidebar-item-body::after {
+    content: "";
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: -14px;
+    height: 1px;
+    background: color-mix(in srgb, var(--content-material-border) 86%, transparent);
+    opacity: 1;
+    transition:
+        opacity 160ms var(--motion-ease-standard),
+        background-color var(--motion-duration-fast) var(--motion-ease-standard);
+    pointer-events: none;
 }
 
 /* 设置页分类标题：强调当前分区名称。 */
@@ -150,7 +177,7 @@
 }
 
 /* 设置页分类按钮悬停态装饰线：略微提亮，提示可点击。 */
-.settings-tab-sidebar-item:hover::after {
+.settings-tab-sidebar-item:hover .settings-tab-sidebar-item-body::after {
     background: color-mix(in srgb, var(--accent-primary) 16%, var(--content-material-border));
 }
 
@@ -159,9 +186,15 @@
     color: var(--accent-primary);
 }
 
-/* 设置页分类按钮隐藏分隔线：让活动边线独占当前上下边界。 */
-.settings-tab-sidebar-item--separator-hidden::after {
+/* 设置页分类按钮激活态：隐藏默认底部分隔线，改用上下强调线。 */
+.settings-tab-sidebar-item.active .settings-tab-sidebar-item-body::after {
     opacity: 0;
+}
+
+/* 设置页分类按钮激活态：上下两根线淡入显示。 */
+.settings-tab-sidebar-item.active::before,
+.settings-tab-sidebar-item.active::after {
+    opacity: 1;
 }
 
 /* 设置页分类标题激活态：通过颜色和字重突出当前选区。 */
@@ -173,33 +206,6 @@
 /* 设置页分类说明激活态：保留次级信息，但与主色保持关联。 */
 .settings-tab-sidebar-item.active .settings-tab-sidebar-item-desc {
     color: color-mix(in srgb, var(--accent-primary) 76%, var(--text-secondary));
-}
-
-/* 设置页活动边线：覆盖在静态分隔线上方，承载移动感动画。 */
-.settings-tab-sidebar-active-line {
-    position: absolute;
-    left: var(--settings-sidebar-line-left, 8px);
-    right: var(--settings-sidebar-line-right, 8px);
-    height: 1px;
-    background: color-mix(in srgb, var(--accent-primary) 76%, var(--content-material-border));
-    pointer-events: none;
-    transform: translateY(-0.5px);
-    transition:
-        left 90ms var(--motion-ease-standard),
-        right 90ms var(--motion-ease-standard),
-        opacity 90ms var(--motion-ease-standard);
-    z-index: 2;
-}
-
-/* 设置页旧活动边线：在收缩阶段略微减弱亮度。 */
-.settings-tab-sidebar-active-line--old {
-    background: color-mix(in srgb, var(--accent-primary) 64%, var(--content-material-border));
-}
-
-/* 设置页新活动边线：在生长阶段保持更强强调色。 */
-.settings-tab-sidebar-active-line--new,
-.settings-tab-sidebar-active-line--settled {
-    background: color-mix(in srgb, var(--accent-primary) 82%, var(--content-material-border));
 }
 
 /* 设置页右侧内容区容器 */

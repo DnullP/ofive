@@ -51,7 +51,7 @@
     "@tauri-apps/plugin-opener": "^2",
     "@xyflow/react": "^12.10.1",
     "codemirror": "^6.0.2",
-    "dockview": "^4.9.0",
+    "dockview": "file:./vendor/dockview",
     "highlight.js": "^11.11.1",
     "i18next": "^25.8.13",
     "katex": "^0.16.33",
@@ -63,7 +63,8 @@
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "web-vitals": "^5.2.0",
-    "yaml": "^2.8.2"
+    "yaml": "^2.8.2",
+    "dockview-core": "file:./vendor/dockview-core"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

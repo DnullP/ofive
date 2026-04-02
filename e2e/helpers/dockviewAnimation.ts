@@ -18,11 +18,13 @@ import type { Page } from "@playwright/test";
 import type {
     DockviewLayoutAnimationObservation,
     DockviewLayoutSnapshot,
+    DockviewTabReorderAuditEntry,
     DockviewLayoutTimelineEntry,
 } from "../../src/host/layout/dockviewLayoutDebugContract";
 export type {
     DockviewLayoutAnimationObservation,
     DockviewLayoutSnapshot,
+    DockviewTabReorderAuditEntry,
     DockviewLayoutTimelineEntry,
 } from "../../src/host/layout/dockviewLayoutDebugContract";
 
@@ -126,6 +128,31 @@ export async function getDockviewTimelineEntries(page: Page): Promise<DockviewLa
 export async function getDockviewLayoutSnapshot(page: Page): Promise<DockviewLayoutSnapshot> {
     return page.evaluate(() => {
         return window.__OFIVE_MOCK_DOCKVIEW__?.getLayoutSnapshot() ?? { groups: [] };
+    });
+}
+
+/**
+ * @function clearDockviewTabReorderAuditEntries
+ * @description 清空当前页面上的 tab 重排审计记录。
+ * @param page Playwright 页面对象。
+ */
+export async function clearDockviewTabReorderAuditEntries(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        window.__OFIVE_MOCK_DOCKVIEW__?.clearTabReorderAuditEntries();
+    });
+}
+
+/**
+ * @function getDockviewTabReorderAuditEntries
+ * @description 读取当前页面上的 tab 重排审计记录。
+ * @param page Playwright 页面对象。
+ * @returns tab 重排审计列表。
+ */
+export async function getDockviewTabReorderAuditEntries(
+    page: Page,
+): Promise<DockviewTabReorderAuditEntry[]> {
+    return page.evaluate(() => {
+        return window.__OFIVE_MOCK_DOCKVIEW__?.getTabReorderAuditEntries() ?? [];
     });
 }
 

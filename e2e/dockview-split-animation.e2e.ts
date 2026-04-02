@@ -14,9 +14,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
     activateMockTab,
+    clearDockviewTabReorderAuditEntries,
     getDockviewAnimationObservations,
     getDockviewTimelineEntries,
     getDockviewLayoutSnapshot,
+    getDockviewTabReorderAuditEntries,
     openMockSplitTab,
     runDockviewAnimationAudit,
     waitForDockviewAnimationsToSettle,
@@ -60,6 +62,16 @@ async function openMockGuideTabFromFileTree(page: Page): Promise<void> {
     await page.locator(".tree-item[data-tree-path='test-resources/notes']").click();
     await page.locator(".tree-item[data-tree-path='test-resources/notes/guide.md']").click();
     await page.locator(".dv-tab", { hasText: "guide.md" }).waitFor({ state: "visible" });
+}
+
+/**
+ * @function openMockLatexTabFromFileTree
+ * @description 从 mock 文件树打开 latex-test.md，构造主区同组多 tab 场景。
+ * @param page Playwright 页面对象。
+ */
+async function openMockLatexTabFromFileTree(page: Page): Promise<void> {
+    await page.locator(".tree-item[data-tree-path='test-resources/notes/latex-test.md']").click();
+    await page.locator(".dv-tab", { hasText: "latex-test.md" }).waitFor({ state: "visible" });
 }
 
 /**
@@ -1527,5 +1539,153 @@ test.describe("Dockview split animation audit", () => {
         const postClickPlayCount = countPlayedDockviewAnimationObservations(postClickObservations);
         expect(preClickPlayCount).toBeGreaterThan(0);
         expect(postClickPlayCount).toBe(preClickPlayCount);
+    });
+
+    test(`manual mouse drag audit: same-group tab drag should shift sibling tab before drop ${MOUSE_DRAG_TAG}`, async ({ page }) => {
+        await waitForDockviewReady(page);
+        await openMockGuideTabFromFileTree(page);
+        await openMockLatexTabFromFileTree(page);
+        await waitForDockviewAnimationsToSettle(page);
+
+        await page.evaluate(() => {
+            window.__OFIVE_E2E_DOCKVIEW_TRACE__ = [];
+
+            const host = document.querySelector(".main-dockview-host");
+            if (!host || window.__OFIVE_E2E_DOCKVIEW_TRACE_BOUND__) {
+                return;
+            }
+
+            const pushTrace = (type: string, event: DragEvent): void => {
+                const target = event.target instanceof Element
+                    ? event.target.closest(".dv-tab, .dv-tabs-container, .dv-groupview")
+                    : null;
+
+                window.__OFIVE_E2E_DOCKVIEW_TRACE__.push({
+                    type,
+                    targetText: target ? (target.textContent ?? "").trim() : null,
+                    targetClassName: target ? target.className : null,
+                });
+                window.__OFIVE_E2E_DOCKVIEW_TRACE__ = window.__OFIVE_E2E_DOCKVIEW_TRACE__.slice(-120);
+            };
+
+            host.addEventListener("dragstart", (event) => pushTrace("dragstart", event), true);
+            host.addEventListener("dragover", (event) => pushTrace("dragover", event), true);
+            host.addEventListener("drop", (event) => pushTrace("drop", event), true);
+            host.addEventListener("dragend", (event) => pushTrace("dragend", event), true);
+            window.__OFIVE_E2E_DOCKVIEW_TRACE_BOUND__ = true;
+        });
+
+        const sourceTab = page.locator(".dv-tab", { hasText: "guide.md" }).first();
+        const targetTab = page.locator(".dv-tab", { hasText: "latex-test.md" }).first();
+        const sourceBox = await sourceTab.boundingBox();
+        const targetBox = await targetTab.boundingBox();
+        if (!sourceBox || !targetBox) {
+            throw new Error("manual mouse drag audit: same-group live reorder probe missing bounding boxes");
+        }
+
+        const sourceX = sourceBox.x + (sourceBox.width / 2);
+        const sourceY = sourceBox.y + (sourceBox.height / 2);
+        const targetX = targetBox.x + (targetBox.width * 0.84);
+        const targetY = targetBox.y + (targetBox.height * 0.5);
+
+        await page.mouse.move(sourceX, sourceY);
+        await page.waitForTimeout(16);
+        await page.mouse.down();
+        await page.mouse.move(sourceX + 8, sourceY + 4, { steps: 6 });
+        await page.waitForTimeout(24);
+        await page.mouse.move(sourceX + ((targetX - sourceX) * 0.45), sourceY, { steps: 8 });
+        await page.waitForTimeout(24);
+        await page.mouse.move(targetX, targetY, { steps: 14 });
+        await page.waitForTimeout(120);
+
+        const dragProbe = await page.evaluate(() => {
+            const probeTab = Array.from(document.querySelectorAll<HTMLElement>(".dv-tab")).find((tab) => {
+                return (tab.textContent ?? "").trim() === "latex-test.md";
+            });
+            const sourceTabElement = Array.from(document.querySelectorAll<HTMLElement>(".dv-tab")).find((tab) => {
+                return (tab.textContent ?? "").trim() === "guide.md";
+            });
+            const insertionContainer = document.querySelector<HTMLElement>(".dv-tabs-container.dv-tabs-container--insertion-preview");
+
+            return {
+                trace: window.__OFIVE_E2E_DOCKVIEW_TRACE__ ?? [],
+                targetTransform: probeTab ? window.getComputedStyle(probeTab).transform : null,
+                targetShift: probeTab ? probeTab.style.getPropertyValue("--ofive-dockview-tab-shift-x") : null,
+                sourceClassName: sourceTabElement?.className ?? null,
+                insertionMarkerLeft: insertionContainer?.style.getPropertyValue("--ofive-dockview-insert-left") ?? null,
+                insertionMarkerClassName: insertionContainer?.className ?? null,
+            };
+        });
+
+        await page.mouse.up();
+
+        expect(dragProbe.trace.some((entry: { type: string; }) => entry.type === "dragstart")).toBe(true);
+        expect(dragProbe.trace.some((entry: { type: string; targetText: string | null; }) => {
+            return entry.type === "dragover" && entry.targetText?.includes("latex-test.md");
+        })).toBe(true);
+        expect(dragProbe.sourceClassName).toContain("dv-tab--drag-source");
+        expect(dragProbe.targetShift).toBeTruthy();
+        expect(dragProbe.insertionMarkerClassName).toContain("dv-tabs-container--insertion-preview");
+        expect(dragProbe.insertionMarkerLeft).toBeTruthy();
+        expect(dragProbe.targetTransform).not.toBe("matrix(1, 0, 0, 1, 0, 0)");
+    });
+
+    test(`manual mouse drag audit: strict reorder telemetry should distinguish preview-only same-group drag ${MOUSE_DRAG_TAG}`, async ({ page }) => {
+        await waitForDockviewReady(page);
+        await openMockGuideTabFromFileTree(page);
+        await openMockLatexTabFromFileTree(page);
+        await waitForDockviewAnimationsToSettle(page);
+        await clearDockviewTabReorderAuditEntries(page);
+
+        const sourceTab = page.locator(".dv-tab", { hasText: "guide.md" }).first();
+        const targetTab = page.locator(".dv-tab", { hasText: "latex-test.md" }).first();
+
+        const sourceBox = await sourceTab.boundingBox();
+        const targetBox = await targetTab.boundingBox();
+        if (!sourceBox || !targetBox) {
+            throw new Error("strict reorder telemetry same-group drag is missing tab bounding boxes");
+        }
+
+        const sourceX = sourceBox.x + (sourceBox.width / 2);
+        const sourceY = sourceBox.y + (sourceBox.height / 2);
+        const targetX = targetBox.x + (targetBox.width * 0.84);
+        const targetY = targetBox.y + (targetBox.height * 0.5);
+
+        await page.mouse.move(sourceX, sourceY);
+        await page.waitForTimeout(16);
+        await page.mouse.down();
+        await page.mouse.move(sourceX + 8, sourceY + 4, { steps: 6 });
+        await page.waitForTimeout(24);
+        await page.mouse.move(sourceX + ((targetX - sourceX) * 0.45), sourceY, { steps: 8 });
+        await page.waitForTimeout(24);
+        await page.mouse.move(targetX, targetY, { steps: 14 });
+        await page.waitForTimeout(120);
+        await page.mouse.up();
+        await page.waitForTimeout(240);
+
+        const auditEntries = await getDockviewTabReorderAuditEntries(page);
+        const startEntry = auditEntries.find((entry) => entry.type === "drag-session-start") ?? null;
+        const previewEntries = auditEntries.filter((entry) => entry.type === "preview-updated");
+        const domOrderEntry = auditEntries.find((entry) => entry.type === "dom-order-changed") ?? null;
+        const dropEntry = auditEntries.find((entry) => entry.type === "drop-committed") ?? null;
+        const endEntry = auditEntries.find((entry) => entry.type === "drag-session-end") ?? null;
+        const terminalEntry = auditEntries.at(-1) ?? null;
+
+        expect(startEntry).not.toBeNull();
+        expect(previewEntries.length).toBeGreaterThan(0);
+        expect(endEntry).not.toBeNull();
+
+        expect(previewEntries.some((entry) => {
+            return entry.insertionLeft !== null && entry.shiftedTabLabels.includes("latex-test.md");
+        })).toBe(true);
+
+        expect(domOrderEntry).toBeNull();
+        expect(dropEntry).toBeNull();
+        expect(terminalEntry?.tabStrips.some((strip) => {
+            return strip.tabLabels.join("|") === "首页|guide.md|latex-test.md";
+        })).toBe(true);
+
+        const distinctSessionIds = new Set(auditEntries.map((entry) => entry.sessionId).filter((value) => value !== null));
+        expect(distinctSessionIds.size).toBe(1);
     });
 });

@@ -17,10 +17,13 @@
  *   - DockviewLayoutAnimationObservation
  *   - DockviewLayoutTimelineEntry
  *   - DockviewLayoutSnapshot
+ *   - DockviewTabStripSnapshot
+ *   - DockviewTabReorderAuditEntry
  *   - DockviewLayoutDebugApi
  */
 
 import type { DockviewGroupRectSnapshot } from "./dockviewLayoutAnimationState";
+import type { DockviewLayoutRuntimeEvent } from "./dockviewLayoutRuntime";
 
 /** Dockview 动画观测阶段。 */
 export type DockviewLayoutAnimationObservationPhase = "capture" | "play";
@@ -41,7 +44,11 @@ export type DockviewLayoutTimelineEntryType =
     | "pointerdown-tab"
     | "pointerdrag-tab"
     | "dragstart-tab"
+    | "split-trigger-evaluated"
     | "drop-host"
+    | "drop-result"
+    | "health-alert"
+    | "health-recovery"
     | "remove-panel"
     | "dragend-tab"
     | "pointerup-tab"
@@ -49,6 +56,15 @@ export type DockviewLayoutTimelineEntryType =
     | "active-panel-change"
     | "wait-layout-ready"
     | "play-attempt";
+
+/** Dockview tab 重排审计事件类型。 */
+export type DockviewTabReorderAuditEntryType =
+    | "drag-session-start"
+    | "preview-updated"
+    | "preview-cleared"
+    | "dom-order-changed"
+    | "drop-committed"
+    | "drag-session-end";
 
 /**
  * @interface DockviewLayoutAnimationObservation
@@ -101,6 +117,69 @@ export interface DockviewLayoutSnapshot {
 }
 
 /**
+ * @interface DockviewTabStripSnapshot
+ * @description 当前 Dockview 中一个 tab strip 的顺序快照。
+ */
+export interface DockviewTabStripSnapshot {
+    stripIndex: number;
+    groupIndex: number;
+    tabLabels: string[];
+}
+
+/**
+ * @interface DockviewTabReorderAuditEntry
+ * @description 一次 tab 重排交互的审计记录。
+ */
+export interface DockviewTabReorderAuditEntry {
+    sequence: number;
+    sessionId: number | null;
+    type: DockviewTabReorderAuditEntryType;
+    timestamp: number;
+    sourceLabel: string | null;
+    sourceGroupIndex: number | null;
+    sourceIndex: number | null;
+    targetGroupIndex: number | null;
+    targetIndex: number | null;
+    insertionLeft: number | null;
+    shiftedTabLabels: string[];
+    tabStrips: DockviewTabStripSnapshot[];
+    details?: Record<string, string | number | boolean | null>;
+}
+
+/** Dockview 布局健康问题严重级别。 */
+export type DockviewLayoutHealthIssueSeverity = "info" | "warn" | "error";
+
+/**
+ * @interface DockviewLayoutHealthIssue
+ * @description 一条 Dockview 运行时健康问题记录。
+ */
+export interface DockviewLayoutHealthIssue {
+    code: string;
+    severity: DockviewLayoutHealthIssueSeverity;
+    message: string;
+    details?: Record<string, string | number | boolean | null>;
+}
+
+/**
+ * @interface DockviewLayoutHealthSnapshot
+ * @description 当前 Dockview 布局与拖拽交互状态的健康快照。
+ */
+export interface DockviewLayoutHealthSnapshot {
+    timestamp: number;
+    activeTabId: string | null;
+    groupCount: number;
+    tabCount: number;
+    dragInProgress: boolean;
+    dropCommitted: boolean;
+    pendingPointerDrag: boolean;
+    contentPreviewCount: number;
+    dragPreviewCount: number;
+    dragSourceTabCount: number;
+    dragSourceGroupCount: number;
+    issues: DockviewLayoutHealthIssue[];
+}
+
+/**
  * @interface DockviewLayoutDebugApi
  * @description 暴露给 mock 页面和自动化测试的 Dockview 调试契约。
  */
@@ -117,4 +196,10 @@ export interface DockviewLayoutDebugApi {
     getTimelineEntries: () => DockviewLayoutTimelineEntry[];
     clearTimelineEntries: () => void;
     getLayoutSnapshot: () => DockviewLayoutSnapshot;
+    getHealthSnapshot: () => DockviewLayoutHealthSnapshot;
+    recoverInteractionState: () => void;
+    getRuntimeEvents: () => DockviewLayoutRuntimeEvent[];
+    clearRuntimeEvents: () => void;
+    getTabReorderAuditEntries: () => DockviewTabReorderAuditEntry[];
+    clearTabReorderAuditEntries: () => void;
 }
