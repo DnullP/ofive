@@ -40,7 +40,6 @@
 .main-dockview {
   width: 100%;
   height: 100%;
-  box-sizing: border-box;
 }
 
 /* 主编辑区挂载容器：提供 DOM 观察入口用于标记 tab 条拖拽区。 */
@@ -50,98 +49,6 @@
   height: 100%;
   overflow: hidden;
   background: transparent;
-}
-
-/* Dockview 根容器：为每个 group 预留内边距，让工作区从贴边块状感过渡到分区式卡面。 */
-.main-dockview-host .dv-dockview {
-  padding: var(--space-2);
-  box-sizing: border-box;
-}
-
-/* Dockview group 外层容器：移除默认硬边框和浮层阴影，交给内部卡面表达层次。 */
-.main-dockview-host .dv-resize-container {
-  border: none;
-  box-shadow: none;
-  background: transparent;
-}
-
-/* Dockview group 视图：通过 margin 形成真实间距，并改成圆角分区工作面。 */
-.main-dockview-host .dv-resize-container > .dv-groupview {
-  margin: var(--space-2);
-  height: calc(100% - (var(--space-2) * 2));
-  border-radius: calc(var(--radius-lg) + 2px);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--shell-surface-raised) 66%, transparent), color-mix(in srgb, var(--surface-base) 92%, transparent));
-  border: 1px solid color-mix(in srgb, var(--chrome-border-soft) 92%, transparent);
-  box-shadow:
-    0 10px 28px color-mix(in srgb, var(--bg-primary) 12%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--chrome-inline-highlight) 88%, transparent);
-}
-
-/* Dockview 活动 group：微弱提亮边界，提示当前聚焦工作区。 */
-.main-dockview-host .dv-resize-container > .dv-groupview.dv-active-group {
-  border-color: color-mix(in srgb, var(--accent-primary) 24%, var(--chrome-border-soft));
-  box-shadow:
-    0 14px 34px color-mix(in srgb, var(--accent-primary-soft) 18%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--chrome-inline-highlight) 92%, transparent);
-}
-
-/* Dockview tab 条：从平直条带调整为内嵌圆角容器，减少 VS Code 式硬分隔感。 */
-.main-dockview-host .dv-groupview > .dv-tabs-and-actions-container {
-  margin: var(--space-2) var(--space-2) 0;
-  padding: var(--space-1);
-  gap: var(--space-1);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--chrome-tabstrip-bg) 88%, transparent);
-  border: 1px solid color-mix(in srgb, var(--chrome-border-soft) 84%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chrome-inline-highlight) 70%, transparent);
-}
-
-/* Dockview 标签容器：允许 tab 之间保留轻度呼吸感。 */
-.main-dockview-host .dv-groupview > .dv-tabs-and-actions-container .dv-tabs-container {
-  position: relative;
-  gap: var(--space-1);
-}
-
-/* Tab strip 目标占位：只保留半透明 tab 预位，不再显示细线插入缝。 */
-.main-dockview-host .dv-groupview > .dv-tabs-and-actions-container .dv-tabs-container.dv-tabs-container--insertion-preview::after {
-  content: attr(data-ofive-dockview-preview-label);
-  position: absolute;
-  top: 50%;
-  left: var(--ofive-dockview-insert-left, 0px);
-  width: var(--ofive-dockview-preview-width, 88px);
-  height: var(--ofive-dockview-preview-height, 30px);
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding-inline: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--accent-primary) 28%, transparent);
-  background: color-mix(in srgb, var(--chrome-tab-active-bg) 56%, transparent);
-  color: color-mix(in srgb, var(--text-primary) 72%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--chrome-inline-highlight) 58%, transparent),
-    0 8px 18px color-mix(in srgb, var(--accent-primary-soft) 12%, transparent);
-  opacity: 0.72;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* Dockview 内容区：独立成圆角内容面，和 tab 条之间保留层级落差。 */
-.main-dockview-host .dv-groupview > .dv-content-container {
-  margin: var(--space-2);
-  margin-top: var(--space-2);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: color-mix(in srgb, var(--surface-base) 94%, transparent);
-  border: 1px solid color-mix(in srgb, var(--chrome-border-soft) 76%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--chrome-inline-highlight) 56%, transparent),
-    0 2px 12px color-mix(in srgb, var(--bg-primary) 7%, transparent);
 }
 
 /* 主区工作区文件拖拽预览：工作区文件拖拽统一由宿主层接管，并复用 Dockview 原生 drop anchor 的视觉变量。 */
@@ -252,22 +159,11 @@
     background-color var(--motion-duration-fast) var(--motion-ease-standard),
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
     box-shadow var(--motion-duration-default) var(--motion-ease-standard),
-    color var(--motion-duration-fast) var(--motion-ease-standard),
-    transform var(--motion-duration-fast) var(--motion-ease-standard),
-    opacity var(--motion-duration-fast) var(--motion-ease-standard);
+    color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
-.main-dockview-host .dv-tab {
-  --ofive-dockview-tab-shift-x: 0px;
-  --ofive-dockview-tab-scale: 1;
-  border-radius: var(--radius-pill);
-  border: 1px solid transparent;
-  margin: 0;
-  min-height: 30px;
-  padding-inline: 12px;
-  transform: translate3d(var(--ofive-dockview-tab-shift-x), 0, 0) scale(var(--ofive-dockview-tab-scale));
-  transform-origin: center center;
-  will-change: transform, opacity;
+.dv-tab {
+  border-radius: var(--radius-sm);
 }
 
 /* Dockview tab 焦点态：替换浏览器默认 outline，避免被 tab strip 裁切后只剩顶部虚线。 */
@@ -284,142 +180,6 @@
 
 .dv-tab:hover {
   background: var(--surface-hover-accent);
-  border-color: color-mix(in srgb, var(--accent-primary) 16%, transparent);
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent-primary-soft) 16%, transparent);
-}
-
-/* Dockview 活动 tab：提升卡片感，让当前 tab 更像被拾起的片段。 */
-.main-dockview-host .dv-groupview.dv-active-group > .dv-tabs-and-actions-container .dv-tabs-container > .dv-tab.dv-active-tab,
-.main-dockview-host .dv-groupview.dv-inactive-group > .dv-tabs-and-actions-container .dv-tabs-container > .dv-tab.dv-active-tab {
-  border-color: color-mix(in srgb, var(--chrome-border-strong) 82%, transparent);
-  box-shadow:
-    0 8px 18px color-mix(in srgb, var(--bg-primary) 8%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--chrome-inline-highlight) 68%, transparent);
-}
-
-/* Dockview 非激活 tab：保留层次，但压低体积感，避免 tab 条显得拥挤。 */
-.main-dockview-host .dv-groupview > .dv-tabs-and-actions-container .dv-tabs-container > .dv-tab.dv-inactive-tab {
-  opacity: 0.92;
-}
-
-/* Dockview tab 拖拽来源：原位置完全隐去，只保留跟手 drag image 和目标占位。 */
-.main-dockview-host .dv-tab.dv-tab-dragging,
-.main-dockview-host .dv-tab.dv-tab--drag-source {
-  opacity: 0;
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-  color: transparent;
-}
-
-/* Dockview 宿主拖拽态：拖拽中允许 group 和 tab 获得更顺滑的重排过渡。 */
-.main-dockview-host.dockview-tab-dragging .dv-groupview,
-.main-dockview-host.dockview-tab-dragging .dv-tab {
-  transition:
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    background-color var(--motion-duration-fast) var(--motion-ease-standard),
-    box-shadow var(--motion-duration-fast) var(--motion-ease-standard),
-    border-color var(--motion-duration-fast) var(--motion-ease-standard),
-    color var(--motion-duration-fast) var(--motion-ease-standard);
-}
-
-/* Dockview 自定义拖拽预览：让浏览器原生 drag image 看起来像被拾起的软卡片。 */
-.dockview-tab-drag-preview {
-  border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--chrome-border-strong) 86%, transparent);
-  background: color-mix(in srgb, var(--chrome-tab-active-bg) 96%, transparent);
-  box-shadow:
-    0 14px 30px color-mix(in srgb, var(--bg-primary) 18%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--chrome-inline-highlight) 72%, transparent);
-  transform: scale(0.94);
-  opacity: 0.94;
-}
-
-/* Dockview 内容拖拽预览外壳：承载被拖拽 tab 的实际内容缩略卡，并跟随指针移动。 */
-.dockview-content-drag-preview {
-  position: fixed;
-  left: 0;
-  top: 0;
-  z-index: 12000;
-  pointer-events: none;
-  transform-origin: top left;
-  will-change: left, top, width, height, opacity;
-}
-
-/* Dockview 内容拖拽预览激活态：启用更高的不透明度，突出正在被拾起的内容卡。 */
-.dockview-content-drag-preview--active {
-  opacity: 1;
-}
-
-/* Dockview 内容拖拽预览回位态：松手后平滑移动回目标 group，并恢复原始比例。 */
-.dockview-content-drag-preview--settling {
-  transition:
-    left 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    top 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    width 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    height 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-/* Dockview 内容拖拽预览内层：负责缩放动画，让内容在拖拽开始时平滑缩小。 */
-.dockview-content-drag-preview__inner {
-  --ofive-dockview-content-drag-scale: 1;
-  width: 100%;
-  height: 100%;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  transform: scale(var(--ofive-dockview-content-drag-scale));
-  transform-origin: top left;
-  transition:
-    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    filter 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  filter: saturate(1.02);
-}
-
-/* Dockview 内容拖拽预览头部：只保留被拖动 tab 本身，让预览和 tab 紧密相连。 */
-.dockview-content-drag-preview__header {
-  display: flex;
-  align-items: stretch;
-  justify-content: flex-start;
-  padding-bottom: var(--space-2);
-}
-
-/* Dockview 内容拖拽预览 tab：恢复来源 tab 的可见样式，作为预览卡的标题条。 */
-.dockview-content-drag-preview__tab {
-  opacity: 1 !important;
-  color: var(--text-primary) !important;
-  background: color-mix(in srgb, var(--chrome-tab-active-bg) 96%, transparent) !important;
-  border-color: color-mix(in srgb, var(--chrome-border-strong) 82%, transparent) !important;
-  box-shadow:
-    0 10px 22px color-mix(in srgb, var(--bg-primary) 14%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--chrome-inline-highlight) 68%, transparent) !important;
-}
-
-/* Dockview 内容拖拽预览内容区：复用 group 内容视觉，并给悬浮预览更明显的材质和阴影。 */
-.dockview-content-drag-preview__content {
-  overflow: hidden;
-  border-radius: calc(var(--radius-lg) + 2px);
-  border: 1px solid color-mix(in srgb, var(--chrome-border-strong) 78%, transparent);
-  background: color-mix(in srgb, var(--surface-base) 96%, transparent);
-  box-shadow:
-    0 22px 54px color-mix(in srgb, var(--bg-primary) 18%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--chrome-inline-highlight) 70%, transparent);
-}
-
-/* Dockview 源 group 内容拖拽态：拖拽期间暂时隐去原内容，避免页面中出现两份相同内容。 */
-.main-dockview-host .dv-groupview.dv-groupview--content-drag-source > .dv-content-container {
-  opacity: 0;
-  transform: scale(0.985);
-  transition:
-    opacity 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-/* Tab strip 原生 drop overlay：实时重排阶段只保留 sibling 位移和插入缝，不显示 Dockview 默认蓝框。 */
-.main-dockview-host.dockview-tab-dragging .dv-tabs-container .dv-drop-target-dropzone {
-  display: none !important;
 }
 
 /* 主区 group：为宿主层 FLIP 重排提供稳定的变换原点。 */
@@ -453,8 +213,7 @@
 .dv-drop-target-anchor {
   background-color: var(--accent-primary-soft);
   border: 2px solid var(--accent-primary);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--accent-primary-soft) 24%, transparent);
+  border-radius: var(--radius-md);
 }
 
 /* Paneview 拖拽放置区高亮 */

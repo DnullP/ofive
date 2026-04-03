@@ -33,7 +33,6 @@ import {
 import type {
     DockviewDidDropEvent,
     DockviewDndOverlayEvent,
-    DockviewWillDropEvent,
     PaneviewDndOverlayEvent,
     PaneviewDropEvent,
 } from "dockview-core";
@@ -166,28 +165,15 @@ import {
     type DockviewGroupRectSnapshot,
     type PendingDockviewLayoutAnimation,
 } from "./dockviewLayoutAnimationState";
-import { logDockviewRuntime } from "./dockviewLayoutLogger";
-import {
-    createDockviewLayoutRuntime,
-    type DockviewLayoutRuntimeStore,
-} from "./dockviewLayoutRuntime";
 import type {
     DockviewLayoutAnimationObservation,
     DockviewLayoutDebugApi,
-    DockviewLayoutHealthIssue,
-    DockviewLayoutHealthSnapshot,
-    DockviewTabReorderAuditEntry,
-    DockviewTabStripSnapshot,
     DockviewLayoutTimelineEntry,
 } from "./dockviewLayoutDebugContract";
 export type {
     DockviewLayoutAnimationObservation,
     DockviewLayoutDebugApi,
-    DockviewLayoutHealthIssue,
-    DockviewLayoutHealthSnapshot,
     DockviewLayoutSnapshot,
-    DockviewTabReorderAuditEntry,
-    DockviewTabStripSnapshot,
     DockviewLayoutTimelineEntry,
 } from "./dockviewLayoutDebugContract";
 
@@ -272,9 +258,6 @@ function isPointInsideRect(
 
 const DOCKVIEW_NEW_GROUP_FADE_DURATION_MS = 240;
 const DOCKVIEW_POINTER_DRAG_CAPTURE_THRESHOLD_PX = 10;
-const DOCKVIEW_CONTENT_DRAG_PREVIEW_SCALE = 0.84;
-const DOCKVIEW_CONTENT_DRAG_PREVIEW_SETTLE_DURATION_MS = 220;
-const DOCKVIEW_CONTENT_DRAG_PREVIEW_FAILSAFE_DURATION_MS = 900;
 
 type SidebarMotionState = "hidden" | "entering" | "visible" | "exiting";
 
@@ -291,13 +274,6 @@ export interface TabInstanceDefinition {
     component: string;
     params?: Record<string, unknown>;
 }
-
-type DockviewMovePanelCommitEvent = {
-    panel: IDockviewPanel;
-    from: {
-        id: string;
-    };
-};
 
 export interface PanelRenderContext {
     activeTabId: string | null;
@@ -618,400 +594,6 @@ function collectDockviewGroupRectSnapshots(host: HTMLElement): DockviewGroupRect
     );
 }
 
-interface DockviewTabRectSnapshot {
-    left: number;
-    top: number;
-    width: number;
-    height: number;
-}
-
-interface DockviewTabPreviewState {
-    sourceContainer: HTMLElement;
-    sourceIndex: number;
-    targetContainer: HTMLElement;
-    targetIndex: number;
-    tabWidth: number;
-}
-
-interface DockviewTabInsertionMarkerState {
-    container: HTMLElement;
-    left: number;
-    width: number;
-    height: number;
-    label: string;
-}
-
-interface DockviewTabContentDragPreviewState {
-    element: HTMLElement;
-    innerElement: HTMLElement;
-    sourceGroupElement: HTMLElement;
-    width: number;
-    height: number;
-    tabHeight: number;
-}
-
-/**
- * @function collectDockviewTabRectSnapshots
- * @description 读取当前 Dockview host 内所有 tab 的几何快照，用于拖拽重排时的 FLIP 动画。
- * @param host Dockview 主区宿主元素。
- * @returns 以 tab DOM 节点为 key 的位置快照表。
- */
-function collectDockviewTabRectSnapshots(
-    host: HTMLElement,
-): Map<HTMLElement, DockviewTabRectSnapshot> {
-    const snapshots = new Map<HTMLElement, DockviewTabRectSnapshot>();
-    Array.from(host.querySelectorAll<HTMLElement>(".dv-tab")).forEach((tabElement) => {
-        const rect = tabElement.getBoundingClientRect();
-        snapshots.set(tabElement, {
-            left: rect.left,
-            top: rect.top,
-            width: rect.width,
-            height: rect.height,
-        });
-    });
-    return snapshots;
-}
-
-function collectDockviewTabElements(container: HTMLElement): HTMLElement[] {
-    return Array.from(container.children).filter((child): child is HTMLElement => {
-        return child instanceof HTMLElement && child.classList.contains("dv-tab");
-    });
-}
-
-function resolveDockviewTabGap(container: HTMLElement): number {
-    const styles = window.getComputedStyle(container);
-    const gapValue = styles.columnGap || styles.gap || "0";
-    const parsedGap = Number.parseFloat(gapValue);
-    return Number.isFinite(parsedGap) ? parsedGap : 0;
-}
-
-function areDockviewTabPreviewStatesEquivalent(
-    previousState: DockviewTabPreviewState | null,
-    nextState: DockviewTabPreviewState | null,
-): boolean {
-    if (!previousState || !nextState) {
-        return previousState === nextState;
-    }
-
-    return (
-        previousState.sourceContainer === nextState.sourceContainer
-        && previousState.sourceIndex === nextState.sourceIndex
-        && previousState.targetContainer === nextState.targetContainer
-        && previousState.targetIndex === nextState.targetIndex
-        && Math.abs(previousState.tabWidth - nextState.tabWidth) < 0.5
-    );
-}
-
-/**
- * @function resolveDockviewTabPreviewState
- * @description 根据当前 dragover 命中的 tab strip 位置，计算 tab 预重排所需的插入索引。
- * @param event 当前原生 dragover 事件。
- * @param sourceTabElement 正在被拖拽的源 tab。
- * @returns 预重排状态；当鼠标未位于 tab strip 或目标位置无变化时返回 null。
- */
-function resolveDockviewTabPreviewState(
-    event: DragEvent,
-    sourceTabElement: HTMLElement,
-): DockviewTabPreviewState | null {
-    const sourceContainer = sourceTabElement.closest<HTMLElement>(".dv-tabs-container");
-    if (!sourceContainer) {
-        return null;
-    }
-
-    const sourceTabs = collectDockviewTabElements(sourceContainer);
-    const sourceIndex = sourceTabs.indexOf(sourceTabElement);
-    if (sourceIndex < 0) {
-        return null;
-    }
-
-    const target = event.target;
-    if (!(target instanceof Element)) {
-        return null;
-    }
-
-    const targetContainer = target.closest<HTMLElement>(".dv-tabs-container");
-    if (!targetContainer) {
-        return null;
-    }
-
-    const targetTabs = collectDockviewTabElements(targetContainer);
-    let targetIndex = targetTabs.length;
-
-    for (let index = 0; index < targetTabs.length; index += 1) {
-        const tabElement = targetTabs[index];
-        const tabRect = tabElement.getBoundingClientRect();
-        const tabMidpoint = tabRect.left + (tabRect.width / 2);
-        if (event.clientX < tabMidpoint) {
-            targetIndex = index;
-            break;
-        }
-    }
-
-    const sourceRect = sourceTabElement.getBoundingClientRect();
-    if (sourceRect.width <= 0) {
-        return null;
-    }
-
-    if (sourceContainer === targetContainer && (targetIndex === sourceIndex || targetIndex === sourceIndex + 1)) {
-        return null;
-    }
-
-    return {
-        sourceContainer,
-        sourceIndex,
-        targetContainer,
-        targetIndex,
-        tabWidth: sourceRect.width,
-    };
-}
-
-function buildDockviewTabPreviewOffsets(
-    previewState: DockviewTabPreviewState,
-    sourceTabElement: HTMLElement,
-): Map<HTMLElement, number> {
-    const offsets = new Map<HTMLElement, number>();
-    const sourceTabs = collectDockviewTabElements(previewState.sourceContainer);
-    const sourceShift = previewState.tabWidth + resolveDockviewTabGap(previewState.sourceContainer);
-
-    if (previewState.sourceContainer === previewState.targetContainer) {
-        sourceTabs.forEach((tabElement, index) => {
-            if (tabElement === sourceTabElement) {
-                return;
-            }
-
-            if (previewState.targetIndex > previewState.sourceIndex) {
-                if (index > previewState.sourceIndex && index < previewState.targetIndex) {
-                    offsets.set(tabElement, -sourceShift);
-                }
-                return;
-            }
-
-            if (index >= previewState.targetIndex && index < previewState.sourceIndex) {
-                offsets.set(tabElement, sourceShift);
-            }
-        });
-
-        return offsets;
-    }
-
-    sourceTabs.forEach((tabElement, index) => {
-        if (tabElement === sourceTabElement) {
-            return;
-        }
-
-        if (index > previewState.sourceIndex) {
-            offsets.set(tabElement, -sourceShift);
-        }
-    });
-
-    const targetTabs = collectDockviewTabElements(previewState.targetContainer);
-    const targetShift = previewState.tabWidth + resolveDockviewTabGap(previewState.targetContainer);
-    targetTabs.forEach((tabElement, index) => {
-        if (index >= previewState.targetIndex) {
-            offsets.set(tabElement, (offsets.get(tabElement) ?? 0) + targetShift);
-        }
-    });
-
-    return offsets;
-}
-
-function resolveDockviewTabInsertionMarkerState(
-    previewState: DockviewTabPreviewState,
-    offsets: Map<HTMLElement, number>,
-): DockviewTabInsertionMarkerState | null {
-    const container = previewState.targetContainer;
-    const containerRect = container.getBoundingClientRect();
-    const targetTabs = collectDockviewTabElements(container);
-    const gap = resolveDockviewTabGap(container);
-    const sourceTab = collectDockviewTabElements(previewState.sourceContainer)[previewState.sourceIndex] ?? null;
-    const sourceRect = sourceTab?.getBoundingClientRect();
-    const previewWidth = sourceRect?.width ?? previewState.tabWidth;
-    const previewHeight = sourceRect?.height ?? 30;
-    const previewLabel = sourceTab?.textContent?.trim() ?? "";
-
-    const clampInsertionLeft = (left: number): number => {
-        const minLeft = previewWidth / 2;
-        const maxLeft = Math.max(minLeft, containerRect.width - (previewWidth / 2));
-        return Math.min(maxLeft, Math.max(minLeft, left));
-    };
-
-    if (targetTabs.length === 0) {
-        return {
-            container,
-            left: clampInsertionLeft(previewWidth / 2 + 8),
-            width: previewWidth,
-            height: previewHeight,
-            label: previewLabel,
-        };
-    }
-
-    const resolveLeftWithOffset = (tabElement: HTMLElement): number => {
-        const rect = tabElement.getBoundingClientRect();
-        return rect.left - containerRect.left + (offsets.get(tabElement) ?? 0);
-    };
-
-    if (previewState.targetIndex <= 0) {
-        const firstTab = targetTabs[0];
-        return {
-            container,
-            left: clampInsertionLeft(resolveLeftWithOffset(firstTab) - (gap / 2)),
-            width: previewWidth,
-            height: previewHeight,
-            label: previewLabel,
-        };
-    }
-
-    if (previewState.targetIndex >= targetTabs.length) {
-        const lastTab = targetTabs[targetTabs.length - 1];
-        const lastRect = lastTab.getBoundingClientRect();
-        return {
-            container,
-            left: clampInsertionLeft(resolveLeftWithOffset(lastTab) + lastRect.width + (gap / 2)),
-            width: previewWidth,
-            height: previewHeight,
-            label: previewLabel,
-        };
-    }
-
-    const previousTab = targetTabs[previewState.targetIndex - 1];
-    const nextTab = targetTabs[previewState.targetIndex];
-    const previousRect = previousTab.getBoundingClientRect();
-    const previousRight = resolveLeftWithOffset(previousTab) + previousRect.width;
-    const nextLeft = resolveLeftWithOffset(nextTab);
-
-    return {
-        container,
-        left: clampInsertionLeft((previousRight + nextLeft) / 2),
-        width: previewWidth,
-        height: previewHeight,
-        label: previewLabel,
-    };
-}
-
-function collectDockviewTabStripSnapshots(host: HTMLElement): DockviewTabStripSnapshot[] {
-    return Array.from(host.querySelectorAll<HTMLElement>(".dv-groupview")).map((group, groupIndex) => {
-        const tabLabels = Array.from(group.querySelectorAll<HTMLElement>(".dv-tab")).map((tabElement) => {
-            return tabElement.textContent?.trim() ?? "";
-        }).filter((label) => label.length > 0);
-
-        return {
-            stripIndex: groupIndex,
-            groupIndex,
-            tabLabels,
-        };
-    });
-}
-
-function areDockviewTabStripSnapshotsEquivalent(
-    previousSnapshots: DockviewTabStripSnapshot[],
-    currentSnapshots: DockviewTabStripSnapshot[],
-): boolean {
-    if (previousSnapshots.length !== currentSnapshots.length) {
-        return false;
-    }
-
-    return previousSnapshots.every((previousSnapshot, index) => {
-        const currentSnapshot = currentSnapshots[index];
-        if (!currentSnapshot) {
-            return false;
-        }
-
-        if (previousSnapshot.groupIndex !== currentSnapshot.groupIndex) {
-            return false;
-        }
-
-        if (previousSnapshot.tabLabels.length !== currentSnapshot.tabLabels.length) {
-            return false;
-        }
-
-        return previousSnapshot.tabLabels.every((label, labelIndex) => {
-            return currentSnapshot.tabLabels[labelIndex] === label;
-        });
-    });
-}
-
-function resolveDockviewTabGroupIndex(
-    host: HTMLElement,
-    element: Element | null,
-): number | null {
-    if (!element) {
-        return null;
-    }
-
-    const groupElement = element.closest(".dv-groupview");
-    if (!(groupElement instanceof HTMLElement)) {
-        return null;
-    }
-
-    return Array.from(host.querySelectorAll(".dv-groupview")).indexOf(groupElement);
-}
-
-function resolveInteractionTargetMetadata(target: EventTarget | null): Record<string, string | number | boolean | null> {
-    if (!(target instanceof Element)) {
-        return {
-            targetTagName: null,
-            targetClassName: null,
-            targetText: null,
-            panelId: null,
-            tabText: null,
-        };
-    }
-
-    const panelElement = target.closest<HTMLElement>(`[${PANEL_ID_DATA_ATTR}]`);
-    const tabElement = target.closest<HTMLElement>(".dv-tab");
-
-    return {
-        targetTagName: target.tagName.toLowerCase(),
-        targetClassName: target.className || null,
-        targetText: target.textContent?.trim().slice(0, 120) ?? null,
-        panelId: panelElement?.getAttribute(PANEL_ID_DATA_ATTR) ?? null,
-        tabText: tabElement?.textContent?.trim() ?? null,
-    };
-}
-
-function resolveDockviewDropKindDetails(
-    event: DockviewWillDropEvent | DockviewDidDropEvent | DockviewDndOverlayEvent,
-): Record<string, string | number | boolean | null> {
-    const panelId = "panel" in event ? event.panel?.id ?? null : null;
-    const groupId = event.group?.id ?? null;
-    const transfer = event.getData();
-    const dropKind = "kind" in event ? event.kind : ("target" in event ? event.target : null);
-
-    return {
-        dropKind,
-        dropPosition: event.position,
-        dropPanelId: panelId,
-        dropGroupId: groupId,
-        hasTransfer: Boolean(transfer),
-        transferPanelId: transfer?.panelId ?? null,
-        clientX: event.nativeEvent.clientX,
-        clientY: event.nativeEvent.clientY,
-    };
-}
-
-function resolveDockviewTabIndexWithinContainer(
-    tabElement: HTMLElement | null,
-): number | null {
-    if (!tabElement) {
-        return null;
-    }
-
-    const container = tabElement.closest<HTMLElement>(".dv-tabs-container");
-    if (!container) {
-        return null;
-    }
-
-    const tabs = collectDockviewTabElements(container);
-    const tabIndex = tabs.indexOf(tabElement);
-    return tabIndex >= 0 ? tabIndex : null;
-}
-
-function resolveDockviewShiftedTabLabels(offsets: Map<HTMLElement, number>): string[] {
-    return Array.from(offsets.entries()).filter(([, offset]) => Math.abs(offset) >= 0.5).map(([tabElement]) => {
-        return tabElement.textContent?.trim() ?? "";
-    }).filter((label) => label.length > 0);
-}
-
 /**
  * @function useAnimatedSidebarVisibility
  * @description 为侧栏提供进入/退出动画状态机，避免业务可见性变化时立即卸载容器。
@@ -1287,26 +869,6 @@ export function DockviewLayout({
     const dockviewLayoutAnimationFrameRef = useRef<number | null>(null);
     const dockviewDragAnimationCleanupTimerRef = useRef<number | null>(null);
     const dockviewTabDragInProgressRef = useRef(false);
-    const dockviewDraggedTabElementRef = useRef<HTMLElement | null>(null);
-    const dockviewTabDragPreviewRef = useRef<HTMLElement | null>(null);
-    const dockviewTabContentDragPreviewRef = useRef<DockviewTabContentDragPreviewState | null>(null);
-    const dockviewLastDragPointerRef = useRef<{ x: number; y: number } | null>(null);
-    const dockviewDropCommittedRef = useRef(false);
-    const dockviewContentDragPreviewSettleTimerRef = useRef<number | null>(null);
-    const dockviewContentDragPreviewFailsafeTimerRef = useRef<number | null>(null);
-    const dockviewRequestContentPreviewSettleRef = useRef<(() => void) | null>(null);
-    const dockviewFinalizeCommittedDragSessionRef = useRef<((trigger: "dockview-drop" | "panel-move-commit") => void) | null>(null);
-    const dockviewTabPreviewStateRef = useRef<DockviewTabPreviewState | null>(null);
-    const dockviewTabPreviewOffsetsRef = useRef<Map<HTMLElement, number>>(new Map());
-    const dockviewTabInsertionMarkerRef = useRef<DockviewTabInsertionMarkerState | null>(null);
-    const dockviewTabRectSnapshotsRef = useRef<Map<HTMLElement, DockviewTabRectSnapshot>>(new Map());
-    const dockviewTabStripSnapshotsRef = useRef<DockviewTabStripSnapshot[]>([]);
-    const dockviewTabReorderAnimationsRef = useRef<Map<HTMLElement, Animation>>(new Map());
-    const dockviewTabReorderFrameRef = useRef<number | null>(null);
-    const dockviewTabReorderAuditSequenceRef = useRef(1);
-    const dockviewTabReorderAuditEntriesRef = useRef<DockviewTabReorderAuditEntry[]>([]);
-    const dockviewActiveTabDragSessionIdRef = useRef<number | null>(null);
-    const nextDockviewTabDragSessionIdRef = useRef(1);
     const dockviewPendingPointerDragRef = useRef<{
         pointerId: number;
         startX: number;
@@ -1317,9 +879,6 @@ export function DockviewLayout({
     const dockviewAnimationObservationsRef = useRef<DockviewLayoutAnimationObservation[]>([]);
     const dockviewTimelineSequenceRef = useRef(1);
     const dockviewTimelineEntriesRef = useRef<DockviewLayoutTimelineEntry[]>([]);
-    const dockviewRuntimeRef = useRef<DockviewLayoutRuntimeStore>(createDockviewLayoutRuntime());
-    const dockviewLastHealthSnapshotRef = useRef<DockviewLayoutHealthSnapshot | null>(null);
-    const dockviewLastHealthSignatureRef = useRef<string | null>(null);
     const leftUnhandledDragDisposeRef = useRef<{ dispose: () => void } | null>(null);
     const rightUnhandledDragDisposeRef = useRef<{ dispose: () => void } | null>(null);
     const leftPaneLayoutDisposeRef = useRef<{ dispose: () => void } | null>(null);
@@ -2945,16 +2504,6 @@ export function DockviewLayout({
     };
 
     const handleMainDockviewDrop = async (dropEvent: DockviewDidDropEvent): Promise<void> => {
-        recordDockviewTimelineEntry("drop-result", {
-            ...resolveDockviewDropKindDetails(dropEvent),
-            outcome: "main-dock-drop-received",
-        });
-        logDockviewRuntime("info", "timeline-entry", "main dock drop received", {
-            ...resolveDockviewDropKindDetails(dropEvent),
-        });
-
-        dockviewFinalizeCommittedDragSessionRef.current?.("dockview-drop");
-
         const droppedItems = readWorkspaceFileDragPayload(dropEvent.nativeEvent.dataTransfer);
         if (droppedItems.some((item) => !item.isDir)) {
             resetMainDockWorkspaceDragState();
@@ -2962,33 +2511,6 @@ export function DockviewLayout({
         }
 
         void convertPanePanelToTab(dropEvent);
-    };
-
-    const handleMainDockviewDidMovePanel = (event: DockviewMovePanelCommitEvent): void => {
-        const hasActivePreview = dockviewTabContentDragPreviewRef.current !== null;
-        const hasActiveDrag = dockviewTabDragInProgressRef.current;
-        if (!hasActivePreview && !hasActiveDrag) {
-            return;
-        }
-
-        const details = {
-            outcome: "internal-panel-move-committed",
-            movedObjectId: event.panel.id,
-            fromGroupId: event.from.id,
-            activeTabId: activeTabId ?? null,
-        };
-        recordDockviewTimelineEntry("drop-result", details);
-        logDockviewRuntime("info", "timeline-entry", "dockview internal panel move committed", details);
-        dockviewFinalizeCommittedDragSessionRef.current?.("panel-move-commit");
-    };
-
-    const handleMainDockviewWillDrop = (event: DockviewWillDropEvent): void => {
-        const details = {
-            ...resolveDockviewDropKindDetails(event),
-            accepted: true,
-        };
-        recordDockviewTimelineEntry("split-trigger-evaluated", details);
-        logDockviewRuntime("debug", "timeline-entry", "dockview will drop evaluated", details);
     };
 
     const handleUnhandledDragOver = (targetApi: PaneviewApi, event: PaneviewDndOverlayEvent): void => {
@@ -3219,45 +2741,17 @@ export function DockviewLayout({
 
     const handleDockviewUnhandledDragOver = (event: DockviewDndOverlayEvent): void => {
         if (hasWorkspaceFileDragPayloadFiles(event.nativeEvent.dataTransfer)) {
-            recordDockviewTimelineEntry("split-trigger-evaluated", {
-                ...resolveDockviewDropKindDetails(event),
-                accepted: false,
-                reason: "workspace-file-drag",
-            });
             return;
         }
 
         const paneTransfer = getPaneData();
         if (!paneTransfer) {
-            recordDockviewTimelineEntry("split-trigger-evaluated", {
-                ...resolveDockviewDropKindDetails(event),
-                accepted: false,
-                reason: "no-pane-transfer",
-            });
             return;
         }
 
         if (convertibleByPanelId.has(paneTransfer.paneId)) {
             event.accept();
-            recordDockviewTimelineEntry("split-trigger-evaluated", {
-                ...resolveDockviewDropKindDetails(event),
-                accepted: true,
-                reason: "convertible-panel-accepted",
-                movedPaneId: paneTransfer.paneId,
-            });
-            logDockviewRuntime("debug", "timeline-entry", "dockview split trigger accepted", {
-                ...resolveDockviewDropKindDetails(event),
-                movedPaneId: paneTransfer.paneId,
-            });
-            return;
         }
-
-        recordDockviewTimelineEntry("split-trigger-evaluated", {
-            ...resolveDockviewDropKindDetails(event),
-            accepted: false,
-            reason: "panel-not-convertible",
-            movedPaneId: paneTransfer.paneId,
-        });
     };
 
     /**
@@ -3526,12 +3020,6 @@ export function DockviewLayout({
         const existing = api.getPanel(normalizedTab.id);
         if (existing) {
             existing.api.setActive();
-            recordDockviewTimelineEntry("drop-result", {
-                outcome: "existing-tab-activated",
-                tabId: normalizedTab.id,
-                referencePanelId: options?.referencePanel?.id ?? null,
-                targetPosition: options?.position ?? "center",
-            });
             return;
         }
 
@@ -3558,13 +3046,6 @@ export function DockviewLayout({
                     direction: directionByPosition[options.position],
                 },
             });
-            recordDockviewTimelineEntry("drop-result", {
-                outcome: "tab-opened-as-split",
-                tabId: lifecycleAwareTab.id,
-                referencePanelId: options.referencePanel.id,
-                targetPosition: options.position,
-                movedObjectId: lifecycleAwareTab.id,
-            });
         } else if (options?.referencePanel) {
             api.addPanel({
                 ...addPanelOptions,
@@ -3573,22 +3054,8 @@ export function DockviewLayout({
                     direction: "within",
                 },
             });
-            recordDockviewTimelineEntry("drop-result", {
-                outcome: "tab-opened-within-group",
-                tabId: lifecycleAwareTab.id,
-                referencePanelId: options.referencePanel.id,
-                targetPosition: "center",
-                movedObjectId: lifecycleAwareTab.id,
-            });
         } else {
             api.addPanel(addPanelOptions);
-            recordDockviewTimelineEntry("drop-result", {
-                outcome: "tab-opened-without-reference",
-                tabId: lifecycleAwareTab.id,
-                referencePanelId: null,
-                targetPosition: options?.position ?? "center",
-                movedObjectId: lifecycleAwareTab.id,
-            });
         }
 
         api.getPanel(lifecycleAwareTab.id)?.api.setActive();
@@ -3659,14 +3126,6 @@ export function DockviewLayout({
             return;
         }
 
-        const getDockviewLayoutSnapshot = () => {
-            const host = mainDockHostRef.current;
-            const snapshot = {
-                groups: host ? collectDockviewGroupRectSnapshots(host) : [],
-            };
-            return snapshot;
-        };
-
         debugApiRef.current = {
             openSplitTab: (tab, position = "right") => {
                 const api = dockviewApiRef.current;
@@ -3703,25 +3162,10 @@ export function DockviewLayout({
                 dockviewTimelineEntriesRef.current = [];
             },
             getLayoutSnapshot: () => {
-                return getDockviewLayoutSnapshot();
-            },
-            getHealthSnapshot: () => {
-                return buildDockviewLayoutHealthSnapshot();
-            },
-            recoverInteractionState: () => {
-                recoverDockviewInteractionState();
-            },
-            getRuntimeEvents: () => {
-                return dockviewRuntimeRef.current.getEvents();
-            },
-            clearRuntimeEvents: () => {
-                dockviewRuntimeRef.current.clearEvents();
-            },
-            getTabReorderAuditEntries: () => {
-                return [...dockviewTabReorderAuditEntriesRef.current];
-            },
-            clearTabReorderAuditEntries: () => {
-                dockviewTabReorderAuditEntriesRef.current = [];
+                const host = mainDockHostRef.current;
+                return {
+                    groups: host ? collectDockviewGroupRectSnapshots(host) : [],
+                };
             },
         };
 
@@ -5211,10 +4655,6 @@ export function DockviewLayout({
                 window.clearTimeout(dockviewDragAnimationCleanupTimerRef.current);
                 dockviewDragAnimationCleanupTimerRef.current = null;
             }
-            if (dockviewContentDragPreviewSettleTimerRef.current !== null) {
-                window.clearTimeout(dockviewContentDragPreviewSettleTimerRef.current);
-                dockviewContentDragPreviewSettleTimerRef.current = null;
-            }
         },
         [],
     );
@@ -5270,445 +4710,20 @@ export function DockviewLayout({
             dockviewPendingPointerDragRef.current = null;
         };
 
-        const clearDockviewContentDragPreviewFailsafeTimer = (): void => {
-            if (dockviewContentDragPreviewFailsafeTimerRef.current === null) {
-                return;
-            }
-
-            window.clearTimeout(dockviewContentDragPreviewFailsafeTimerRef.current);
-            dockviewContentDragPreviewFailsafeTimerRef.current = null;
-        };
-
-        const recordDockviewLastDragPointer = (
-            clientX: number,
-            clientY: number,
-        ): void => {
-            if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
-                return;
-            }
-
-            dockviewLastDragPointerRef.current = {
-                x: clientX,
-                y: clientY,
-            };
-        };
-
-        const clearDockviewTabContentDragPreview = (): void => {
-            if (dockviewContentDragPreviewSettleTimerRef.current !== null) {
-                window.clearTimeout(dockviewContentDragPreviewSettleTimerRef.current);
-                dockviewContentDragPreviewSettleTimerRef.current = null;
-            }
-
-            clearDockviewContentDragPreviewFailsafeTimer();
-            dockviewDropCommittedRef.current = false;
-
-            const previewState = dockviewTabContentDragPreviewRef.current;
-            if (!previewState) {
-                return;
-            }
-
-            previewState.sourceGroupElement.classList.remove("dv-groupview--content-drag-source");
-            previewState.element.remove();
-            dockviewTabContentDragPreviewRef.current = null;
-        };
-
-        const positionDockviewTabContentDragPreview = (
-            clientX: number,
-            clientY: number,
-        ): void => {
-            const previewState = dockviewTabContentDragPreviewRef.current;
-            if (!previewState) {
-                return;
-            }
-
-            const left = clientX - Math.min(previewState.width * 0.22, 96);
-            const top = clientY - Math.min(previewState.tabHeight * 0.52, 18);
-
-            previewState.element.style.left = `${Math.round(left)}px`;
-            previewState.element.style.top = `${Math.round(top)}px`;
-        };
-
-        const createDockviewTabContentDragPreview = (
-            tabElement: HTMLElement,
-            event: DragEvent,
-        ): void => {
-            const sourceGroupElement = tabElement.closest<HTMLElement>(".dv-groupview");
-            const sourceContentElement = sourceGroupElement?.querySelector<HTMLElement>(":scope > .dv-content-container");
-            if (!sourceGroupElement || !sourceContentElement) {
-                return;
-            }
-
-            const sourceGroupRect = sourceGroupElement.getBoundingClientRect();
-            const sourceTabRect = tabElement.getBoundingClientRect();
-            if (sourceGroupRect.width <= 0 || sourceGroupRect.height <= 0) {
-                return;
-            }
-
-            const previewElement = document.createElement("div");
-            previewElement.className = "dockview-content-drag-preview";
-            previewElement.style.width = `${Math.round(sourceGroupRect.width)}px`;
-            previewElement.style.height = `${Math.round(sourceGroupRect.height)}px`;
-            previewElement.style.left = `${Math.round(sourceGroupRect.left)}px`;
-            previewElement.style.top = `${Math.round(sourceGroupRect.top)}px`;
-
-            const previewInnerElement = document.createElement("div");
-            previewInnerElement.className = "dockview-content-drag-preview__inner";
-
-            const previewHeaderElement = document.createElement("div");
-            previewHeaderElement.className = "dockview-content-drag-preview__header";
-            const tabCloneElement = tabElement.cloneNode(true);
-            if (tabCloneElement instanceof HTMLElement) {
-                tabCloneElement.classList.remove("dv-tab--drag-source", "dv-tab-dragging");
-                tabCloneElement.classList.add("dockview-content-drag-preview__tab");
-                tabCloneElement.style.removeProperty("opacity");
-                tabCloneElement.style.removeProperty("color");
-                tabCloneElement.style.removeProperty("background");
-                tabCloneElement.style.removeProperty("box-shadow");
-                tabCloneElement.style.removeProperty("border-color");
-                previewHeaderElement.appendChild(tabCloneElement);
-            }
-
-            const contentCloneElement = sourceContentElement.cloneNode(true);
-            if (contentCloneElement instanceof HTMLElement) {
-                contentCloneElement.classList.add("dockview-content-drag-preview__content");
-                previewInnerElement.append(previewHeaderElement, contentCloneElement);
-            } else {
-                return;
-            }
-
-            previewElement.appendChild(previewInnerElement);
-            document.body.appendChild(previewElement);
-
-            sourceGroupElement.classList.add("dv-groupview--content-drag-source");
-
-            dockviewTabContentDragPreviewRef.current = {
-                element: previewElement,
-                innerElement: previewInnerElement,
-                sourceGroupElement,
-                width: sourceGroupRect.width,
-                height: sourceGroupRect.height,
-                tabHeight: sourceTabRect.height,
-            };
-
-            const pointer = {
-                x: event.clientX || dockviewLastDragPointerRef.current?.x || (sourceTabRect.left + sourceTabRect.width / 2),
-                y: event.clientY || dockviewLastDragPointerRef.current?.y || (sourceTabRect.top + sourceTabRect.height / 2),
-            };
-
-            recordDockviewLastDragPointer(pointer.x, pointer.y);
-
-            requestAnimationFrame(() => {
-                const activePreviewState = dockviewTabContentDragPreviewRef.current;
-                if (!activePreviewState || activePreviewState.element !== previewElement) {
-                    return;
-                }
-
-                positionDockviewTabContentDragPreview(pointer.x, pointer.y);
-                activePreviewState.element.classList.add("dockview-content-drag-preview--active");
-                activePreviewState.innerElement.style.setProperty(
-                    "--ofive-dockview-content-drag-scale",
-                    String(DOCKVIEW_CONTENT_DRAG_PREVIEW_SCALE),
-                );
-            });
-        };
-
-        const settleDockviewTabContentDragPreview = (): void => {
-            const previewState = dockviewTabContentDragPreviewRef.current;
-            if (!previewState) {
-                return;
-            }
-
-            if (dockviewContentDragPreviewSettleTimerRef.current !== null) {
-                return;
-            }
-
-            const startSettle = (): void => {
-                const activePreviewState = dockviewTabContentDragPreviewRef.current;
-                if (!activePreviewState) {
-                    return;
-                }
-
-                const draggedTabElement = dockviewDraggedTabElementRef.current;
-                const targetGroupElement = draggedTabElement?.closest<HTMLElement>(".dv-groupview")
-                    ?? activePreviewState.sourceGroupElement;
-                const targetRect = targetGroupElement.getBoundingClientRect();
-
-                activePreviewState.element.classList.add("dockview-content-drag-preview--settling");
-                activePreviewState.element.style.width = `${Math.round(targetRect.width)}px`;
-                activePreviewState.element.style.height = `${Math.round(targetRect.height)}px`;
-                activePreviewState.element.style.left = `${Math.round(targetRect.left)}px`;
-                activePreviewState.element.style.top = `${Math.round(targetRect.top)}px`;
-                activePreviewState.innerElement.style.setProperty(
-                    "--ofive-dockview-content-drag-scale",
-                    "1",
-                );
-
-                dockviewContentDragPreviewSettleTimerRef.current = window.setTimeout(() => {
-                    dockviewContentDragPreviewSettleTimerRef.current = null;
-                    clearDockviewTabContentDragPreview();
-                    const draggedTab = dockviewDraggedTabElementRef.current;
-                    if (draggedTab) {
-                        draggedTab.classList.remove("dv-tab--drag-source");
-                        dockviewDraggedTabElementRef.current = null;
-                    }
-                }, DOCKVIEW_CONTENT_DRAG_PREVIEW_SETTLE_DURATION_MS);
-            };
-
-            if (dockviewDropCommittedRef.current) {
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(startSettle);
-                });
-                return;
-            }
-
-            requestAnimationFrame(startSettle);
-        };
-
-        dockviewRequestContentPreviewSettleRef.current = settleDockviewTabContentDragPreview;
-
-        const finalizeDockviewCommittedDragSession = (
-            trigger: "dockview-drop" | "panel-move-commit",
-        ): void => {
-            const hasActivePreview = dockviewTabContentDragPreviewRef.current !== null;
-            const hasActiveDragArtifacts = dockviewTabDragInProgressRef.current
-                || dockviewTabDragPreviewRef.current !== null
-                || dockviewDraggedTabElementRef.current !== null;
-
-            if (!hasActivePreview && !hasActiveDragArtifacts) {
-                return;
-            }
-
-            dockviewDropCommittedRef.current = true;
-            if (hasActivePreview) {
-                settleDockviewTabContentDragPreview();
-            }
-
-            clearDockviewTabDragVisualState({
-                preserveContentPreview: hasActivePreview,
-            });
-            dockviewTabDragInProgressRef.current = false;
-            dockviewActiveTabDragSessionIdRef.current = null;
-
-            recordDockviewTabReorderAuditEntry({
-                type: "drag-session-end",
-                details: {
-                    trigger,
-                },
-            });
-        };
-
-        dockviewFinalizeCommittedDragSessionRef.current = finalizeDockviewCommittedDragSession;
-
-        const clearDockviewTabInsertionMarker = (): void => {
-            const insertionMarker = dockviewTabInsertionMarkerRef.current;
-            if (!insertionMarker) {
-                return;
-            }
-
-            insertionMarker.container.classList.remove("dv-tabs-container--insertion-preview");
-            insertionMarker.container.style.removeProperty("--ofive-dockview-insert-left");
-            insertionMarker.container.style.removeProperty("--ofive-dockview-preview-width");
-            insertionMarker.container.style.removeProperty("--ofive-dockview-preview-height");
-            insertionMarker.container.removeAttribute("data-ofive-dockview-preview-label");
-            dockviewTabInsertionMarkerRef.current = null;
-        };
-
-        const applyDockviewTabInsertionMarker = (
-            insertionMarkerState: DockviewTabInsertionMarkerState | null,
-        ): void => {
-            const previousMarker = dockviewTabInsertionMarkerRef.current;
-            if (
-                previousMarker
-                && (!insertionMarkerState || previousMarker.container !== insertionMarkerState.container)
-            ) {
-                previousMarker.container.classList.remove("dv-tabs-container--insertion-preview");
-                previousMarker.container.style.removeProperty("--ofive-dockview-insert-left");
-                previousMarker.container.style.removeProperty("--ofive-dockview-preview-width");
-                previousMarker.container.style.removeProperty("--ofive-dockview-preview-height");
-                previousMarker.container.removeAttribute("data-ofive-dockview-preview-label");
-            }
-
-            if (!insertionMarkerState) {
-                dockviewTabInsertionMarkerRef.current = null;
-                return;
-            }
-
-            insertionMarkerState.container.classList.add("dv-tabs-container--insertion-preview");
-            insertionMarkerState.container.style.setProperty(
-                "--ofive-dockview-insert-left",
-                `${insertionMarkerState.left}px`,
-            );
-            insertionMarkerState.container.style.setProperty(
-                "--ofive-dockview-preview-width",
-                `${insertionMarkerState.width}px`,
-            );
-            insertionMarkerState.container.style.setProperty(
-                "--ofive-dockview-preview-height",
-                `${insertionMarkerState.height}px`,
-            );
-            insertionMarkerState.container.setAttribute(
-                "data-ofive-dockview-preview-label",
-                insertionMarkerState.label,
-            );
-            dockviewTabInsertionMarkerRef.current = insertionMarkerState;
-        };
-
-        const clearDockviewTabPreviewLayout = (): void => {
-            const previousPreviewState = dockviewTabPreviewStateRef.current;
-            const previousInsertionMarker = dockviewTabInsertionMarkerRef.current;
-            if (previousPreviewState || previousInsertionMarker) {
-                recordDockviewTabReorderAuditEntry({
-                    type: "preview-cleared",
-                    targetGroupIndex: mainDockHostRef.current
-                        ? resolveDockviewTabGroupIndex(mainDockHostRef.current, previousPreviewState?.targetContainer ?? null)
-                        : null,
-                    targetIndex: previousPreviewState?.targetIndex ?? null,
-                    insertionLeft: previousInsertionMarker
-                        ? Number(previousInsertionMarker.left.toFixed(2))
-                        : null,
-                });
-            }
-
-            dockviewTabPreviewOffsetsRef.current.forEach((_offset, tabElement) => {
-                tabElement.style.removeProperty("--ofive-dockview-tab-shift-x");
-            });
-            dockviewTabPreviewOffsetsRef.current.clear();
-            dockviewTabPreviewStateRef.current = null;
-            clearDockviewTabInsertionMarker();
-        };
-
-        const applyDockviewTabPreviewLayout = (previewState: DockviewTabPreviewState): void => {
-            const draggedTabElement = dockviewDraggedTabElementRef.current;
-            if (!draggedTabElement) {
-                clearDockviewTabPreviewLayout();
-                return;
-            }
-
-            const nextOffsets = buildDockviewTabPreviewOffsets(previewState, draggedTabElement);
-            const previousOffsets = dockviewTabPreviewOffsetsRef.current;
-
-            previousOffsets.forEach((_offset, tabElement) => {
-                if (nextOffsets.has(tabElement)) {
-                    return;
-                }
-
-                tabElement.style.removeProperty("--ofive-dockview-tab-shift-x");
-            });
-
-            nextOffsets.forEach((offset, tabElement) => {
-                tabElement.style.setProperty("--ofive-dockview-tab-shift-x", `${offset}px`);
-            });
-
-            applyDockviewTabInsertionMarker(
-                resolveDockviewTabInsertionMarkerState(previewState, nextOffsets),
-            );
-            dockviewTabPreviewOffsetsRef.current = nextOffsets;
-            dockviewTabPreviewStateRef.current = previewState;
-
-            recordDockviewTabReorderAuditEntry({
-                type: "preview-updated",
-                targetGroupIndex: mainDockHostRef.current
-                    ? resolveDockviewTabGroupIndex(mainDockHostRef.current, previewState.targetContainer)
-                    : null,
-                targetIndex: previewState.targetIndex,
-                insertionLeft: dockviewTabInsertionMarkerRef.current
-                    ? Number(dockviewTabInsertionMarkerRef.current.left.toFixed(2))
-                    : null,
-                shiftedTabLabels: resolveDockviewShiftedTabLabels(nextOffsets),
-            });
-        };
-
-        /** 清理 tab 拖拽期间挂载到宿主和文档上的视觉状态。 */
-        const clearDockviewTabDragVisualState = (options?: { preserveContentPreview?: boolean }): void => {
-            host.classList.remove("dockview-tab-dragging");
-            clearDockviewTabPreviewLayout();
-
-            if (dockviewTabReorderFrameRef.current !== null) {
-                window.cancelAnimationFrame(dockviewTabReorderFrameRef.current);
-                dockviewTabReorderFrameRef.current = null;
-            }
-
-            dockviewTabReorderAnimationsRef.current.forEach((animation) => {
-                animation.cancel();
-            });
-            dockviewTabReorderAnimationsRef.current.clear();
-            dockviewTabRectSnapshotsRef.current.clear();
-
-            const shouldPreserveContentPreview = options?.preserveContentPreview === true
-                && dockviewTabContentDragPreviewRef.current !== null;
-
-            const draggedTabElement = dockviewDraggedTabElementRef.current;
-            if (draggedTabElement && !shouldPreserveContentPreview) {
-                draggedTabElement.classList.remove("dv-tab--drag-source");
-                dockviewDraggedTabElementRef.current = null;
-            }
-
-            const dragPreviewElement = dockviewTabDragPreviewRef.current;
-            if (dragPreviewElement) {
-                dragPreviewElement.remove();
-                dockviewTabDragPreviewRef.current = null;
-            }
-
-            if (!shouldPreserveContentPreview) {
-                clearDockviewTabContentDragPreview();
-            }
-        };
-
-        /** 为原生拖拽创建缩小版 tab preview，让跟手视觉更轻。 */
-        const attachDockviewTabDragPreview = (
-            event: DragEvent,
-            _tabElement: HTMLElement,
-        ): void => {
-            if (!event.dataTransfer) {
-                return;
-            }
-
-            const preview = document.createElement("div");
-            preview.className = "dockview-tab-drag-preview";
-            preview.style.width = "1px";
-            preview.style.height = "1px";
-            preview.style.position = "fixed";
-            preview.style.left = "-9999px";
-            preview.style.top = "-9999px";
-            preview.style.pointerEvents = "none";
-            preview.setAttribute("aria-hidden", "true");
-            document.body.appendChild(preview);
-            dockviewTabDragPreviewRef.current = preview;
-
-            event.dataTransfer.setDragImage(preview, 0, 0);
-        };
-
         const handleDragStartCapture = (event: DragEvent): void => {
             const target = event.target;
             if (!(target instanceof Element)) {
                 return;
             }
 
-            const tabElement = target.closest<HTMLElement>(".dv-tab");
-            if (!tabElement) {
+            if (!target.closest(".dv-tab")) {
                 return;
             }
 
             clearPendingDragCleanupTimer();
             clearPendingPointerDrag();
-
-            // Recover from any previously interrupted drag session before creating new previews.
-            if (
-                !dockviewTabDragInProgressRef.current
-                && (
-                    dockviewTabContentDragPreviewRef.current !== null
-                    || dockviewTabDragPreviewRef.current !== null
-                    || dockviewDraggedTabElementRef.current !== null
-                )
-            ) {
-                clearDockviewTabDragVisualState();
-            }
-
             recordDockviewTimelineEntry("dragstart-tab", {
-                ...resolveInteractionTargetMetadata(target),
-                clientX: event.clientX,
-                clientY: event.clientY,
-                movedObjectId: tabElement.textContent?.trim() ?? null,
+                targetText: target.textContent?.trim() ?? null,
             });
 
             if (dockviewTabDragInProgressRef.current) {
@@ -5716,19 +4731,6 @@ export function DockviewLayout({
             }
 
             dockviewTabDragInProgressRef.current = true;
-            dockviewDraggedTabElementRef.current = tabElement;
-            dockviewActiveTabDragSessionIdRef.current = nextDockviewTabDragSessionIdRef.current++;
-            dockviewDropCommittedRef.current = false;
-            tabElement.classList.add("dv-tab--drag-source");
-            host.classList.add("dockview-tab-dragging");
-            attachDockviewTabDragPreview(event, tabElement);
-            createDockviewTabContentDragPreview(tabElement, event);
-            recordDockviewTabReorderAuditEntry({
-                type: "drag-session-start",
-                details: {
-                    trigger: "dragstart",
-                },
-            });
             captureDockviewLayoutAnimation("split-entering", "drag");
         };
 
@@ -5747,12 +4749,8 @@ export function DockviewLayout({
             }
 
             recordDockviewTimelineEntry("pointerdown-tab", {
-                ...resolveInteractionTargetMetadata(target),
-                clientX: event.clientX,
-                clientY: event.clientY,
+                targetText: target.textContent?.trim() ?? null,
             });
-
-            recordDockviewLastDragPointer(event.clientX, event.clientY);
 
             dockviewPendingPointerDragRef.current = {
                 pointerId: event.pointerId,
@@ -5778,8 +4776,6 @@ export function DockviewLayout({
             }
 
             if (dockviewTabDragInProgressRef.current) {
-                recordDockviewLastDragPointer(event.clientX, event.clientY);
-                positionDockviewTabContentDragPreview(event.clientX, event.clientY);
                 return;
             }
 
@@ -5792,96 +4788,37 @@ export function DockviewLayout({
                 return;
             }
 
+            clearPendingDragCleanupTimer();
+            dockviewTabDragInProgressRef.current = true;
             clearPendingPointerDrag();
             recordDockviewTimelineEntry("pointerdrag-tab", {
                 targetText: pendingPointerDrag.targetText,
                 deltaX: Math.round(deltaX),
                 deltaY: Math.round(deltaY),
-                clientX: event.clientX,
-                clientY: event.clientY,
             });
+            captureDockviewLayoutAnimation("split-entering", "drag");
         };
 
         const handleDragEndCapture = (): void => {
             clearPendingDragCleanupTimer();
             clearPendingPointerDrag();
-            if (
-                !dockviewTabDragInProgressRef.current
-                && dockviewContentDragPreviewSettleTimerRef.current !== null
-            ) {
-                return;
-            }
-
-            const hadDragSession = dockviewTabDragInProgressRef.current
-                || dockviewDropCommittedRef.current
-                || dockviewTabContentDragPreviewRef.current !== null
-                || dockviewTabDragPreviewRef.current !== null
-                || dockviewDraggedTabElementRef.current !== null;
+            const hadDragSession = dockviewTabDragInProgressRef.current;
             dockviewTabDragInProgressRef.current = false;
-            if (hadDragSession) {
-                recordDockviewTabReorderAuditEntry({
-                    type: "drag-session-end",
-                    details: {
-                        trigger: "dragend",
-                    },
-                });
-            }
-            dockviewActiveTabDragSessionIdRef.current = null;
             recordDockviewTimelineEntry("dragend-tab");
             if (!hadDragSession) {
                 return;
             }
-
-            recordDockviewTimelineEntry("drop-result", {
-                outcome: dockviewDropCommittedRef.current ? "drag-session-settling" : "drag-session-cancelled",
-                activeTabId: activeTabId ?? null,
-                tabStripCount: mainDockHostRef.current
-                    ? collectDockviewTabStripSnapshots(mainDockHostRef.current).length
-                    : 0,
-            });
-
-            const shouldSettleContentPreview = dockviewTabContentDragPreviewRef.current !== null;
-            if (shouldSettleContentPreview) {
-                settleDockviewTabContentDragPreview();
-            }
-            clearDockviewTabDragVisualState({
-                preserveContentPreview: shouldSettleContentPreview,
-            });
-            dockviewDropCommittedRef.current = false;
             releaseDockviewDragAnimation();
-        };
-
-        const handleDragOverCapture = (event: DragEvent): void => {
-            if (!dockviewTabDragInProgressRef.current) {
-                return;
-            }
-
-            recordDockviewLastDragPointer(event.clientX, event.clientY);
-            positionDockviewTabContentDragPreview(event.clientX, event.clientY);
-
-            const draggedTabElement = dockviewDraggedTabElementRef.current;
-            if (!draggedTabElement) {
-                return;
-            }
-
-            const nextPreviewState = resolveDockviewTabPreviewState(event, draggedTabElement);
-            if (!nextPreviewState) {
-                if (dockviewTabPreviewStateRef.current !== null) {
-                    clearDockviewTabPreviewLayout();
-                }
-                return;
-            }
-
-            if (areDockviewTabPreviewStatesEquivalent(dockviewTabPreviewStateRef.current, nextPreviewState)) {
-                return;
-            }
-
-            applyDockviewTabPreviewLayout(nextPreviewState);
         };
 
         const handlePointerUpCapture = (): void => {
             recordDockviewTimelineEntry("pointerup-tab");
             clearPendingPointerDrag();
+            if (!dockviewTabDragInProgressRef.current) {
+                return;
+            }
+
+            handleDragEndCapture();
         };
 
         const handleDropCapture = (event: DragEvent): void => {
@@ -5890,61 +4827,25 @@ export function DockviewLayout({
             recordDockviewTimelineEntry("drop-host", {
                 targetClassName: target instanceof Element ? target.className : null,
                 hadDragSession,
-                clientX: event.clientX,
-                clientY: event.clientY,
             });
 
             if (!hadDragSession) {
                 return;
             }
 
-            dockviewDropCommittedRef.current = true;
-            recordDockviewLastDragPointer(event.clientX, event.clientY);
-            positionDockviewTabContentDragPreview(event.clientX, event.clientY);
-
-            recordDockviewTabReorderAuditEntry({
-                type: "drop-committed",
-                details: {
-                    targetClassName: target instanceof Element ? String(target.className) : null,
-                },
-            });
-
             clearPendingDragCleanupTimer();
+            dockviewTabDragInProgressRef.current = false;
             releaseDockviewDragAnimation();
-
-            clearDockviewContentDragPreviewFailsafeTimer();
-            if (dockviewTabContentDragPreviewRef.current !== null) {
-                dockviewContentDragPreviewFailsafeTimerRef.current = window.setTimeout(() => {
-                    dockviewContentDragPreviewFailsafeTimerRef.current = null;
-                    if (dockviewTabContentDragPreviewRef.current === null) {
-                        return;
-                    }
-
-                    logDockviewRuntime(
-                        "warn",
-                        "interaction-recovered",
-                        "content drag preview did not settle after drop; recovering interaction state",
-                        {
-                            dropCommitted: dockviewDropCommittedRef.current,
-                            dragInProgress: dockviewTabDragInProgressRef.current,
-                            activeTabId: activeTabId ?? null,
-                        },
-                    );
-                    recoverDockviewInteractionState();
-                }, DOCKVIEW_CONTENT_DRAG_PREVIEW_FAILSAFE_DURATION_MS);
-            }
         };
 
         host.addEventListener("pointerdown", handlePointerDownCapture, { capture: true });
         host.addEventListener("pointermove", handlePointerMoveCapture, { capture: true });
         host.addEventListener("dragstart", handleDragStartCapture, { capture: true });
-        host.addEventListener("dragover", handleDragOverCapture, { capture: true });
         host.addEventListener("drop", handleDropCapture, { capture: true });
         host.addEventListener("dragend", handleDragEndCapture, { capture: true });
         host.addEventListener("pointerup", handlePointerUpCapture, { capture: true });
         windowTarget.addEventListener("pointermove", handlePointerMoveCapture, { capture: true });
         windowTarget.addEventListener("pointerup", handlePointerUpCapture, { capture: true });
-        windowTarget.addEventListener("dragover", handleDragOverCapture, { capture: true });
         windowTarget.addEventListener("dragend", handleDragEndCapture, { capture: true });
         windowTarget.addEventListener("drop", handleDropCapture, { capture: true });
 
@@ -5952,160 +4853,16 @@ export function DockviewLayout({
             host.removeEventListener("pointerdown", handlePointerDownCapture, { capture: true });
             host.removeEventListener("pointermove", handlePointerMoveCapture, { capture: true });
             host.removeEventListener("dragstart", handleDragStartCapture, { capture: true });
-            host.removeEventListener("dragover", handleDragOverCapture, { capture: true });
             host.removeEventListener("drop", handleDropCapture, { capture: true });
             host.removeEventListener("dragend", handleDragEndCapture, { capture: true });
             host.removeEventListener("pointerup", handlePointerUpCapture, { capture: true });
             windowTarget.removeEventListener("pointermove", handlePointerMoveCapture, { capture: true });
             windowTarget.removeEventListener("pointerup", handlePointerUpCapture, { capture: true });
-            windowTarget.removeEventListener("dragover", handleDragOverCapture, { capture: true });
             windowTarget.removeEventListener("dragend", handleDragEndCapture, { capture: true });
             windowTarget.removeEventListener("drop", handleDropCapture, { capture: true });
             dockviewTabDragInProgressRef.current = false;
-            dockviewDropCommittedRef.current = false;
-            clearDockviewTabDragVisualState();
             clearPendingPointerDrag();
             clearPendingDragCleanupTimer();
-            clearDockviewContentDragPreviewFailsafeTimer();
-            dockviewRequestContentPreviewSettleRef.current = null;
-            dockviewFinalizeCommittedDragSessionRef.current = null;
-        };
-    }, [dockviewApi]);
-
-    useEffect(() => {
-        const host = mainDockHostRef.current;
-        if (!host) {
-            return;
-        }
-
-        const playDockviewTabReorderAnimation = (): void => {
-            dockviewTabReorderFrameRef.current = null;
-
-            const currentSnapshots = collectDockviewTabRectSnapshots(host);
-            const previousSnapshots = dockviewTabRectSnapshotsRef.current;
-            const currentTabStripSnapshots = collectDockviewTabStripSnapshots(host);
-            const previousTabStripSnapshots = dockviewTabStripSnapshotsRef.current;
-
-            if (!areDockviewTabStripSnapshotsEquivalent(previousTabStripSnapshots, currentTabStripSnapshots)) {
-                recordDockviewTabReorderAuditEntry({
-                    type: "dom-order-changed",
-                    tabStrips: currentTabStripSnapshots,
-                    targetGroupIndex: dockviewTabPreviewStateRef.current
-                        ? resolveDockviewTabGroupIndex(host, dockviewTabPreviewStateRef.current.targetContainer)
-                        : null,
-                    targetIndex: dockviewTabPreviewStateRef.current?.targetIndex ?? null,
-                    insertionLeft: dockviewTabInsertionMarkerRef.current
-                        ? Number(dockviewTabInsertionMarkerRef.current.left.toFixed(2))
-                        : null,
-                    details: {
-                        trigger: "mutation-observer",
-                        previewActive: dockviewTabPreviewStateRef.current !== null,
-                    },
-                });
-            }
-
-            dockviewTabStripSnapshotsRef.current = currentTabStripSnapshots;
-
-            if (!host.classList.contains("dockview-tab-dragging")) {
-                dockviewTabRectSnapshotsRef.current = currentSnapshots;
-                return;
-            }
-
-            if (dockviewTabPreviewStateRef.current !== null) {
-                dockviewTabRectSnapshotsRef.current = currentSnapshots;
-                return;
-            }
-
-            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-                dockviewTabRectSnapshotsRef.current = currentSnapshots;
-                return;
-            }
-
-            currentSnapshots.forEach((currentSnapshot, tabElement) => {
-                if (tabElement.classList.contains("dv-tab--drag-source")) {
-                    return;
-                }
-
-                const previousSnapshot = previousSnapshots.get(tabElement);
-                if (!previousSnapshot) {
-                    return;
-                }
-
-                const deltaX = previousSnapshot.left - currentSnapshot.left;
-                const deltaY = previousSnapshot.top - currentSnapshot.top;
-                if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) {
-                    return;
-                }
-
-                dockviewTabReorderAnimationsRef.current.get(tabElement)?.cancel();
-                const animation = tabElement.animate(
-                    [
-                        {
-                            transform: `translate(${deltaX}px, ${deltaY}px)`,
-                        },
-                        {
-                            transform: "translate(0px, 0px)",
-                        },
-                    ],
-                    {
-                        duration: 160,
-                        easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
-                        fill: "both",
-                    },
-                );
-
-                dockviewTabReorderAnimationsRef.current.set(tabElement, animation);
-                animation.onfinish = () => {
-                    if (dockviewTabReorderAnimationsRef.current.get(tabElement) === animation) {
-                        dockviewTabReorderAnimationsRef.current.delete(tabElement);
-                    }
-                };
-                animation.oncancel = () => {
-                    if (dockviewTabReorderAnimationsRef.current.get(tabElement) === animation) {
-                        dockviewTabReorderAnimationsRef.current.delete(tabElement);
-                    }
-                };
-            });
-
-            dockviewTabRectSnapshotsRef.current = currentSnapshots;
-        };
-
-        const scheduleDockviewTabReorderAnimation = (): void => {
-            if (dockviewTabReorderFrameRef.current !== null) {
-                return;
-            }
-
-            dockviewTabReorderFrameRef.current = window.requestAnimationFrame(
-                playDockviewTabReorderAnimation,
-            );
-        };
-
-        dockviewTabRectSnapshotsRef.current = collectDockviewTabRectSnapshots(host);
-        dockviewTabStripSnapshotsRef.current = collectDockviewTabStripSnapshots(host);
-
-        const observer = new MutationObserver(() => {
-            scheduleDockviewTabReorderAnimation();
-        });
-
-        observer.observe(host, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ["class", "style"],
-        });
-
-        return () => {
-            observer.disconnect();
-            if (dockviewTabReorderFrameRef.current !== null) {
-                window.cancelAnimationFrame(dockviewTabReorderFrameRef.current);
-                dockviewTabReorderFrameRef.current = null;
-            }
-            dockviewTabReorderAnimationsRef.current.forEach((animation) => {
-                animation.cancel();
-            });
-            dockviewTabReorderAnimationsRef.current.clear();
-            dockviewTabRectSnapshotsRef.current.clear();
-            dockviewTabStripSnapshotsRef.current = [];
         };
     }, [dockviewApi]);
 
@@ -6148,9 +4905,6 @@ export function DockviewLayout({
             nextObservation,
         ].slice(-120);
         dockviewAnimationObservationsRef.current = nextObservations;
-        dockviewRuntimeRef.current.publish("animation-observation", {
-            observation: nextObservation,
-        });
 
         window.dispatchEvent(new CustomEvent("ofive:dockview-layout-animation", {
             detail: nextObservation,
@@ -6175,316 +4929,7 @@ export function DockviewLayout({
             ...dockviewTimelineEntriesRef.current,
             nextEntry,
         ].slice(-200);
-        dockviewRuntimeRef.current.publish("timeline-entry", {
-            entry: nextEntry,
-        });
     };
-
-    const recordDockviewTabReorderAuditEntry = (
-        entry: Omit<DockviewTabReorderAuditEntry, "sequence" | "timestamp" | "sessionId" | "sourceLabel" | "sourceGroupIndex" | "sourceIndex" | "targetGroupIndex" | "targetIndex" | "insertionLeft" | "shiftedTabLabels" | "tabStrips"> & {
-            sessionId?: number | null;
-            sourceLabel?: string | null;
-            sourceGroupIndex?: number | null;
-            sourceIndex?: number | null;
-            targetGroupIndex?: number | null;
-            targetIndex?: number | null;
-            insertionLeft?: number | null;
-            shiftedTabLabels?: string[];
-            tabStrips?: DockviewTabStripSnapshot[];
-        },
-    ): void => {
-        const host = mainDockHostRef.current;
-        const draggedTabElement = dockviewDraggedTabElementRef.current;
-        const nextEntry: DockviewTabReorderAuditEntry = {
-            sequence: dockviewTabReorderAuditSequenceRef.current++,
-            sessionId: entry.sessionId ?? dockviewActiveTabDragSessionIdRef.current,
-            type: entry.type,
-            timestamp: Date.now(),
-            sourceLabel: entry.sourceLabel ?? draggedTabElement?.textContent?.trim() ?? null,
-            sourceGroupIndex: entry.sourceGroupIndex ?? (host && draggedTabElement
-                ? resolveDockviewTabGroupIndex(host, draggedTabElement)
-                : null),
-            sourceIndex: entry.sourceIndex ?? resolveDockviewTabIndexWithinContainer(draggedTabElement),
-            targetGroupIndex: entry.targetGroupIndex ?? null,
-            targetIndex: entry.targetIndex ?? null,
-            insertionLeft: entry.insertionLeft ?? null,
-            shiftedTabLabels: entry.shiftedTabLabels ?? resolveDockviewShiftedTabLabels(dockviewTabPreviewOffsetsRef.current),
-            tabStrips: entry.tabStrips ?? (host ? collectDockviewTabStripSnapshots(host) : []),
-            details: entry.details,
-        };
-
-        dockviewTabReorderAuditEntriesRef.current = [
-            ...dockviewTabReorderAuditEntriesRef.current,
-            nextEntry,
-        ].slice(-400);
-        dockviewRuntimeRef.current.publish("tab-reorder-audit", {
-            entry: nextEntry,
-        });
-    };
-
-    const publishDockviewLayoutSnapshot = (): void => {
-        const host = mainDockHostRef.current;
-        const snapshot = {
-            groups: host ? collectDockviewGroupRectSnapshots(host) : [],
-        };
-        dockviewRuntimeRef.current.publish("layout-snapshot", {
-            snapshot,
-        });
-    };
-
-    const buildDockviewLayoutHealthSnapshot = (): DockviewLayoutHealthSnapshot => {
-        const host = mainDockHostRef.current;
-        const groupCount = host ? host.querySelectorAll(".dv-groupview").length : 0;
-        const tabCount = host ? host.querySelectorAll(".dv-tab").length : 0;
-        const contentPreviewCount = typeof document === "undefined"
-            ? 0
-            : document.querySelectorAll(".dockview-content-drag-preview").length;
-        const dragPreviewCount = typeof document === "undefined"
-            ? 0
-            : document.querySelectorAll(".dockview-tab-drag-preview").length;
-        const dragSourceTabCount = host ? host.querySelectorAll(".dv-tab--drag-source").length : 0;
-        const dragSourceGroupCount = host ? host.querySelectorAll(".dv-groupview--content-drag-source").length : 0;
-
-        const issues: DockviewLayoutHealthIssue[] = [];
-        const hasResidualDragArtifacts = contentPreviewCount > 0
-            || dragPreviewCount > 0
-            || dragSourceTabCount > 0
-            || dragSourceGroupCount > 0
-            || dockviewDraggedTabElementRef.current !== null;
-
-        if (
-            dockviewTabDragInProgressRef.current
-            && dockviewDropCommittedRef.current
-            && hasResidualDragArtifacts
-        ) {
-            issues.push({
-                code: "stuck-post-drop-drag-state",
-                severity: "error",
-                message: "The drag session is still marked active after drop while drag artifacts remain mounted.",
-                details: {
-                    contentPreviewCount,
-                    dragPreviewCount,
-                    dragSourceTabCount,
-                    dragSourceGroupCount,
-                },
-            });
-        }
-
-        if (!dockviewTabDragInProgressRef.current && hasResidualDragArtifacts) {
-            issues.push({
-                code: "stale-drag-artifacts",
-                severity: "error",
-                message: "Drag previews or source markers remain after the drag session ended.",
-                details: {
-                    contentPreviewCount,
-                    dragPreviewCount,
-                    dragSourceTabCount,
-                    dragSourceGroupCount,
-                },
-            });
-        }
-
-        if (contentPreviewCount > 1) {
-            issues.push({
-                code: "duplicate-content-previews",
-                severity: "error",
-                message: "Multiple dockview content drag previews are mounted at the same time.",
-                details: {
-                    contentPreviewCount,
-                },
-            });
-        }
-
-        if (dragPreviewCount > 1) {
-            issues.push({
-                code: "duplicate-tab-previews",
-                severity: "error",
-                message: "Multiple dockview tab drag preview nodes are mounted at the same time.",
-                details: {
-                    dragPreviewCount,
-                },
-            });
-        }
-
-        if (contentPreviewCount !== dragPreviewCount) {
-            issues.push({
-                code: "preview-count-mismatch",
-                severity: "warn",
-                message: "Tab preview and content preview counts are out of sync.",
-                details: {
-                    contentPreviewCount,
-                    dragPreviewCount,
-                },
-            });
-        }
-
-        if (dockviewTabDragInProgressRef.current && dockviewDraggedTabElementRef.current === null) {
-            issues.push({
-                code: "missing-drag-source",
-                severity: "error",
-                message: "A Dockview drag session is marked active without a source tab element.",
-            });
-        }
-
-        return {
-            timestamp: Date.now(),
-            activeTabId,
-            groupCount,
-            tabCount,
-            dragInProgress: dockviewTabDragInProgressRef.current,
-            dropCommitted: dockviewDropCommittedRef.current,
-            pendingPointerDrag: dockviewPendingPointerDragRef.current !== null,
-            contentPreviewCount,
-            dragPreviewCount,
-            dragSourceTabCount,
-            dragSourceGroupCount,
-            issues,
-        };
-    };
-
-    const recoverDockviewInteractionState = (): void => {
-        const healthSnapshot = buildDockviewLayoutHealthSnapshot();
-        logDockviewRuntime("warn", "interaction-recovered", "recovering interaction state", {
-            beforeIssueCount: healthSnapshot.issues.length,
-            contentPreviewCount: healthSnapshot.contentPreviewCount,
-            dragPreviewCount: healthSnapshot.dragPreviewCount,
-        });
-
-        dockviewTabDragInProgressRef.current = false;
-        dockviewDropCommittedRef.current = false;
-        dockviewActiveTabDragSessionIdRef.current = null;
-        dockviewPendingPointerDragRef.current = null;
-
-        if (dockviewDragAnimationCleanupTimerRef.current !== null) {
-            window.clearTimeout(dockviewDragAnimationCleanupTimerRef.current);
-            dockviewDragAnimationCleanupTimerRef.current = null;
-        }
-
-        if (dockviewContentDragPreviewSettleTimerRef.current !== null) {
-            window.clearTimeout(dockviewContentDragPreviewSettleTimerRef.current);
-            dockviewContentDragPreviewSettleTimerRef.current = null;
-        }
-
-        if (dockviewContentDragPreviewFailsafeTimerRef.current !== null) {
-            window.clearTimeout(dockviewContentDragPreviewFailsafeTimerRef.current);
-            dockviewContentDragPreviewFailsafeTimerRef.current = null;
-        }
-
-        dockviewTabPreviewOffsetsRef.current.forEach((_offset, tabElement) => {
-            tabElement.style.removeProperty("--ofive-dockview-tab-shift-x");
-        });
-        dockviewTabPreviewOffsetsRef.current.clear();
-        dockviewTabPreviewStateRef.current = null;
-
-        const insertionMarker = dockviewTabInsertionMarkerRef.current;
-        if (insertionMarker) {
-            insertionMarker.container.classList.remove("dv-tabs-container--insertion-preview");
-            insertionMarker.container.style.removeProperty("--ofive-dockview-insert-left");
-            insertionMarker.container.style.removeProperty("--ofive-dockview-preview-width");
-            insertionMarker.container.style.removeProperty("--ofive-dockview-preview-height");
-            insertionMarker.container.removeAttribute("data-ofive-dockview-preview-label");
-            dockviewTabInsertionMarkerRef.current = null;
-        }
-
-        dockviewTabReorderAnimationsRef.current.forEach((animation) => {
-            animation.cancel();
-        });
-        dockviewTabReorderAnimationsRef.current.clear();
-        dockviewTabRectSnapshotsRef.current.clear();
-
-        mainDockHostRef.current?.classList.remove("dockview-tab-dragging");
-        mainDockHostRef.current?.querySelectorAll<HTMLElement>(".dv-tab--drag-source").forEach((tabElement) => {
-            tabElement.classList.remove("dv-tab--drag-source");
-        });
-        mainDockHostRef.current?.querySelectorAll<HTMLElement>(".dv-groupview--content-drag-source").forEach((groupElement) => {
-            groupElement.classList.remove("dv-groupview--content-drag-source");
-        });
-
-        dockviewDraggedTabElementRef.current = null;
-
-        const dragPreviewElement = dockviewTabDragPreviewRef.current;
-        if (dragPreviewElement) {
-            dragPreviewElement.remove();
-            dockviewTabDragPreviewRef.current = null;
-        }
-
-        const contentPreviewState = dockviewTabContentDragPreviewRef.current;
-        if (contentPreviewState) {
-            contentPreviewState.sourceGroupElement.classList.remove("dv-groupview--content-drag-source");
-            contentPreviewState.element.remove();
-            dockviewTabContentDragPreviewRef.current = null;
-        }
-
-        document.querySelectorAll(".dockview-tab-drag-preview, .dockview-content-drag-preview").forEach((element) => {
-            element.remove();
-        });
-
-        releaseDockviewDragAnimation();
-
-        recordDockviewTimelineEntry("health-recovery", {
-            issueCount: healthSnapshot.issues.length,
-            contentPreviewCount: healthSnapshot.contentPreviewCount,
-            dragPreviewCount: healthSnapshot.dragPreviewCount,
-        });
-
-        const recoveredSnapshot = buildDockviewLayoutHealthSnapshot();
-        dockviewRuntimeRef.current.publish("interaction-recovered", {
-            before: healthSnapshot,
-            after: recoveredSnapshot,
-        });
-
-        dockviewLastHealthSnapshotRef.current = recoveredSnapshot;
-        dockviewLastHealthSignatureRef.current = null;
-    };
-
-    useEffect(() => {
-        if (typeof window === "undefined") {
-            return;
-        }
-
-        const monitor = (): void => {
-            const healthSnapshot = buildDockviewLayoutHealthSnapshot();
-            dockviewLastHealthSnapshotRef.current = healthSnapshot;
-            dockviewRuntimeRef.current.publish("health-snapshot", {
-                snapshot: healthSnapshot,
-            });
-
-            const signature = healthSnapshot.issues
-                .map((issue) => `${issue.severity}:${issue.code}`)
-                .join("|");
-
-            if (signature === dockviewLastHealthSignatureRef.current) {
-                return;
-            }
-
-            dockviewLastHealthSignatureRef.current = signature || null;
-            if (healthSnapshot.issues.length === 0) {
-                return;
-            }
-
-            dockviewRuntimeRef.current.publish("health-issue", {
-                snapshot: healthSnapshot,
-                issues: healthSnapshot.issues,
-            });
-            logDockviewRuntime("warn", "health-issue", "layout health issues detected", {
-                issueCount: healthSnapshot.issues.length,
-                groupCount: healthSnapshot.groupCount,
-                tabCount: healthSnapshot.tabCount,
-                codes: healthSnapshot.issues.map((issue) => issue.code).join(","),
-            });
-            recordDockviewTimelineEntry("health-alert", {
-                issueCount: healthSnapshot.issues.length,
-                groupCount: healthSnapshot.groupCount,
-                tabCount: healthSnapshot.tabCount,
-            });
-        };
-
-        monitor();
-        const intervalId = window.setInterval(monitor, 250);
-        return () => {
-            window.clearInterval(intervalId);
-        };
-    }, [activeTabId]);
 
     const captureDockviewLayoutAnimation = (
         reason: PendingDockviewLayoutAnimation["reason"],
@@ -6892,7 +5337,6 @@ export function DockviewLayout({
             }
 
             const pendingAnimationId = pendingDockviewLayoutAnimationRef.current?.id;
-            publishDockviewLayoutSnapshot();
             recordDockviewTimelineEntry("layout-change", {
                 pendingAnimationId: pendingAnimationId ?? null,
             });
@@ -7152,8 +5596,6 @@ export function DockviewLayout({
                         className="dockview-theme-abyss main-dockview"
                         components={dockviewComponents}
                         onReady={handleReady}
-                        onDidMovePanel={handleMainDockviewDidMovePanel}
-                        onWillDrop={handleMainDockviewWillDrop}
                         onDidDrop={(event) => {
                             void handleMainDockviewDrop(event);
                         }}

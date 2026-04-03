@@ -1028,72 +1028,18 @@
 
 /* macOS 亮色毛玻璃：保持更高透光度，避免发灰发脏。 */
 :root[data-theme="light"].app-runtime--tauri.app-effect--glass.app-platform--macos {
-  --window-glass-bg: rgba(238, 242, 247, 0.1);
-  --window-glass-elevated: rgba(248, 250, 252, 0.14);
-  --window-glass-border: rgba(71, 85, 105, 0.18);
-  --window-glass-bg-rgb: 238, 242, 247;
-  --window-glass-elevated-rgb: 248, 250, 252;
-  --window-glass-border-rgb: 71, 85, 105;
-  --glass-surface-opacity: 0.08;
-  --glass-surface-opacity-soft: 0.11;
-  --glass-surface-opacity-strong: 0.16;
-  --glass-inactive-surface-opacity: 0.06;
-  --glass-inactive-surface-opacity-soft: 0.09;
-  --glass-inactive-surface-opacity-strong: 0.13;
-  --bg-primary: rgba(238, 242, 247, 0.035);
-  --bg-secondary: rgba(248, 250, 252, 0.07);
-  --bg-hover: rgba(248, 250, 252, 0.13);
-  --border-color: rgba(71, 85, 105, 0.16);
-  --floating-surface-bg: rgba(248, 250, 252, 0.46);
-  --floating-surface-bg-strong: rgba(248, 250, 252, 0.56);
-  --floating-surface-border: rgba(71, 85, 105, 0.2);
-  --content-material-bg: rgba(248, 250, 252, 0.1);
-  --content-material-bg-muted: rgba(238, 242, 247, 0.08);
-  --content-material-bg-strong: rgba(248, 250, 252, 0.16);
-  --content-material-border: rgba(71, 85, 105, 0.14);
-  --content-material-highlight: rgba(255, 255, 255, 0.16);
-  --content-material-pill-bg: rgba(248, 250, 252, 0.14);
-  --content-material-input-bg: rgba(238, 242, 247, 0.11);
-  --content-material-hover-bg: rgba(248, 250, 252, 0.18);
-  --surface-input-bg: rgba(248, 250, 252, 0.14);
-  --surface-input-border: rgba(71, 85, 105, 0.18);
-  --surface-card-bg: rgba(248, 250, 252, 0.18);
-  --surface-card-bg-muted: rgba(248, 250, 252, 0.13);
-  --surface-card-border: rgba(71, 85, 105, 0.16);
-  --surface-chip-bg: rgba(248, 250, 252, 0.12);
-  --surface-chip-bg-strong: rgba(248, 250, 252, 0.18);
-  --surface-chip-border: rgba(71, 85, 105, 0.14);
-  --surface-overlay-backdrop: rgba(238, 242, 247, 0.14);
-  --surface-overlay-panel-bg: rgba(248, 250, 252, 0.2);
-  --surface-overlay-panel-border: rgba(71, 85, 105, 0.18);
-  --shell-surface-muted: rgba(248, 250, 252, 0.08);
-  --shell-surface-raised: rgba(248, 250, 252, 0.14);
-  --shell-stroke-soft: rgba(71, 85, 105, 0.12);
-  --shell-stroke-strong: rgba(71, 85, 105, 0.2);
-  --chrome-titlebar-bg:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.04)),
-    rgba(248, 250, 252, 0.08);
-  --chrome-sidebar-bg:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.03)),
-    rgba(248, 250, 252, 0.06);
-  --chrome-sidebar-header-bg:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03)),
-    rgba(248, 250, 252, 0.05);
-  --chrome-activity-bar-bg:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.03)),
-    rgba(248, 250, 252, 0.08);
-  --chrome-tabstrip-bg: rgba(248, 250, 252, 0.08);
-  --chrome-tab-active-bg: rgba(248, 250, 252, 0.14);
-  --chrome-tab-inactive-bg: rgba(248, 250, 252, 0.04);
-  --chrome-border-soft: rgba(71, 85, 105, 0.12);
-  --chrome-border-strong: rgba(71, 85, 105, 0.2);
-  --chrome-inline-highlight: rgba(255, 255, 255, 0.22);
-  --shell-atmosphere-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(238, 242, 247, 0.015));
-  --shell-atmosphere-opacity: 0.04;
-  --shell-content-atmosphere-overlay: linear-gradient(180deg, rgba(248, 250, 252, 0.05), transparent 18%);
-  --shell-content-atmosphere-opacity: 0.03;
-  --editor-bg-color: rgba(238, 242, 247, 0.045);
-  --editor-gutter-bg-color: rgba(248, 250, 252, 0.08);
+  --window-glass-bg: rgba(248, 249, 251, 0.13);
+  --window-glass-elevated: rgba(255, 255, 255, 0.2);
+  --window-glass-border: rgba(15, 23, 42, 0.16);
+  --window-glass-bg-rgb: 248, 249, 251;
+  --window-glass-elevated-rgb: 255, 255, 255;
+  --window-glass-border-rgb: 15, 23, 42;
+  --bg-primary: rgba(248, 249, 251, 0.05);
+  --bg-secondary: rgba(255, 255, 255, 0.09);
+  --bg-hover: rgba(255, 255, 255, 0.16);
+  --border-color: rgba(15, 23, 42, 0.16);
+  --editor-bg-color: rgba(248, 249, 251, 0.06);
+  --editor-gutter-bg-color: rgba(255, 255, 255, 0.1);
 }
 
 /* macOS 牛皮纸毛玻璃：比亮色明显更深，保留暖色而不抬亮 chrome。 */
