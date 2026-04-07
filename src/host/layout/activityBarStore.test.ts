@@ -14,6 +14,8 @@ import { describe, expect, it } from "bun:test";
 import {
     dedupeActivityBarItems,
     mergeActivityBarConfig,
+    projectActivityBarConfigFromRuntime,
+    reorderActivityBarItems,
     type ActivityBarItemConfig,
 } from "./activityBarStore";
 
@@ -48,6 +50,54 @@ describe("mergeActivityBarConfig", () => {
         expect(result).toEqual([
             { id: "calendar", section: "top", visible: true, bar: "left" },
             { id: "files", section: "top", visible: true, bar: "left" },
+        ]);
+    });
+});
+
+describe("reorderActivityBarItems", () => {
+    it("应按 strip 可见顺序重排活动项，并让隐藏项保持在 bar 末尾", () => {
+        const result = reorderActivityBarItems([
+            { id: "files", section: "top", visible: true, bar: "left" },
+            { id: "search", section: "top", visible: true, bar: "left" },
+            { id: "graph", section: "bottom", visible: true, bar: "left" },
+            { id: "hidden", section: "top", visible: false, bar: "left" },
+            { id: "outline", section: "top", visible: true, bar: "right" },
+        ], {
+            sourceBarId: "left",
+            targetBarId: "left",
+            iconId: "graph",
+            targetIndex: 1,
+        });
+
+        expect(result).toEqual<ActivityBarItemConfig[]>([
+            { id: "files", section: "top", visible: true, bar: "left" },
+            { id: "graph", section: "bottom", visible: true, bar: "left" },
+            { id: "search", section: "top", visible: true, bar: "left" },
+            { id: "hidden", section: "top", visible: false, bar: "left" },
+            { id: "outline", section: "top", visible: true, bar: "right" },
+        ]);
+    });
+});
+
+describe("projectActivityBarConfigFromRuntime", () => {
+    it("应仅用 runtime order 覆盖受 layout 管理的可见 strip 顺序", () => {
+        const result = projectActivityBarConfigFromRuntime([
+            { id: "files", section: "top", visible: true, bar: "left" },
+            { id: "__settings__", section: "bottom", visible: true, bar: "left" },
+            { id: "graph", section: "bottom", visible: true, bar: "left" },
+            { id: "hidden", section: "top", visible: false, bar: "left" },
+            { id: "outline", section: "top", visible: true, bar: "right" },
+        ], {
+            left: ["graph", "files"],
+            right: ["outline"],
+        });
+
+        expect(result.items).toEqual<ActivityBarItemConfig[]>([
+            { id: "graph", section: "bottom", visible: true, bar: "left" },
+            { id: "__settings__", section: "bottom", visible: true, bar: "left" },
+            { id: "files", section: "top", visible: true, bar: "left" },
+            { id: "hidden", section: "top", visible: false, bar: "left" },
+            { id: "outline", section: "top", visible: true, bar: "right" },
         ]);
     });
 });

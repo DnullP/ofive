@@ -2,6 +2,9 @@
  * Host layout exports.
  */
 
+export { WorkbenchLayoutHost } from "./WorkbenchLayoutHost";
+export type { WorkbenchLayoutHostProps } from "./WorkbenchLayoutHost";
+export type { WorkbenchLayoutMode } from "./workbenchLayoutMode";
 export { DockviewLayout } from "./DockviewLayout";
 export type {
     PanelDefinition,

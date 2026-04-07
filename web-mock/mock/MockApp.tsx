@@ -12,7 +12,7 @@
 import React, { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { Bot, Compass, FolderOpen, Link2, Orbit, Plus } from "lucide-react";
 import {
-    DockviewLayout,
+    WorkbenchLayoutHost,
     type TabInstanceDefinition,
 } from "../../src/host/layout";
 import type {
@@ -22,6 +22,7 @@ import type {
     DockviewLayoutTimelineEntry,
 } from "../../src/host/layout/dockviewLayoutDebugContract";
 import { buildGlassRuntimeStyle } from "../../src/host/layout/glassRuntimeStyle";
+import { readWorkbenchLayoutMode } from "../../src/host/layout/workbenchLayoutMode";
 import { CodeMirrorEditorTab } from "../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
 import { KnowledgeGraphTab } from "../../src/plugins/knowledge-graph/tab/KnowledgeGraphTab";
 import { CanvasTab } from "../../src/plugins/canvas/CanvasTab";
@@ -464,6 +465,7 @@ function ensureMockComponentsRegistered(): void {
 export function MockApp(): ReactNode {
     const mockVaultPath = useMemo(() => resolveMockVaultPath(), []);
     const showControls = useMemo(() => resolveShouldShowControls(), []);
+    const workbenchLayoutMode = useMemo(() => readWorkbenchLayoutMode(), []);
     const dockviewDebugApiRef = useRef<DockviewLayoutDebugApi | null>(null);
     const [platform, setPlatform] = useState<MockPlatform>(() => resolveInitialMockPlatform());
     const [themeMode, setThemeMode] = useState<MockThemeMode>(() => resolveInitialThemeMode());
@@ -669,6 +671,10 @@ export function MockApp(): ReactNode {
                     </label>
                     <div style={{ display: "grid", gap: 6, fontSize: 12 }}>
                         <span>Split Motion Demo</span>
+                        <div style={{ color: "rgba(245, 247, 251, 0.72)", lineHeight: 1.5 }}>
+                            当前布局引擎：{workbenchLayoutMode}
+                        </div>
+                        {workbenchLayoutMode === "dockview" ? (
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
                             <button
                                 type="button"
@@ -687,6 +693,8 @@ export function MockApp(): ReactNode {
                                 Close Split
                             </button>
                         </div>
+                        ) : null}
+                        {workbenchLayoutMode === "dockview" ? (
                         <button
                             type="button"
                             data-testid="mock-control-split-replay"
@@ -695,17 +703,20 @@ export function MockApp(): ReactNode {
                         >
                             {isSplitReplayRunning ? "Replaying..." : "Replay Split Motion"}
                         </button>
+                        ) : null}
                         <div style={{ color: "rgba(245, 247, 251, 0.72)", lineHeight: 1.5 }}>
-                            使用这组按钮可以稳定复现 Dockview split 创建与回收动画，不必依赖拖拽操作。
+                            {workbenchLayoutMode === "dockview"
+                                ? "使用这组按钮可以稳定复现 Dockview split 创建与回收动画，不必依赖拖拽操作。"
+                                : "layout-v2 模式下这里保留 mock 控件面板，但不再暴露 Dockview 专属 split 调试按钮。"}
                         </div>
                     </div>
                 </div>
             ) : null}
             <div className="app-content">
-                <DockviewLayout
+                <WorkbenchLayoutHost
                     initialTabs={initialTabs}
                     initialActivePanelId="files"
-                    debugApiRef={dockviewDebugApiRef}
+                    debugApiRef={workbenchLayoutMode === "dockview" ? dockviewDebugApiRef : undefined}
                 />
             </div>
         </div>

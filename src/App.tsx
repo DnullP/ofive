@@ -2,8 +2,8 @@ import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   CustomTitlebar,
-  DockviewLayout,
   SettingsTab,
+  WorkbenchLayoutHost,
   type TabInstanceDefinition,
 } from "./host/layout";
 import { useBackendEventBridge } from "./host/events/appEventBus";
@@ -61,7 +61,7 @@ function App() {
     <div className="app-shell">
       <CustomTitlebar />
       <div className="app-content">
-        <DockviewLayout
+        <WorkbenchLayoutHost
           initialTabs={initialTabs}
           initialActivePanelId="files"
         />

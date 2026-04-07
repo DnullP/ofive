@@ -127,6 +127,13 @@ export interface MergedActivityBarItem {
     bar: "left" | "right";
 }
 
+export interface ActivityBarItemMove {
+    sourceBarId: "left" | "right";
+    targetBarId: "left" | "right";
+    iconId: string;
+    targetIndex: number;
+}
+
 /**
  * @function dedupeActivityBarItems
  * @description 按活动项 id 去重配置，保留最后一次出现的配置。
@@ -254,6 +261,138 @@ export function mergeActivityBarConfig(
     }
 
     return result;
+}
+
+export function reorderActivityBarItems(
+    items: Array<Pick<MergedActivityBarItem, "id" | "section" | "visible" | "bar">>,
+    move: ActivityBarItemMove,
+): ActivityBarItemConfig[] {
+    const movingItem = items.find((item) => item.id === move.iconId);
+    if (!movingItem) {
+        return items.map((item) => ({
+            id: item.id,
+            section: item.section,
+            visible: item.visible,
+            bar: item.bar,
+        }));
+    }
+
+    const sourceBarId = move.sourceBarId;
+    const targetBarId = move.targetBarId;
+    const withoutMovingItem = items.filter((item) => item.id !== move.iconId);
+
+    const buildBarItems = (barId: "left" | "right"): ActivityBarItemConfig[] => {
+        const barItems = withoutMovingItem.filter((item) => item.bar === barId);
+        const visibleItems = barItems.filter((item) => item.visible);
+        const hiddenItems = barItems.filter((item) => !item.visible);
+
+        if (barId !== targetBarId) {
+            return [...visibleItems, ...hiddenItems].map((item) => ({
+                id: item.id,
+                section: item.section,
+                visible: item.visible,
+                bar: item.bar,
+            }));
+        }
+
+        const clampedTargetIndex = Math.min(Math.max(0, move.targetIndex), visibleItems.length);
+        const reorderedVisibleItems = [...visibleItems];
+        reorderedVisibleItems.splice(clampedTargetIndex, 0, {
+            ...movingItem,
+            bar: targetBarId,
+        });
+
+        return [...reorderedVisibleItems, ...hiddenItems].map((item) => ({
+            id: item.id,
+            section: item.section,
+            visible: item.visible,
+            bar: item.bar,
+        }));
+    };
+
+    const nextLeftItems = buildBarItems("left");
+    const nextRightItems = buildBarItems("right");
+
+    if (sourceBarId !== targetBarId) {
+        return sourceBarId === "left"
+            ? [...nextRightItems, ...nextLeftItems]
+            : [...nextLeftItems, ...nextRightItems];
+    }
+
+    return [...nextLeftItems, ...nextRightItems];
+}
+
+export function projectActivityBarConfigFromRuntime(
+    items: Array<Pick<MergedActivityBarItem, "id" | "section" | "visible" | "bar">>,
+    runtimeOrder: {
+        left: string[];
+        right: string[];
+    },
+): ActivityBarConfig {
+    const buildRuntimeQueue = (bar: "left" | "right"): ActivityBarItemConfig[] => {
+        const managedVisibleItems = items.filter((item) => item.visible && item.bar === bar && (bar === "right" || item.id !== SETTINGS_ACTIVITY_ID));
+        const managedItemsById = new Map(managedVisibleItems.map((item) => [item.id, item]));
+        const queue: ActivityBarItemConfig[] = [];
+        const seen = new Set<string>();
+
+        for (const id of runtimeOrder[bar]) {
+            const item = managedItemsById.get(id);
+            if (!item || seen.has(id)) {
+                continue;
+            }
+
+            seen.add(id);
+            queue.push({
+                id: item.id,
+                section: item.section,
+                visible: item.visible,
+                bar: item.bar,
+            });
+        }
+
+        for (const item of managedVisibleItems) {
+            if (seen.has(item.id)) {
+                continue;
+            }
+
+            queue.push({
+                id: item.id,
+                section: item.section,
+                visible: item.visible,
+                bar: item.bar,
+            });
+        }
+
+        return queue;
+    };
+
+    const leftQueue = buildRuntimeQueue("left");
+    const rightQueue = buildRuntimeQueue("right");
+
+    return {
+        items: items.map((item) => {
+            const isManagedVisibleItem = item.visible && (item.bar === "right" || item.id !== SETTINGS_ACTIVITY_ID);
+            if (!isManagedVisibleItem) {
+                return {
+                    id: item.id,
+                    section: item.section,
+                    visible: item.visible,
+                    bar: item.bar,
+                };
+            }
+
+            const nextItem = item.bar === "right"
+                ? rightQueue.shift()
+                : leftQueue.shift();
+
+            return nextItem ?? {
+                id: item.id,
+                section: item.section,
+                visible: item.visible,
+                bar: item.bar,
+            };
+        }),
+    };
 }
 
 /* ────────────────── 状态存储 ────────────────── */

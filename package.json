@@ -55,6 +55,7 @@
     "highlight.js": "^11.11.1",
     "i18next": "^25.8.13",
     "katex": "^0.16.33",
+    "layout-v2": "file:../layout-v2",
     "lucide-react": "^0.564.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -75,5 +76,8 @@
     "@vitejs/plugin-react": "^4.6.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
-  }
+  },
+  "trustedDependencies": [
+    "layout-v2"
+  ]
 }
