@@ -87,7 +87,7 @@ import {
     type SidebarHeaderActionContext,
 } from "../registry";
 import { useVaultState } from "../vault/vaultStore";
-import "../../../node_modules/layout-v2/dist/layout-v2.css";
+import "layout-v2/styles.css";
 import "./sidebar/Sidebar.css";
 import { SidebarHeader } from "./sidebar/SidebarHeader";
 import { SidebarIconBar } from "./sidebar/SidebarIconBar";
