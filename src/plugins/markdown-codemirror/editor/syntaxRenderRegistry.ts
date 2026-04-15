@@ -308,6 +308,13 @@ export function createRegisteredLineSyntaxRenderExtension() {
             }
 
             update(update: ViewUpdate): void {
+                /* 在 IME 组合态期间跳过装饰重建：
+                   标题/行内语法装饰可能改变字号、行高或通过 Decoration.replace
+                   隐藏/显示内容，在组合态下触发重排会导致 IME 候选窗偏移。
+                   组合结束后 CodeMirror 会再次触发 docChanged，届时重建即可。 */
+                if (update.view.composing) {
+                    return;
+                }
                 if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged) {
                     this.decorations = buildRegisteredSyntaxDecorations(update.view);
                 }

@@ -15,6 +15,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import YAML from "yaml";
 import i18n from "../i18n";
 import { detectExcludedLineRanges, isLineExcluded } from "../utils/markdownBlockDetector";
+import { scorePinyinMatch } from "../utils/pinyinMatch";
 import { parseTaskBoardLine } from "../utils/taskSyntax";
 import { loadBrowserMockMarkdownContents } from "./vaultBrowserMockFixtures";
 
@@ -1011,6 +1012,12 @@ function scoreBrowserFallbackQuickSwitch(relativePath: string, query: string): n
             continue;
         }
 
+        const pinyinScore = scorePinyinMatch(fileName, token);
+        if (pinyinScore !== null) {
+            score += pinyinScore;
+            continue;
+        }
+
         return null;
     }
 
@@ -1577,6 +1584,36 @@ export async function searchVaultMarkdownFiles(
         query,
         resultCount: response.length,
     });
+
+    /* ── Pinyin augmentation: re-score with pinyin when backend yields few results ── */
+    const trimmedQuery = query.trim();
+    if (trimmedQuery && /^[a-zA-Z\s]+$/.test(trimmedQuery)) {
+        const allFiles = await invoke<VaultQuickSwitchItem[]>("search_vault_markdown_files", {
+            query: "",
+            limit: 200,
+        });
+
+        const existingPaths = new Set(response.map((item) => item.relativePath));
+        const pinyinMatches: VaultQuickSwitchItem[] = [];
+
+        for (const item of allFiles) {
+            if (existingPaths.has(item.relativePath)) {
+                continue;
+            }
+            const pinyinScore = scorePinyinMatch(item.title, trimmedQuery);
+            if (pinyinScore !== null) {
+                pinyinMatches.push({ ...item, score: pinyinScore });
+            }
+        }
+
+        if (pinyinMatches.length > 0) {
+            const merged = [...response, ...pinyinMatches]
+                .sort((left, right) => right.score - left.score || left.relativePath.localeCompare(right.relativePath))
+                .slice(0, normalizedLimit);
+            console.info("[vault-api] pinyin augmentation added", { extra: pinyinMatches.length });
+            return merged;
+        }
+    }
 
     return response;
 }

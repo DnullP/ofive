@@ -21,6 +21,27 @@ import { resolveParentDirectory } from "../pathUtils";
 import { parseWikiLinkParts } from "./wikiLinkParser";
 
 const WIKI_LINK_PATTERN = /(\[\[)([^\]\n]+?)(\]\])/g;
+const INLINE_CODE_SPAN_PATTERN = /`[^`\n]+`/g;
+
+/**
+ * @function isInsideInlineCode
+ * @description 判断行内某个范围是否落在反引号行内代码内。
+ * @param lineText 行文本。
+ * @param startInLine 匹配在行内的起始偏移。
+ * @param endInLine 匹配在行内的结束偏移。
+ * @returns 若范围被行内代码完全包含则返回 true。
+ */
+function isInsideInlineCode(lineText: string, startInLine: number, endInLine: number): boolean {
+    for (const m of lineText.matchAll(INLINE_CODE_SPAN_PATTERN)) {
+        const codeStart = m.index ?? -1;
+        if (codeStart < 0) continue;
+        const codeEnd = codeStart + m[0].length;
+        if (startInLine >= codeStart && endInLine <= codeEnd) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /**
  * @interface WikiLinkMatch
@@ -185,6 +206,9 @@ export function findWikiLinkAtPosition(state: EditorState, position: number): Wi
         if (matchIndex < 0 || parsed === null) {
             continue;
         }
+        if (isInsideInlineCode(lineText, matchIndex, matchIndex + fullText.length)) {
+            continue;
+        }
 
         const from = line.from + matchIndex;
         const to = from + fullText.length;
@@ -260,6 +284,10 @@ export function registerWikiLinkSyntaxRenderer(): void {
                 const matchIndex = match.index ?? -1;
                 const hasImageEmbedPrefix = matchIndex > 0 && context.lineText.charAt(matchIndex - 1) === "!";
                 if (hasImageEmbedPrefix || parsed === null) {
+                    return;
+                }
+
+                if (isInsideInlineCode(context.lineText, matchIndex, matchIndex + fullText.length)) {
                     return;
                 }
 

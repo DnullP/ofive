@@ -307,7 +307,7 @@ function hasPendingSmoothedMessages(
  * @returns React 节点。
  */
 function AiChatView(): ReactNode {
-    const { currentVaultPath } = useVaultState();
+    const { currentVaultPath, backendReady } = useVaultState();
     const [historyState, setHistoryState] = useState<AiChatHistoryState | null>(null);
     const [bindingsByConversation, setBindingsByConversation] = useState<Record<string, PendingStreamBinding>>({});
     const [smoothedMessagesById, setSmoothedMessagesById] = useState<Record<string, AiChatSmoothedMessageState>>({});
@@ -679,6 +679,12 @@ function AiChatView(): ReactNode {
             return;
         }
 
+        // Wait for backend to be ready (set_current_vault completed)
+        // before loading vault-scoped data.
+        if (!backendReady) {
+            return;
+        }
+
         Promise.all([
             getAiVendorCatalog(),
             ensureAiChatSettingsLoaded(currentVaultPath),
@@ -725,7 +731,7 @@ function AiChatView(): ReactNode {
             disposed = true;
             unsubscribe();
         };
-    }, [currentVaultPath]);
+    }, [currentVaultPath, backendReady]);
 
     useEffect(() => {
         if (!historyLoadedRef.current || !historyState || !currentVaultPath) {
@@ -1645,7 +1651,7 @@ function AiChatTab(_props: IDockviewPanelProps<Record<string, unknown>>): ReactN
  * @returns 设置页 React 节点。
  */
 function AiChatSettingsSection(): ReactNode {
-    const { currentVaultPath } = useVaultState();
+    const { currentVaultPath, backendReady } = useVaultState();
     const [vendorCatalog, setVendorCatalog] = useState<AiVendorDefinition[]>([]);
     const [settings, setSettings] = useState<AiChatSettings | null>(null);
     const [availableModels, setAvailableModels] = useState<AiVendorModelDefinition[]>([]);
@@ -1682,6 +1688,12 @@ function AiChatSettingsSection(): ReactNode {
             return;
         }
 
+        // Wait for backend to be ready (set_current_vault completed)
+        // before loading vault-scoped data.
+        if (!backendReady) {
+            return;
+        }
+
         setIsLoading(true);
         Promise.all([
             getAiVendorCatalog(),
@@ -1713,7 +1725,7 @@ function AiChatSettingsSection(): ReactNode {
         return () => {
             disposed = true;
         };
-    }, [currentVaultPath]);
+    }, [currentVaultPath, backendReady]);
 
     useEffect(() => {
         if (!currentVaultPath) {

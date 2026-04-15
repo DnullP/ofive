@@ -23,7 +23,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 async function waitForMockLayoutReady(page: Page): Promise<void> {
     await page.goto("/web-mock/mock-tauri-test.html");
     await page.getByRole("main", { name: "Dockview Main Area" }).waitFor({ state: "visible" });
-    await page.getByRole("button", { name: "资源管理器" }).waitFor({ state: "visible" });
+    await page.getByTestId("activity-bar-item-files").waitFor({ state: "visible" });
     await page.getByRole("button", { name: "▸ test-resources" }).waitFor({ state: "visible" });
 }
 
@@ -227,13 +227,13 @@ test.describe("frontmatter 可见性", () => {
 
         await expect(frontmatterWidget.locator("textarea.fmv-input").first()).toHaveValue("Network Segment");
 
-        const bodyLine = page.locator(".cm-line").filter({ hasText: "# Description" }).first();
+        const bodyLine = page.locator(".cm-line").filter({ hasText: "Description" }).first();
         await expectVisibleWithPositiveRect(bodyLine);
 
         const relation = await page.evaluate(() => {
             const widget = document.querySelector(".cm-frontmatter-widget");
             const bodyLine = Array.from(document.querySelectorAll(".cm-line")).find((node) =>
-                (node.textContent || "").trim() === "# Description",
+                (node.textContent || "").trim() === "Description",
             );
 
             if (!(widget instanceof HTMLElement) || !(bodyLine instanceof HTMLElement)) {

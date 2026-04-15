@@ -90,6 +90,10 @@ const LAST_VAULT_PATH_STORAGE_KEY = "ofive:last-vault-path";
  * @field autoSaveEnabled - 是否开启自动保存
  * @field autoSaveDelayMs - 自动保存防抖延迟（毫秒），范围 500–10000
  * @field editorFontFamily - 编辑器字体族，默认与 Obsidian 一致的无衬线字体栈
+ * @field notificationsEnabled - 是否开启前端消息通知
+ * @field notificationsMaxVisible - 前端同时最多显示的通知数量，范围 1–10
+ * @field frontmatterTemplate - Frontmatter 模板，支持 {{filename}} / {{date}} / {{directory}} 占位符
+ * @field restoreWorkspaceLayout - 重启时是否恢复上次的工作区布局和标签页
  */
 export interface FeatureSettings {
     /** 是否开启搜索功能（后端配置） */
@@ -148,6 +152,14 @@ export interface FeatureSettings {
     autoSaveDelayMs: number;
     /** 编辑器字体族，默认 Obsidian 同款无衬线字体栈 */
     editorFontFamily: string;
+    /** 是否开启前端消息通知，默认 true */
+    notificationsEnabled: boolean;
+    /** 前端同时最多显示的通知数量，默认 3，范围 1–10 */
+    notificationsMaxVisible: number;
+    /** Frontmatter 模板，支持 {{filename}} / {{date}} / {{directory}} 占位符 */
+    frontmatterTemplate: string;
+    /** 重启时是否恢复上次的工作区布局和标签页，默认 true */
+    restoreWorkspaceLayout: boolean;
 }
 
 /**
@@ -226,6 +238,10 @@ export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
     autoSaveEnabled: true,
     autoSaveDelayMs: 1500,
     editorFontFamily: DEFAULT_EDITOR_FONT_FAMILY,
+    notificationsEnabled: true,
+    notificationsMaxVisible: 3,
+    frontmatterTemplate: "---\ntitle: {{filename}}\ndate: {{date}}\n---",
+    restoreWorkspaceLayout: true,
 };
 
 /**
@@ -474,6 +490,25 @@ function normalizeBackendConfig(config: VaultConfig): {
             (featuresObj.editorFontFamily as string).trim().length > 0
             ? (featuresObj.editorFontFamily as string).trim()
             : DEFAULT_FEATURE_SETTINGS.editorFontFamily;
+    const notificationsEnabled =
+        typeof featuresObj.notificationsEnabled === "boolean"
+            ? featuresObj.notificationsEnabled
+            : DEFAULT_FEATURE_SETTINGS.notificationsEnabled;
+    const notificationsMaxVisible =
+        typeof featuresObj.notificationsMaxVisible === "number" &&
+            Number.isFinite(featuresObj.notificationsMaxVisible) &&
+            (featuresObj.notificationsMaxVisible as number) >= 1 &&
+            (featuresObj.notificationsMaxVisible as number) <= 10
+            ? (featuresObj.notificationsMaxVisible as number)
+            : DEFAULT_FEATURE_SETTINGS.notificationsMaxVisible;
+    const frontmatterTemplate =
+        typeof featuresObj.frontmatterTemplate === "string"
+            ? (featuresObj.frontmatterTemplate as string)
+            : DEFAULT_FEATURE_SETTINGS.frontmatterTemplate;
+    const restoreWorkspaceLayout =
+        typeof featuresObj.restoreWorkspaceLayout === "boolean"
+            ? featuresObj.restoreWorkspaceLayout
+            : DEFAULT_FEATURE_SETTINGS.restoreWorkspaceLayout;
 
     const nextFeatures = {
         ...featuresObj,
@@ -505,6 +540,10 @@ function normalizeBackendConfig(config: VaultConfig): {
         autoSaveEnabled,
         autoSaveDelayMs,
         editorFontFamily,
+        notificationsEnabled,
+        notificationsMaxVisible,
+        frontmatterTemplate,
+        restoreWorkspaceLayout,
     };
 
     const nextConfig: VaultConfig = {
@@ -543,7 +582,11 @@ function normalizeBackendConfig(config: VaultConfig): {
         featuresObj.editorLineNumbers !== editorLineNumbers ||
         featuresObj.autoSaveEnabled !== autoSaveEnabled ||
         featuresObj.autoSaveDelayMs !== autoSaveDelayMs ||
-        featuresObj.editorFontFamily !== editorFontFamily;
+        featuresObj.editorFontFamily !== editorFontFamily ||
+        featuresObj.notificationsEnabled !== notificationsEnabled ||
+        featuresObj.notificationsMaxVisible !== notificationsMaxVisible ||
+        featuresObj.frontmatterTemplate !== frontmatterTemplate ||
+        featuresObj.restoreWorkspaceLayout !== restoreWorkspaceLayout;
 
     return {
         nextConfig,
@@ -576,6 +619,10 @@ function normalizeBackendConfig(config: VaultConfig): {
             autoSaveEnabled,
             autoSaveDelayMs,
             editorFontFamily,
+            notificationsEnabled,
+            notificationsMaxVisible,
+            frontmatterTemplate,
+            restoreWorkspaceLayout,
         },
         changed,
     };

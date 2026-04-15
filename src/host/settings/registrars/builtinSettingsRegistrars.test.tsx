@@ -10,6 +10,7 @@ import {
     getSettingsSectionsSnapshot,
 } from "../settingsRegistry";
 import { registerAutoSaveSettingsSection } from "./autoSaveSettingsRegistrar";
+import { registerFrontmatterSettingsSection } from "./frontmatterSettingsRegistrar";
 import { registerGeneralSettingsSection } from "./generalSettingsRegistrar";
 import { registerLanguageSettingsSection } from "./languageSettingsRegistrar";
 import { registerShortcutSettingsSection } from "./shortcutSettingsRegistrar";
@@ -23,6 +24,7 @@ describe("builtin settings registrars", () => {
     test("应把内建 host settings 注册为 section + item 结构", () => {
         const unregisters = [
             registerGeneralSettingsSection(),
+            registerFrontmatterSettingsSection(),
             registerLanguageSettingsSection(),
             registerThemeSettingsSection(),
             registerAutoSaveSettingsSection(),
@@ -36,12 +38,16 @@ describe("builtin settings registrars", () => {
             "language-i18n",
             "theme-style",
             "editor-auto-save",
+            "frontmatter-template",
             "shortcut-system",
         ]);
         expect(snapshot.find((section) => section.id === "general-global")?.items.map((item) => item.id)).toEqual([
             "remember-last-vault",
             "search-enabled",
             "knowledge-graph-enabled",
+            "notifications-enabled",
+            "notifications-max-visible",
+            "restore-workspace-layout",
             "config-error",
         ]);
         expect(snapshot.find((section) => section.id === "shortcut-system")?.items.map((item) => item.id)).toEqual([

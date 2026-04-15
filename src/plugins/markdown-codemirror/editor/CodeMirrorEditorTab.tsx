@@ -36,7 +36,7 @@ import {
     saveVaultMarkdownFile,
     segmentChineseText,
 } from "../../../api/vaultApi";
-import { useConfigState, DEFAULT_EDITOR_FONT_FAMILY } from "../../../host/config/configStore";
+import { useConfigState, getConfigSnapshot, DEFAULT_EDITOR_FONT_FAMILY } from "../../../host/config/configStore";
 import {
     subscribeEditorCommandRequestedEvent,
     subscribeEditorRevealRequestedEvent,
@@ -657,7 +657,11 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         }
 
         if (commandId === "editor.insertFrontmatter") {
-            return insertFrontmatter(view);
+            const snapshot = getConfigSnapshot();
+            return insertFrontmatter(view, {
+                template: snapshot.featureSettings.frontmatterTemplate,
+                filePath: currentFilePathRef.current,
+            });
         }
 
         if (commandId === "editor.insertTable") {

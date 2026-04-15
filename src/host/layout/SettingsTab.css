@@ -439,6 +439,31 @@
     font-size: 12px;
 }
 
+/* Frontmatter 模板编辑器：多行文本输入框。 */
+.settings-frontmatter-template-textarea {
+    width: 100%;
+    min-height: 120px;
+    border: 1px solid var(--content-material-border);
+    border-radius: 4px;
+    background: var(--content-material-input-bg);
+    color: var(--text-primary);
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    line-height: 1.5;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.settings-frontmatter-template-textarea::placeholder {
+    color: var(--text-tertiary);
+}
+
+.settings-frontmatter-template-textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
 /* 紧凑行下拉选择框 */
 .settings-compact-select {
     min-width: 80px;

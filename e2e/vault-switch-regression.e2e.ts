@@ -24,8 +24,8 @@ import { gotoMockVaultPage, switchMockVaultAndReload } from "./helpers/mockVault
  */
 async function waitForLayoutReady(page: Page): Promise<void> {
     await page.getByRole("main", { name: "Dockview Main Area" }).waitFor({ state: "visible" });
-    await page.locator(".dv-tab").first().waitFor({ state: "visible" });
-    await page.locator(".dv-pane-header").first().waitFor({ state: "visible" });
+    await page.locator(".layout-v2-tab-section__tab").first().waitFor({ state: "visible" });
+    await page.locator("[data-testid='sidebar-left']").first().waitFor({ state: "visible" });
 }
 
 test.describe("仓库切换 UI 失效", () => {
@@ -36,30 +36,36 @@ test.describe("仓库切换 UI 失效", () => {
         await expect(page.locator(".vault-separator")).toHaveAttribute("title", initialVaultPath);
 
         const rightSidebar = page.locator("[aria-label='Right Extension Panel']");
-        const outlinePane = rightSidebar.locator(".dv-pane").filter({ hasText: "Outline" }).first();
-        const backlinksPane = rightSidebar.locator(".dv-pane").filter({ hasText: "Backlinks" }).first();
 
-        await expect(outlinePane.getByText("No focused article")).toBeVisible();
-        await expect(backlinksPane.getByText("No focused article")).toBeVisible();
+        /* layout-v2 uses tabbed panels: check outline tab is visible, then verify empty state */
+        const outlineTab = rightSidebar.locator(".layout-v2-panel-section__panel-tab[title='Outline']");
+        const backlinksTab = rightSidebar.locator(".layout-v2-panel-section__panel-tab[title='Backlinks']");
+        const paneBody = rightSidebar.locator(".layout-v2-panel-section__pane-body");
+
+        await outlineTab.click();
+        await expect(paneBody.getByText("No focused article")).toBeVisible();
+
+        await backlinksTab.click();
+        await expect(paneBody.getByText("No focused article")).toBeVisible();
 
         await page.getByTestId("activity-bar-item-calendar").click();
-        await expect(page.locator(".dv-tab", { hasText: "Calendar" })).toBeVisible();
+        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "Calendar" })).toBeVisible();
 
-        await page.getByRole("button", { name: "Architecture DevTools" }).click();
-        await expect(page.locator(".dv-tab", { hasText: "Architecture DevTools" })).toBeVisible();
+        await page.getByTestId("activity-bar-item-architecture-devtools").click();
+        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "Architecture DevTools" })).toBeVisible();
 
         const nextVaultPath = await switchMockVaultAndReload(page, "vault-switch-regression-b");
         await waitForLayoutReady(page);
 
         await expect(page.locator(".vault-separator")).toHaveAttribute("title", nextVaultPath);
-        await expect(page.locator(".dv-tab", { hasText: "Calendar" })).toHaveCount(0);
-        await expect(page.locator(".dv-tab", { hasText: "Home" })).toBeVisible();
+        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "Calendar" })).toHaveCount(0);
+        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "Home" })).toBeVisible();
 
-        await expect(outlinePane.getByText("No focused article")).toBeVisible();
-        await expect(backlinksPane.getByText("No focused article")).toBeVisible();
-        await expect(outlinePane.getByText("Failed to load outline")).toHaveCount(0);
+        await outlineTab.click();
+        await expect(paneBody.getByText("No focused article")).toBeVisible();
+        await expect(paneBody.getByText("Failed to load outline")).toHaveCount(0);
 
-        await page.getByRole("button", { name: "Architecture DevTools" }).click();
-        await expect(page.locator(".dv-tab", { hasText: "Architecture DevTools" })).toBeVisible();
+        await page.getByTestId("activity-bar-item-architecture-devtools").click();
+        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "Architecture DevTools" })).toBeVisible();
     });
 });

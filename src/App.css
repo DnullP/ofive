@@ -1255,6 +1255,19 @@ textarea,
   -webkit-backdrop-filter: none;
 }
 
+/* 拖拽 section 分隔条时暂停所有 backdrop-filter，避免每帧重新合成模糊的 GPU 开销。 */
+:root[data-layout-resizing] .app-shell {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+:root[data-layout-resizing] [data-floating-backdrop="true"],
+:root[data-layout-resizing] [data-floating-surface="true"],
+:root[data-layout-resizing] .cm-tooltip,
+:root[data-layout-resizing] .cm-wikilink-suggest-popup {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* macOS 标题栏：窗口控制按钮在左侧。 */
 .app-titlebar--mac {
   flex-direction: row;

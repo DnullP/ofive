@@ -365,19 +365,66 @@ export function insertTask(view: EditorView): boolean {
 }
 
 /**
+ * @interface FrontmatterInsertContext
+ * @description insertFrontmatter 所需的上下文信息。
+ */
+export interface FrontmatterInsertContext {
+    /** 用户配置的 frontmatter 模板（YAML 内容，不含 --- 分隔符） */
+    template?: string;
+    /** 当前文件的 vault 相对路径 */
+    filePath?: string;
+}
+
+/**
+ * @function expandFrontmatterTemplate
+ * @description 将 frontmatter 模板中的占位符替换为实际值。
+ *   支持占位符：{{filename}} 文件名（无扩展名）、{{date}} 当前日期（YYYY-MM-DD）、{{directory}} 所在目录路径。
+ * @param template 模板字符串。
+ * @param filePath vault 相对路径。
+ * @returns 替换后的字符串。
+ */
+export function expandFrontmatterTemplate(template: string, filePath: string): string {
+    const segments = filePath.split("/");
+    const fullName = segments.pop() ?? "";
+    const directory = segments.join("/");
+    const filename = fullName.replace(/\.[^.]+$/, "");
+    const date = new Date().toISOString().slice(0, 10);
+
+    return template
+        .replace(/\{\{filename\}\}/g, filename)
+        .replace(/\{\{date\}\}/g, date)
+        .replace(/\{\{directory\}\}/g, directory);
+}
+
+/**
  * @function insertFrontmatter
- * @description 若当前文档缺少 frontmatter，则在文档顶部插入空 frontmatter 模板。
+ * @description 若当前文档缺少 frontmatter，则在文档顶部插入 frontmatter。
+ *   当提供 context.template 时使用模板并展开占位符，否则插入空 frontmatter。
  *   已存在 frontmatter 时不修改正文。
  * @param view 编辑器视图。
+ * @param context 可选的插入上下文。
  * @returns 是否完成处理。
  */
-export function insertFrontmatter(view: EditorView): boolean {
+export function insertFrontmatter(view: EditorView, context?: FrontmatterInsertContext): boolean {
     const docText = view.state.doc.sliceString(0, view.state.doc.length);
     if (hasFrontmatterBlock(docText)) {
         return true;
     }
 
-    const insertText = "---\n\n---\n\n";
+    const template = context?.template?.trim();
+    let insertText: string;
+    if (template) {
+        const expanded = expandFrontmatterTemplate(template, context?.filePath ?? "");
+        // 模板可能自身包含 --- 分隔符，若已有则直接使用，否则包裹
+        if (expanded.startsWith("---")) {
+            insertText = expanded.endsWith("\n") ? `${expanded}\n` : `${expanded}\n\n`;
+        } else {
+            insertText = `---\n${expanded}\n---\n\n`;
+        }
+    } else {
+        insertText = "---\n\n---\n\n";
+    }
+
     view.dispatch({
         changes: {
             from: 0,

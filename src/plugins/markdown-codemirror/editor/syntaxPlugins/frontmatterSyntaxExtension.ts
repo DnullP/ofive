@@ -326,8 +326,13 @@ class FrontmatterYamlWidget extends WidgetType {
     }
 
     destroy(): void {
-        this.root?.unmount();
+        const root = this.root;
         this.root = null;
+        if (root) {
+            queueMicrotask(() => {
+                try { root.unmount(); } catch { /* already unmounted */ }
+            });
+        }
     }
 
     ignoreEvent(): boolean {

@@ -51,8 +51,8 @@ test.describe("glass visual reference", () => {
 
         const styleSnapshot = await page.evaluate(() => {
             const html = document.documentElement;
-            const mainArea = document.querySelector<HTMLElement>(".main-content-area");
-            const leftSidebar = document.querySelector<HTMLElement>(".sidebar.sidebar-left");
+            const mainArea = document.querySelector<HTMLElement>(".layout-v2-tab-section__content");
+            const leftSidebar = document.querySelector<HTMLElement>("[data-testid='sidebar-left']");
             const fileTree = document.querySelector<HTMLElement>(".file-tree");
             const aiChatPanel = document.querySelector<HTMLElement>(".ai-chat-panel");
             const aiChatHeader = document.querySelector<HTMLElement>(".ai-chat-header");

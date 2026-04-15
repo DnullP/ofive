@@ -120,6 +120,10 @@ describe("configStore defaults", () => {
                 autoSaveEnabled: DEFAULT_FEATURE_SETTINGS.autoSaveEnabled,
                 autoSaveDelayMs: DEFAULT_FEATURE_SETTINGS.autoSaveDelayMs,
                 editorFontFamily: DEFAULT_FEATURE_SETTINGS.editorFontFamily,
+                notificationsEnabled: DEFAULT_FEATURE_SETTINGS.notificationsEnabled,
+                notificationsMaxVisible: DEFAULT_FEATURE_SETTINGS.notificationsMaxVisible,
+                frontmatterTemplate: DEFAULT_FEATURE_SETTINGS.frontmatterTemplate,
+                restoreWorkspaceLayout: DEFAULT_FEATURE_SETTINGS.restoreWorkspaceLayout,
             },
         });
     });

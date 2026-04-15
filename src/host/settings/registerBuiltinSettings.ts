@@ -10,6 +10,7 @@
 import { ensureBuiltinManagedStoresRegistered } from "../store/registerBuiltinManagedStores";
 import { enableManagedStoreSettings } from "../store/storeRegistry";
 import { registerAutoSaveSettingsSection } from "./registrars/autoSaveSettingsRegistrar.tsx";
+import { registerFrontmatterSettingsSection } from "./registrars/frontmatterSettingsRegistrar.tsx";
 import { registerGeneralSettingsSection } from "./registrars/generalSettingsRegistrar.tsx";
 import { registerLanguageSettingsSection } from "./registrars/languageSettingsRegistrar.tsx";
 
@@ -26,6 +27,7 @@ export function ensureBuiltinSettingsRegistered(): void {
 
     ensureBuiltinManagedStoresRegistered();
     registerGeneralSettingsSection();
+    registerFrontmatterSettingsSection();
     registerLanguageSettingsSection();
     registerAutoSaveSettingsSection();
     enableManagedStoreSettings();

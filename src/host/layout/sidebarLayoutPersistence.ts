@@ -77,6 +77,8 @@ export interface SidebarLayoutSnapshot {
     paneStates: SidebarPaneLayoutSnapshot[];
     /** 需在启动后恢复为 panel 模式的可转化视图。 */
     convertiblePanelStates: SidebarConvertibleViewSnapshot[];
+    /** section 分割比例（sectionId → ratio），用于恢复拖拽后的尺寸。 */
+    sectionRatios?: Record<string, number>;
 }
 
 /**
@@ -237,6 +239,15 @@ export function parseSidebarLayoutConfig(entries: Record<string, unknown>): Side
         .map((item) => normalizeConvertiblePanelState(item))
         .filter((item): item is SidebarConvertibleViewSnapshot => item !== null);
 
+    const sectionRatiosRaw = toSafeObject(root.sectionRatios);
+    const sectionRatios: Record<string, number> | undefined = sectionRatiosRaw
+        ? Object.fromEntries(
+              Object.entries(sectionRatiosRaw).filter(
+                  ([, v]) => typeof v === "number" && Number.isFinite(v),
+              ),
+          ) as Record<string, number>
+        : undefined;
+
     return {
         version: 1,
         left: normalizeRailSnapshot(root.left, 280),
@@ -244,6 +255,7 @@ export function parseSidebarLayoutConfig(entries: Record<string, unknown>): Side
         panelStates,
         paneStates,
         convertiblePanelStates,
+        sectionRatios: sectionRatios && Object.keys(sectionRatios).length > 0 ? sectionRatios : undefined,
     };
 }
 
@@ -279,6 +291,7 @@ export function buildSidebarLayoutConfigValue(
             ...item,
             sourceParams: item.sourceParams ? { ...item.sourceParams } : undefined,
         })),
+        sectionRatios: snapshot.sectionRatios ? { ...snapshot.sectionRatios } : undefined,
     };
 }
 

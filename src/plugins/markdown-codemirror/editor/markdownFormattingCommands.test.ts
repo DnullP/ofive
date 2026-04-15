@@ -19,6 +19,7 @@ import {
     insertLink,
     insertTask,
     insertFrontmatter,
+    expandFrontmatterTemplate,
     insertTable,
 } from "./markdownFormattingCommands";
 
@@ -307,6 +308,64 @@ describe("insertFrontmatter", () => {
         const { view, dispatches } = createMockView("---\ntitle: demo\n---\n\n# Title\n", 0, 0);
         insertFrontmatter(view);
         expect(dispatches).toHaveLength(0);
+    });
+
+    test("提供模板时按模板内容插入且展开占位符", () => {
+        const { view, dispatches } = createMockView("# Title\n", 0, 0);
+        insertFrontmatter(view, {
+            template: "---\ntitle: {{filename}}\ndate: {{date}}\n---",
+            filePath: "notes/daily/my-note.md",
+        });
+        expect(dispatches).toHaveLength(1);
+        const inserted = (dispatches[0]!.changes as { insert: string }).insert;
+        expect(inserted).toContain("title: my-note");
+        expect(inserted).toMatch(/date: \d{4}-\d{2}-\d{2}/);
+        expect(inserted).toStartWith("---\n");
+    });
+
+    test("模板不含 --- 时自动包裹分隔符", () => {
+        const { view, dispatches } = createMockView("# Title\n", 0, 0);
+        insertFrontmatter(view, {
+            template: "title: {{filename}}",
+            filePath: "hello.md",
+        });
+        expect(dispatches).toHaveLength(1);
+        const inserted = (dispatches[0]!.changes as { insert: string }).insert;
+        expect(inserted).toStartWith("---\n");
+        expect(inserted).toContain("title: hello");
+        expect(inserted).toContain("\n---\n");
+    });
+});
+
+describe("expandFrontmatterTemplate", () => {
+    test("替换 {{filename}} 为不带扩展名的文件名", () => {
+        expect(expandFrontmatterTemplate("title: {{filename}}", "notes/my-file.md"))
+            .toBe("title: my-file");
+    });
+
+    test("替换 {{date}} 为 YYYY-MM-DD 格式", () => {
+        const result = expandFrontmatterTemplate("date: {{date}}", "a.md");
+        expect(result).toMatch(/^date: \d{4}-\d{2}-\d{2}$/);
+    });
+
+    test("替换 {{directory}} 为所在目录路径", () => {
+        expect(expandFrontmatterTemplate("path: {{directory}}", "notes/daily/test.md"))
+            .toBe("path: notes/daily");
+    });
+
+    test("根目录文件的 {{directory}} 为空字符串", () => {
+        expect(expandFrontmatterTemplate("dir: {{directory}}", "readme.md"))
+            .toBe("dir: ");
+    });
+
+    test("同时替换多个占位符", () => {
+        const result = expandFrontmatterTemplate(
+            "title: {{filename}}\ndate: {{date}}\nfolder: {{directory}}",
+            "projects/notes/demo.md",
+        );
+        expect(result).toContain("title: demo");
+        expect(result).toContain("folder: projects/notes");
+        expect(result).toMatch(/date: \d{4}-\d{2}-\d{2}/);
     });
 });
 

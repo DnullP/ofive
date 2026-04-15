@@ -23,8 +23,26 @@ import { readVaultBinaryFile, resolveMediaEmbedTarget } from "../../../../api/va
 import { shouldRebuildImageEmbedDecorations } from "./imageEmbedUpdatePolicy";
 import { resolveParentDirectory } from "../pathUtils";
 import { rangeIntersectsSelection } from "../syntaxRenderRegistry";
+import { isInsideExclusionZone } from "../syntaxExclusionZones";
 
 const IMAGE_EMBED_PATTERN = /(!\[\[)([^\]\n]+?)(\]\])/g;
+const INLINE_CODE_SPAN_PATTERN = /`[^`\n]+`/g;
+
+/**
+ * @function isInsideInlineCode
+ * @description 判断行内某个范围是否落在反引号行内代码内。
+ */
+function isInsideInlineCode(lineText: string, startInLine: number, endInLine: number): boolean {
+    for (const m of lineText.matchAll(INLINE_CODE_SPAN_PATTERN)) {
+        const codeStart = m.index ?? -1;
+        if (codeStart < 0) continue;
+        const codeEnd = codeStart + m[0].length;
+        if (startInLine >= codeStart && endInLine <= codeEnd) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /**
  * @type ImageEmbedRenderState
@@ -329,6 +347,12 @@ export function createImageEmbedSyntaxExtension(
                     const endLineNumber = view.state.doc.lineAt(visibleRange.to).number;
 
                     while (currentLine.number <= endLineNumber) {
+                        if (isInsideExclusionZone(view, currentLine.from)) {
+                            if (currentLine.number === endLineNumber) break;
+                            currentLine = view.state.doc.line(currentLine.number + 1);
+                            continue;
+                        }
+
                         const matches = Array.from(currentLine.text.matchAll(IMAGE_EMBED_PATTERN));
 
                         matches.forEach((match) => {
@@ -336,6 +360,10 @@ export function createImageEmbedSyntaxExtension(
                             const rawTarget = (match[2] ?? "").trim();
                             const matchIndex = match.index ?? -1;
                             if (matchIndex < 0 || fullText.length === 0 || rawTarget.length === 0) {
+                                return;
+                            }
+
+                            if (isInsideInlineCode(currentLine.text, matchIndex, matchIndex + fullText.length)) {
                                 return;
                             }
 
