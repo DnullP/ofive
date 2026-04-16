@@ -88,7 +88,11 @@ async function createCustomPanelContainer(page: Page, activityName: string): Pro
 
     const commandInput = commandPalette.locator(".command-palette-input");
     await commandInput.fill("customActivity.create");
-    await page.keyboard.press("Enter");
+    await commandPalette
+        .locator(".command-palette-item")
+        .filter({ hasText: "customActivity.create" })
+        .first()
+        .click();
 
     const modal = page.locator(".custom-activity-modal");
     await expect(modal).toBeVisible();
@@ -295,7 +299,11 @@ test.describe("自定义 Activity", () => {
 
         const commandInput = commandPalette.locator(".command-palette-input");
         await commandInput.fill("customActivity.create");
-        await page.keyboard.press("Enter");
+        await commandPalette
+            .locator(".command-palette-item")
+            .filter({ hasText: "customActivity.create" })
+            .first()
+            .click();
 
         const modal = page.locator(".custom-activity-modal");
         await expect(modal).toBeVisible();

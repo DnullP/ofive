@@ -230,26 +230,14 @@ test.describe("frontmatter 可见性", () => {
         const bodyLine = page.locator(".cm-line").filter({ hasText: "Description" }).first();
         await expectVisibleWithPositiveRect(bodyLine);
 
-        const relation = await page.evaluate(() => {
-            const widget = document.querySelector(".cm-frontmatter-widget");
-            const bodyLine = Array.from(document.querySelectorAll(".cm-line")).find((node) =>
-                (node.textContent || "").trim() === "Description",
-            );
+        const [widgetBox, bodyBox] = await Promise.all([
+            frontmatterWidget.boundingBox(),
+            bodyLine.boundingBox(),
+        ]);
 
-            if (!(widget instanceof HTMLElement) || !(bodyLine instanceof HTMLElement)) {
-                return null;
-            }
-
-            const widgetRect = widget.getBoundingClientRect();
-            const bodyRect = bodyLine.getBoundingClientRect();
-            return {
-                widgetBottom: widgetRect.bottom,
-                bodyTop: bodyRect.top,
-            };
-        });
-
-        expect(relation).not.toBeNull();
-        expect(relation!.bodyTop).toBeGreaterThanOrEqual(relation!.widgetBottom);
+        expect(widgetBox).not.toBeNull();
+        expect(bodyBox).not.toBeNull();
+        expect(bodyBox!.y).toBeGreaterThanOrEqual(widgetBox!.y + widgetBox!.height);
     });
 
     test("frontmatter 文本字段提交再按 j 不应展开源码或写入正文", async ({ page }) => {

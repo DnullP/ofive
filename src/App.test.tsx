@@ -26,6 +26,7 @@ mock.module("./host/layout", () => ({
     CustomTitlebar: () => <div>{APP_TEST_TITLEBAR}</div>,
     DockviewLayout: () => <div>{APP_TEST_DOCKVIEW}</div>,
     SettingsTab: () => <div>{APP_TEST_SETTINGS_TAB}</div>,
+    WorkbenchLayoutHost: () => <div>{APP_TEST_DOCKVIEW}</div>,
 }));
 
 mock.module("./host/events/appEventBus", () => ({

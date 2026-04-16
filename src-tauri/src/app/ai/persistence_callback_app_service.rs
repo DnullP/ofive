@@ -192,6 +192,13 @@ mod tests {
         }
     }
 
+    fn create_loopback_http_client() -> reqwest::Client {
+        reqwest::Client::builder()
+            .no_proxy()
+            .build()
+            .expect("应成功创建直连 loopback 的 HTTP client")
+    }
+
     #[tokio::test]
     async fn persistence_callback_server_should_accept_authorized_request() {
         let root = create_test_root();
@@ -199,7 +206,7 @@ mod tests {
             .await
             .expect("应成功启动 persistence callback server");
 
-        let client = reqwest::Client::new();
+        let client = create_loopback_http_client();
         let response = client
             .post(&handle.callback_url)
             .header("x-ofive-sidecar-token", &handle.callback_token)
@@ -227,7 +234,7 @@ mod tests {
             .await
             .expect("应成功启动 persistence callback server");
 
-        let client = reqwest::Client::new();
+        let client = create_loopback_http_client();
         let response = client
             .post(&handle.callback_url)
             .json(&build_request())
@@ -248,7 +255,7 @@ mod tests {
             .await
             .expect("应成功启动 persistence callback server");
 
-        let client = reqwest::Client::new();
+        let client = create_loopback_http_client();
         let response = client
             .post(&handle.callback_url)
             .header("x-ofive-sidecar-token", &handle.callback_token)

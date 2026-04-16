@@ -153,3 +153,53 @@ describe("mergePanelStatesWithSidebarLayoutFallback", () => {
         ]);
     });
 });
+
+/**
+ * 回归：sidebar 拖拽 split 时 handleSidebarStateChange → saveSidebarLayoutSnapshot →
+ * backendConfig 更新 → sidebarSnapshot 重算 → handleSidebarStateChange 新引用 →
+ * useEffect 重触发 → 无限循环 (Maximum update depth exceeded)。
+ *
+ * 修复后，handleSidebarStateChange 通过 ref 读取 sidebarSnapshot，回调引用不再随
+ * backendConfig 变更而重建；VSCodeWorkbench 也使用 ref 消费 onSidebarStateChange。
+ *
+ * 此测试验证 JSON 序列化幂等性（dedup guard 的二级兜底）：
+ * build → parse → rebuild 后 JSON 必须与首次一致，否则 dedup guard 失效。
+ */
+describe("snapshot round-trip JSON stability (infinite loop regression)", () => {
+    it("build → parse → rebuild 应产出相同 JSON", () => {
+        const first = buildSidebarLayoutConfigValue(snapshot);
+        const parsed = parseSidebarLayoutConfig({ [SIDEBAR_LAYOUT_CONFIG_KEY]: first });
+        expect(parsed).not.toBeNull();
+        const second = buildSidebarLayoutConfigValue(parsed!);
+
+        expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+    });
+
+    it("sectionRatios 存在时 round-trip 应稳定", () => {
+        const withRatios: SidebarLayoutSnapshot = {
+            ...snapshot,
+            sectionRatios: { "left-sidebar": 0.35, "right-sidebar": 0.25 },
+        };
+
+        const first = buildSidebarLayoutConfigValue(withRatios);
+        const parsed = parseSidebarLayoutConfig({ [SIDEBAR_LAYOUT_CONFIG_KEY]: first });
+        expect(parsed).not.toBeNull();
+        const second = buildSidebarLayoutConfigValue(parsed!);
+
+        expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+    });
+
+    it("sectionRatios 为 undefined 时 round-trip 应稳定", () => {
+        const withoutRatios: SidebarLayoutSnapshot = {
+            ...snapshot,
+            sectionRatios: undefined,
+        };
+
+        const first = buildSidebarLayoutConfigValue(withoutRatios);
+        const parsed = parseSidebarLayoutConfig({ [SIDEBAR_LAYOUT_CONFIG_KEY]: first });
+        expect(parsed).not.toBeNull();
+        const second = buildSidebarLayoutConfigValue(parsed!);
+
+        expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+    });
+});

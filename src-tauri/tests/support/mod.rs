@@ -184,6 +184,7 @@ impl SemanticIndexTestHarness {
                 chunking_strategy: ChunkingStrategyKind::HeadingParagraph,
                 model_id: "intfloat/multilingual-e5-small".to_string(),
                 chunk_strategy_version: 1,
+                ..SemanticIndexSettings::default()
             },
             &self.vault.root,
         )

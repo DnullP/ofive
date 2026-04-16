@@ -1,0 +1,29 @@
+/* WorkbenchLayoutHost tokens: 布局宿主占位界面色票。 */
+:root {
+    --wbh-empty-text: color-mix(in srgb, var(--text-secondary) 72%, transparent);
+    --wbh-empty-bg: color-mix(in srgb, var(--bg-primary) 48%, transparent);
+
+    --wbh-card-text: color-mix(in srgb, var(--text-primary) 92%, transparent);
+    --wbh-card-bg: linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 72%, transparent), color-mix(in srgb, var(--bg-primary) 76%, transparent));
+
+    --wbh-card-p-text: color-mix(in srgb, var(--text-link-color) 82%, var(--text-primary) 18%);
+
+    --wbh-code-bg: color-mix(in srgb, var(--bg-primary) 62%, transparent);
+    --wbh-code-text: color-mix(in srgb, var(--text-link-color) 92%, transparent);
+
+    --wbh-eyebrow-text: color-mix(in srgb, var(--text-link-color) 92%, transparent);
+
+    --wbh-sidebar-panes-bg: color-mix(in srgb, var(--bg-primary) 20%, transparent);
+
+    --wbh-pane-border: color-mix(in srgb, var(--shell-stroke-soft) 32%, transparent);
+    --wbh-pane-bg: color-mix(in srgb, var(--bg-primary) 26%, transparent);
+    --wbh-pane-bg-active: color-mix(in srgb, var(--bg-secondary) 46%, transparent);
+
+    --wbh-pane-header-text: color-mix(in srgb, var(--text-primary) 88%, transparent);
+    --wbh-pane-header-hover-bg: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+
+    --wbh-pane-chevron-text: color-mix(in srgb, var(--text-link-color) 88%, transparent);
+
+    --wbh-pane-body-border: color-mix(in srgb, var(--shell-stroke-soft) 24%, transparent);
+    --wbh-pane-body-bg: color-mix(in srgb, var(--bg-primary) 20%, transparent);
+}

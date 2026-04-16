@@ -35,6 +35,8 @@
  *   - subscribeNotificationCenter
  */
 
+import { getConfigSnapshot } from "../config/configStore";
+
 /**
  * @type NotificationLevel
  * @description 宿主消息级别。
@@ -191,6 +193,10 @@ function dispatchNotificationCenterEvent(event: NotificationCenterEvent): void {
     );
 }
 
+function areFrontendNotificationsEnabled(): boolean {
+    return getConfigSnapshot().featureSettings.notificationsEnabled;
+}
+
 /**
  * @function publishNotification
  * @description 发布一条消息；若复用已有 notificationId，则由消费方按更新语义处理。
@@ -212,6 +218,10 @@ export function publishNotification(options: NotificationPublishOptions): string
         createdAt,
         updatedAt,
     };
+
+    if (!areFrontendNotificationsEnabled()) {
+        return notificationId;
+    }
 
     dispatchNotificationCenterEvent({
         type: "upsert",

@@ -71,6 +71,10 @@ function createFeatureSettings(): FeatureSettings {
         autoSaveDelayMs: 1500,
         editorFontFamily:
             '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+        notificationsEnabled: true,
+        notificationsMaxVisible: 3,
+        frontmatterTemplate: "",
+        restoreWorkspaceLayout: true,
     };
 }
 

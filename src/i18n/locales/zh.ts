@@ -806,6 +806,7 @@ const zh = {
         leftPanelArea: "左侧扩展面板区",
         mainArea: "Dockview 主区域",
         rightPanelArea: "右侧扩展面板区",
+        noRegisteredPanel: "未注册的面板渲染器。",
     },
 
     /* ==================== 图片 ==================== */

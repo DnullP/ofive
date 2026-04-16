@@ -1011,7 +1011,7 @@ mod tests {
         delete_indexed_markdown_document_in_root,
         start_semantic_index_full_sync_in_root,
     };
-    use crate::infra::persistence::app_private_store::set_app_private_store_test_root;
+    use crate::app::app_storage::storage_registry_facade::set_app_storage_test_root;
     use crate::shared::semantic_index_contracts::{
         ChunkingStrategyKind, DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
         EmbeddingProviderKind, SemanticIndexModelInstallStatus,
@@ -1041,7 +1041,7 @@ mod tests {
                 .lock()
                 .expect("app storage test lock should succeed");
             let root = test_root.join(".app-storage-test");
-            set_app_private_store_test_root(Some(root.clone()))
+            set_app_storage_test_root(Some(root.clone()))
                 .expect("test root should set");
             Self { _lock: lock, root }
         }
@@ -1049,7 +1049,7 @@ mod tests {
 
     impl Drop for AppStorageTestGuard {
         fn drop(&mut self) {
-            let _ = set_app_private_store_test_root(None);
+            let _ = set_app_storage_test_root(None);
             let _ = fs::remove_dir_all(&self.root);
         }
     }

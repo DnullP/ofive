@@ -796,6 +796,7 @@ const en = {
         leftPanelArea: "Left Extension Panel",
         mainArea: "Dockview Main Area",
         rightPanelArea: "Right Extension Panel",
+        noRegisteredPanel: "No registered panel renderer.",
     },
 
     /* ==================== Image ==================== */

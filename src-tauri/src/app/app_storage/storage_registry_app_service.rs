@@ -101,6 +101,11 @@ fn ensure_consumer_allowed(
 }
 
 #[cfg(test)]
+pub(crate) fn set_app_storage_test_root(root: Option<PathBuf>) -> Result<(), String> {
+    app_private_store::set_app_private_store_test_root(root)
+}
+
+#[cfg(test)]
 mod tests {
     use super::{load_app_storage_state, resolve_app_storage_owner_dir, save_app_storage_state};
     use crate::infra::persistence::app_private_store::set_app_private_store_test_root;

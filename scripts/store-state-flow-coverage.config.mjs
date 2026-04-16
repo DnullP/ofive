@@ -407,4 +407,17 @@ export const storeConsumerCoverage = {
     "src/plugins/semantic-index/semanticIndexPlugin.tsx": [
         "src/plugins/semantic-index/semanticIndexPlugin.test.tsx",
     ],
+    "src/host/layout/WorkbenchLayoutHost.tsx": [
+        "e2e/custom-activity.e2e.ts",
+        "e2e/vault-switch-regression.e2e.ts",
+    ],
+    "src/host/notifications/notificationCenter.ts": [
+        "src/host/notifications/notificationCenter.config.test.ts",
+    ],
+    "src/host/settings/registrars/frontmatterSettingsRegistrar.tsx": [
+        "src/host/settings/registrars/builtinSettingsRegistrars.test.tsx",
+    ],
+    "src/plugins/log-notification/LogNotificationOverlay.tsx": [
+        "src/plugins/log-notification/logNotificationState.test.ts",
+    ],
 };

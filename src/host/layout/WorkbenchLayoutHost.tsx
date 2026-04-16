@@ -75,7 +75,8 @@ import {
 import { dispatchShortcut } from "../commands/shortcutDispatcher";
 import { createConditionContext } from "../conditions/conditionEvaluator";
 import i18n from "../../i18n";
-import "layout-v2/styles.css";
+import "../../../node_modules/layout-v2/dist/layout-v2.css";
+import "./WorkbenchLayoutHost.tokens.css";
 import "./WorkbenchLayoutHost.css";
 
 /* ────────── Constants ────────── */
@@ -349,6 +350,8 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     const leftSidebarVisibleRef = useRef(initialSidebarState.left.visible);
     const rightSidebarVisibleRef = useRef(initialSidebarState.right.visible);
     const sectionRatiosRef = useRef<Record<string, number> | undefined>(sidebarSnapshot?.sectionRatios);
+    const sidebarSnapshotRef = useRef(sidebarSnapshot);
+    sidebarSnapshotRef.current = sidebarSnapshot;
 
     /* ── Open file helper ── */
 
@@ -533,23 +536,24 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             if (!currentVaultPath && !configState.backendConfig) return;
             if (!configState.featureSettings.restoreWorkspaceLayout) return;
 
+            const snap = sidebarSnapshotRef.current;
             const snapshot: SidebarLayoutSnapshot = {
                 version: 1,
                 left: {
-                    width: sidebarSnapshot?.left.width ?? DEFAULT_LEFT_RAIL_WIDTH,
+                    width: snap?.left.width ?? DEFAULT_LEFT_RAIL_WIDTH,
                     visible: state.left.visible,
                     activeActivityId: state.left.activeActivityId,
                     activePanelId: state.left.activePanelId,
                 },
                 right: {
-                    width: sidebarSnapshot?.right.width ?? DEFAULT_RIGHT_RAIL_WIDTH,
+                    width: snap?.right.width ?? DEFAULT_RIGHT_RAIL_WIDTH,
                     visible: hasRightSidebar ? state.right.visible : false,
                     activeActivityId: state.right.activeActivityId,
                     activePanelId: state.right.activePanelId,
                 },
-                panelStates: sidebarSnapshot?.panelStates ?? [],
-                paneStates: sidebarSnapshot?.paneStates ?? [],
-                convertiblePanelStates: sidebarSnapshot?.convertiblePanelStates ?? [],
+                panelStates: snap?.panelStates ?? [],
+                paneStates: snap?.paneStates ?? [],
+                convertiblePanelStates: snap?.convertiblePanelStates ?? [],
                 sectionRatios: sectionRatiosRef.current,
             };
 
@@ -561,8 +565,6 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         },
         [
             hasRightSidebar,
-            sidebarSnapshot,
-            configState.backendConfig,
             configState.loadedVaultPath,
             vaultState.currentVaultPath,
         ],
@@ -595,23 +597,24 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 if (!currentVaultPath && !configState.backendConfig) return;
                 if (!configState.featureSettings.restoreWorkspaceLayout) return;
 
+                const snap = sidebarSnapshotRef.current;
                 const snapshot: SidebarLayoutSnapshot = {
                     version: 1,
                     left: {
-                        width: sidebarSnapshot?.left.width ?? DEFAULT_LEFT_RAIL_WIDTH,
+                        width: snap?.left.width ?? DEFAULT_LEFT_RAIL_WIDTH,
                         visible: leftSidebarVisibleRef.current,
-                        activeActivityId: sidebarSnapshot?.left.activeActivityId ?? null,
-                        activePanelId: sidebarSnapshot?.left.activePanelId ?? null,
+                        activeActivityId: snap?.left.activeActivityId ?? null,
+                        activePanelId: snap?.left.activePanelId ?? null,
                     },
                     right: {
-                        width: sidebarSnapshot?.right.width ?? DEFAULT_RIGHT_RAIL_WIDTH,
+                        width: snap?.right.width ?? DEFAULT_RIGHT_RAIL_WIDTH,
                         visible: hasRightSidebar ? rightSidebarVisibleRef.current : false,
-                        activeActivityId: sidebarSnapshot?.right.activeActivityId ?? null,
-                        activePanelId: sidebarSnapshot?.right.activePanelId ?? null,
+                        activeActivityId: snap?.right.activeActivityId ?? null,
+                        activePanelId: snap?.right.activePanelId ?? null,
                     },
-                    panelStates: sidebarSnapshot?.panelStates ?? [],
-                    paneStates: sidebarSnapshot?.paneStates ?? [],
-                    convertiblePanelStates: sidebarSnapshot?.convertiblePanelStates ?? [],
+                    panelStates: snap?.panelStates ?? [],
+                    paneStates: snap?.paneStates ?? [],
+                    convertiblePanelStates: snap?.convertiblePanelStates ?? [],
                     sectionRatios: sectionRatiosRef.current,
                 };
 
@@ -624,8 +627,6 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         },
         [
             hasRightSidebar,
-            sidebarSnapshot,
-            configState.backendConfig,
             configState.loadedVaultPath,
             vaultState.currentVaultPath,
         ],
@@ -662,7 +663,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 return (
                     <div className="workbench-layout-v2__content-card">
                         <div className="workbench-layout-v2__content-eyebrow">{panelId}</div>
-                        <p>No registered panel renderer.</p>
+                        <p>{i18n.t("dockview.noRegisteredPanel")}</p>
                     </div>
                 );
             }
@@ -785,6 +786,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 hasRightSidebar={hasRightSidebar}
                 initialSidebarState={initialSidebarState}
                 initialSectionRatios={sidebarSnapshot?.sectionRatios}
+                hideEmptyPanelBar
                 renderActivityIcon={renderActivityIcon}
                 renderPanelContent={renderPanelContent}
                 onActivateActivity={handleActivateActivity}

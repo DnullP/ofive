@@ -358,7 +358,9 @@ mod tests {
         available_embedding_providers, build_embedding_provider,
         semantic_index_embedding_cache_dir,
     };
-    use crate::infra::persistence::app_private_store::set_app_private_store_test_root;
+    use crate::app::app_storage::storage_registry_facade::{
+        resolve_app_storage_owner_dir, set_app_storage_test_root,
+    };
     use crate::shared::semantic_index_contracts::EmbeddingProviderKind;
     use std::fs;
     use std::path::Path;
@@ -386,7 +388,7 @@ mod tests {
                     .map(|duration| duration.as_nanos())
                     .unwrap_or(0)
             ));
-            set_app_private_store_test_root(Some(root.clone()))
+            set_app_storage_test_root(Some(root.clone()))
                 .expect("test root should set");
             Self { _lock: lock, root }
         }
@@ -394,7 +396,7 @@ mod tests {
 
     impl Drop for AppStorageTestGuard {
         fn drop(&mut self) {
-            let _ = set_app_private_store_test_root(None);
+            let _ = set_app_storage_test_root(None);
             let _ = fs::remove_dir_all(&self.root);
         }
     }
@@ -442,7 +444,12 @@ mod tests {
     fn fastembed_provider_should_resolve_module_private_cache_dir() {
         let _guard = AppStorageTestGuard::new();
         let cache_dir = semantic_index_embedding_cache_dir().expect("cache dir should resolve");
+        let owner_dir = resolve_app_storage_owner_dir(
+            "semantic-index",
+            "semantic-index",
+        )
+        .expect("owner dir should resolve");
 
-        assert!(cache_dir.ends_with("app-storage/extensions/semantic-index/models"));
+        assert_eq!(cache_dir, owner_dir.join("models"));
     }
 }

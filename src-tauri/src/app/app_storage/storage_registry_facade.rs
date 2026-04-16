@@ -48,3 +48,8 @@ where
         state,
     )
 }
+
+#[cfg(test)]
+pub(crate) fn set_app_storage_test_root(root: Option<PathBuf>) -> Result<(), String> {
+    storage_registry_app_service::set_app_storage_test_root(root)
+}

@@ -15,7 +15,7 @@ import { registerSettingsItems, registerSettingsSection } from "../settingsRegis
  * @function FrontmatterTemplateEditor
  * @description Frontmatter 模板文本编辑器组件。
  */
-function FrontmatterTemplateEditor(): JSX.Element {
+function FrontmatterTemplateEditor(): React.JSX.Element {
     const { t } = useTranslation();
     const template = useConfigState().featureSettings.frontmatterTemplate;
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

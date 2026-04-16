@@ -28,8 +28,8 @@
     width: 100%;
     height: 100%;
     min-height: 0;
-    color: rgba(203, 213, 225, 0.72);
-    background: rgba(15, 23, 42, 0.48);
+    color: var(--wbh-empty-text);
+    background: var(--wbh-empty-bg);
     text-align: center;
 }
 
@@ -69,8 +69,8 @@
     height: 100%;
     box-sizing: border-box;
     padding: 14px;
-    color: rgba(226, 232, 240, 0.92);
-    background: linear-gradient(180deg, rgba(30, 41, 59, 0.72), rgba(15, 23, 42, 0.76));
+    color: var(--wbh-card-text);
+    background: var(--wbh-card-bg);
 }
 
 .workbench-layout-v2__content-card--main {
@@ -87,7 +87,7 @@
     margin: 0;
     font-size: 13px;
     line-height: 1.6;
-    color: rgba(191, 219, 254, 0.82);
+    color: var(--wbh-card-p-text);
 }
 
 .workbench-layout-v2__content-card pre {
@@ -95,8 +95,8 @@
     padding: 12px;
     overflow: auto;
     border-radius: 10px;
-    background: rgba(2, 6, 23, 0.62);
-    color: rgba(186, 230, 253, 0.92);
+    background: var(--wbh-code-bg);
+    color: var(--wbh-code-text);
     font-size: 12px;
     line-height: 1.5;
 }
@@ -106,7 +106,7 @@
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: rgba(125, 211, 252, 0.92);
+    color: var(--wbh-eyebrow-text);
 }
 
 .workbench-layout-v2__sidebar {
@@ -118,19 +118,19 @@
     flex-direction: column;
     gap: 1px;
     min-height: 100%;
-    background: rgba(15, 23, 42, 0.2);
+    background: var(--wbh-sidebar-panes-bg);
 }
 
 .workbench-layout-v2__sidebar-pane {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.08);
-    background: rgba(15, 23, 42, 0.26);
+    border-bottom: 1px solid var(--wbh-pane-border);
+    background: var(--wbh-pane-bg);
 }
 
 .workbench-layout-v2__sidebar-pane.is-active {
-    background: rgba(30, 41, 59, 0.46);
+    background: var(--wbh-pane-bg-active);
 }
 
 .workbench-layout-v2__sidebar-pane-header {
@@ -142,18 +142,18 @@
     padding: 8px 12px;
     border: 0;
     background: transparent;
-    color: rgba(226, 232, 240, 0.88);
+    color: var(--wbh-pane-header-text);
     text-align: left;
     cursor: pointer;
 }
 
 .workbench-layout-v2__sidebar-pane-header:hover {
-    background: rgba(59, 130, 246, 0.12);
+    background: var(--wbh-pane-header-hover-bg);
 }
 
 .workbench-layout-v2__sidebar-pane-chevron {
     width: 14px;
-    color: rgba(125, 211, 252, 0.88);
+    color: var(--wbh-pane-chevron-text);
     font-size: 12px;
     flex: 0 0 auto;
 }
@@ -172,8 +172,8 @@
 .workbench-layout-v2__sidebar-pane-body {
     min-height: 0;
     padding: 0;
-    border-top: 1px solid rgba(148, 163, 184, 0.06);
-    background: rgba(2, 6, 23, 0.2);
+    border-top: 1px solid var(--wbh-pane-body-border);
+    background: var(--wbh-pane-body-bg);
 }
 
 .workbench-layout-v2__sidebar-pane-body > * {

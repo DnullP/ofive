@@ -19,6 +19,7 @@
 import { CircleAlert, Info, TriangleAlert, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useConfigState } from "../../host/config/configStore";
 import {
     dismissNotification,
     subscribeNotificationCenter,
@@ -87,6 +88,7 @@ function resolveTimerPercent(item: NotificationViewModel): number {
  */
 export function LogNotificationOverlay(): ReactNode {
     const { t } = useTranslation();
+    const notificationsEnabled = useConfigState().featureSettings.notificationsEnabled;
     const [items, setItems] = useState<NotificationViewModel[]>([]);
 
     useEffect(() => {
@@ -94,6 +96,12 @@ export function LogNotificationOverlay(): ReactNode {
             setItems((previous) => applyNotificationCenterEvent(previous, event));
         });
     }, []);
+
+    useEffect(() => {
+        if (!notificationsEnabled) {
+            setItems([]);
+        }
+    }, [notificationsEnabled]);
 
     useEffect(() => {
         const timer = window.setInterval(() => {
@@ -104,6 +112,10 @@ export function LogNotificationOverlay(): ReactNode {
             window.clearInterval(timer);
         };
     }, []);
+
+    if (!notificationsEnabled) {
+        return null;
+    }
 
     if (items.length === 0) {
         return null;
