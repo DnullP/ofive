@@ -55,7 +55,7 @@
     "highlight.js": "^11.11.1",
     "i18next": "^25.8.13",
     "katex": "^0.16.33",
-    "layout-v2": "file:../layout-v2",
+    "layout-v2": "git+https://github.com/DnullP/layout-v2.git",
     "lucide-react": "^0.564.0",
     "pinyin-pro": "^3.28.1",
     "react": "^19.1.0",
