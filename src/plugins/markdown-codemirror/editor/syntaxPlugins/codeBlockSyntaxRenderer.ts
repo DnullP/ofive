@@ -58,9 +58,7 @@ export function registerCodeBlockSyntaxRenderer(): void {
                     state.inFence = true;
                     state.fenceChar = (openMatch[1] ?? "```").charAt(0);
 
-                    const isEditing =
-                        context.view.hasFocus &&
-                        rangeIntersectsSelection(context.view, context.lineFrom, lineEnd);
+                    const isEditing = rangeIntersectsSelection(context.view, context.lineFrom, lineEnd);
                     if (!isEditing) {
                         pushSyntaxDecorationRange(
                             context.ranges,
@@ -80,9 +78,7 @@ export function registerCodeBlockSyntaxRenderer(): void {
                 if (isClosingFence) {
                     state.inFence = false;
 
-                    const isEditing =
-                        context.view.hasFocus &&
-                        rangeIntersectsSelection(context.view, context.lineFrom, lineEnd);
+                    const isEditing = rangeIntersectsSelection(context.view, context.lineFrom, lineEnd);
                     if (!isEditing) {
                         pushSyntaxDecorationRange(
                             context.ranges,

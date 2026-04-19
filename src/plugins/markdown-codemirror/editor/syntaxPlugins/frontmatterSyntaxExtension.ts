@@ -31,6 +31,7 @@ import {
     createBlockAtomicRangesExtension,
     hiddenBlockAnchorLineDecoration,
     hiddenBlockLineDecoration,
+    rangeTouchesBlock,
 } from "./blockWidgetReplace";
 import { setExclusionZones } from "../syntaxExclusionZones";
 
@@ -99,6 +100,21 @@ export function isFrontmatterBlockSelected(
     ranges: readonly FrontmatterSelectionRange[],
 ): boolean {
     return ranges.some((range) => !range.empty && range.from < block.to && range.to > block.from);
+}
+
+/**
+ * @function shouldKeepFrontmatterSourceVisible
+ * @description 当底层选区仍停留在 frontmatter 源码里时，保留源码可见，
+ *   避免 widget 替换后 selection 指向不可映射位置。
+ * @param block frontmatter 区块。
+ * @param ranges 当前选区集合。
+ * @returns 若当前应回退源码显示，返回 true。
+ */
+export function shouldKeepFrontmatterSourceVisible(
+    block: Pick<FrontmatterBlock, "from" | "to">,
+    ranges: readonly FrontmatterSelectionRange[],
+): boolean {
+    return rangeTouchesBlock(block, ranges);
 }
 
 /**
@@ -402,6 +418,10 @@ export function createFrontmatterSyntaxExtension(options: FrontmatterSyntaxExten
                     { from: block.from, to: block.to },
                 ]);
 
+                if (shouldKeepFrontmatterSourceVisible(block, view.state.selection.ranges)) {
+                    return builder.finish();
+                }
+
                 const isSelected = isFrontmatterBlockSelected(block, view.state.selection.ranges);
 
                 // 通过 Decoration.line 为每行添加隐藏类，CSS 将行高设为 0。
@@ -442,6 +462,9 @@ export function createFrontmatterSyntaxExtension(options: FrontmatterSyntaxExten
     const atomicRanges = createBlockAtomicRangesExtension((view) => {
         const block = parseFrontmatterBlock(view.state);
         if (!block) {
+            return null;
+        }
+        if (shouldKeepFrontmatterSourceVisible(block, view.state.selection.ranges)) {
             return null;
         }
         return { from: block.from, to: block.to };

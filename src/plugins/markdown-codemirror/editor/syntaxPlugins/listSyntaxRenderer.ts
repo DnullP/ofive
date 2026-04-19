@@ -320,9 +320,7 @@ export function registerListSyntaxRenderer(): void {
             const markerFrom = context.lineFrom + listMatch.markerStart;
             const markerTo = markerFrom + listMatch.markerText.length;
             const contentFrom = context.lineFrom + listMatch.contentStart;
-            const isEditing =
-                context.view.hasFocus &&
-                rangeIntersectsSelection(context.view, context.lineFrom, lineEnd);
+            const isEditing = rangeIntersectsSelection(context.view, context.lineFrom, lineEnd);
             if (isEditing) {
                 pushSyntaxDecorationRange(
                     context.ranges,

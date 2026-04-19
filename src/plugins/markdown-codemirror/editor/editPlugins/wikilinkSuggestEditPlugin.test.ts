@@ -5,6 +5,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { EditorState } from "@codemirror/state";
+import { mapSuggestStateThroughTransaction } from "./wikilinkSuggestEditPlugin";
 import {
     buildWikiLinkSuggestionAcceptance,
     detectOpenWikiLink,
@@ -276,5 +278,56 @@ describe("resolveWikiLinkSuggestionAcceptanceAtCursor", () => {
             insert: "Note",
             selectionAnchor: 6,
         });
+    });
+});
+
+describe("mapSuggestStateThroughTransaction", () => {
+    test("文档前方插入内容后应同步平移 anchorPos 与 replaceTo", () => {
+        const state = EditorState.create({ doc: "[[note" });
+        const transaction = state.update({
+            changes: {
+                from: 0,
+                insert: "前缀",
+            },
+        });
+
+        const mapped = mapSuggestStateThroughTransaction({
+            active: true,
+            query: "note",
+            items: [],
+            selectedIndex: 0,
+            anchorPos: 2,
+            replaceTo: 6,
+            preserveClosingBrackets: false,
+            closingBracketsImmediatelyAfterReplaceTo: false,
+        }, transaction);
+
+        expect(mapped.anchorPos).toBe(4);
+        expect(mapped.replaceTo).toBe(8);
+    });
+
+    test("inactive 状态在文档变更时应保持不变", () => {
+        const state = EditorState.create({ doc: "[[note" });
+        const transaction = state.update({
+            changes: {
+                from: 0,
+                insert: "前缀",
+            },
+        });
+
+        const mapped = mapSuggestStateThroughTransaction({
+            active: false,
+            query: "",
+            items: [],
+            selectedIndex: 0,
+            anchorPos: 0,
+            replaceTo: 0,
+            preserveClosingBrackets: false,
+            closingBracketsImmediatelyAfterReplaceTo: false,
+        }, transaction);
+
+        expect(mapped.active).toBe(false);
+        expect(mapped.anchorPos).toBe(0);
+        expect(mapped.replaceTo).toBe(0);
     });
 });

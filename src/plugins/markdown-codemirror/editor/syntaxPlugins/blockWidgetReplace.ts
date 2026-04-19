@@ -55,6 +55,19 @@ export interface BlockRange {
 }
 
 /**
+ * @interface BlockSelectionRange
+ * @description 判断块级源码是否仍应保留可映射位置所需的最小选区结构。
+ */
+export interface BlockSelectionRange {
+    /** 选区起始偏移。 */
+    from: number;
+    /** 选区结束偏移。 */
+    to: number;
+    /** 是否为空光标。 */
+    empty: boolean;
+}
+
+/**
  * 源码行隐藏装饰：为被替换的源码行添加 CSS 类，通过样式将行高设为 0 使内容不可见。
  * 对应的 gutter 元素由 CM6 同步为 0 高度，配合 `.cm-gutterElement { overflow:hidden }`
  * 确保行号文本不溢出。
@@ -74,6 +87,29 @@ export const hiddenBlockAnchorLineDecoration: Decoration = Decoration.line({
 
 /** 原子范围标记：仅用于 RangeSet 占位，值本身不被使用。 */
 const atomicRangeMarker = Decoration.mark({});
+
+/**
+ * @function rangeTouchesBlock
+ * @description 判断当前选区是否仍命中块级源码范围。
+ *   当可视化 widget 已接管展示，但底层选区仍停留在该块时，
+ *   应保留源码映射或禁用 atomicRanges，避免 CodeMirror 在滚动/测量时
+ *   找不到可覆盖该位置的 tile。
+ * @param range 块级范围。
+ * @param selections 当前选区集合。
+ * @returns 若任一选区或空光标命中该块，返回 true。
+ */
+export function rangeTouchesBlock(
+    range: BlockRange,
+    selections: readonly BlockSelectionRange[],
+): boolean {
+    return selections.some((selection) => {
+        if (selection.empty) {
+            return selection.from >= range.from && selection.from <= range.to;
+        }
+
+        return selection.from <= range.to && selection.to >= range.from;
+    });
+}
 
 /**
  * @function createBlockAtomicRangesExtension

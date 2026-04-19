@@ -67,24 +67,39 @@
     color: var(--editor-panel-muted-text-color);
 }
 
-/* Keep header visual style when editing the source line in-place.
-   The renderer marks the whole line with `cm-rendered-header-source` when
-   the line is being edited; ensure font-family, weight and sizing
-   apply to the raw source and its child spans. */
-.cm-tab-editor .cm-rendered-header-source,
-.cm-tab-editor .cm-rendered-header-source * {
+/* Editing a markdown heading should keep the raw `# title` source visible,
+   but the visual size must come from the whole `.cm-line`, not inline token
+   spans, otherwise CodeMirror may split `#` and content into separate lines. */
+.cm-tab-editor .cm-line.cm-rendered-header-source-line {
     font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-weight: 700;
     color: var(--editor-header-text-color);
     line-height: 1.3;
-    padding: 2px 0 6px 0;
     text-decoration: none;
 }
 
-/* Ensure child token spans inherit the font-size so the header level
-   sizes are respected even when CodeMirror wraps tokens in spans. */
-.cm-tab-editor .cm-rendered-header-source span {
+.cm-tab-editor .cm-line.cm-rendered-header-source-line span {
     font-size: inherit;
+    font-weight: inherit;
+    color: inherit;
+    line-height: inherit;
+    text-decoration: none !important;
+}
+
+/* Legacy safety net for any stale inline class left by old transactions. */
+.cm-tab-editor .cm-rendered-header-source,
+.cm-tab-editor .cm-rendered-header-source * {
+    display: inline;
+    width: auto;
+    font: inherit;
+    color: inherit;
+    line-height: inherit;
+    padding: 0;
+    text-decoration: none;
+}
+
+.cm-tab-editor .cm-rendered-header-source::after {
+    display: none;
 }
 
 /* 编辑器模式切换按钮：放入标题栏右侧，用于切换编辑态与阅读态。 */

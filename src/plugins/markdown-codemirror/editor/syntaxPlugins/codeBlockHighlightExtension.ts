@@ -44,7 +44,7 @@ import rustLanguage from "highlight.js/lib/languages/rust";
 import typescriptLanguage from "highlight.js/lib/languages/typescript";
 import xmlLanguage from "highlight.js/lib/languages/xml";
 import yamlLanguage from "highlight.js/lib/languages/yaml";
-import { hiddenBlockLineDecoration } from "./blockWidgetReplace";
+import { hiddenBlockLineDecoration, rangeTouchesBlock } from "./blockWidgetReplace";
 import {
     setExclusionZones,
     isRangeInsideHigherPriorityZone,
@@ -220,15 +220,7 @@ function parseCodeBlocks(state: EditorView["state"]): CodeBlock[] {
  * @returns 光标在块内时返回 true。
  */
 function isCursorInsideBlock(view: EditorView, block: CodeBlock): boolean {
-    if (!view.hasFocus) {
-        return false;
-    }
-    return view.state.selection.ranges.some((range) => {
-        if (range.empty) {
-            return range.from >= block.from && range.from <= block.to;
-        }
-        return range.from <= block.to && range.to >= block.from;
-    });
+    return rangeTouchesBlock(block, view.state.selection.ranges);
 }
 
 /* ================================================================== */

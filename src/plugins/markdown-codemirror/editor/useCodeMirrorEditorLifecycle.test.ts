@@ -13,7 +13,11 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { safeDestroyEditorView, syncEditorTabGutterWidth } from "./useCodeMirrorEditorLifecycle";
+import {
+    safeDestroyEditorView,
+    shouldFlushEditorAutoSaveOnBlur,
+    syncEditorTabGutterWidth,
+} from "./useCodeMirrorEditorLifecycle";
 
 /**
  * @function createStyleRecorder
@@ -125,5 +129,31 @@ describe("safeDestroyEditorView", () => {
         } finally {
             globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
         }
+    });
+});
+
+describe("shouldFlushEditorAutoSaveOnBlur", () => {
+    test("IME 组合期间不应立即 flush autosave", () => {
+        expect(shouldFlushEditorAutoSaveOnBlur({
+            isComposing: true,
+            lastCompositionEndAt: 0,
+            now: 100,
+        })).toBe(false);
+    });
+
+    test("组合刚结束的短窗口内不应立即 flush autosave", () => {
+        expect(shouldFlushEditorAutoSaveOnBlur({
+            isComposing: false,
+            lastCompositionEndAt: 100,
+            now: 120,
+        })).toBe(false);
+    });
+
+    test("组合稳定结束后允许 flush autosave", () => {
+        expect(shouldFlushEditorAutoSaveOnBlur({
+            isComposing: false,
+            lastCompositionEndAt: 100,
+            now: 200,
+        })).toBe(true);
     });
 });

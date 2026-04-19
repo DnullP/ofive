@@ -32,9 +32,7 @@ export function registerBlockquoteSyntaxRenderer(): void {
             }
 
             const lineEnd = context.lineFrom + context.lineText.length;
-            const isEditing =
-                context.view.hasFocus &&
-                rangeIntersectsSelection(context.view, context.lineFrom, lineEnd);
+            const isEditing = rangeIntersectsSelection(context.view, context.lineFrom, lineEnd);
             if (isEditing) {
                 return;
             }

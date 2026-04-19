@@ -369,8 +369,7 @@ export function createImageEmbedSyntaxExtension(
 
                             const tokenFrom = currentLine.from + matchIndex;
                             const tokenTo = tokenFrom + fullText.length;
-                            const isEditingToken =
-                                view.hasFocus && rangeIntersectsSelection(view, tokenFrom, tokenTo);
+                            const isEditingToken = rangeIntersectsSelection(view, tokenFrom, tokenTo);
                             if (isEditingToken) {
                                 return;
                             }

@@ -33,8 +33,10 @@ import {
     type MarkdownTableModel,
 } from "../markdownTableModel";
 import {
+    type BlockSelectionRange,
     hiddenBlockAnchorLineDecoration,
     hiddenBlockLineDecoration,
+    rangeTouchesBlock,
 } from "./blockWidgetReplace";
 import {
     isRangeInsideHigherPriorityZone,
@@ -56,6 +58,21 @@ interface MarkdownTableBlock {
     endLineNumber: number;
     /** 结构化表格模型。 */
     model: MarkdownTableModel;
+}
+
+/**
+ * @function shouldKeepMarkdownTableSourceVisible
+ * @description 当底层选区仍停留在表格源码范围里时，保留源码显示，
+ *   避免 widget 替换后 selection 指向不可映射位置。
+ * @param block 表格块。
+ * @param ranges 当前选区集合。
+ * @returns 若应回退源码显示，返回 true。
+ */
+export function shouldKeepMarkdownTableSourceVisible(
+    block: Pick<MarkdownTableBlock, "from" | "to">,
+    ranges: readonly BlockSelectionRange[],
+): boolean {
+    return rangeTouchesBlock(block, ranges);
 }
 
 /** 表格原子范围标记。 */
@@ -323,6 +340,10 @@ export function createMarkdownTableSyntaxExtension(
                 setExclusionZones(view, "markdown-table", blocks.map((block) => ({ from: block.from, to: block.to })));
 
                 blocks.forEach((block) => {
+                    if (shouldKeepMarkdownTableSourceVisible(block, view.state.selection.ranges)) {
+                        return;
+                    }
+
                     for (let lineNumber = block.startLineNumber; lineNumber < block.endLineNumber; lineNumber += 1) {
                         const line = view.state.doc.line(lineNumber);
                         builder.add(line.from, line.from, hiddenBlockLineDecoration);
@@ -362,7 +383,9 @@ export function createMarkdownTableSyntaxExtension(
         }
 
         return RangeSet.of(
-            pluginValue.blocks.map((block) => markdownTableAtomicMarker.range(block.from, block.to)),
+            pluginValue.blocks
+                .filter((block) => !shouldKeepMarkdownTableSourceVisible(block, view.state.selection.ranges))
+                .map((block) => markdownTableAtomicMarker.range(block.from, block.to)),
         );
     });
 

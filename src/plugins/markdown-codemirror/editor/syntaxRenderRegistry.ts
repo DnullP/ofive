@@ -75,6 +75,11 @@ export interface LineSyntaxRendererRegistration {
     id: string;
     /** 处理单行装饰生成 */
     applyLineDecorations: (context: LineSyntaxDecorationContext) => void;
+    /**
+     * 当 IME 组合态命中当前行时，是否仍允许该渲染器运行。
+     * 仅适用于不会隐藏源码、不会破坏位置映射的安全行级样式。
+     */
+    allowComposingSelectionLine?: boolean;
 }
 
 const lineSyntaxRendererMap = new Map<string, LineSyntaxRendererRegistration>();
@@ -133,6 +138,25 @@ export function pushSyntaxDecorationRange(
 }
 
 /**
+ * @function pushLineSyntaxDecoration
+ * @description 写入零宽度的行级装饰，用于 `Decoration.line`。
+ * @param ranges 装饰范围集合。
+ * @param at 行起始偏移。
+ * @param decoration 行装饰对象。
+ */
+export function pushLineSyntaxDecoration(
+    ranges: SyntaxDecorationRange[],
+    at: number,
+    decoration: Decoration,
+): void {
+    ranges.push({
+        from: at,
+        to: at,
+        decoration,
+    });
+}
+
+/**
  * @function rangeIntersectsSelection
  * @description 判断范围是否与当前光标/选择重叠。
  * @param view 编辑器视图。
@@ -151,6 +175,40 @@ export function rangeIntersectsSelection(
         }
         return range.from <= to && range.to >= from;
     });
+}
+
+/**
+ * @function shouldSuppressLineSyntaxRendering
+ * @description 判断当前行是否应在 IME 组合态期间回退为原始源码，避免行级语法装饰继续改写活动输入行的 DOM。
+ * @param view 编辑器视图。
+ * @param lineFrom 当前行起始偏移。
+ * @param lineTo 当前行结束偏移。
+ * @returns 若当前正在 IME 组合，且选区触达该行，则返回 true。
+ */
+export function shouldSuppressLineSyntaxRendering(
+    view: EditorView,
+    lineFrom: number,
+    lineTo: number,
+): boolean {
+    if (!view.composing) {
+        return false;
+    }
+
+    return view.state.selection.ranges.some((range) => range.from <= lineTo && range.to >= lineFrom);
+}
+
+/**
+ * @function shouldApplyLineSyntaxRenderer
+ * @description 判断某个行级渲染器在当前行是否应执行。
+ * @param renderer 渲染器注册项。
+ * @param suppressCurrentLine 当前行是否处于 IME 组合态保护窗口。
+ * @returns `true` 表示允许执行。
+ */
+export function shouldApplyLineSyntaxRenderer(
+    renderer: Pick<LineSyntaxRendererRegistration, "allowComposingSelectionLine">,
+    suppressCurrentLine: boolean,
+): boolean {
+    return !suppressCurrentLine || renderer.allowComposingSelectionLine === true;
 }
 
 /**
@@ -173,7 +231,7 @@ export function addInlineSyntaxDecoration(
 
     const tokenFrom = context.lineFrom + tokenStartInLine;
     const tokenTo = tokenFrom + fullText.length;
-    const isEditingToken = context.view.hasFocus && rangeIntersectsSelection(context.view, tokenFrom, tokenTo);
+    const isEditingToken = rangeIntersectsSelection(context.view, tokenFrom, tokenTo);
     if (isEditingToken) {
         return;
     }
@@ -216,7 +274,7 @@ export function addDelimitedInlineSyntaxDecoration(
     const tokenTo = tokenFrom + fullText.length;
     const contentFrom = tokenFrom + leftMarkerLength;
     const contentTo = tokenTo - rightMarkerLength;
-    const isEditingToken = context.view.hasFocus && rangeIntersectsSelection(context.view, tokenFrom, tokenTo);
+    const isEditingToken = rangeIntersectsSelection(context.view, tokenFrom, tokenTo);
     if (isEditingToken) {
         return;
     }
@@ -252,9 +310,18 @@ function buildRegisteredSyntaxDecorations(view: EditorView): DecorationSet {
         const endLineNumber = view.state.doc.lineAt(visibleRange.to).number;
 
         while (currentLine.number <= endLineNumber) {
+            const shouldSuppressCurrentLine = shouldSuppressLineSyntaxRendering(
+                view,
+                currentLine.from,
+                currentLine.to,
+            );
             /* 若当前行起始位置处于任何排斥区域内，则跳过行级语法渲染 */
             if (!isInsideExclusionZone(view, currentLine.from)) {
                 renderers.forEach((renderer) => {
+                    if (!shouldApplyLineSyntaxRenderer(renderer, shouldSuppressCurrentLine)) {
+                        return;
+                    }
+
                     renderer.applyLineDecorations({
                         view,
                         lineText: currentLine.text,
@@ -302,20 +369,24 @@ export function createRegisteredLineSyntaxRenderExtension() {
     return ViewPlugin.fromClass(
         class {
             decorations: DecorationSet;
+            private wasComposing: boolean;
 
             constructor(view: EditorView) {
                 this.decorations = buildRegisteredSyntaxDecorations(view);
+                this.wasComposing = view.composing;
             }
 
             update(update: ViewUpdate): void {
-                /* 在 IME 组合态期间跳过装饰重建：
-                   标题/行内语法装饰可能改变字号、行高或通过 Decoration.replace
-                   隐藏/显示内容，在组合态下触发重排会导致 IME 候选窗偏移。
-                   组合结束后 CodeMirror 会再次触发 docChanged，届时重建即可。 */
-                if (update.view.composing) {
-                    return;
-                }
-                if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged) {
+                const compositionChanged = update.view.composing !== this.wasComposing;
+                this.wasComposing = update.view.composing;
+
+                if (
+                    update.docChanged
+                    || update.selectionSet
+                    || update.viewportChanged
+                    || update.focusChanged
+                    || compositionChanged
+                ) {
                     this.decorations = buildRegisteredSyntaxDecorations(update.view);
                 }
             }

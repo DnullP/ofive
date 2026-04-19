@@ -16,7 +16,7 @@
  *  - createLatexSyntaxExtension: 创建 LaTeX 语法渲染扩展
  */
 
-import { RangeSetBuilder, type Text } from "@codemirror/state";
+import { RangeSet, RangeSetBuilder, type Text } from "@codemirror/state";
 import {
     Decoration,
     type DecorationSet,
@@ -30,7 +30,7 @@ import { rangeIntersectsSelection } from "../syntaxRenderRegistry";
 import {
     hiddenBlockLineDecoration,
     hiddenBlockAnchorLineDecoration,
-    createBlockAtomicRangesExtension,
+    rangeTouchesBlock,
     type BlockRange,
 } from "./blockWidgetReplace";
 import {
@@ -358,7 +358,7 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
                 continue;
             }
 
-            const isEditing = view.hasFocus && rangeIntersectsSelection(view, blockFrom, blockTo);
+            const isEditing = rangeTouchesBlock({ from: blockFrom, to: blockTo }, view.state.selection.ranges);
             if (!isEditing && latex.length > 0) {
                 const rendered = renderLatexToHtml(latex, true);
                 const widget = new BlockLatexWidget(latex, rendered.html, rendered.isError);
@@ -417,7 +417,7 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
                     continue;
                 }
 
-                const isEditing = view.hasFocus && rangeIntersectsSelection(view, blockFrom, blockTo);
+                const isEditing = rangeTouchesBlock({ from: blockFrom, to: blockTo }, view.state.selection.ranges);
                 if (!isEditing && latex.length > 0) {
                     const rendered = renderLatexToHtml(latex, true);
                     const widget = new BlockLatexWidget(latex, rendered.html, rendered.isError);
@@ -499,7 +499,7 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
                     const tokenFrom = currentLine.from + matchIndex;
                     const tokenTo = tokenFrom + fullMatch.length;
 
-                    const isEditing = view.hasFocus && rangeIntersectsSelection(view, tokenFrom, tokenTo);
+                    const isEditing = rangeIntersectsSelection(view, tokenFrom, tokenTo);
                     if (isEditing) {
                         continue;
                     }
@@ -590,23 +590,19 @@ export function createLatexSyntaxExtension() {
         },
     );
 
-    const atomicRanges = createBlockAtomicRangesExtension(
-        (view: EditorView): BlockRange | null => {
-            const ranges = blockLatexRangesMap.get(view);
-            if (!ranges || ranges.length === 0) {
-                return null;
-            }
+    const atomicRanges = EditorView.atomicRanges.of((view) => {
+        const ranges = blockLatexRangesMap.get(view);
+        if (!ranges || ranges.length === 0) {
+            return RangeSet.empty;
+        }
 
-            /* 返回光标所在的块级范围（如有） */
-            const cursor = view.state.selection.main.head;
-            for (const range of ranges) {
-                if (cursor >= range.from && cursor <= range.to) {
-                    return range;
-                }
-            }
-            return null;
-        },
-    );
+        const hiddenRanges = ranges.filter((range) => !rangeTouchesBlock(range, view.state.selection.ranges));
+        if (hiddenRanges.length === 0) {
+            return RangeSet.empty;
+        }
+
+        return RangeSet.of(hiddenRanges.map((range: BlockRange) => Decoration.mark({}).range(range.from, range.to)));
+    });
 
     return [plugin, atomicRanges];
 }

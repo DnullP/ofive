@@ -96,6 +96,7 @@ import {
     registerVimTokenProvider,
     unregisterVimTokenProvider,
 } from "./vimChineseMotionExtension";
+import { shouldDeferBlurCommitAfterComposition } from "../../../utils/imeInputGuard";
 
 const SHARED_EDITOR_FONT_FAMILY_CSS_VALUE = "var(--cm-editor-font-family)";
 const SHARED_EDITOR_FONT_SIZE_CSS_VALUE = "var(--cm-editor-font-size)";
@@ -252,6 +253,21 @@ function neutralizeEditorView(view: EditorView): void {
 }
 
 /**
+ * @function shouldFlushEditorAutoSaveOnBlur
+ * @description 判断正文编辑器在 blur 时是否应立即 flush autosave。
+ *   输入法组合期间或组合结束后的短时间窗口内应跳过，避免候选确认导致的临时失焦直接触发保存。
+ * @param input 组合态判定输入。
+ * @returns `true` 表示可以立即 flush；`false` 表示应延后。
+ */
+export function shouldFlushEditorAutoSaveOnBlur(input: {
+    isComposing: boolean;
+    lastCompositionEndAt: number;
+    now: number;
+}): boolean {
+    return !shouldDeferBlurCommitAfterComposition(input);
+}
+
+/**
  * @function useCodeMirrorEditorLifecycle
  * @description 管理 EditorView 的创建、更新、gutter 补偿同步与清理。
  * @param options 生命周期 Hook 参数。
@@ -268,6 +284,8 @@ export function useCodeMirrorEditorLifecycle(
     const lineWrappingCompartmentRef = useRef<Compartment>(new Compartment());
     const lineNumbersCompartmentRef = useRef<Compartment>(new Compartment());
     const exitFrontmatterVimNavigationRef = useRef(options.onRequestExitFrontmatterVimNavigation);
+    const isEditorComposingRef = useRef(false);
+    const lastEditorCompositionEndAtRef = useRef(0);
 
     useEffect(() => {
         exitFrontmatterVimNavigationRef.current = options.onRequestExitFrontmatterVimNavigation;
@@ -352,6 +370,15 @@ export function useCodeMirrorEditorLifecycle(
                             return false;
                         }
                     },
+                    compositionstart() {
+                        isEditorComposingRef.current = true;
+                        return false;
+                    },
+                    compositionend() {
+                        isEditorComposingRef.current = false;
+                        lastEditorCompositionEndAtRef.current = performance.now();
+                        return false;
+                    },
                 }),
                 ...getRegisteredEditPluginExtensions({
                     getCurrentFilePath: () => options.currentFilePathRef.current,
@@ -380,6 +407,19 @@ export function useCodeMirrorEditorLifecycle(
                     }
 
                     if (update.focusChanged && !update.view.hasFocus) {
+                        const shouldFlush = shouldFlushEditorAutoSaveOnBlur({
+                            isComposing: isEditorComposingRef.current || update.view.composing,
+                            lastCompositionEndAt: lastEditorCompositionEndAtRef.current,
+                            now: performance.now(),
+                        });
+                        if (!shouldFlush) {
+                            console.debug("[editor] skipped blur autosave flush during IME composition", {
+                                articleId: options.articleId,
+                                filePath: options.currentFilePathRef.current,
+                            });
+                            return;
+                        }
+
                         void flushAutoSaveByPath(options.currentFilePathRef.current);
                     }
                 }),

@@ -116,18 +116,71 @@ const INACTIVE_STATE: SuggestState = {
 /** 更新补全状态的 StateEffect */
 const setSuggestState = StateEffect.define<SuggestState>();
 
+/**
+ * @function mapSuggestStateThroughTransaction
+ * @description 在文档变更后重映射补全弹窗保存的锚点/替换区间位置，避免 requestMeasure 继续使用旧偏移。
+ * @param value 变更前的补全状态。
+ * @param transaction 当前事务。
+ * @returns 映射后的补全状态；若区间失效则退回空状态。
+ */
+export function mapSuggestStateThroughTransaction(
+    value: SuggestState,
+    transaction: Transaction,
+): SuggestState {
+    if (!value.active || !transaction.docChanged) {
+        return value;
+    }
+
+    const docLength = transaction.newDoc.length;
+    const anchorPos = transaction.changes.mapPos(value.anchorPos, -1);
+    const replaceTo = transaction.changes.mapPos(value.replaceTo, 1);
+
+    if (anchorPos < 0 || replaceTo < anchorPos || replaceTo > docLength) {
+        return INACTIVE_STATE;
+    }
+
+    return {
+        ...value,
+        anchorPos,
+        replaceTo,
+    };
+}
+
+/**
+ * @function safeCoordsAtPos
+ * @description 安全读取某文档偏移的屏幕坐标；当位置越界或当前 tile 不可解析时返回 null。
+ * @param view 编辑器视图。
+ * @param position 文档偏移。
+ * @returns 坐标对象或 null。
+ */
+function safeCoordsAtPos(
+    view: EditorView,
+    position: number,
+): { left: number; right: number; top: number; bottom: number } | null {
+    if (position < 0 || position > view.state.doc.length) {
+        return null;
+    }
+
+    try {
+        return view.coordsAtPos(position);
+    } catch {
+        return null;
+    }
+}
+
 /** 补全状态 StateField */
 const suggestStateField = StateField.define<SuggestState>({
     create() {
         return INACTIVE_STATE;
     },
     update(value, transaction: Transaction) {
+        const mappedValue = mapSuggestStateThroughTransaction(value, transaction);
         for (const effect of transaction.effects) {
             if (effect.is(setSuggestState)) {
                 return effect.value;
             }
         }
-        return value;
+        return mappedValue;
     },
 });
 
@@ -494,7 +547,7 @@ function createWikiLinkSuggestExtensions(): Extension[] {
                         if (!state.active) {
                             return { state, coords: null };
                         }
-                        const coords = view.coordsAtPos(state.anchorPos);
+                        const coords = safeCoordsAtPos(view, state.anchorPos);
                         return { state, coords };
                     },
                     write({ state, coords }, view) {

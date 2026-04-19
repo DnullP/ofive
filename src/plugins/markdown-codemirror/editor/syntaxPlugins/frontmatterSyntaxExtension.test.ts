@@ -6,7 +6,11 @@
 
 import { EditorState } from "@codemirror/state";
 import { describe, expect, test } from "bun:test";
-import { isFrontmatterBlockSelected, parseFrontmatterBlock } from "./frontmatterSyntaxExtension";
+import {
+    isFrontmatterBlockSelected,
+    parseFrontmatterBlock,
+    shouldKeepFrontmatterSourceVisible,
+} from "./frontmatterSyntaxExtension";
 
 /**
  * @function createState
@@ -59,6 +63,22 @@ describe("isFrontmatterBlockSelected", () => {
                 { from: 6, to: 6, empty: true },
                 { from: 18, to: 24, empty: false },
             ],
+        )).toBe(false);
+    });
+});
+
+describe("shouldKeepFrontmatterSourceVisible", () => {
+    test("空光标停留在 frontmatter 源码内时应保留源码可见", () => {
+        expect(shouldKeepFrontmatterSourceVisible(
+            { from: 0, to: 18 },
+            [{ from: 6, to: 6, empty: true }],
+        )).toBe(true);
+    });
+
+    test("光标已离开 frontmatter 时不应阻止 widget 接管", () => {
+        expect(shouldKeepFrontmatterSourceVisible(
+            { from: 0, to: 18 },
+            [{ from: 24, to: 24, empty: true }],
         )).toBe(false);
     });
 });

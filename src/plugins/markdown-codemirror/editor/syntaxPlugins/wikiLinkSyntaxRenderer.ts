@@ -293,8 +293,7 @@ export function registerWikiLinkSyntaxRenderer(): void {
 
                 const tokenFrom = context.lineFrom + matchIndex;
                 const tokenTo = tokenFrom + fullText.length;
-                const isEditingToken = context.view.hasFocus
-                    && rangeIntersectsSelection(context.view, tokenFrom, tokenTo);
+                const isEditingToken = rangeIntersectsSelection(context.view, tokenFrom, tokenTo);
                 if (isEditingToken) {
                     return;
                 }
