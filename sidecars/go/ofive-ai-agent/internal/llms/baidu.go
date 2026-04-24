@@ -12,7 +12,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	"google.golang.org/adk/model"
 	"google.golang.org/genai"
@@ -52,7 +51,7 @@ func NewBaiduLLM(name, endpoint, modelName, appID, authToken string) *BaiduLLM {
 		model:    modelName,
 		appID:    appID,
 		apiKey:   authToken,
-		client:   &http.Client{Timeout: 60 * time.Second},
+		client:   newStreamingHTTPClient(),
 	}
 }
 

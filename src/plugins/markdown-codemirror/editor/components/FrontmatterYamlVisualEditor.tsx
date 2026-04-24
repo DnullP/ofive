@@ -37,7 +37,7 @@ import {
     resolveFrontmatterNavigationMove,
 } from "../handoff/frontmatterVimHandoff";
 import {
-    shouldDeferBlurCommitAfterComposition,
+    createImeCompositionGuard,
     shouldSubmitPlainEnter,
 } from "../../../../utils/imeInputGuard";
 import "./FrontmatterYamlVisualEditor.css";
@@ -660,8 +660,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
     const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
     const lastCommittedYamlRef = useRef<string>(props.initialYamlText.trimEnd());
     const pendingNavigationFocusFieldRef = useRef<string | null>(null);
-    const isInputComposingRef = useRef(false);
-    const lastInputCompositionEndAtRef = useRef(0);
+    const inputImeCompositionGuard = useRef(createImeCompositionGuard()).current;
 
     const fieldEntries = useMemo(() => Object.entries(recordDraft), [recordDraft]);
 
@@ -871,7 +870,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
      * @description 标记 frontmatter 输入框进入输入法组合态。
      */
     const handleInputCompositionStart = (): void => {
-        isInputComposingRef.current = true;
+        inputImeCompositionGuard.handleCompositionStart();
     };
 
     /**
@@ -879,8 +878,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
      * @description 标记 frontmatter 输入框退出输入法组合态，并记录结束时间戳。
      */
     const handleInputCompositionEnd = (): void => {
-        isInputComposingRef.current = false;
-        lastInputCompositionEndAtRef.current = performance.now();
+        inputImeCompositionGuard.handleCompositionEnd();
     };
 
     /**
@@ -889,11 +887,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
      * @returns `true` 表示本次 blur 不应提交。
      */
     const shouldDeferInputBlurCommit = (): boolean => {
-        return shouldDeferBlurCommitAfterComposition({
-            isComposing: isInputComposingRef.current,
-            lastCompositionEndAt: lastInputCompositionEndAtRef.current,
-            now: performance.now(),
-        });
+        return inputImeCompositionGuard.shouldDeferBlurCommit();
     };
 
     /**
@@ -912,11 +906,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
             return false;
         }
 
-        return !shouldDeferBlurCommitAfterComposition({
-            isComposing: isInputComposingRef.current,
-            lastCompositionEndAt: lastInputCompositionEndAtRef.current,
-            now: performance.now(),
-        });
+        return inputImeCompositionGuard.shouldAllowBlurAction();
     };
 
     /**

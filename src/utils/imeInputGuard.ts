@@ -16,6 +16,8 @@
  *   - isImeComposing
  *   - shouldSubmitPlainEnter
  *   - shouldDeferBlurCommitAfterComposition
+ *   - shouldAllowBlurActionAfterComposition
+ *   - createImeCompositionGuard
  */
 
 interface NativeKeyboardEventLike {
@@ -38,7 +40,30 @@ interface BlurCommitGuardInput {
     now: number;
 }
 
+export interface ImeCompositionStateSnapshot {
+    isComposing: boolean;
+    lastCompositionEndAt: number;
+}
+
+interface ImeCompositionGuardOptions {
+    getNow?: () => number;
+}
+
+export interface ImeCompositionGuard {
+    state: ImeCompositionStateSnapshot;
+    handleCompositionStart(): void;
+    handleCompositionEnd(): void;
+    shouldDeferBlurCommit(input?: { isComposing?: boolean }): boolean;
+    shouldAllowBlurAction(input?: { isComposing?: boolean }): boolean;
+}
+
 const BLUR_COMMIT_GRACE_PERIOD_MS = 40;
+
+function getDefaultNow(): number {
+    return typeof performance !== "undefined"
+        ? performance.now()
+        : Date.now();
+}
 
 /**
  * @function isImeComposing
@@ -82,4 +107,55 @@ export function shouldDeferBlurCommitAfterComposition(
     }
 
     return input.now - input.lastCompositionEndAt < BLUR_COMMIT_GRACE_PERIOD_MS;
+}
+
+/**
+ * @function shouldAllowBlurActionAfterComposition
+ * @description 判断 blur 触发的后续动作是否可以执行。
+ * @param input blur 判定所需的组合态与时间戳信息。
+ * @returns `true` 表示可以继续执行 blur 相关动作；`false` 表示应延后。
+ */
+export function shouldAllowBlurActionAfterComposition(
+    input: BlurCommitGuardInput,
+): boolean {
+    return !shouldDeferBlurCommitAfterComposition(input);
+}
+
+/**
+ * @function createImeCompositionGuard
+ * @description 创建一份可复用的输入法组合态守卫，用于聚合 `isComposing` 与 `lastCompositionEndAt` 状态。
+ * @param options 可选配置。
+ * @returns 组合态守卫实例。
+ */
+export function createImeCompositionGuard(
+    options: ImeCompositionGuardOptions = {},
+): ImeCompositionGuard {
+    const getNow = options.getNow ?? getDefaultNow;
+    const state: ImeCompositionStateSnapshot = {
+        isComposing: false,
+        lastCompositionEndAt: 0,
+    };
+
+    const shouldDeferBlurCommit = (input: { isComposing?: boolean } = {}): boolean => {
+        return shouldDeferBlurCommitAfterComposition({
+            isComposing: input.isComposing ?? state.isComposing,
+            lastCompositionEndAt: state.lastCompositionEndAt,
+            now: getNow(),
+        });
+    };
+
+    return {
+        state,
+        handleCompositionStart(): void {
+            state.isComposing = true;
+        },
+        handleCompositionEnd(): void {
+            state.isComposing = false;
+            state.lastCompositionEndAt = getNow();
+        },
+        shouldDeferBlurCommit,
+        shouldAllowBlurAction(input: { isComposing?: boolean } = {}): boolean {
+            return !shouldDeferBlurCommit(input);
+        },
+    };
 }

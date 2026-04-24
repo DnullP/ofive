@@ -112,6 +112,19 @@ func TestGenerateContentStreamsVendorResponseIntoMultipleYields(t *testing.T) {
 	}
 }
 
+func TestNewBaiduLLMUsesStreamingHTTPClient(t *testing.T) {
+	t.Parallel()
+
+	llm := NewBaiduLLM("baidu-qianfan", "https://example.com", "deepseek-v3.1-250821", "", "token")
+
+	if llm.client == nil {
+		t.Fatal("expected baidu client to be initialized")
+	}
+	if llm.client.Timeout != 0 {
+		t.Fatalf("expected baidu streaming client to avoid total timeout, got %s", llm.client.Timeout)
+	}
+}
+
 func TestGenerateContentSendsToolsAndToolMessages(t *testing.T) {
 	t.Parallel()
 

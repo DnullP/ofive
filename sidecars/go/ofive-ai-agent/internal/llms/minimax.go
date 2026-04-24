@@ -12,7 +12,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	"google.golang.org/adk/model"
 	"google.golang.org/genai"
@@ -49,7 +48,7 @@ func NewMinimaxLLM(name, endpoint, modelName, apiKey string) *MinimaxLLM {
 		endpoint: endpoint,
 		model:    modelName,
 		apiKey:   apiKey,
-		client:   &http.Client{Timeout: 60 * time.Second},
+		client:   newStreamingHTTPClient(),
 	}
 }
 

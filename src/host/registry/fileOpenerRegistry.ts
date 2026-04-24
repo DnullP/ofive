@@ -12,7 +12,7 @@
  *
  * @dependencies
  *   - react (useSyncExternalStore)
- *   - ../layout/DockviewLayout
+ *   - ../layout/workbenchContracts
  *
  * @example
  *   const dispose = registerFileOpener({
@@ -26,7 +26,7 @@
  */
 
 import { useSyncExternalStore } from "react";
-import type { TabInstanceDefinition } from "../layout/DockviewLayout";
+import type { TabInstanceDefinition } from "../layout/workbenchContracts";
 
 /**
  * @interface FileOpenerContext

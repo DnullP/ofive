@@ -28,7 +28,7 @@ import {
     type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import type { DockviewApi } from "dockview";
+import type { WorkbenchContainerApi } from "../../../host/layout/workbenchContracts";
 import katex from "katex";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -84,7 +84,7 @@ interface ReadModeWikiLinkAnchorProps extends ComponentPropsWithoutRef<"a"> {
     /** 当前文档路径。 */
     currentFilePath: string;
     /** Dockview 容器 API。 */
-    containerApi: DockviewApi;
+    containerApi: WorkbenchContainerApi;
     /** 父级 preview id。 */
     parentPreviewId: string | null;
 }
@@ -735,7 +735,7 @@ interface MarkdownReadViewProps {
     /** 当前文件相对路径。 */
     currentFilePath: string;
     /** Dockview 容器 API。 */
-    containerApi: DockviewApi;
+    containerApi: WorkbenchContainerApi;
 }
 
 /**

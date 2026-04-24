@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { IDockviewPanelProps } from "dockview";
+import type { WorkbenchTabProps } from "../../../host/layout/workbenchContracts";
 import { readVaultBinaryFile } from "../../../api/vaultApi";
 import "./ImageViewerTab.css";
 
@@ -37,7 +37,7 @@ function isTauriRuntime(): boolean {
  * @param props Dockview 面板参数，支持 params.path 与 params.absolutePath。
  * @returns 图片查看器视图。
  */
-export function ImageViewerTab(props: IDockviewPanelProps<Record<string, unknown>>): ReactNode {
+export function ImageViewerTab(props: WorkbenchTabProps<Record<string, unknown>>): ReactNode {
     const { t } = useTranslation();
     const [imageLoadError, setImageLoadError] = useState<string | null>(null);
     const [imageSource, setImageSource] = useState<string>("");

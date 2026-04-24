@@ -29,7 +29,7 @@
  */
 
 import { useSyncExternalStore, type ReactNode } from "react";
-import type { PanelRenderContext, PanelPosition } from "../layout/DockviewLayout";
+import type { PanelRenderContext, PanelPosition } from "../layout/workbenchContracts";
 
 /**
  * @interface PanelDescriptor

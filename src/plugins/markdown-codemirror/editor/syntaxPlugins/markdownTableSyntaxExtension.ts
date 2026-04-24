@@ -24,7 +24,7 @@ import {
 } from "@codemirror/view";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import type { DockviewApi } from "dockview";
+import type { WorkbenchContainerApi } from "../../../../host/layout/workbenchContracts";
 import i18n from "../../../../i18n";
 import { MarkdownTableVisualEditor } from "../components/MarkdownTableVisualEditor";
 import {
@@ -58,6 +58,13 @@ interface MarkdownTableBlock {
     endLineNumber: number;
     /** 结构化表格模型。 */
     model: MarkdownTableModel;
+}
+
+interface MarkdownTableSyntaxExtensionOptions {
+    onRequestFocusVimNavigation?: (request: {
+        blockFrom: number;
+        position: "first" | "last";
+    }) => void;
 }
 
 /**
@@ -215,6 +222,35 @@ function saveMarkdownTable(
     };
 }
 
+function exitMarkdownTableVimNavigation(
+    view: EditorView,
+    expectedFrom: number,
+    direction: "previous" | "next",
+): void {
+    if (!isViewAlive(view)) {
+        return;
+    }
+
+    const liveBlock = parseMarkdownTableBlocks(view).find((block) => block.from === expectedFrom);
+    if (!liveBlock) {
+        return;
+    }
+
+    const anchor = direction === "previous"
+        ? (liveBlock.startLineNumber > 1
+            ? view.state.doc.line(liveBlock.startLineNumber - 1).from
+            : 0)
+        : (liveBlock.endLineNumber < view.state.doc.lines
+            ? view.state.doc.line(liveBlock.endLineNumber + 1).from
+            : liveBlock.to);
+
+    view.dispatch({
+        selection: { anchor },
+        scrollIntoView: true,
+    });
+    view.focus();
+}
+
 /**
  * @class MarkdownTableWidget
  * @description Markdown 表格 widget：将表格块挂接为可视化 React 编辑组件。
@@ -233,7 +269,7 @@ class MarkdownTableWidget extends WidgetType {
         blockFrom: number,
         model: MarkdownTableModel,
         private readonly view: EditorView,
-        private readonly containerApi: DockviewApi,
+        private readonly containerApi: WorkbenchContainerApi,
         private readonly getCurrentFilePath: () => string,
     ) {
         super();
@@ -253,8 +289,12 @@ class MarkdownTableWidget extends WidgetType {
             this.root = createRoot(wrapper);
             this.root.render(
                 createElement(MarkdownTableVisualEditor, {
+                    blockFrom: this.blockFrom,
                     initialModel: this.model,
                     onCommitMarkdown: (markdownText: string) => saveMarkdownTable(this.view, this.blockFrom, markdownText),
+                    onRequestExitVimNavigation: (direction: "previous" | "next") => {
+                        exitMarkdownTableVimNavigation(this.view, this.blockFrom, direction);
+                    },
                     containerApi: this.containerApi,
                     currentFilePath: this.getCurrentFilePath(),
                 }),
@@ -296,8 +336,9 @@ class MarkdownTableWidget extends WidgetType {
  * @returns CodeMirror Extension。
  */
 export function createMarkdownTableSyntaxExtension(
-    containerApi: DockviewApi,
+    containerApi: WorkbenchContainerApi,
     getCurrentFilePath: () => string,
+    options: MarkdownTableSyntaxExtensionOptions = {},
 ): Extension {
     const plugin = ViewPlugin.fromClass(
         class {
@@ -310,6 +351,44 @@ export function createMarkdownTableSyntaxExtension(
             }
 
             update(update: ViewUpdate): void {
+                if (update.selectionSet) {
+                    const selection = update.view.state.selection.main;
+                    if (selection.empty) {
+                        const touchedBlock = parseMarkdownTableBlocks(update.view)
+                            .find((block) => selection.head >= block.from && selection.head <= block.to);
+                        if (touchedBlock) {
+                            queueMicrotask(() => {
+                                if (!isViewAlive(update.view)) {
+                                    return;
+                                }
+
+                                const liveSelection = update.view.state.selection.main;
+                                if (!liveSelection.empty) {
+                                    return;
+                                }
+
+                                const liveBlock = parseMarkdownTableBlocks(update.view)
+                                    .find((block) => liveSelection.head >= block.from && liveSelection.head <= block.to);
+                                if (!liveBlock) {
+                                    return;
+                                }
+
+                                const anchor = liveBlock.endLineNumber < update.view.state.doc.lines
+                                    ? update.view.state.doc.line(liveBlock.endLineNumber + 1).from
+                                    : liveBlock.to;
+                                update.view.dispatch({
+                                    selection: { anchor },
+                                    scrollIntoView: true,
+                                });
+                                options.onRequestFocusVimNavigation?.({
+                                    blockFrom: liveBlock.from,
+                                    position: "first",
+                                });
+                            });
+                        }
+                    }
+                }
+
                 if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged) {
                     this.decorations = this.safeBuildDecorations(update.view);
                 }

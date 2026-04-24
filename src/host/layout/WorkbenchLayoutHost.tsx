@@ -18,10 +18,10 @@ import {
     type WorkbenchTabDefinition,
 } from "layout-v2";
 import {
-    type DockviewLayoutDebugApi,
     type PanelRenderContext,
     type TabInstanceDefinition,
-} from "./DockviewLayout";
+    type WorkbenchTabProps,
+} from "./workbenchContracts";
 import {
     SETTINGS_ACTIVITY_ID,
     ensureActivityBarConfigLoaded,
@@ -91,7 +91,6 @@ const CUSTOM_ACTIVITY_CREATE_COMMAND_ID = "customActivity.create";
 export interface WorkbenchLayoutHostProps {
     initialTabs?: TabInstanceDefinition[];
     initialActivePanelId?: string;
-    debugApiRef?: MutableRefObject<DockviewLayoutDebugApi | null>;
 }
 
 /* ────────── Mapping helpers ────────── */
@@ -174,7 +173,7 @@ function buildPanelRenderContext(
 ): PanelRenderContext {
     return {
         activeTabId: workbenchContext.activeTabId,
-        dockviewApi: null,
+        workbenchApi: null,
         hostPanelId: workbenchContext.hostPanelId,
         convertibleView: null,
         openTab: (tab: TabInstanceDefinition) => {
@@ -218,7 +217,7 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
         id: api.id,
         close: api.close,
         setActive: api.setActive,
-        setTitle: () => undefined,
+        setTitle: (title: string) => workbenchApiRef.current?.updateTab(api.id, { title }),
     }), [api.id, api.close, api.setActive]);
 
     const containerApi = useMemo(() => ({
@@ -231,6 +230,10 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
                 api: {
                     close: () => workbenchApiRef.current?.closeTab(tabId),
                     setActive: () => workbenchApiRef.current?.setActiveTab(tabId),
+                    setTitle: (title: string) => workbenchApiRef.current?.updateTab(tabId, { title }),
+                    updateParameters: (params: Record<string, unknown>) => {
+                        workbenchApiRef.current?.updateTab(tabId, { params });
+                    },
                 },
             };
         },
@@ -240,6 +243,10 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
                 params: t.params,
                 api: {
                     setActive: () => workbenchApiRef.current?.setActiveTab(t.id),
+                    setTitle: (title: string) => workbenchApiRef.current?.updateTab(t.id, { title }),
+                    updateParameters: (params: Record<string, unknown>) => {
+                        workbenchApiRef.current?.updateTab(t.id, { params });
+                    },
                 },
             }));
         },
@@ -253,7 +260,7 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
         },
     }), [workbenchApiRef]);
 
-    return <Component params={params} api={stableApi} containerApi={containerApi} />;
+    return <Component {...({ params, api: stableApi, containerApi } satisfies WorkbenchTabProps<Record<string, unknown>>)} />;
 });
 
 /* ────────── Main component ────────── */
@@ -488,7 +495,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
     const overlayRenderContext = useMemo(() => ({
         activeTabId: activeTabIdRef.current,
-        dockviewApi: null,
+        workbenchApi: null,
         hostPanelId: null,
         convertibleView: null,
         openTab: (tab: TabInstanceDefinition) => {

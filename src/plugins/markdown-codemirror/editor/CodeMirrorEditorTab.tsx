@@ -1,9 +1,9 @@
 /**
  * @module plugins/markdown-codemirror/editor/CodeMirrorEditorTab
- * @description 基于 CodeMirror 6 的编辑器 Tab 组件，用于在 Dockview 中承载可编辑文本内容。
+ * @description 基于 CodeMirror 6 的编辑器 Tab 组件，用于在 workbench 中承载可编辑文本内容。
  * @dependencies
  *  - react
- *  - dockview
+ *  - workbenchContracts
  *  - codemirror
  *  - @codemirror/lang-markdown
  *  - ./codemirrorTheme
@@ -11,7 +11,6 @@
 
 import { Component, useEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
 import { BookOpen, SquarePen } from "lucide-react";
-import type { IDockviewPanelProps } from "dockview";
 import { EditorView } from "codemirror";
 import { indentLess, indentMore, redo, toggleComment, undo } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
@@ -75,13 +74,13 @@ import { describeRenderFeature } from "./renderParityContract";
 import {
     setupVimEnhancedMotions,
 } from "./vimChineseMotionExtension";
-import { openFileInDockview } from "../../../host/layout/openFileService";
+import { openFileInWorkbench } from "../../../host/layout/openFileService";
 import {
     resolveMarkdownNoteTitle,
 } from "./noteTitleUtils";
 import { resolveEditorBodyAnchor, resolveEditorBodySelectionRange } from "./editorBodyAnchor";
 import {
-    shouldDeferBlurCommitAfterComposition,
+    createImeCompositionGuard,
     shouldSubmitPlainEnter,
 } from "../../../utils/imeInputGuard";
 import { createEditorChineseSegmentationController } from "./editorChineseSegmentation";
@@ -91,6 +90,7 @@ import {
 } from "./editorTitleRenameService";
 import { attachEditorKeyboardBridge } from "./editorKeyboardBridge";
 import { useCodeMirrorEditorLifecycle } from "./useCodeMirrorEditorLifecycle";
+import type { WorkbenchTabProps } from "../../../host/layout/workbenchContracts";
 
 ensureBuiltinSyntaxRenderersRegistered();
 ensureBuiltinEditPluginsRegistered();
@@ -103,6 +103,9 @@ const registeredLineSyntaxRenderExtension = createRegisteredLineSyntaxRenderExte
 const FRONTMATTER_FOCUSABLE_SELECTOR = "[data-frontmatter-field-focusable='true']";
 const FRONTMATTER_VIM_NAV_SELECTOR = "[data-frontmatter-vim-nav='true']";
 const FRONTMATTER_VIM_ROW_SELECTOR = "[data-frontmatter-vim-nav='true'][data-frontmatter-field-key]";
+const MARKDOWN_TABLE_SHELL_SELECTOR = "[data-markdown-table-block-from]";
+const MARKDOWN_TABLE_VIM_NAV_SELECTOR = "[data-markdown-table-vim-nav='true']";
+const MARKDOWN_TABLE_ENTRY_SELECTOR = `${MARKDOWN_TABLE_VIM_NAV_SELECTOR}[data-markdown-table-entry-anchor='true']`;
 
 /**
  * @function exitVimInsertMode
@@ -222,11 +225,11 @@ function resolveDisplayFilePath(
 }
 /**
  * @function CodeMirrorEditorTab
- * @description Dockview Tab 渲染函数，挂载并管理 CodeMirror 实例生命周期。
- * @param props Dockview 面板参数，支持 params.path 与 params.content。
+ * @description Workbench Tab 渲染函数，挂载并管理 CodeMirror 实例生命周期。
+ * @param props Workbench 面板参数，支持 params.path 与 params.content。
  * @returns 编辑器 Tab 视图。
  */
-export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, unknown>>): ReactNode {
+export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unknown>>): ReactNode {
     const tabRootRef = useRef<HTMLDivElement | null>(null);
     const hostRef = useRef<HTMLDivElement | null>(null);
     const hasAppliedInitialAutoFocusRef = useRef<boolean>(false);
@@ -281,6 +284,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     const editorFontSize = featureSettings.editorFontSize;
     const editorTabSize = featureSettings.editorTabSize;
     const editorLineWrapping = featureSettings.editorLineWrapping;
+    const editorTabRestoreMode = featureSettings.editorTabRestoreMode;
     const editorLineNumbers = featureSettings.editorLineNumbers;
     const sharedTypographyVariables = useMemo(() => ({
         "--cm-editor-font-family": editorFontFamily,
@@ -324,8 +328,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     const [titleDraft, setTitleDraft] = useState<string>(displayTitle);
     const [isTitleRenaming, setIsTitleRenaming] = useState<boolean>(false);
     const titleRenameInFlightRef = useRef<boolean>(false);
-    const isTitleInputComposingRef = useRef<boolean>(false);
-    const lastTitleInputCompositionEndAtRef = useRef<number>(0);
+    const titleImeCompositionGuard = useRef(createImeCompositionGuard()).current;
     const activeEditor = useActiveEditor();
     const { displayMode } = useEditorDisplayModeState();
     const isActiveEditor = activeEditor?.articleId === articleId;
@@ -439,6 +442,68 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
     };
 
     /**
+     * @function focusMarkdownTableVimNavigationTarget
+     * @description 将焦点切入 Markdown table 的 Vim 导航层。
+     * @param request 进入时的目标表格与首尾位置。
+     * @returns 是否成功切入 Markdown table 导航层。
+     */
+    const focusMarkdownTableVimNavigationTarget = (request: {
+        blockFrom: number;
+        position: "first" | "last";
+    }): boolean => {
+        const view = viewRef.current;
+        if (!view) {
+            return false;
+        }
+
+        const tableShell = view.dom.querySelector<HTMLElement>(
+            `${MARKDOWN_TABLE_SHELL_SELECTOR}[data-markdown-table-block-from='${request.blockFrom}']`,
+        );
+        if (!tableShell) {
+            return false;
+        }
+
+        const entryTargets = Array.from(tableShell.querySelectorAll<HTMLElement>(MARKDOWN_TABLE_ENTRY_SELECTOR));
+        const navigationTargets = Array.from(tableShell.querySelectorAll<HTMLElement>(MARKDOWN_TABLE_VIM_NAV_SELECTOR));
+        const preferredTargets = entryTargets.length > 0 ? entryTargets : navigationTargets;
+        const target = request.position === "first"
+            ? preferredTargets[0]
+            : preferredTargets[preferredTargets.length - 1];
+
+        if (!target) {
+            return false;
+        }
+
+        exitVimInsertMode(view);
+        target.focus();
+        console.info("[editor] markdown table vim handoff entered", {
+            articleId,
+            position: request.position,
+            blockFrom: request.blockFrom,
+        });
+        return true;
+    };
+
+    const focusWidgetNavigationTarget = (
+        widget: "frontmatter" | "markdown-table",
+        position: "first" | "last",
+        blockFrom?: number,
+    ): boolean => {
+        if (widget === "frontmatter") {
+            return focusFrontmatterVimNavigationTarget(position);
+        }
+
+        if (typeof blockFrom !== "number") {
+            return false;
+        }
+
+        return focusMarkdownTableVimNavigationTarget({
+            blockFrom,
+            position,
+        });
+    };
+
+    /**
      * @function exitFrontmatterVimNavigationToBody
      * @description 从 frontmatter Vim 导航层返回正文起点。
      */
@@ -461,11 +526,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
      * @returns `true` 表示本次 blur 应跳过自动提交。
      */
     const shouldDeferTitleBlurCommit = (): boolean => {
-        return shouldDeferBlurCommitAfterComposition({
-            isComposing: isTitleInputComposingRef.current,
-            lastCompositionEndAt: lastTitleInputCompositionEndAtRef.current,
-            now: performance.now(),
-        });
+        return titleImeCompositionGuard.shouldDeferBlurCommit();
     };
 
     const { viewRef } = useCodeMirrorEditorLifecycle({
@@ -485,6 +546,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         editorFontSize,
         editorTabSize,
         editorLineWrapping,
+        editorTabRestoreMode,
         editorLineNumbers,
         initialAutoFocus: props.params.autoFocus === true,
         initialCursorOffset: typeof props.params.initialCursorOffset === "number"
@@ -501,6 +563,8 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         scheduleActiveLineSegmentation,
         trySelectWordAtMouseEvent,
         onRequestExitFrontmatterVimNavigation: exitFrontmatterVimNavigationToBody,
+        onRequestFocusFrontmatterVimNavigation: focusFrontmatterVimNavigationTarget,
+        onRequestFocusMarkdownTableVimNavigation: focusMarkdownTableVimNavigationTarget,
     });
 
     useEffect(() => {
@@ -677,10 +741,10 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
         executeCommand(commandId, {
             activeTabId: props.api.id,
             closeTab: (tabId) => {
-                props.containerApi.getPanel(tabId)?.api.close();
+                props.containerApi.getPanel(tabId)?.api.close?.();
             },
             openFileTab: (relativePath, content, tabParams) => {
-                void openFileInDockview({
+                void openFileInWorkbench({
                     containerApi: props.containerApi,
                     relativePath,
                     contentOverride: content,
@@ -745,10 +809,13 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
             executeEditorCommand: (commandId) => {
                 executeEditorCommandRef.current(commandId);
             },
-            focusFrontmatterNavigationTarget: focusFrontmatterVimNavigationTarget,
+            focusWidgetNavigationTarget,
             frontmatterSelectors: {
                 focusable: FRONTMATTER_FOCUSABLE_SELECTOR,
                 navigation: FRONTMATTER_VIM_NAV_SELECTOR,
+            },
+            markdownTableSelectors: {
+                shell: MARKDOWN_TABLE_SHELL_SELECTOR,
             },
         });
     }, [articleId]);
@@ -790,7 +857,7 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                 dependencies: {
                     renameMarkdownFile: renameVaultMarkdownFile,
                     saveMarkdownFile: saveVaultMarkdownFile,
-                    openFile: openFileInDockview,
+                    openFile: openFileInWorkbench,
                     reportArticleContent,
                     reportArticleFocus,
                     reportActiveEditor,
@@ -828,11 +895,10 @@ export function CodeMirrorEditorTab(props: IDockviewPanelProps<Record<string, un
                                 setTitleDraft(event.target.value);
                             }}
                             onCompositionStart={() => {
-                                isTitleInputComposingRef.current = true;
+                                titleImeCompositionGuard.handleCompositionStart();
                             }}
                             onCompositionEnd={() => {
-                                isTitleInputComposingRef.current = false;
-                                lastTitleInputCompositionEndAtRef.current = performance.now();
+                                titleImeCompositionGuard.handleCompositionEnd();
                             }}
                             onBlur={() => {
                                 if (shouldDeferTitleBlurCommit()) {

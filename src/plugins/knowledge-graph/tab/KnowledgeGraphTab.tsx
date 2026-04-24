@@ -17,7 +17,7 @@
 import { Graph, type GraphConfigInterface } from "@cosmos.gl/graph";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import type { IDockviewPanelProps } from "dockview";
+import type { WorkbenchTabProps } from "../../../host/layout/workbenchContracts";
 import { getCurrentVaultMarkdownGraph } from "../../../api/vaultApi";
 import { createKnowledgeGraphInteractionCallbacksFor } from "./knowledgeGraphInteractions";
 import { buildKnowledgeGraphConfig } from "./knowledgeGraphSettings";
@@ -29,7 +29,7 @@ import {
 } from "../store/graphSettingsStore";
 import { useThemeState } from "../../../host/theme/themeStore";
 import { useVaultState } from "../../../host/vault/vaultStore";
-import { openFileInDockview } from "../../../host/layout/openFileService";
+import { openFileInWorkbench } from "../../../host/layout/openFileService";
 import "./KnowledgeGraphTab.css";
 
 /**
@@ -247,7 +247,7 @@ function createVisibleSpaceBounds(
  * @returns Dockview Tab 组件。
  */
 export function KnowledgeGraphTab(
-    props: IDockviewPanelProps<Record<string, unknown>>,
+    props: WorkbenchTabProps<Record<string, unknown>>,
 ): ReactElement {
     const { t } = useTranslation();
     const { currentVaultPath } = useVaultState();
@@ -431,7 +431,7 @@ export function KnowledgeGraphTab(
         console.info("[knowledge-graph] node clicked", { index, relativePath });
 
         try {
-            await openFileInDockview({
+            await openFileInWorkbench({
                 containerApi: props.containerApi,
                 currentVaultPath,
                 relativePath,

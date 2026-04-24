@@ -56,8 +56,7 @@
  *  - useCodeMirrorEditorLifecycle: 管理编辑器实例生命周期
  */
 
-import { useEffect, useRef, type MutableRefObject } from "react";
-import type { IDockviewPanelProps } from "dockview";
+import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from "react";
 import { EditorView } from "codemirror";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
@@ -72,6 +71,13 @@ import {
     reportArticleFocus,
     type ArticleState,
 } from "../../../host/editor/editorContextStore";
+import type { WorkbenchContainerApi } from "../../../host/layout/workbenchContracts";
+import {
+    getEditorViewStateSnapshot,
+    saveEditorViewStateSnapshot,
+    type EditorViewStateSnapshot,
+} from "../../../host/editor/editorViewStateStore";
+import type { EditorTabRestoreMode } from "../../../host/config/editorTabRestoreMode";
 import type { EditorDisplayMode } from "../../../host/editor/editorDisplayModeStore";
 import { flushAutoSaveByPath } from "../../../host/editor/autoSaveService";
 import {
@@ -96,10 +102,13 @@ import {
     registerVimTokenProvider,
     unregisterVimTokenProvider,
 } from "./vimChineseMotionExtension";
-import { shouldDeferBlurCommitAfterComposition } from "../../../utils/imeInputGuard";
+import { createImeCompositionGuard } from "../../../utils/imeInputGuard";
 
 const SHARED_EDITOR_FONT_FAMILY_CSS_VALUE = "var(--cm-editor-font-family)";
 const SHARED_EDITOR_FONT_SIZE_CSS_VALUE = "var(--cm-editor-font-size)";
+type PersistedEditorViewState = Omit<EditorViewStateSnapshot, "updatedAt">;
+
+type RestoredEditorSelection = Pick<PersistedEditorViewState, "anchor" | "head">;
 
 /**
  * @interface SyncEditorTabGutterWidthOptions
@@ -121,8 +130,8 @@ export interface SyncEditorTabGutterWidthOptions {
 export interface UseCodeMirrorEditorLifecycleOptions {
     /** 当前文章 id。 */
     articleId: string;
-    /** Dockview 容器 API。 */
-    containerApi: IDockviewPanelProps<Record<string, unknown>>["containerApi"];
+    /** Workbench 容器 API。 */
+    containerApi: WorkbenchContainerApi;
     /** tab 根节点引用。 */
     tabRootRef: MutableRefObject<HTMLDivElement | null>;
     /** CodeMirror 宿主节点引用。 */
@@ -151,6 +160,8 @@ export interface UseCodeMirrorEditorLifecycleOptions {
     editorTabSize: number;
     /** 是否自动换行。 */
     editorLineWrapping: boolean;
+    /** 页签恢复策略。 */
+    editorTabRestoreMode: EditorTabRestoreMode;
     /** 行号模式。 */
     editorLineNumbers: Parameters<typeof buildLineNumbersExtension>[0];
     /** 是否初次自动聚焦。 */
@@ -179,6 +190,13 @@ export interface UseCodeMirrorEditorLifecycleOptions {
     trySelectWordAtMouseEvent: EditorChineseSegmentationController["trySelectWordAtMouseEvent"];
     /** 退出 frontmatter Vim 导航层。 */
     onRequestExitFrontmatterVimNavigation(): void;
+    /** 进入 frontmatter Vim 导航层。 */
+    onRequestFocusFrontmatterVimNavigation(position: "first" | "last"): boolean;
+    /** 进入 Markdown table Vim 导航层。 */
+    onRequestFocusMarkdownTableVimNavigation(request: {
+        blockFrom: number;
+        position: "first" | "last";
+    }): boolean;
 }
 
 /**
@@ -252,19 +270,74 @@ function neutralizeEditorView(view: EditorView): void {
     neutralizedView.destroyed = true;
 }
 
-/**
- * @function shouldFlushEditorAutoSaveOnBlur
- * @description 判断正文编辑器在 blur 时是否应立即 flush autosave。
- *   输入法组合期间或组合结束后的短时间窗口内应跳过，避免候选确认导致的临时失焦直接触发保存。
- * @param input 组合态判定输入。
- * @returns `true` 表示可以立即 flush；`false` 表示应延后。
- */
-export function shouldFlushEditorAutoSaveOnBlur(input: {
-    isComposing: boolean;
-    lastCompositionEndAt: number;
-    now: number;
-}): boolean {
-    return !shouldDeferBlurCommitAfterComposition(input);
+function clampEditorViewState(
+    snapshot: EditorViewStateSnapshot,
+    docLength: number,
+): PersistedEditorViewState {
+    const maxOffset = Math.max(0, docLength);
+    return {
+        articleId: snapshot.articleId,
+        anchor: Math.max(0, Math.min(snapshot.anchor, maxOffset)),
+        head: Math.max(0, Math.min(snapshot.head, maxOffset)),
+        scrollTop: Math.max(0, snapshot.scrollTop),
+        scrollLeft: Math.max(0, snapshot.scrollLeft),
+        scrollSnapshot: snapshot.scrollSnapshot,
+    };
+}
+
+function captureEditorViewState(
+    articleId: string,
+    view: EditorView,
+): PersistedEditorViewState {
+    return {
+        articleId,
+        anchor: view.state.selection.main.anchor,
+        head: view.state.selection.main.head,
+        scrollTop: view.scrollDOM.scrollTop,
+        scrollLeft: view.scrollDOM.scrollLeft,
+        scrollSnapshot: view.scrollSnapshot(),
+    };
+}
+
+export function restoreEditorSelectionWithoutScrolling(
+    view: Pick<EditorView, "state" | "dispatch" | "scrollDOM">,
+    selection: RestoredEditorSelection,
+): void {
+    const currentSelection = view.state.selection.main;
+    if (currentSelection.anchor === selection.anchor && currentSelection.head === selection.head) {
+        return;
+    }
+
+    const preservedScrollTop = view.scrollDOM.scrollTop;
+    const preservedScrollLeft = view.scrollDOM.scrollLeft;
+
+    view.dispatch({
+        selection: {
+            anchor: selection.anchor,
+            head: selection.head,
+        },
+    });
+
+    if (
+        view.scrollDOM.scrollTop !== preservedScrollTop
+        || view.scrollDOM.scrollLeft !== preservedScrollLeft
+    ) {
+        view.scrollDOM.scrollTop = preservedScrollTop;
+        view.scrollDOM.scrollLeft = preservedScrollLeft;
+    }
+}
+
+export function revealEditorSelection(
+    view: Pick<EditorView, "state" | "dispatch">,
+    selection: RestoredEditorSelection,
+): void {
+    view.dispatch({
+        selection: {
+            anchor: selection.anchor,
+            head: selection.head,
+        },
+        effects: EditorView.scrollIntoView(selection.head, { y: "nearest", x: "nearest" }),
+    });
 }
 
 /**
@@ -284,12 +357,21 @@ export function useCodeMirrorEditorLifecycle(
     const lineWrappingCompartmentRef = useRef<Compartment>(new Compartment());
     const lineNumbersCompartmentRef = useRef<Compartment>(new Compartment());
     const exitFrontmatterVimNavigationRef = useRef(options.onRequestExitFrontmatterVimNavigation);
-    const isEditorComposingRef = useRef(false);
-    const lastEditorCompositionEndAtRef = useRef(0);
+    const focusFrontmatterVimNavigationRef = useRef(options.onRequestFocusFrontmatterVimNavigation);
+    const focusMarkdownTableVimNavigationRef = useRef(options.onRequestFocusMarkdownTableVimNavigation);
+    const editorImeCompositionGuard = useRef(createImeCompositionGuard()).current;
 
     useEffect(() => {
         exitFrontmatterVimNavigationRef.current = options.onRequestExitFrontmatterVimNavigation;
     }, [options.onRequestExitFrontmatterVimNavigation]);
+
+    useEffect(() => {
+        focusFrontmatterVimNavigationRef.current = options.onRequestFocusFrontmatterVimNavigation;
+    }, [options.onRequestFocusFrontmatterVimNavigation]);
+
+    useEffect(() => {
+        focusMarkdownTableVimNavigationRef.current = options.onRequestFocusMarkdownTableVimNavigation;
+    }, [options.onRequestFocusMarkdownTableVimNavigation]);
 
     useEffect(() => {
         syncEditorTabGutterWidth({
@@ -299,134 +381,170 @@ export function useCodeMirrorEditorLifecycle(
         });
     }, [options.displayFilePath, options.editorLineNumbers, options.effectiveDisplayMode, options.readContent, options.tabRootRef]);
 
-    useEffect(() => {
+    const persistViewStateSnapshot = (snapshot: PersistedEditorViewState | null): void => {
+        if (!snapshot) {
+            return;
+        }
+
+        saveEditorViewStateSnapshot(snapshot);
+    };
+
+    const persistCurrentViewState = (view: EditorView | null): void => {
+        if (!view) {
+            return;
+        }
+
+        persistViewStateSnapshot(captureEditorViewState(options.articleId, view));
+    };
+
+    useLayoutEffect(() => {
         if (!options.hostRef.current || viewRef.current) {
             return;
         }
 
+        const restoredViewState = (() => {
+            const persistedViewState = getEditorViewStateSnapshot(options.articleId);
+            return persistedViewState
+                ? clampEditorViewState(persistedViewState, options.initialDoc.length)
+                : null;
+        })();
+
         const extensions = [
-                vimModeCompartmentRef.current.of(options.vimModeEnabled ? vim() : []),
-                editorBaseSetup,
-                markdown(),
-                createCodeMirrorThemeExtension(),
-                fontFamilyCompartmentRef.current.of(
-                    createCodeMirrorTypographyThemeExtension(
-                        SHARED_EDITOR_FONT_FAMILY_CSS_VALUE,
-                        SHARED_EDITOR_FONT_SIZE_CSS_VALUE,
-                    ),
+            vimModeCompartmentRef.current.of(options.vimModeEnabled ? vim() : []),
+            editorBaseSetup,
+            markdown(),
+            createCodeMirrorThemeExtension(),
+            fontFamilyCompartmentRef.current.of(
+                createCodeMirrorTypographyThemeExtension(
+                    SHARED_EDITOR_FONT_FAMILY_CSS_VALUE,
+                    SHARED_EDITOR_FONT_SIZE_CSS_VALUE,
                 ),
-                fontSizeCompartmentRef.current.of([]),
-                tabSizeCompartmentRef.current.of(EditorState.tabSize.of(options.editorTabSize)),
-                lineWrappingCompartmentRef.current.of(
-                    options.editorLineWrapping ? EditorView.lineWrapping : [],
-                ),
-                lineNumbersCompartmentRef.current.of(
-                    buildLineNumbersExtension(options.editorLineNumbers),
-                ),
-                keymap.of([indentWithTab]),
-                createFrontmatterSyntaxExtension({
-                    onRequestExitVimNavigation: () => {
-                        exitFrontmatterVimNavigationRef.current();
+            ),
+            fontSizeCompartmentRef.current.of([]),
+            tabSizeCompartmentRef.current.of(EditorState.tabSize.of(options.editorTabSize)),
+            lineWrappingCompartmentRef.current.of(
+                options.editorLineWrapping ? EditorView.lineWrapping : [],
+            ),
+            lineNumbersCompartmentRef.current.of(
+                buildLineNumbersExtension(options.editorLineNumbers),
+            ),
+            keymap.of([indentWithTab]),
+            createFrontmatterSyntaxExtension({
+                onRequestExitVimNavigation: () => {
+                    exitFrontmatterVimNavigationRef.current();
+                },
+                onRequestFocusVimNavigation: (position) => {
+                    focusFrontmatterVimNavigationRef.current(position);
+                },
+            }),
+            createCodeBlockHighlightExtension(),
+            ...createLatexSyntaxExtension(),
+            createMarkdownTableSyntaxExtension(
+                options.containerApi,
+                () => options.currentFilePathRef.current,
+                {
+                    onRequestFocusVimNavigation: (request) => {
+                        focusMarkdownTableVimNavigationRef.current(request);
                     },
-                }),
-                createCodeBlockHighlightExtension(),
-                ...createLatexSyntaxExtension(),
-                createMarkdownTableSyntaxExtension(
-                    options.containerApi,
-                    () => options.currentFilePathRef.current,
-                ),
-                options.registeredLineSyntaxRenderExtension,
-                createTaskCheckboxToggleExtension(),
-                createImageEmbedSyntaxExtension(() => options.currentFilePathRef.current),
-                createWikiLinkPreviewExtension(
-                    options.containerApi,
-                    () => options.currentFilePathRef.current,
-                ),
-                createWikiLinkNavigationExtension(
-                    options.containerApi,
-                    () => options.currentFilePathRef.current,
-                ),
-                EditorView.domEventHandlers({
-                    mousedown(event, view) {
-                        try {
-                            if (event.button !== 0) {
-                                return false;
-                            }
-
-                            options.prefetchSegmentationAtMouseEvent(view, event);
-
-                            if (event.detail !== 2) {
-                                return false;
-                            }
-
-                            const handled = options.trySelectWordAtMouseEvent(view, event);
-                            if (!handled) {
-                                return false;
-                            }
-
-                            event.preventDefault();
-                            return true;
-                        } catch (_error) {
+                },
+            ),
+            options.registeredLineSyntaxRenderExtension,
+            createTaskCheckboxToggleExtension(),
+            createImageEmbedSyntaxExtension(() => options.currentFilePathRef.current),
+            createWikiLinkPreviewExtension(
+                options.containerApi,
+                () => options.currentFilePathRef.current,
+            ),
+            createWikiLinkNavigationExtension(
+                options.containerApi,
+                () => options.currentFilePathRef.current,
+            ),
+            EditorView.domEventHandlers({
+                mousedown(event, view) {
+                    try {
+                        if (event.button !== 0) {
                             return false;
                         }
-                    },
-                    compositionstart() {
-                        isEditorComposingRef.current = true;
-                        return false;
-                    },
-                    compositionend() {
-                        isEditorComposingRef.current = false;
-                        lastEditorCompositionEndAtRef.current = performance.now();
-                        return false;
-                    },
-                }),
-                ...getRegisteredEditPluginExtensions({
-                    getCurrentFilePath: () => options.currentFilePathRef.current,
-                }),
-                EditorView.updateListener.of((update) => {
-                    if (update.docChanged) {
-                        const nextContent = update.state.doc.toString();
-                        options.setReadContent(nextContent);
-                        reportArticleContent({
-                            articleId: options.articleId,
-                            path: options.currentFilePathRef.current,
-                            content: nextContent,
-                        });
-                    }
 
-                    if (update.docChanged || update.selectionSet) {
-                        options.scheduleActiveLineSegmentation(update.state);
-                    }
+                        options.prefetchSegmentationAtMouseEvent(view, event);
 
-                    if (update.focusChanged && update.view.hasFocus) {
-                        reportArticleFocus({
-                            articleId: options.articleId,
-                            path: options.currentFilePathRef.current,
-                            content: update.state.doc.toString(),
-                        });
-                    }
-
-                    if (update.focusChanged && !update.view.hasFocus) {
-                        const shouldFlush = shouldFlushEditorAutoSaveOnBlur({
-                            isComposing: isEditorComposingRef.current || update.view.composing,
-                            lastCompositionEndAt: lastEditorCompositionEndAtRef.current,
-                            now: performance.now(),
-                        });
-                        if (!shouldFlush) {
-                            console.debug("[editor] skipped blur autosave flush during IME composition", {
-                                articleId: options.articleId,
-                                filePath: options.currentFilePathRef.current,
-                            });
-                            return;
+                        if (event.detail !== 2) {
+                            return false;
                         }
 
+                        const handled = options.trySelectWordAtMouseEvent(view, event);
+                        if (!handled) {
+                            return false;
+                        }
+
+                        event.preventDefault();
+                        return true;
+                    } catch (_error) {
+                        return false;
+                    }
+                },
+                compositionstart() {
+                    editorImeCompositionGuard.handleCompositionStart();
+                    return false;
+                },
+                compositionend() {
+                    editorImeCompositionGuard.handleCompositionEnd();
+                    return false;
+                },
+            }),
+            ...getRegisteredEditPluginExtensions({
+                getCurrentFilePath: () => options.currentFilePathRef.current,
+            }),
+            EditorView.updateListener.of((update) => {
+                if (update.docChanged) {
+                    const nextContent = update.state.doc.toString();
+                    options.setReadContent(nextContent);
+                    reportArticleContent({
+                        articleId: options.articleId,
+                        path: options.currentFilePathRef.current,
+                        content: nextContent,
+                    });
+                }
+
+                if (update.docChanged || update.selectionSet) {
+                    options.scheduleActiveLineSegmentation(update.state);
+                }
+
+                if (update.focusChanged && update.view.hasFocus) {
+                    reportArticleFocus({
+                        articleId: options.articleId,
+                        path: options.currentFilePathRef.current,
+                        content: update.state.doc.toString(),
+                    });
+                }
+
+                if (update.focusChanged && !update.view.hasFocus) {
+                    persistCurrentViewState(update.view);
+
+                    const shouldFlush = editorImeCompositionGuard.shouldAllowBlurAction({
+                        isComposing: editorImeCompositionGuard.state.isComposing || update.view.composing,
+                    });
+                    if (!shouldFlush) {
+                        console.debug("[editor] skipped blur autosave flush during IME composition", {
+                            articleId: options.articleId,
+                            filePath: options.currentFilePathRef.current,
+                        });
+                    } else {
                         void flushAutoSaveByPath(options.currentFilePathRef.current);
                     }
-                }),
+                }
+
+            }),
         ];
 
         const state = EditorState.create({
             doc: options.initialDoc,
+            selection: restoredViewState && options.editorTabRestoreMode === "cursor"
+                ? {
+                    anchor: restoredViewState.anchor,
+                    head: restoredViewState.head,
+                }
+                : undefined,
             extensions: extensions as Extension,
         });
 
@@ -434,6 +552,7 @@ export function useCodeMirrorEditorLifecycle(
             viewRef.current = new EditorView({
                 state,
                 parent: options.hostRef.current,
+                scrollTo: restoredViewState?.scrollSnapshot ?? undefined,
             });
         } catch (constructionError) {
             console.error("[editor] EditorView construction failed", {
@@ -446,6 +565,21 @@ export function useCodeMirrorEditorLifecycle(
             }
             return;
         }
+
+        if (restoredViewState) {
+            if (options.editorTabRestoreMode === "cursor") {
+                revealEditorSelection(viewRef.current, restoredViewState);
+            } else {
+                if (restoredViewState.scrollSnapshot === null) {
+                    viewRef.current.scrollDOM.scrollTop = restoredViewState.scrollTop;
+                    viewRef.current.scrollDOM.scrollLeft = restoredViewState.scrollLeft;
+                }
+
+                restoreEditorSelectionWithoutScrolling(viewRef.current, restoredViewState);
+            }
+        }
+
+        persistViewStateSnapshot(restoredViewState ?? captureEditorViewState(options.articleId, viewRef.current));
 
         syncEditorTabGutterWidth({
             tabRoot: options.tabRootRef.current,
@@ -509,7 +643,12 @@ export function useCodeMirrorEditorLifecycle(
             content: state.doc.toString(),
         });
 
-        if (viewRef.current && options.initialAutoFocus && !options.hasAppliedInitialAutoFocusRef.current) {
+        if (
+            viewRef.current
+            && options.initialAutoFocus
+            && !options.hasAppliedInitialAutoFocusRef.current
+            && !restoredViewState
+        ) {
             options.hasAppliedInitialAutoFocusRef.current = true;
             const targetOffset = Math.max(0, Math.min(options.initialCursorOffset ?? state.doc.length, state.doc.length));
             window.requestAnimationFrame(() => {
@@ -537,12 +676,13 @@ export function useCodeMirrorEditorLifecycle(
             gutterMutationObserver?.disconnect();
             cleanupPasteHandler();
             if (viewRef.current) {
+                persistCurrentViewState(viewRef.current);
                 unregisterVimTokenProvider(viewRef.current);
                 safeDestroyEditorView(viewRef.current);
             }
             viewRef.current = null;
         };
-    }, [options.initialDoc, options.articleId, options.containerApi]);
+    }, [options.articleId, options.containerApi]);
 
     useEffect(() => {
         const view = viewRef.current;

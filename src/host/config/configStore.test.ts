@@ -116,6 +116,7 @@ describe("configStore defaults", () => {
                 editorFontSize: DEFAULT_FEATURE_SETTINGS.editorFontSize,
                 editorTabSize: DEFAULT_FEATURE_SETTINGS.editorTabSize,
                 editorLineWrapping: DEFAULT_FEATURE_SETTINGS.editorLineWrapping,
+                editorTabRestoreMode: DEFAULT_FEATURE_SETTINGS.editorTabRestoreMode,
                 editorLineNumbers: DEFAULT_FEATURE_SETTINGS.editorLineNumbers,
                 autoSaveEnabled: DEFAULT_FEATURE_SETTINGS.autoSaveEnabled,
                 autoSaveDelayMs: DEFAULT_FEATURE_SETTINGS.autoSaveDelayMs,
@@ -148,5 +149,59 @@ describe("configStore defaults", () => {
         expect(snapshot.backendConfig).toBeNull();
         expect(snapshot.featureSettings.glassEffectEnabled).toBe(true);
         expect(savedVaultConfigs).toHaveLength(1);
+    });
+
+    it("应在仓库配置中的 tab 恢复模式无效时回落到默认视图模式", async () => {
+        currentVaultConfig = {
+            schemaVersion: 1,
+            entries: {
+                features: {
+                    editorTabRestoreMode: "unexpected-mode",
+                },
+            },
+        };
+
+        await syncConfigStateForVault("/tmp/invalid-restore-mode-vault", true);
+
+        const snapshot = getConfigSnapshot();
+        const latestSavedVaultConfig = savedVaultConfigs[savedVaultConfigs.length - 1];
+        expect(snapshot.featureSettings.editorTabRestoreMode).toBe(DEFAULT_FEATURE_SETTINGS.editorTabRestoreMode);
+        expect(latestSavedVaultConfig?.entries).toEqual({
+            features: {
+                searchEnabled: DEFAULT_FEATURE_SETTINGS.searchEnabled,
+                knowledgeGraphEnabled: DEFAULT_FEATURE_SETTINGS.knowledgeGraphEnabled,
+                glassEffectEnabled: DEFAULT_FEATURE_SETTINGS.glassEffectEnabled,
+                glassTintOpacity: DEFAULT_FEATURE_SETTINGS.glassTintOpacity,
+                glassSurfaceOpacity: DEFAULT_FEATURE_SETTINGS.glassSurfaceOpacity,
+                glassInactiveSurfaceOpacity: DEFAULT_FEATURE_SETTINGS.glassInactiveSurfaceOpacity,
+                glassBlurRadius: DEFAULT_FEATURE_SETTINGS.glassBlurRadius,
+                windowsAcrylicFocusedRed: DEFAULT_FEATURE_SETTINGS.windowsAcrylicFocusedRed,
+                windowsAcrylicFocusedGreen: DEFAULT_FEATURE_SETTINGS.windowsAcrylicFocusedGreen,
+                windowsAcrylicFocusedBlue: DEFAULT_FEATURE_SETTINGS.windowsAcrylicFocusedBlue,
+                windowsAcrylicFocusedAlpha: DEFAULT_FEATURE_SETTINGS.windowsAcrylicFocusedAlpha,
+                windowsAcrylicInactiveRed: DEFAULT_FEATURE_SETTINGS.windowsAcrylicInactiveRed,
+                windowsAcrylicInactiveGreen: DEFAULT_FEATURE_SETTINGS.windowsAcrylicInactiveGreen,
+                windowsAcrylicInactiveBlue: DEFAULT_FEATURE_SETTINGS.windowsAcrylicInactiveBlue,
+                windowsAcrylicInactiveAlpha: DEFAULT_FEATURE_SETTINGS.windowsAcrylicInactiveAlpha,
+                windowsAcrylicDisableSystemBackdrop: DEFAULT_FEATURE_SETTINGS.windowsAcrylicDisableSystemBackdrop,
+                windowsAcrylicFocusedAccentFlags: DEFAULT_FEATURE_SETTINGS.windowsAcrylicFocusedAccentFlags,
+                windowsAcrylicFocusedAnimationId: DEFAULT_FEATURE_SETTINGS.windowsAcrylicFocusedAnimationId,
+                windowsAcrylicInactiveAccentFlags: DEFAULT_FEATURE_SETTINGS.windowsAcrylicInactiveAccentFlags,
+                windowsAcrylicInactiveAnimationId: DEFAULT_FEATURE_SETTINGS.windowsAcrylicInactiveAnimationId,
+                vimModeEnabled: DEFAULT_FEATURE_SETTINGS.vimModeEnabled,
+                editorFontSize: DEFAULT_FEATURE_SETTINGS.editorFontSize,
+                editorTabSize: DEFAULT_FEATURE_SETTINGS.editorTabSize,
+                editorLineWrapping: DEFAULT_FEATURE_SETTINGS.editorLineWrapping,
+                editorTabRestoreMode: DEFAULT_FEATURE_SETTINGS.editorTabRestoreMode,
+                editorLineNumbers: DEFAULT_FEATURE_SETTINGS.editorLineNumbers,
+                autoSaveEnabled: DEFAULT_FEATURE_SETTINGS.autoSaveEnabled,
+                autoSaveDelayMs: DEFAULT_FEATURE_SETTINGS.autoSaveDelayMs,
+                editorFontFamily: DEFAULT_FEATURE_SETTINGS.editorFontFamily,
+                notificationsEnabled: DEFAULT_FEATURE_SETTINGS.notificationsEnabled,
+                notificationsMaxVisible: DEFAULT_FEATURE_SETTINGS.notificationsMaxVisible,
+                frontmatterTemplate: DEFAULT_FEATURE_SETTINGS.frontmatterTemplate,
+                restoreWorkspaceLayout: DEFAULT_FEATURE_SETTINGS.restoreWorkspaceLayout,
+            },
+        });
     });
 });

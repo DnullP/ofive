@@ -175,6 +175,19 @@
     cursor: text;
 }
 
+.mtv-cell-preview[data-vim-nav-active="true"] {
+    background: color-mix(in srgb, var(--editor-suggest-item-hover-bg) 70%, transparent);
+    box-shadow: inset 0 0 0 1px var(--editor-suggest-item-hover-border-color);
+    cursor: default;
+    outline: none;
+}
+
+.mtv-cell-preview[data-vim-nav-active="true"]:focus-visible {
+    box-shadow:
+        inset 0 0 0 1px var(--editor-suggest-item-hover-border-color),
+        0 0 0 2px color-mix(in srgb, var(--editor-suggest-item-hover-border-color) 36%, transparent);
+}
+
 /* mtv-cell-preview[data-empty="true"]：空单元格预览态采用弱化文本色。 */
 .mtv-cell-preview[data-empty="true"] {
     color: var(--editor-panel-muted-text-color);

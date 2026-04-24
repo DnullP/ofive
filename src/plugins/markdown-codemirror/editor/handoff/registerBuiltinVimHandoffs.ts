@@ -8,6 +8,7 @@
 
 import { registerFrontmatterBodyVimHandoff } from "./builtins/frontmatterBodyVimHandoff";
 import { registerLatexBlockVimHandoff } from "./builtins/latexBlockVimHandoff";
+import { registerMarkdownTableBodyVimHandoff } from "./builtins/markdownTableBodyVimHandoff";
 
 let registered = false;
 
@@ -18,5 +19,6 @@ export function ensureBuiltinVimHandoffsRegistered(): void {
 
     registerFrontmatterBodyVimHandoff();
     registerLatexBlockVimHandoff();
+    registerMarkdownTableBodyVimHandoff();
     registered = true;
 }

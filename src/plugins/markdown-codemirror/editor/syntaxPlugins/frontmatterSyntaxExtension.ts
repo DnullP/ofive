@@ -70,6 +70,8 @@ interface SaveFrontmatterResult {
 interface FrontmatterSyntaxExtensionOptions {
     /** 请求退出 frontmatter Vim 导航并返回正文。 */
     onRequestExitVimNavigation?: () => void;
+    /** 请求进入 frontmatter Vim 导航。 */
+    onRequestFocusVimNavigation?: (position: "first" | "last") => void;
 }
 
 /**
@@ -126,6 +128,37 @@ export function shouldKeepFrontmatterSourceVisible(
  */
 function isViewAlive(view: EditorView): boolean {
     return view.dom.isConnected;
+}
+
+function scheduleFrontmatterNavigationRedirect(
+    view: EditorView,
+    onRequestFocusVimNavigation?: (position: "first" | "last") => void,
+): void {
+    queueMicrotask(() => {
+        if (!isViewAlive(view)) {
+            return;
+        }
+
+        const liveBlock = parseFrontmatterBlock(view.state);
+        if (!liveBlock) {
+            return;
+        }
+
+        const selection = view.state.selection.main;
+        if (!selection.empty || selection.head < liveBlock.from || selection.head > liveBlock.to) {
+            return;
+        }
+
+        const bodyAnchor = liveBlock.endLineNumber < view.state.doc.lines
+            ? view.state.doc.line(liveBlock.endLineNumber + 1).from
+            : liveBlock.to;
+
+        view.dispatch({
+            selection: { anchor: bodyAnchor },
+            scrollIntoView: true,
+        });
+        onRequestFocusVimNavigation?.("first");
+    });
 }
 
 /**
@@ -384,6 +417,22 @@ export function createFrontmatterSyntaxExtension(options: FrontmatterSyntaxExten
             }
 
             update(update: ViewUpdate): void {
+                if (update.selectionSet) {
+                    const block = parseFrontmatterBlock(update.view.state);
+                    const selection = update.view.state.selection.main;
+                    if (
+                        block &&
+                        selection.empty &&
+                        selection.head >= block.from &&
+                        selection.head <= block.to
+                    ) {
+                        scheduleFrontmatterNavigationRedirect(
+                            update.view,
+                            options.onRequestFocusVimNavigation,
+                        );
+                    }
+                }
+
                 if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged) {
                     this.decorations = this.safeBuildDecorations(update.view);
                 }

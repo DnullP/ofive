@@ -19,7 +19,7 @@
  */
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactElement } from "react";
-import type { IDockviewPanelProps } from "dockview";
+import type { WorkbenchTabProps } from "../../host/layout/workbenchContracts";
 import i18n from "../../i18n";
 import { useActivities, usePanels, useTabComponents } from "../../host/registry";
 import { ArchitectureDagEdgeCanvas } from "./ArchitectureDagEdgeCanvas";
@@ -997,7 +997,7 @@ const ArchitectureDagNode = memo(function ArchitectureDagNode(
  * @returns DevTools tab 组件。
  */
 export function ArchitectureDevtoolsTab(
-    _props: IDockviewPanelProps<Record<string, unknown>>,
+    _props: WorkbenchTabProps<Record<string, unknown>>,
 ): ReactElement {
     const snapshot = useArchitectureSnapshot();
     const activities = useActivities();

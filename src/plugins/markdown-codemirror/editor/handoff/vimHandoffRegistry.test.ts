@@ -79,7 +79,8 @@ describe("vimHandoffRegistry", () => {
             priority: 100,
             description: "frontmatter only handoff",
             resolve: () => ({
-                kind: "focus-frontmatter-navigation",
+                kind: "focus-widget-navigation",
+                widget: "frontmatter",
                 position: "first",
                 reason: "frontmatter-only",
             }),

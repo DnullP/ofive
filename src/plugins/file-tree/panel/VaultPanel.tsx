@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { FileTree, type FileTreeItem } from "./FileTree";
-import type { TabInstanceDefinition } from "../../../host/layout/DockviewLayout";
+import type { TabInstanceDefinition } from "../../../host/layout/workbenchContracts";
 import { openFileWithResolver } from "../../../host/layout/openFileService";
 import { MoveFileDirectoryModal } from "../../../host/layout/MoveFileDirectoryModal";
 import {

@@ -12,7 +12,7 @@ import React, {
     type KeyboardEvent,
     type ReactNode,
 } from "react";
-import type { IDockviewPanelProps } from "dockview";
+import type { WorkbenchTabProps } from "../../host/layout/workbenchContracts";
 import { ArrowUp, Bot, Check, Copy, Plus, Sparkles, X } from "lucide-react";
 import {
     getAiChatHistory,
@@ -1641,7 +1641,7 @@ function AiChatView(): ReactNode {
  * @param _props Dockview 面板属性；当前实现不依赖额外参数。
  * @returns React 节点。
  */
-function AiChatTab(_props: IDockviewPanelProps<Record<string, unknown>>): ReactNode {
+function AiChatTab(_props: WorkbenchTabProps<Record<string, unknown>>): ReactNode {
     return <AiChatView />;
 }
 

@@ -55,7 +55,7 @@ async function openMockFrontmatterNote(page: Page): Promise<void> {
 
 /**
  * @function openMockFrontmatterNoteViaQuickSwitcher
- * @description 通过 Quick Switcher 最终复用的 openFileInDockview 路径打开带 frontmatter 的 mock 笔记。
+ * @description 通过 Quick Switcher 最终复用的 openFileInWorkbench 路径打开带 frontmatter 的 mock 笔记。
  *   web mock 未挂载真实 quick switch overlay，因此这里直接复用其选中候选项后的文件切换链路。
  * @param page Playwright 页面对象。
  * @param relativePath 目标 Markdown 相对路径。
@@ -93,7 +93,7 @@ async function openMockFrontmatterNoteViaQuickSwitcher(page: Page, relativePath:
         }
 
         const module = await import("/src/host/layout/openFileService.ts");
-        await module.openFileInDockview({
+        await module.openFileInWorkbench({
             containerApi: containerApi as never,
             relativePath: nextRelativePath,
         });

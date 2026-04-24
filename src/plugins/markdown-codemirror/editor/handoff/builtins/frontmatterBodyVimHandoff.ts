@@ -36,7 +36,8 @@ export function registerFrontmatterBodyVimHandoff(): () => void {
             }
 
             return {
-                kind: "focus-frontmatter-navigation" as const,
+                kind: "focus-widget-navigation" as const,
+                widget: "frontmatter" as const,
                 position: "last" as const,
                 reason: "enter-frontmatter-from-body",
             };

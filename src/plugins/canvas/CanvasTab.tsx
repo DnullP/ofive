@@ -48,7 +48,7 @@ import {
     type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { IDockviewPanelProps } from "dockview";
+import type { WorkbenchTabProps } from "../../host/layout/workbenchContracts";
 import {
     readVaultCanvasFile,
     saveVaultCanvasFile,
@@ -64,7 +64,7 @@ import {
     readWorkspaceFileDragPayload,
 } from "../../host/layout/workspaceFileDragPayload";
 import { showNativeContextMenu } from "../../host/layout/nativeContextMenu";
-import { openFileInDockview } from "../../host/layout/openFileService";
+import { openFileInWorkbench } from "../../host/layout/openFileService";
 import {
     createEmptyCanvasDocument,
     createGroupFromSelection,
@@ -317,7 +317,7 @@ const CANVAS_NODE_TYPES = {
  * @param props Dockview 面板属性，支持 params.path 与 params.content。
  * @returns Canvas 编辑器视图。
  */
-export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): ReactNode {
+export function CanvasTab(props: WorkbenchTabProps<Record<string, unknown>>): ReactNode {
     const { t } = useTranslation();
     const path = String(props.params.path ?? "");
     const contentOverride = typeof props.params.content === "string"
@@ -830,7 +830,7 @@ export function CanvasTab(props: IDockviewPanelProps<Record<string, unknown>>): 
             return;
         }
 
-        void openFileInDockview({
+        void openFileInWorkbench({
             containerApi: props.containerApi,
             relativePath: node.data.filePath,
         });

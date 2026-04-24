@@ -156,10 +156,46 @@ const TABLE_EDITOR_SAMPLE = `# Markdown Table Playground
 | \`inline code\` | ==highlight== |
 `;
 
+const TABLE_VIM_BOUNDARY_SAMPLE = `# Markdown Table Vim Boundary
+
+该页面用于验证表格内部 Vim 导航在三列表格中的边界切换。
+
+| 层级 | 作用 | 典型对象 |
+| --- | --- | --- |
+| 布局骨架层 | 决定区域如何切分和嵌套 | \`SectionNode\`, section tree |
+| 工作台部件层 | 决定不同区域里展示什么容器 | \`ActivityBar\`, \`PanelSection\`, \`TabSection\` |
+| 宿主集成层 | 把业务数据投影到布局引擎 | \`VSCodeWorkbench\`, \`Workbench*Definition\`, host adapters |
+`;
+
+const SCROLL_REGRESSION_SAMPLE = [
+    "# Scroll Regression Demo",
+    "",
+    "该页面用于验证编辑器在 tab 切换与侧栏交互后是否保留阅读位置。",
+    "",
+    ...Array.from({ length: 220 }, (_, index) => {
+        const lineNumber = String(index + 1).padStart(3, "0");
+        return `${lineNumber}. Scroll regression checkpoint line ${lineNumber}.`;
+    }),
+].join("\n");
+
+const SCROLL_REGRESSION_ALT_SAMPLE = [
+    "# Scroll Regression Alt Demo",
+    "",
+    "该页面用于验证切走再切回后，第一次点击 editor 不会把滚动位置拉回顶部。",
+    "",
+    ...Array.from({ length: 220 }, (_, index) => {
+        const lineNumber = String(index + 1).padStart(3, "0");
+        return `${lineNumber}. Alternate scroll regression line ${lineNumber}.`;
+    }),
+].join("\n");
+
 const MOCK_FILE_CONTENTS: Record<string, string> = {
     "test-resources/notes/network-segment.md": NETWORK_SEGMENT_SAMPLE,
     "test-resources/notes/latex-test.md": LATEX_TEST_SAMPLE,
+    "test-resources/notes/scroll-regression.md": SCROLL_REGRESSION_SAMPLE,
+    "test-resources/notes/scroll-regression-alt.md": SCROLL_REGRESSION_ALT_SAMPLE,
     "test-resources/notes/table-editor.md": TABLE_EDITOR_SAMPLE,
+    "test-resources/notes/table-vim-boundary.md": TABLE_VIM_BOUNDARY_SAMPLE,
     "test-resources/notes/guide.md": "# Guide\n\n- 系统代理对一般应用程序生效\n- 终端无代理, 需要在`./zshrc`中配置, 或者直接`export \"HTTP_PROXY\"`\n- docker本身不走系统代理和终端代[[Cron1234]]理中的任何一个, 需要单独配置\n\nDocker本身是通过[[Daemon (linux)]]进程启动的, 而deamon默认是没有代理的, 需要在systemd的配置中进行设置.\n",
     "test-resources/notes/glass-validation.canvas": CANVAS_SAMPLE,
 };

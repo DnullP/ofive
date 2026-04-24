@@ -26,7 +26,7 @@ import {
     type MouseEvent,
     type ReactNode,
 } from "react";
-import type { DockviewApi } from "dockview";
+import type { WorkbenchContainerApi } from "../../../../host/layout/workbenchContracts";
 import { useTranslation } from "react-i18next";
 import {
     suggestWikiLinkTargets,
@@ -55,7 +55,11 @@ import {
 import { shouldSkipWikiLinkNavigationForSelection } from "../readModeSelectionPolicy";
 import { openWikiLinkTarget } from "../syntaxPlugins/wikiLinkSyntaxRenderer";
 import { parseWikiLinkParts } from "../syntaxPlugins/wikiLinkParser";
-import { isImeComposing } from "../../../../utils/imeInputGuard";
+import {
+    createImeCompositionGuard,
+    isImeComposing,
+    shouldSubmitPlainEnter,
+} from "../../../../utils/imeInputGuard";
 import "./MarkdownTableVisualEditor.css";
 
 const TABLE_WIDGET_EDITOR_FOCUS_CLASS = "cm-table-widget-focused";
@@ -115,6 +119,11 @@ interface PendingInputSelection {
     end: number;
 }
 
+interface PendingMarkdownTableNavigationRestore {
+    blockFrom: number;
+    position: MarkdownTableCellPosition;
+}
+
 const INACTIVE_WIKILINK_SUGGEST_STATE: TableWikiLinkSuggestState = {
     active: false,
     cellKey: null,
@@ -123,6 +132,8 @@ const INACTIVE_WIKILINK_SUGGEST_STATE: TableWikiLinkSuggestState = {
     selectedIndex: 0,
     match: null,
 };
+
+let pendingMarkdownTableNavigationRestore: PendingMarkdownTableNavigationRestore | null = null;
 
 /**
  * @interface SaveResult
@@ -140,14 +151,18 @@ interface SaveResult {
  * @description 组件输入参数。
  */
 export interface MarkdownTableVisualEditorProps {
+    /** 当前表格块起始偏移。 */
+    blockFrom: number;
     /** 初始表格模型。 */
     initialModel: MarkdownTableModel;
     /** 表格源码写回回调。 */
     onCommitMarkdown: (markdownText: string) => SaveResult;
+    /** 请求退出表格 Vim 导航层并返回正文。 */
+    onRequestExitVimNavigation?: (direction: "previous" | "next") => void;
     /** 当前文档相对路径。 */
     currentFilePath: string;
     /** Dockview 容器 API。 */
-    containerApi: DockviewApi;
+    containerApi: WorkbenchContainerApi;
 }
 
 /**
@@ -172,6 +187,76 @@ function resolveDefaultActiveCell(model: MarkdownTableModel): MarkdownTableCellP
     }
 
     return { section: "header", rowIndex: 0, columnIndex: 0 };
+}
+
+function isSameCellPosition(
+    left: MarkdownTableCellPosition,
+    right: MarkdownTableCellPosition,
+): boolean {
+    return left.section === right.section
+        && left.rowIndex === right.rowIndex
+        && left.columnIndex === right.columnIndex;
+}
+
+function isTableBodyEntryAnchor(position: MarkdownTableCellPosition): boolean {
+    return position.section === "body" && position.columnIndex === 0;
+}
+
+function clearPendingMarkdownTableNavigationRestore(
+    blockFrom: number,
+    position?: MarkdownTableCellPosition,
+): void {
+    if (!pendingMarkdownTableNavigationRestore || pendingMarkdownTableNavigationRestore.blockFrom !== blockFrom) {
+        return;
+    }
+
+    if (position && !isSameCellPosition(pendingMarkdownTableNavigationRestore.position, position)) {
+        return;
+    }
+
+    pendingMarkdownTableNavigationRestore = null;
+}
+
+function tryRestoreMarkdownTableNavigationCellNow(
+    blockFrom: number,
+    position: MarkdownTableCellPosition,
+): boolean {
+    const target = Array.from(document.querySelectorAll<HTMLElement>("[data-markdown-table-vim-nav='true']"))
+        .find((element) => element.dataset.markdownTableBlockFrom === String(blockFrom)
+            && element.dataset.markdownTableSection === position.section
+            && element.dataset.markdownTableRowIndex === String(position.rowIndex)
+            && element.dataset.markdownTableColumnIndex === String(position.columnIndex));
+
+    if (!target) {
+        return false;
+    }
+
+    target.focus();
+    if (document.activeElement !== target) {
+        return false;
+    }
+
+    clearPendingMarkdownTableNavigationRestore(blockFrom, position);
+    return true;
+}
+
+function restoreMarkdownTableNavigationCellFocus(
+    blockFrom: number,
+    position: MarkdownTableCellPosition,
+    attemptsRemaining = 4,
+): void {
+    if (tryRestoreMarkdownTableNavigationCellNow(blockFrom, position)) {
+        return;
+    }
+
+    if (attemptsRemaining <= 1) {
+        clearPendingMarkdownTableNavigationRestore(blockFrom, position);
+        return;
+    }
+
+    window.requestAnimationFrame(() => {
+        restoreMarkdownTableNavigationCellFocus(blockFrom, position, attemptsRemaining - 1);
+    });
 }
 
 /**
@@ -321,6 +406,9 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const { t } = useTranslation();
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+    const navigationRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+    const inputImeCompositionGuard = useRef(createImeCompositionGuard()).current;
+    const isCommittingDraftRef = useRef<boolean>(false);
     const pendingInputSelectionRef = useRef<PendingInputSelection | null>(null);
     const wikiLinkSuggestRequestSeqRef = useRef<number>(0);
     const wikiLinkSuggestDebounceTimerRef = useRef<number | null>(null);
@@ -328,6 +416,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const [activeCell, setActiveCell] = useState<MarkdownTableCellPosition>(() =>
         resolveDefaultActiveCell(props.initialModel),
     );
+    const [interactionMode, setInteractionMode] = useState<"navigation" | "editing">("navigation");
     const [wikiLinkSuggestState, setWikiLinkSuggestState] = useState<TableWikiLinkSuggestState>(
         INACTIVE_WIKILINK_SUGGEST_STATE,
     );
@@ -391,28 +480,54 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         };
     }, []);
 
+    useEffect(() => {
+        const pendingRestore = pendingMarkdownTableNavigationRestore;
+        if (!pendingRestore || pendingRestore.blockFrom !== props.blockFrom) {
+            return;
+        }
+
+        if (tryRestoreMarkdownTableNavigationCellNow(props.blockFrom, pendingRestore.position)) {
+            return;
+        }
+
+        window.requestAnimationFrame(() => {
+            restoreMarkdownTableNavigationCellFocus(props.blockFrom, pendingRestore.position);
+        });
+    }, [props.blockFrom, tableModel]);
+
     /**
      * @function commitDraftModel
      * @description 将当前草稿表格 flush 回编辑器文档。
      */
     const commitDraftModel = (): void => {
+        if (isCommittingDraftRef.current) {
+            return;
+        }
+
         const nextMarkdown = serializeMarkdownTable(tableModelRef.current);
         if (nextMarkdown === lastCommittedMarkdownRef.current) {
             return;
         }
 
-        const result = props.onCommitMarkdown(nextMarkdown);
-        if (result.success) {
-            lastCommittedMarkdownRef.current = nextMarkdown;
-            console.info("[markdown-table-visual-editor] commit success", {
-                bytes: nextMarkdown.length,
-            });
-            return;
-        }
+        isCommittingDraftRef.current = true;
+        try {
+            const result = props.onCommitMarkdown(nextMarkdown);
+            if (result.success) {
+                lastCommittedMarkdownRef.current = nextMarkdown;
+                console.info("[markdown-table-visual-editor] commit success", {
+                    bytes: nextMarkdown.length,
+                });
+                return;
+            }
 
-        console.warn("[markdown-table-visual-editor] commit failed", {
-            message: result.message,
-        });
+            console.warn("[markdown-table-visual-editor] commit failed", {
+                message: result.message,
+            });
+        } finally {
+            queueMicrotask(() => {
+                isCommittingDraftRef.current = false;
+            });
+        }
     };
 
     const focusedEditorRef = useRef<FocusedMarkdownTableEditor>({
@@ -597,10 +712,52 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
      * @param position 单元格位置。
      */
     const focusCell = (position: MarkdownTableCellPosition): void => {
+        setInteractionMode("editing");
         setActiveCell(position);
         window.requestAnimationFrame(() => {
             inputRefs.current.get(buildCellKey(position))?.focus();
         });
+    };
+
+    const focusNavigationCell = (position: MarkdownTableCellPosition): void => {
+        pendingMarkdownTableNavigationRestore = {
+            blockFrom: props.blockFrom,
+            position,
+        };
+        setInteractionMode("navigation");
+        setActiveCell(position);
+        window.requestAnimationFrame(() => {
+            const target = navigationRefs.current.get(buildCellKey(position));
+            target?.focus();
+            if (target && document.activeElement === target) {
+                clearPendingMarkdownTableNavigationRestore(props.blockFrom, position);
+            }
+        });
+    };
+
+    const handleNavigationTargetFocus = (position: MarkdownTableCellPosition): void => {
+        clearPendingMarkdownTableNavigationRestore(props.blockFrom, position);
+        setInteractionMode("navigation");
+        setActiveCell((previous) => (isSameCellPosition(previous, position) ? previous : position));
+    };
+
+    const shouldSubmitTableCellPlainEnter = (
+        event: KeyboardEvent<HTMLInputElement>,
+    ): boolean => {
+        if (!shouldSubmitPlainEnter({
+            key: event.key,
+            nativeEvent: event.nativeEvent,
+        })) {
+            return false;
+        }
+
+        return inputImeCompositionGuard.shouldAllowBlurAction();
+    };
+
+    const exitEditingToNavigation = (position: MarkdownTableCellPosition): void => {
+        closeWikiLinkSuggest();
+        commitDraftModel();
+        focusNavigationCell(position);
     };
 
     /**
@@ -620,6 +777,11 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             rows: nextModel.rows.length,
             selection: nextCell,
         });
+        if (interactionMode === "navigation") {
+            focusNavigationCell(nextCell);
+            return;
+        }
+
         focusCell(nextCell);
     };
 
@@ -795,6 +957,13 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             return;
         }
 
+        if (shouldSubmitTableCellPlainEnter(event)) {
+            event.preventDefault();
+            event.stopPropagation();
+            exitEditingToNavigation(position);
+            return;
+        }
+
         if (event.key === "ArrowUp" && event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
             event.preventDefault();
             handleInsertRow("above");
@@ -839,8 +1008,24 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         }
 
         if (event.key === "Escape" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-            commitDraftModel();
-            (event.currentTarget as HTMLInputElement).blur();
+            event.preventDefault();
+            event.stopPropagation();
+            exitEditingToNavigation(position);
+        }
+    };
+
+    const handleCellInputBlur = (event: FocusEvent<HTMLInputElement>): void => {
+        if (!inputImeCompositionGuard.shouldAllowBlurAction()) {
+            return;
+        }
+
+        commitDraftModel();
+        closeWikiLinkSuggest();
+        setInteractionMode("navigation");
+
+        const nextTarget = event.relatedTarget as Node | null;
+        if (!nextTarget || !wrapperRef.current?.contains(nextTarget)) {
+            syncEditorFocusClass(false);
         }
     };
 
@@ -935,21 +1120,124 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         position: MarkdownTableCellPosition,
         value: string,
         placeholder: string,
+        isNavigationTarget: boolean,
     ): ReactNode => {
         const isEmpty = value.trim().length === 0;
         const segments = parseTableCellPreviewSegments(value);
+        const cellKey = buildCellKey(position);
 
         return (
             <div
+                ref={(element) => {
+                    if (element) {
+                        navigationRefs.current.set(cellKey, element);
+                        return;
+                    }
+
+                    navigationRefs.current.delete(cellKey);
+                }}
                 className="mtv-cell-preview"
                 data-empty={isEmpty}
+                data-markdown-table-vim-nav={true}
+                data-markdown-table-block-from={props.blockFrom}
+                data-markdown-table-section={position.section}
+                data-markdown-table-row-index={position.rowIndex}
+                data-markdown-table-column-index={position.columnIndex}
+                data-markdown-table-entry-anchor={isTableBodyEntryAnchor(position) ? true : undefined}
+                data-vim-nav-active={isNavigationTarget ? true : undefined}
+                tabIndex={isNavigationTarget ? 0 : -1}
+                onFocus={() => {
+                    handleNavigationTargetFocus(position);
+                }}
                 onClick={() => {
                     focusCell(position);
+                }}
+                onKeyDown={(event) => {
+                    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+                        return;
+                    }
+
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        focusCell(position);
+                        return;
+                    }
+
+                    if (event.key === "Escape") {
+                        event.preventDefault();
+                        props.onRequestExitVimNavigation?.("next");
+                        return;
+                    }
+
+                    if (event.key === "h") {
+                        event.preventDefault();
+                        focusNavigationCell({
+                            ...position,
+                            columnIndex: Math.max(0, position.columnIndex - 1),
+                        });
+                        return;
+                    }
+
+                    if (event.key === "l") {
+                        event.preventDefault();
+                        focusNavigationCell({
+                            ...position,
+                            columnIndex: Math.min(tableModelRef.current.headers.length - 1, position.columnIndex + 1),
+                        });
+                        return;
+                    }
+
+                    if (event.key === "j") {
+                        event.preventDefault();
+                        if (position.section === "header") {
+                            focusNavigationCell({ section: "body", rowIndex: 0, columnIndex: position.columnIndex });
+                            return;
+                        }
+
+                        if (position.rowIndex >= Math.max(0, tableModelRef.current.rows.length - 1)) {
+                            props.onRequestExitVimNavigation?.("next");
+                            return;
+                        }
+
+                        focusNavigationCell({
+                            section: "body",
+                            rowIndex: position.rowIndex + 1,
+                            columnIndex: position.columnIndex,
+                        });
+                        return;
+                    }
+
+                    if (event.key === "k") {
+                        event.preventDefault();
+                        if (position.section === "header") {
+                            props.onRequestExitVimNavigation?.("previous");
+                            return;
+                        }
+
+                        if (position.rowIndex === 0) {
+                            focusNavigationCell({ section: "header", rowIndex: 0, columnIndex: position.columnIndex });
+                            return;
+                        }
+
+                        focusNavigationCell({
+                            section: "body",
+                            rowIndex: position.rowIndex - 1,
+                            columnIndex: position.columnIndex,
+                        });
+                    }
                 }}
             >
                 {isEmpty ? (
                     <span className="mtv-cell-preview-placeholder">{placeholder}</span>
                 ) : segments.map((segment, index) => {
+                    if (isNavigationTarget) {
+                        return (
+                            <span key={`nav-${index}`} className="mtv-cell-preview-text">
+                                {segment.text}
+                            </span>
+                        );
+                    }
+
                     if (segment.kind === "text") {
                         return (
                             <span key={`text-${index}`} className="mtv-cell-preview-text">
@@ -1034,6 +1322,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         <div
             ref={wrapperRef}
             className="mtv-shell"
+            data-markdown-table-block-from={props.blockFrom}
             onFocusCapture={handleWrapperFocusCapture}
             onBlurCapture={handleWrapperBlurCapture}
         >
@@ -1083,10 +1372,12 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                 };
                                 const cellKey = buildCellKey(position);
                                 const isActiveCell = buildCellKey(activeCell) === cellKey;
+                                const isEditingCell = isActiveCell && interactionMode === "editing";
+                                const isNavigationTarget = isActiveCell && interactionMode === "navigation";
                                 return (
                                     <th key={cellKey} className="mtv-table-head-cell">
                                         <div className="mtv-cell-frame">
-                                            {isActiveCell ? (
+                                            {isEditingCell ? (
                                                 <input
                                                     ref={(element) => {
                                                         if (element) {
@@ -1116,11 +1407,19 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                                     onChange={(event) => {
                                                         handleCellInputChange(event, position);
                                                     }}
+                                                    onCompositionStart={() => {
+                                                        inputImeCompositionGuard.handleCompositionStart();
+                                                    }}
+                                                    onCompositionEnd={() => {
+                                                        inputImeCompositionGuard.handleCompositionEnd();
+                                                    }}
+                                                    onBlur={handleCellInputBlur}
                                                 />
                                             ) : renderCellPreview(
                                                 position,
                                                 header,
                                                 t("markdownTable.headerPlaceholder"),
+                                                isNavigationTarget,
                                             )}
                                         </div>
                                         {renderWikiLinkSuggestPopup(cellKey)}
@@ -1140,10 +1439,12 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                     };
                                     const cellKey = buildCellKey(position);
                                     const isActiveCell = buildCellKey(activeCell) === cellKey;
+                                    const isEditingCell = isActiveCell && interactionMode === "editing";
+                                    const isNavigationTarget = isActiveCell && interactionMode === "navigation";
                                     return (
                                         <td key={cellKey} className="mtv-table-body-cell">
                                             <div className="mtv-cell-frame">
-                                                {isActiveCell ? (
+                                                {isEditingCell ? (
                                                     <input
                                                         ref={(element) => {
                                                             if (element) {
@@ -1173,11 +1474,19 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                                         onChange={(event) => {
                                                             handleCellInputChange(event, position);
                                                         }}
+                                                        onCompositionStart={() => {
+                                                            inputImeCompositionGuard.handleCompositionStart();
+                                                        }}
+                                                        onCompositionEnd={() => {
+                                                            inputImeCompositionGuard.handleCompositionEnd();
+                                                        }}
+                                                        onBlur={handleCellInputBlur}
                                                     />
                                                 ) : renderCellPreview(
                                                     position,
                                                     cell,
                                                     t("markdownTable.cellPlaceholder"),
+                                                    isNavigationTarget,
                                                 )}
                                             </div>
                                             {renderWikiLinkSuggestPopup(cellKey)}

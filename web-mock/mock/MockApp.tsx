@@ -10,7 +10,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Bot, Compass, FolderOpen, Link2, Orbit, Plus } from "lucide-react";
+import { Bot, CalendarDays, CheckSquare, Compass, FolderOpen, Hand, Link2, Orbit, Plus, Search, Workflow } from "lucide-react";
 import {
     WorkbenchLayoutHost,
     type TabInstanceDefinition,
@@ -27,12 +27,13 @@ import { CodeMirrorEditorTab } from "../../src/plugins/markdown-codemirror/edito
 import { KnowledgeGraphTab } from "../../src/plugins/knowledge-graph/tab/KnowledgeGraphTab";
 import { CanvasTab } from "../../src/plugins/canvas/CanvasTab";
 import { SettingsTab } from "../../src/host/layout/SettingsTab";
-import { useConfigSync } from "../../src/host/store/configStore";
+import { useConfigSync } from "../../src/host/config/configStore";
 import { registerActivity } from "../../src/host/registry/activityRegistry";
 import { registerFileOpener } from "../../src/host/registry/fileOpenerRegistry";
 import { registerPanel } from "../../src/host/registry/panelRegistry";
 import { registerTabComponent } from "../../src/host/registry/tabComponentRegistry";
 import { buildFileTabId, normalizeRelativePath } from "../../src/host/layout/openFileService";
+import { publishNotification } from "../../src/host/notifications/notificationCenter";
 import { readVaultMarkdownFile } from "../../src/api/vaultApi";
 import { MockVaultPanel } from "./MockVaultPanel";
 import "../../src/plugins/ai-chat/aiChatPlugin.css";
@@ -43,6 +44,14 @@ import "../../src/App.css";
 const MOCK_VAULT_PATH = "/mock/notes";
 const MOCK_SPLIT_DEMO_COMPONENT_ID = "split-demo";
 const MOCK_SPLIT_DEMO_TAB_ID = "split-demo";
+const SEARCH_SURFACE_ID = "search";
+const CALENDAR_ACTIVITY_ID = "calendar";
+const CALENDAR_PANEL_ID = "calendar-panel";
+const MOCK_CALENDAR_TAB_COMPONENT_ID = "calendar-tab";
+const MOCK_ARCHITECTURE_COMPONENT_ID = "architecture-devtools";
+const TASK_BOARD_ACTIVITY_ID = "task-board";
+const MOCK_TASK_BOARD_COMPONENT_ID = "task-board-tab";
+const LOG_NOTIFICATION_TEST_ACTIVITY_ID = "log-notification-test-activity";
 
 /**
  * @function isMockMarkdownPath
@@ -338,6 +347,170 @@ function MockAiChatPanel(): ReactNode {
     );
 }
 
+function MockSearchPanel(): ReactNode {
+    return (
+        <div className="outline-panel">
+            <div className="outline-panel-header">
+                全局搜索
+                <span className="outline-persisted-hint">Mock</span>
+            </div>
+            <div style={{ padding: 12, display: "grid", gap: 10 }}>
+                <input
+                    type="search"
+                    value="scroll state"
+                    readOnly
+                    aria-label="Mock search query"
+                    style={{
+                        width: "100%",
+                        borderRadius: 10,
+                        border: "1px solid rgba(255, 255, 255, 0.14)",
+                        background: "rgba(15, 23, 42, 0.28)",
+                        color: "var(--text-primary)",
+                        padding: "10px 12px",
+                    }}
+                />
+                <ul className="backlinks-list">
+                    <li>
+                        <button type="button" className="backlinks-item">
+                            <span className="backlinks-item-title">test-resources/notes/scroll-regression.md</span>
+                            <span className="backlinks-item-weight">3</span>
+                        </button>
+                    </li>
+                    <li>
+                        <button type="button" className="backlinks-item">
+                            <span className="backlinks-item-title">docs/testing-handbook.md</span>
+                            <span className="backlinks-item-weight">1</span>
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    );
+}
+
+function MockCalendarPanel(): ReactNode {
+    return (
+        <div className="outline-panel">
+            <div className="outline-panel-header">
+                日历
+                <span className="outline-persisted-hint">Panel</span>
+            </div>
+            <ul className="outline-list">
+                <li>
+                    <button type="button" className="outline-item">04-23 今天: 2 篇笔记</button>
+                </li>
+                <li>
+                    <button type="button" className="outline-item">04-24 明天: 1 个计划项</button>
+                </li>
+                <li>
+                    <button type="button" className="outline-item">04-28 下周一: 周回顾</button>
+                </li>
+            </ul>
+        </div>
+    );
+}
+
+function MockWorkbenchPlaceholder(props: {
+    title: string;
+    description: string;
+    points: string[];
+}): ReactNode {
+    return (
+        <div
+            style={{
+                display: "grid",
+                gap: 18,
+                height: "100%",
+                padding: 24,
+                background: "linear-gradient(180deg, rgba(20, 34, 60, 0.32), rgba(6, 12, 24, 0.08))",
+            }}
+        >
+            <div>
+                <h2 style={{ margin: 0, fontSize: 24 }}>{props.title}</h2>
+                <p style={{ margin: "8px 0 0", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                    {props.description}
+                </p>
+            </div>
+            <div
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: 12,
+                    alignSelf: "start",
+                }}
+            >
+                {props.points.map((point) => (
+                    <div
+                        key={point}
+                        style={{
+                            minHeight: 96,
+                            padding: 14,
+                            borderRadius: 14,
+                            border: "1px solid rgba(255, 255, 255, 0.12)",
+                            background: "rgba(15, 23, 42, 0.2)",
+                            boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.08)",
+                            lineHeight: 1.5,
+                        }}
+                    >
+                        {point}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function MockCalendarTab(): ReactNode {
+    return (
+        <MockWorkbenchPlaceholder
+            title="日历"
+            description="mock 现在保留和 Tauri 一致的日历入口，方便在同一套 workbench 壳上看布局与拖拽行为。"
+            points={[
+                "今天: Daily note / 会议纪要 / 周计划",
+                "月底: 项目复盘与归档",
+                "入口结构与右侧 panel 的 activityId 对齐为 calendar",
+            ]}
+        />
+    );
+}
+
+function MockArchitectureDevtoolsTab(): ReactNode {
+    return (
+        <MockWorkbenchPlaceholder
+            title="Architecture Devtools"
+            description="这里保留真实 Tauri 左侧入口的位置和图标，用来验证活动栏密度、拖拽和主区切换。"
+            points={[
+                "Plugin inventory",
+                "Event dependency graph",
+                "Workbench host contract inspection",
+            ]}
+        />
+    );
+}
+
+function MockTaskBoardTab(): ReactNode {
+    return (
+        <MockWorkbenchPlaceholder
+            title="任务看板"
+            description="任务看板在 mock 中先占位到和 Tauri 相同的入口位置，避免 web-mock 和真实工作台结构分叉。"
+            points={[
+                "In Progress: 对齐 mock 与 Tauri workbench 壳",
+                "Review: editor view-state regression coverage",
+                "Done: layout-v2 keep-mounted tab cards",
+            ]}
+        />
+    );
+}
+
+function emitMockGreetingNotification(): void {
+    publishNotification({
+        level: "info",
+        title: "Test Message",
+        message: "greet",
+        source: "module",
+    });
+}
+
 let mockRegistered = false;
 const MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID = "knowledgegraph";
 const MOCK_KNOWLEDGE_GRAPH_ACTIVITY_ID = "knowledge-graph";
@@ -347,10 +520,14 @@ function ensureMockComponentsRegistered(): void {
     mockRegistered = true;
 
     const filesIcon = React.createElement(FolderOpen, { size: 18, strokeWidth: 1.8 });
+    const searchIcon = React.createElement(Search, { size: 18, strokeWidth: 1.8 });
     const outlineIcon = React.createElement(Compass, { size: 18, strokeWidth: 1.8 });
-    const backlinksIcon = React.createElement(Link2, { size: 18, strokeWidth: 1.8 });
     const aiChatIcon = React.createElement(Bot, { size: 18, strokeWidth: 1.8 });
     const knowledgeGraphIcon = React.createElement(Orbit, { size: 18, strokeWidth: 1.8 });
+    const calendarIcon = React.createElement(CalendarDays, { size: 18, strokeWidth: 1.8 });
+    const architectureIcon = React.createElement(Workflow, { size: 18, strokeWidth: 1.8 });
+    const taskBoardIcon = React.createElement(CheckSquare, { size: 18, strokeWidth: 1.8 });
+    const logNotificationIcon = React.createElement(Hand, { size: 18, strokeWidth: 1.8 });
 
     registerActivity({
         type: "panel-container",
@@ -360,6 +537,15 @@ function ensureMockComponentsRegistered(): void {
         defaultSection: "top",
         defaultBar: "left",
         defaultOrder: 1,
+    });
+    registerActivity({
+        type: "panel-container",
+        id: SEARCH_SURFACE_ID,
+        title: () => "搜索",
+        icon: searchIcon,
+        defaultSection: "top",
+        defaultBar: "left",
+        defaultOrder: 2,
     });
     registerActivity({
         type: "panel-container",
@@ -395,6 +581,66 @@ function ensureMockComponentsRegistered(): void {
             });
         },
     });
+    registerActivity({
+        type: "callback",
+        id: CALENDAR_ACTIVITY_ID,
+        title: () => "日历",
+        icon: calendarIcon,
+        defaultSection: "top",
+        defaultBar: "left",
+        defaultOrder: 4,
+        onActivate: (context) => {
+            context.openTab({
+                id: CALENDAR_ACTIVITY_ID,
+                title: "日历",
+                component: MOCK_CALENDAR_TAB_COMPONENT_ID,
+            });
+        },
+    });
+    registerActivity({
+        type: "callback",
+        id: MOCK_ARCHITECTURE_COMPONENT_ID,
+        title: () => "Architecture Devtools",
+        icon: architectureIcon,
+        defaultSection: "top",
+        defaultBar: "left",
+        defaultOrder: 5,
+        onActivate: (context) => {
+            context.openTab({
+                id: MOCK_ARCHITECTURE_COMPONENT_ID,
+                title: "Architecture Devtools",
+                component: MOCK_ARCHITECTURE_COMPONENT_ID,
+            });
+        },
+    });
+    registerActivity({
+        type: "callback",
+        id: TASK_BOARD_ACTIVITY_ID,
+        title: () => "任务看板",
+        icon: taskBoardIcon,
+        defaultSection: "top",
+        defaultBar: "left",
+        defaultOrder: 6,
+        onActivate: (context) => {
+            context.openTab({
+                id: TASK_BOARD_ACTIVITY_ID,
+                title: "任务看板",
+                component: MOCK_TASK_BOARD_COMPONENT_ID,
+            });
+        },
+    });
+    registerActivity({
+        type: "callback",
+        id: LOG_NOTIFICATION_TEST_ACTIVITY_ID,
+        title: () => "Test Message",
+        icon: logNotificationIcon,
+        defaultSection: "bottom",
+        defaultBar: "left",
+        defaultOrder: 999,
+        onActivate: () => {
+            emitMockGreetingNotification();
+        },
+    });
 
     registerPanel({
         id: "files",
@@ -403,6 +649,14 @@ function ensureMockComponentsRegistered(): void {
         defaultPosition: "left",
         defaultOrder: 1,
         render: (ctx) => React.createElement(MockVaultPanel, { openTab: ctx.openTab }),
+    });
+    registerPanel({
+        id: SEARCH_SURFACE_ID,
+        title: () => "搜索",
+        activityId: SEARCH_SURFACE_ID,
+        defaultPosition: "left",
+        defaultOrder: 2,
+        render: () => React.createElement(MockSearchPanel),
     });
     registerPanel({
         id: "outline",
@@ -421,6 +675,14 @@ function ensureMockComponentsRegistered(): void {
         render: () => React.createElement(MockBacklinksPanel),
     });
     registerPanel({
+        id: CALENDAR_PANEL_ID,
+        title: () => "日历",
+        activityId: CALENDAR_ACTIVITY_ID,
+        defaultPosition: "right",
+        defaultOrder: 2,
+        render: () => React.createElement(MockCalendarPanel),
+    });
+    registerPanel({
         id: "ai-chat-mock",
         title: () => "AI 对话",
         activityId: "ai-chat-mock",
@@ -434,6 +696,9 @@ function ensureMockComponentsRegistered(): void {
     registerTabComponent({ id: "codemirror", component: CodeMirrorEditorTab as never });
     registerTabComponent({ id: "canvas", component: CanvasTab as never });
     registerTabComponent({ id: MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID, component: KnowledgeGraphTab as never });
+    registerTabComponent({ id: MOCK_CALENDAR_TAB_COMPONENT_ID, component: MockCalendarTab as never });
+    registerTabComponent({ id: MOCK_ARCHITECTURE_COMPONENT_ID, component: MockArchitectureDevtoolsTab as never });
+    registerTabComponent({ id: MOCK_TASK_BOARD_COMPONENT_ID, component: MockTaskBoardTab as never });
     registerTabComponent({ id: "settings", component: SettingsTab as never });
     registerFileOpener({
         id: "mock.markdown.codemirror",

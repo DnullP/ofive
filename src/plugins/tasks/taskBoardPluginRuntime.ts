@@ -15,7 +15,7 @@
 import React from "react";
 import * as LucideIcons from "lucide-react";
 import type { ReactNode } from "react";
-import type { IDockviewPanelProps } from "dockview";
+import type { WorkbenchTabProps } from "../../host/layout/workbenchContracts";
 import i18n from "../../i18n";
 import type { CommandDefinition } from "../../host/commands/commandSystem";
 import { registerActivity } from "../../host/registry/activityRegistry";
@@ -32,7 +32,7 @@ const TASK_BOARD_COMMAND_ID = "taskBoard.open";
  * @description 任务看板 Tab 组件类型。
  */
 export type TaskBoardTabComponent = (
-    props: IDockviewPanelProps<Record<string, unknown>>,
+    props: WorkbenchTabProps<Record<string, unknown>>,
 ) => ReactNode;
 
 /**

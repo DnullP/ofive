@@ -13,8 +13,8 @@
  */
 
 import { type ReactElement } from "react";
-import type { IDockviewPanelProps } from "dockview";
-import { openFileInDockview } from "../../host/layout/openFileService";
+import type { WorkbenchTabProps } from "../../host/layout/workbenchContracts";
+import { openFileInWorkbench } from "../../host/layout/openFileService";
 import { readConvertibleViewTabState } from "../../host/registry";
 import { CalendarView } from "./CalendarView";
 
@@ -24,7 +24,7 @@ import { CalendarView } from "./CalendarView";
  * @param props Dockview 面板属性。
  * @returns React 元素。
  */
-export function CalendarTab(props: IDockviewPanelProps<Record<string, unknown>>): ReactElement {
+export function CalendarTab(props: WorkbenchTabProps<Record<string, unknown>>): ReactElement {
     const stateKey = readConvertibleViewTabState(props.params)?.stateKey ?? "calendar";
 
     return (
@@ -33,7 +33,7 @@ export function CalendarTab(props: IDockviewPanelProps<Record<string, unknown>>)
             stateKey={stateKey}
             openNote={async (relativePath) => {
                 console.info("[calendar-tab] open note", { relativePath, stateKey });
-                await openFileInDockview({
+                await openFileInWorkbench({
                     containerApi: props.containerApi,
                     relativePath,
                 });

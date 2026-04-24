@@ -53,6 +53,10 @@ import {
     reportActiveEditor,
 } from "../editor/activeEditorStore";
 import {
+    clearEditorViewStateSnapshot,
+    resetEditorViewStateSnapshots,
+} from "../editor/editorViewStateStore";
+import {
     moveVaultDirectoryToDirectory,
     moveVaultMarkdownFileToDirectory,
     readVaultMarkdownFile,
@@ -170,6 +174,7 @@ import type {
     DockviewLayoutDebugApi,
     DockviewLayoutTimelineEntry,
 } from "./dockviewLayoutDebugContract";
+import type { WorkbenchContainerApi } from "./workbenchContracts";
 export type {
     DockviewLayoutAnimationObservation,
     DockviewLayoutDebugApi,
@@ -278,6 +283,7 @@ export interface TabInstanceDefinition {
 export interface PanelRenderContext {
     activeTabId: string | null;
     dockviewApi: DockviewApi | null;
+    workbenchApi: WorkbenchContainerApi | null;
     hostPanelId: string | null;
     convertibleView: ConvertiblePanelRenderState | null;
     openTab: (tab: TabInstanceDefinition) => void;
@@ -1020,6 +1026,7 @@ export function DockviewLayout({
 
         clearActiveEditor();
         resetEditorContext();
+        resetEditorViewStateSnapshots();
         setIsMoveFileDirectoryModalOpen(false);
         setMoveSourceSnapshot(null);
         setCreateEntryDraftRequest((currentRequest) => {
@@ -3672,6 +3679,7 @@ export function DockviewLayout({
     const panelRenderContext: PanelRenderContext = {
         activeTabId,
         dockviewApi,
+        workbenchApi: dockviewApi as unknown as WorkbenchContainerApi | null,
         hostPanelId: null,
         convertibleView: null,
         openTab,
@@ -5379,6 +5387,7 @@ export function DockviewLayout({
             recordDockviewTimelineEntry("remove-panel", {
                 panelId: panel.id,
             });
+            clearEditorViewStateSnapshot(panel.id);
             restoreConvertiblePanelAfterTabClosed(panel);
         });
 

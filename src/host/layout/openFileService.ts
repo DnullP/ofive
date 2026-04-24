@@ -4,25 +4,15 @@
  *   这是宿主层的中心化入口，负责：
  *   - 规范化文件相对路径
  *   - 依据注册的 opener 解析 Tab 定义
- *   - 在 Dockview 中复用既有 Tab 或创建新 Tab
+ *   - 在当前 workbench 中复用既有 Tab 或创建新 Tab
  *
  * @dependencies
- *   - dockview
  *   - ../registry/fileOpenerRegistry
- *   - ./DockviewLayout
+ *   - ./workbenchContracts
  */
 
-import type { DockviewApi } from "dockview";
-import type { TabInstanceDefinition } from "./DockviewLayout";
+import type { TabInstanceDefinition, WorkbenchContainerApi, WorkbenchPanelHandle } from "./workbenchContracts";
 import { resolveFileOpener } from "../registry/fileOpenerRegistry";
-
-interface DockviewPanelLike {
-    id: string;
-    params?: Record<string, unknown>;
-    api: {
-        setActive(): void;
-    };
-}
 
 /**
  * @interface ResolveFileTabOptions
@@ -51,12 +41,12 @@ export interface OpenFileWithResolverOptions extends ResolveFileTabOptions {
 }
 
 /**
- * @interface OpenFileInDockviewOptions
- * @description 基于 DockviewApi 的文件打开选项。
+ * @interface OpenFileInWorkbenchOptions
+ * @description 基于 workbench 容器 API 的文件打开选项。
  */
-export interface OpenFileInDockviewOptions extends ResolveFileTabOptions {
-    /** Dockview 容器实例。 */
-    containerApi: DockviewApi;
+export interface OpenFileInWorkbenchOptions extends ResolveFileTabOptions {
+    /** Workbench 容器实例。 */
+    containerApi: WorkbenchContainerApi;
 }
 
 /**
@@ -82,16 +72,16 @@ export function buildFileTabId(relativePath: string): string {
 /**
  * @function findExistingFilePanelByPath
  * @description 根据 panel 当前参数里的 `path` 查找已打开的文件标签，避免路径重命名后重复打开。
- * @param containerApi Dockview 容器实例。
+ * @param containerApi workbench 容器实例。
  * @param relativePath 目标文件相对路径。
  * @returns 匹配的 panel；未命中时返回 null。
  */
 function findExistingFilePanelByPath(
-    containerApi: DockviewApi,
+    containerApi: WorkbenchContainerApi,
     relativePath: string,
-): DockviewPanelLike | null {
+): WorkbenchPanelHandle | null {
     const normalizedTargetPath = normalizeRelativePath(relativePath);
-    const panels = (containerApi.panels ?? []) as unknown as DockviewPanelLike[];
+    const panels = containerApi.panels ?? [];
 
     return panels.find((panel) => {
         const panelPath = typeof panel.params?.path === "string"
@@ -190,13 +180,13 @@ export async function openFileWithResolver(
 }
 
 /**
- * @function openFileInDockview
- * @description 基于 DockviewApi 打开文件；若已有同 id Tab，则直接激活。
+ * @function openFileInWorkbench
+ * @description 基于 workbench 容器 API 打开文件；若已有同 id Tab，则直接激活。
  * @param options 文件打开选项。
  * @returns 打开的 Tab 定义；若复用已有 Tab 或未命中 opener，则返回 null。
  */
-export async function openFileInDockview(
-    options: OpenFileInDockviewOptions,
+export async function openFileInWorkbench(
+    options: OpenFileInWorkbenchOptions,
 ): Promise<TabInstanceDefinition | null> {
     const normalizedPath = normalizeRelativePath(options.relativePath);
     const tabId = buildFileTabId(normalizedPath);
@@ -230,7 +220,7 @@ export async function openFileInDockview(
         params: tab.params,
     });
     options.containerApi.getPanel(tab.id)?.api.setActive();
-    console.info("[openFileService] opened file in dockview", {
+    console.info("[openFileService] opened file in workbench", {
         relativePath: normalizedPath,
         tabId: tab.id,
         component: tab.component,

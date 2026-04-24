@@ -20,7 +20,7 @@
  */
 
 import type { ReactNode } from "react";
-import type { DockviewApi } from "dockview";
+import type { WorkbenchContainerApi } from "../../../../host/layout/workbenchContracts";
 import { createRoot, type Root } from "react-dom/client";
 import { EditorView, ViewPlugin, type PluginValue, type ViewUpdate } from "@codemirror/view";
 import i18n from "../../../../i18n";
@@ -106,7 +106,7 @@ type WikiLinkPreviewData =
 interface WikiLinkPreviewCardProps {
     anchor: WikiLinkPreviewTarget;
     data: WikiLinkPreviewData;
-    containerApi: DockviewApi;
+    containerApi: WorkbenchContainerApi;
     previewId: string;
 }
 
@@ -276,7 +276,7 @@ function WikiLinkPreviewCard(props: WikiLinkPreviewCardProps): ReactNode {
  */
 class WikiLinkPreviewPlugin implements PluginValue {
     private readonly view: EditorView;
-    private readonly containerApi: DockviewApi;
+    private readonly containerApi: WorkbenchContainerApi;
     private readonly getCurrentFilePath: () => string;
     private readonly previewCache = new Map<string, WikiLinkPreviewData>();
     private readonly ownerWindow: Window;
@@ -296,7 +296,7 @@ class WikiLinkPreviewPlugin implements PluginValue {
 
     constructor(
         view: EditorView,
-        containerApi: DockviewApi,
+        containerApi: WorkbenchContainerApi,
         getCurrentFilePath: () => string,
     ) {
         this.view = view;
@@ -782,7 +782,7 @@ class WikiLinkPreviewPlugin implements PluginValue {
  * @returns CodeMirror 扩展。
  */
 export function createWikiLinkPreviewExtension(
-    containerApi: DockviewApi,
+    containerApi: WorkbenchContainerApi,
     getCurrentFilePath: () => string,
 ): ReturnType<typeof ViewPlugin.fromClass> {
     return ViewPlugin.fromClass(

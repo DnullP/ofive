@@ -25,7 +25,7 @@ import {
     useState,
     type ReactElement,
 } from "react";
-import type { IDockviewPanelProps } from "dockview";
+import type { WorkbenchTabProps } from "../../../host/layout/workbenchContracts";
 import {
     CheckCircle2,
     Clock3,
@@ -40,7 +40,7 @@ import {
     type VaultTaskItem,
 } from "../../../api/vaultApi";
 import { subscribePersistedContentUpdatedEvent } from "../../../host/events/appEventBus";
-import { openFileInDockview } from "../../../host/layout/openFileService";
+import { openFileInWorkbench } from "../../../host/layout/openFileService";
 import i18n from "../../../i18n";
 import {
     dateTimeLocalInputToTaskDue,
@@ -102,7 +102,7 @@ const COLUMN_DEFINITIONS: Array<{
  * @returns React 元素。
  */
 export function TaskBoardTab(
-    props: IDockviewPanelProps<Record<string, unknown>>,
+    props: WorkbenchTabProps<Record<string, unknown>>,
 ): ReactElement {
     const [tasks, setTasks] = useState<VaultTaskItem[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -312,7 +312,7 @@ export function TaskBoardTab(
             line: task.line,
         });
 
-        await openFileInDockview({
+        await openFileInWorkbench({
             containerApi: props.containerApi,
             relativePath: task.relativePath,
         });

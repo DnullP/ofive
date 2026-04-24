@@ -50,7 +50,7 @@
  */
 
 import { useSyncExternalStore, type ReactNode } from "react";
-import type { PanelRenderContext } from "../layout/DockviewLayout";
+import type { PanelRenderContext } from "../layout/workbenchContracts";
 
 /**
  * @interface ActivityBaseDescriptor

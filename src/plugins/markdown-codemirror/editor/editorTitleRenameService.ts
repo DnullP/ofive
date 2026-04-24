@@ -39,7 +39,7 @@ export type TitleSubmitReason = "blur" | "enter";
  */
 interface EditorTitleRenamePanelApi {
     /** 更新面板标题。 */
-    setTitle(title: string): void;
+    setTitle?(title: string): void;
     /** 更新面板参数。 */
     updateParameters?(params: Record<string, unknown>): void;
     /** 激活面板。 */
@@ -214,7 +214,7 @@ export async function commitEditorTitleRename(
     });
 
     if (currentPanel && panelApi) {
-        panelApi.setTitle(nextPanelTitle);
+        panelApi.setTitle?.(nextPanelTitle);
         if (currentPanel.params && typeof currentPanel.params === "object") {
             Object.assign(currentPanel.params, nextPanelParams);
         }
@@ -251,7 +251,7 @@ export async function commitEditorTitleRename(
         }
 
         if (currentPanel && panelApi) {
-            panelApi.setTitle(nextPanelTitle);
+            panelApi.setTitle?.(nextPanelTitle);
             panelApi.updateParameters?.(nextPanelParams);
         } else {
             await options.dependencies.openFile({
@@ -283,7 +283,7 @@ export async function commitEditorTitleRename(
         };
     } catch (error) {
         if (currentPanel && panelApi) {
-            panelApi.setTitle(previousPanelTitle);
+            panelApi.setTitle?.(previousPanelTitle);
             if (currentPanel.params && typeof currentPanel.params === "object" && previousPanelParams) {
                 Object.assign(currentPanel.params, previousPanelParams);
             }

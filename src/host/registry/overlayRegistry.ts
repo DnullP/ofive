@@ -2,7 +2,7 @@
  * @module host/registry/overlayRegistry
  * @description Overlay 注册中心：管理由宿主统一渲染的浮层组件。
  *   Overlay 与 panel/tab 的区别在于：
- *   - 不占据 dockview 面板位
+ *   - 不占据 workbench 面板位
  *   - 由宿主根布局统一挂载
  *   - 可由插件按需注册，用于 Quick Switcher、Command Palette 等全局浮层
  *
@@ -21,7 +21,7 @@
  */
 
 import { useSyncExternalStore, type ReactNode } from "react";
-import type { DockviewApi } from "dockview";
+import type { WorkbenchContainerApi } from "../layout/workbenchContracts";
 import type { CommandDefinition, CommandId } from "../commands/commandSystem";
 
 /**
@@ -31,8 +31,8 @@ import type { CommandDefinition, CommandId } from "../commands/commandSystem";
 export interface OverlayRenderContext {
     /** 当前激活的 tab id */
     activeTabId: string | null;
-    /** 当前 dockview api */
-    dockviewApi: DockviewApi | null;
+    /** 当前 workbench api */
+    workbenchApi: WorkbenchContainerApi | null;
     /** 打开任意已注册 tab */
     openTab: (tab: {
         id: string;

@@ -14,8 +14,9 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+    revealEditorSelection,
+    restoreEditorSelectionWithoutScrolling,
     safeDestroyEditorView,
-    shouldFlushEditorAutoSaveOnBlur,
     syncEditorTabGutterWidth,
 } from "./useCodeMirrorEditorLifecycle";
 
@@ -132,28 +133,114 @@ describe("safeDestroyEditorView", () => {
     });
 });
 
-describe("shouldFlushEditorAutoSaveOnBlur", () => {
-    test("IME 组合期间不应立即 flush autosave", () => {
-        expect(shouldFlushEditorAutoSaveOnBlur({
-            isComposing: true,
-            lastCompositionEndAt: 0,
-            now: 100,
-        })).toBe(false);
+describe("restoreEditorSelectionWithoutScrolling", () => {
+    test("restores selection while preserving the current viewport", () => {
+        const dispatchedSelections: Array<{ anchor: number; head: number }> = [];
+        const selectionMain = { anchor: 0, head: 0 };
+        const scrollDOM = {
+            scrollTop: 2800,
+            scrollLeft: 24,
+        };
+
+        const view = {
+            state: {
+                selection: {
+                    main: selectionMain,
+                },
+            },
+            scrollDOM,
+            dispatch(spec: { selection?: { anchor: number; head: number } }): void {
+                if (!spec.selection) {
+                    return;
+                }
+
+                dispatchedSelections.push(spec.selection);
+                selectionMain.anchor = spec.selection.anchor;
+                selectionMain.head = spec.selection.head;
+
+                // Simulate a browser/editor scroll jump caused by caret restoration.
+                scrollDOM.scrollTop = 96;
+                scrollDOM.scrollLeft = 0;
+            },
+        } as unknown as Pick<
+            import("codemirror").EditorView,
+            "state" | "dispatch" | "scrollDOM"
+        >;
+
+        restoreEditorSelectionWithoutScrolling(view, {
+            anchor: 12,
+            head: 34,
+        });
+
+        expect(dispatchedSelections).toEqual([{ anchor: 12, head: 34 }]);
+        expect(selectionMain).toEqual({ anchor: 12, head: 34 });
+        expect(scrollDOM.scrollTop).toBe(2800);
+        expect(scrollDOM.scrollLeft).toBe(24);
     });
 
-    test("组合刚结束的短窗口内不应立即 flush autosave", () => {
-        expect(shouldFlushEditorAutoSaveOnBlur({
-            isComposing: false,
-            lastCompositionEndAt: 100,
-            now: 120,
-        })).toBe(false);
-    });
+    test("skips dispatch when the selection already matches", () => {
+        let dispatched = false;
+        const view = {
+            state: {
+                selection: {
+                    main: {
+                        anchor: 12,
+                        head: 34,
+                    },
+                },
+            },
+            scrollDOM: {
+                scrollTop: 2800,
+                scrollLeft: 24,
+            },
+            dispatch(): void {
+                dispatched = true;
+            },
+        } as unknown as Pick<
+            import("codemirror").EditorView,
+            "state" | "dispatch" | "scrollDOM"
+        >;
 
-    test("组合稳定结束后允许 flush autosave", () => {
-        expect(shouldFlushEditorAutoSaveOnBlur({
-            isComposing: false,
-            lastCompositionEndAt: 100,
-            now: 200,
-        })).toBe(true);
+        restoreEditorSelectionWithoutScrolling(view, {
+            anchor: 12,
+            head: 34,
+        });
+
+        expect(dispatched).toBe(false);
+    });
+});
+
+describe("revealEditorSelection", () => {
+    test("dispatches an explicit scroll-into-view effect even when selection already matches", () => {
+        const dispatched: Array<{
+            selection?: { anchor: number; head: number };
+            effects?: unknown;
+        }> = [];
+
+        const view = {
+            state: {
+                selection: {
+                    main: {
+                        anchor: 12,
+                        head: 34,
+                    },
+                },
+            },
+            dispatch(spec: { selection?: { anchor: number; head: number }; effects?: unknown }): void {
+                dispatched.push(spec);
+            },
+        } as unknown as Pick<
+            import("codemirror").EditorView,
+            "state" | "dispatch"
+        >;
+
+        revealEditorSelection(view, {
+            anchor: 12,
+            head: 34,
+        });
+
+        expect(dispatched).toHaveLength(1);
+        expect(dispatched[0]?.selection).toEqual({ anchor: 12, head: 34 });
+        expect(dispatched[0]?.effects).toBeTruthy();
     });
 });

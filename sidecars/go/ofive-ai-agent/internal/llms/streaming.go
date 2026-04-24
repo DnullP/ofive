@@ -3,8 +3,15 @@ package llms
 import (
 	"bufio"
 	"io"
+	"net/http"
 	"strings"
 )
+
+// newStreamingHTTPClient avoids http.Client.Timeout because it aborts long-lived
+// SSE responses while the body is still being streamed.
+func newStreamingHTTPClient() *http.Client {
+	return &http.Client{}
+}
 
 type sseEvent struct {
 	Event string

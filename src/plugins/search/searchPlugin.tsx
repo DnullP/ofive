@@ -31,7 +31,7 @@ import {
     type VaultSearchMatchItem,
     type VaultSearchScope,
 } from "../../api/vaultApi";
-import type { PanelRenderContext } from "../../host/layout/DockviewLayout";
+import type { PanelRenderContext } from "../../host/layout/workbenchContracts";
 import i18n from "../../i18n";
 import {
     getConfigSnapshot,

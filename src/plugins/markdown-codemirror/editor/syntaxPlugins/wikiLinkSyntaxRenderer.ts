@@ -5,7 +5,7 @@
  *  - ../syntaxRenderRegistry
  */
 
-import type { DockviewApi } from "dockview";
+import type { WorkbenchContainerApi } from "../../../../host/layout/workbenchContracts";
 import type { EditorState } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType } from "@codemirror/view";
 import i18n from "../../../../i18n";
@@ -16,7 +16,7 @@ import {
     registerLineSyntaxRenderer,
 } from "../syntaxRenderRegistry";
 import { resolveWikiLinkTarget } from "../../../../api/vaultApi";
-import { openFileInDockview } from "../../../../host/layout/openFileService";
+import { openFileInWorkbench } from "../../../../host/layout/openFileService";
 import { resolveParentDirectory } from "../pathUtils";
 import { parseWikiLinkParts } from "./wikiLinkParser";
 
@@ -125,7 +125,7 @@ class WikiLinkDisplayWidget extends WidgetType {
  * @param target wiki 目标文本。
  */
 export async function openWikiLinkTarget(
-    containerApi: DockviewApi,
+    containerApi: WorkbenchContainerApi,
     getCurrentFilePath: () => string,
     target: string,
 ): Promise<void> {
@@ -149,7 +149,7 @@ export async function openWikiLinkTarget(
             return;
         }
 
-        await openFileInDockview({
+        await openFileInWorkbench({
             containerApi,
             relativePath: resolved.relativePath,
         });
@@ -174,7 +174,7 @@ export async function openWikiLinkTarget(
         if (fallbackPanel) {
             fallbackPanel.api.setActive();
         } else {
-            await openFileInDockview({
+            await openFileInWorkbench({
                 containerApi,
                 relativePath: fallbackPath,
                 contentOverride: `# ${target}\n\n${i18n.t("editor.newPageContent", { target })}`,
@@ -331,7 +331,7 @@ export function registerWikiLinkSyntaxRenderer(): void {
  * @returns CodeMirror 扩展。
  */
 export function createWikiLinkNavigationExtension(
-    containerApi: DockviewApi,
+    containerApi: WorkbenchContainerApi,
     getCurrentFilePath: () => string,
 ): ReturnType<typeof EditorView.domEventHandlers> {
     return EditorView.domEventHandlers({

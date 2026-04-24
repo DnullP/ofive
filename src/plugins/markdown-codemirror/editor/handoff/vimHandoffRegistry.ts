@@ -15,6 +15,10 @@
 
 export type VimHandoffSurface = "editor-body" | "frontmatter-navigation";
 
+export type VimHandoffWidget = "frontmatter" | "markdown-table";
+
+export type VimHandoffWidgetPosition = "first" | "last";
+
 export interface VimHandoffContext {
     surface: VimHandoffSurface;
     key: string;
@@ -34,8 +38,10 @@ export type VimHandoffResult =
         reason: string;
     }
     | {
-        kind: "focus-frontmatter-navigation";
-        position: "first" | "last";
+        kind: "focus-widget-navigation";
+        widget: VimHandoffWidget;
+        position: VimHandoffWidgetPosition;
+        blockFrom?: number;
         reason: string;
     };
 

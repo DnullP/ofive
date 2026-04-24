@@ -86,10 +86,13 @@ describe("handleEditorKeydown", () => {
             isVimModeEnabled: () => false,
             executeSegmentedDeleteBackward,
             executeEditorCommand,
-            focusFrontmatterNavigationTarget: mock(() => false),
+            focusWidgetNavigationTarget: mock(() => false),
             frontmatterSelectors: {
                 focusable: "[data-frontmatter-field-focusable='true']",
                 navigation: "[data-frontmatter-vim-nav='true']",
+            },
+            markdownTableSelectors: {
+                shell: "[data-markdown-table-block-from]",
             },
             dependencies: {
                 canMutateEditorDocument: () => true,
@@ -104,7 +107,7 @@ describe("handleEditorKeydown", () => {
 
     test("should consume vim handoff before shortcut dispatch", () => {
         const view = createViewStub("---\ntitle: Demo\n---\n# Demo");
-        const focusFrontmatterNavigationTarget = mock(() => true);
+        const focusWidgetNavigationTarget = mock(() => true);
         const event = createEventStub({
             key: "k",
         });
@@ -128,23 +131,27 @@ describe("handleEditorKeydown", () => {
             isVimModeEnabled: () => true,
             executeSegmentedDeleteBackward: mock(async () => undefined),
             executeEditorCommand: mock(() => undefined),
-            focusFrontmatterNavigationTarget,
+            focusWidgetNavigationTarget,
             frontmatterSelectors: {
                 focusable: "[data-frontmatter-field-focusable='true']",
                 navigation: "[data-frontmatter-vim-nav='true']",
+            },
+            markdownTableSelectors: {
+                shell: "[data-markdown-table-block-from]",
             },
             dependencies: {
                 dispatchShortcut,
                 resolveEditorBodyAnchor: () => 1,
                 resolveRegisteredVimHandoff: () => ({
-                    kind: "focus-frontmatter-navigation",
+                    kind: "focus-widget-navigation",
+                    widget: "frontmatter",
                     position: "last",
                     reason: "test-handoff",
                 }),
             },
         });
 
-        expect(focusFrontmatterNavigationTarget).toHaveBeenCalledWith("last");
+        expect(focusWidgetNavigationTarget).toHaveBeenCalledWith("frontmatter", "last", undefined);
         expect(event.preventDefault).toHaveBeenCalledTimes(1);
         expect(event.stopPropagation).toHaveBeenCalledTimes(1);
         expect(dispatchShortcut).not.toHaveBeenCalled();
@@ -169,10 +176,13 @@ describe("handleEditorKeydown", () => {
             isVimModeEnabled: () => false,
             executeSegmentedDeleteBackward: mock(async () => undefined),
             executeEditorCommand,
-            focusFrontmatterNavigationTarget: mock(() => false),
+            focusWidgetNavigationTarget: mock(() => false),
             frontmatterSelectors: {
                 focusable: "[data-frontmatter-field-focusable='true']",
                 navigation: "[data-frontmatter-vim-nav='true']",
+            },
+            markdownTableSelectors: {
+                shell: "[data-markdown-table-block-from]",
             },
             dependencies: {
                 dispatchShortcut: () => ({
@@ -213,12 +223,74 @@ describe("handleEditorKeydown", () => {
                 isVimModeEnabled: () => false,
                 executeSegmentedDeleteBackward: mock(async () => undefined),
                 executeEditorCommand: mock(() => undefined),
-                focusFrontmatterNavigationTarget: mock(() => false),
+                focusWidgetNavigationTarget: mock(() => false),
                 frontmatterSelectors: {
                     focusable: "[data-frontmatter-field-focusable='true']",
                     navigation: "[data-frontmatter-vim-nav='true']",
                 },
+                markdownTableSelectors: {
+                    shell: "[data-markdown-table-block-from]",
+                },
             });
         }).not.toThrow();
+    });
+
+    test("should skip editor-body vim handoff for keydown events inside markdown table widget", () => {
+        const view = createViewStub("| a | b |\n| --- | --- |\n| c | d |");
+        const event = createEventStub({
+            key: "j",
+            target: {
+                closest: (selector: string) => {
+                    if (selector === "[data-markdown-table-block-from]") {
+                        return {} as Element;
+                    }
+                    return null;
+                },
+            } as unknown as EventTarget,
+        });
+        const resolveRegisteredVimHandoff = mock(() => ({
+            kind: "focus-widget-navigation" as const,
+            widget: "markdown-table" as const,
+            position: "first" as const,
+            reason: "should-not-run",
+        }));
+        const dispatchShortcut = mock(() => ({
+            kind: "none" as const,
+            commandId: null,
+            shouldPreventDefault: false,
+            shouldStopPropagation: false,
+            notifyTabClose: false,
+            reason: "no-match" as const,
+        }));
+
+        handleEditorKeydown({
+            articleId: "file:demo",
+            event,
+            view,
+            getBindings: () => ({}),
+            getManagedShortcutCandidates: () => [],
+            getCurrentVaultPath: () => "/vault",
+            getDisplayMode: () => "edit",
+            isVimModeEnabled: () => true,
+            executeSegmentedDeleteBackward: mock(async () => undefined),
+            executeEditorCommand: mock(() => undefined),
+            focusWidgetNavigationTarget: mock(() => false),
+            frontmatterSelectors: {
+                focusable: "[data-frontmatter-field-focusable='true']",
+                navigation: "[data-frontmatter-vim-nav='true']",
+            },
+            markdownTableSelectors: {
+                shell: "[data-markdown-table-block-from]",
+            },
+            dependencies: {
+                resolveRegisteredVimHandoff,
+                dispatchShortcut,
+            },
+        });
+
+        expect(resolveRegisteredVimHandoff).not.toHaveBeenCalled();
+        expect(dispatchShortcut).toHaveBeenCalledTimes(1);
+        expect(event.preventDefault).not.toHaveBeenCalled();
+        expect(event.stopPropagation).not.toHaveBeenCalled();
     });
 });

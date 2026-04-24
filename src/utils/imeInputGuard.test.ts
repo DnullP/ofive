@@ -9,7 +9,9 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+    createImeCompositionGuard,
     isImeComposing,
+    shouldAllowBlurActionAfterComposition,
     shouldDeferBlurCommitAfterComposition,
     shouldSubmitPlainEnter,
 } from "./imeInputGuard";
@@ -84,6 +86,14 @@ describe("imeInputGuard", () => {
         })).toBe(false);
     });
 
+    it("应在宽限窗口结束后允许 blur 相关动作继续执行", () => {
+        expect(shouldAllowBlurActionAfterComposition({
+            isComposing: false,
+            lastCompositionEndAt: 100,
+            now: 160,
+        })).toBe(true);
+    });
+
     it("应在组合态刚结束的宽限窗口内阻止 Enter 提交", () => {
         const shouldSubmit = shouldSubmitPlainEnter({
             key: "Enter",
@@ -101,5 +111,25 @@ describe("imeInputGuard", () => {
 
         expect(shouldSubmit).toBe(true);
         expect(shouldDefer).toBe(true);
+    });
+
+    it("共享组合态守卫应统一维护 composing 状态与 blur 延迟窗口", () => {
+        let now = 100;
+        const guard = createImeCompositionGuard({
+            getNow: () => now,
+        });
+
+        guard.handleCompositionStart();
+        expect(guard.state.isComposing).toBe(true);
+        expect(guard.shouldDeferBlurCommit()).toBe(true);
+
+        now = 120;
+        guard.handleCompositionEnd();
+        expect(guard.state.isComposing).toBe(false);
+        expect(guard.state.lastCompositionEndAt).toBe(120);
+        expect(guard.shouldDeferBlurCommit()).toBe(true);
+
+        now = 200;
+        expect(guard.shouldAllowBlurAction()).toBe(true);
     });
 });

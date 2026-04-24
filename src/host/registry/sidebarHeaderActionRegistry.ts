@@ -5,7 +5,7 @@
  *
  * @dependencies
  *   - react (useSyncExternalStore, ReactNode)
- *   - ../layout/DockviewLayout (types only)
+ *   - ../layout/workbenchContracts (types only)
  *   - ../commands/commandSystem (types only)
  *   - ../layout/sidebar/types (types only)
  *
@@ -22,7 +22,7 @@
 
 import { useMemo, useSyncExternalStore, type ReactNode } from "react";
 import type { CommandId } from "../commands/commandSystem";
-import type { PanelRenderContext } from "../layout/DockviewLayout";
+import type { PanelRenderContext } from "../layout/workbenchContracts";
 import type { SidebarSide } from "../layout/sidebar/types";
 
 /**

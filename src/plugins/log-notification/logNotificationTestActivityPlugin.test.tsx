@@ -54,7 +54,7 @@ describe("logNotificationTestActivityPlugin", () => {
         if (activity?.type === "callback") {
             activity.onActivate({
                 activeTabId: null,
-                dockviewApi: null,
+                workbenchApi: null,
                 hostPanelId: null,
                 convertibleView: null,
                 openTab: () => undefined,

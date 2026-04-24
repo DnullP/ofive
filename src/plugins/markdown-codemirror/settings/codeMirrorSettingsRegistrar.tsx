@@ -83,6 +83,24 @@ export function registerCodeMirrorSettingsSection(): () => void {
             updateValue: (nextValue) => updateFeatureSetting("editorLineWrapping", nextValue),
         },
         {
+            id: "tab-restore-mode",
+            sectionId: "codemirror-editor",
+            order: 25,
+            kind: "select",
+            title: "settings.tabRestoreMode",
+            description: "settings.tabRestoreModeDesc",
+            searchTerms: ["tab restore", "cursor", "viewport", "切换标签页", "光标", "视图位置"],
+            useValue: () => useConfigState().featureSettings.editorTabRestoreMode,
+            updateValue: (nextValue) => updateFeatureSetting(
+                "editorTabRestoreMode",
+                nextValue as "viewport" | "cursor",
+            ),
+            options: [
+                { value: "viewport", label: "settings.tabRestoreModeViewport" },
+                { value: "cursor", label: "settings.tabRestoreModeCursor" },
+            ],
+        },
+        {
             id: "line-numbers",
             sectionId: "codemirror-editor",
             order: 30,

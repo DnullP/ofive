@@ -7,7 +7,7 @@
  */
 
 import { afterEach, describe, expect, it } from "bun:test";
-import type { TabInstanceDefinition } from "../layout/DockviewLayout";
+import type { TabInstanceDefinition } from "../layout/workbenchContracts";
 import {
     getFileOpenersSnapshot,
     getMatchingFileOpeners,

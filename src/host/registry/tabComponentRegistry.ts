@@ -26,7 +26,7 @@
  */
 
 import { useSyncExternalStore, type ReactNode } from "react";
-import type { IDockviewPanelProps } from "dockview";
+import type { WorkbenchTabProps } from "../layout/workbenchContracts";
 
 /**
  * @type TabLifecycleScope
@@ -40,14 +40,14 @@ export type TabLifecycleScope = "global" | "vault";
  * @interface TabComponentDescriptor
  * @description Tab 组件的注册描述，将组件 key 映射到一个 React 组件。
  * @field id        - 组件唯一标识（即 component key，如 "codemirror"）
- * @field component - React 组件，接收 dockview 的 IDockviewPanelProps
+ * @field component - React 组件，接收宿主 workbench 的 Tab props
  * @field lifecycleScope - 仓库切换时的生命周期作用域
  */
 export interface TabComponentDescriptor {
     /** 组件唯一标识（component key） */
     id: string;
     /** Tab 渲染组件 */
-    component: (props: IDockviewPanelProps<Record<string, unknown>>) => ReactNode;
+    component: (props: WorkbenchTabProps<Record<string, unknown>>) => ReactNode;
     /** 仓库切换时的生命周期作用域，未声明时默认视为 global */
     lifecycleScope?: TabLifecycleScope;
 }

@@ -22,7 +22,7 @@
  *     isVimModeEnabled: () => true,
  *     executeSegmentedDeleteBackward: async () => undefined,
  *     executeEditorCommand: (commandId) => console.log(commandId),
- *     focusFrontmatterNavigationTarget: () => false,
+ *     focusWidgetNavigationTarget: () => false,
  *     frontmatterSelectors: {
  *       focusable: "[data-frontmatter-field-focusable='true']",
  *       navigation: "[data-frontmatter-vim-nav='true']",
@@ -46,6 +46,8 @@ import { canMutateEditorDocument } from "./editorModePolicy";
 import {
     resolveRegisteredVimHandoff,
     type VimHandoffResult,
+    type VimHandoffWidget,
+    type VimHandoffWidgetPosition,
 } from "./handoff/vimHandoffRegistry";
 import {
     flushFocusedMarkdownTableEditor,
@@ -103,6 +105,11 @@ export interface FrontmatterKeyboardSelectors {
     navigation: string;
 }
 
+export interface MarkdownTableKeyboardSelectors {
+    /** Markdown table widget 根容器。 */
+    shell: string;
+}
+
 /**
  * @interface EditorKeyboardBridgeDependencies
  * @description 键盘桥接的可注入依赖，便于测试与后续替换实现。
@@ -149,10 +156,16 @@ export interface EditorKeyboardBridgeBaseOptions {
     executeSegmentedDeleteBackward(view: EditorView): Promise<void>;
     /** 执行宿主命令。 */
     executeEditorCommand(commandId: CommandId): void;
-    /** 将焦点切入 frontmatter 导航层。 */
-    focusFrontmatterNavigationTarget(position: "first" | "last"): boolean;
+    /** 将焦点切入隐藏 widget 的导航层。 */
+    focusWidgetNavigationTarget(
+        widget: VimHandoffWidget,
+        position: VimHandoffWidgetPosition,
+        blockFrom?: number,
+    ): boolean;
     /** frontmatter 相关 DOM 选择器。 */
     frontmatterSelectors: FrontmatterKeyboardSelectors;
+    /** Markdown table 相关 DOM 选择器。 */
+    markdownTableSelectors: MarkdownTableKeyboardSelectors;
     /** 可选的测试/替换依赖。 */
     dependencies?: Partial<EditorKeyboardBridgeDependencies>;
 }
@@ -198,13 +211,17 @@ function isVimNormalMode(view: EditorView): boolean {
  * @description 执行 Vim handoff 的宿主副作用。
  * @param view 编辑器视图。
  * @param result handoff 结果。
- * @param focusFrontmatterNavigationTarget frontmatter 导航聚焦回调。
+ * @param focusWidgetNavigationTarget 隐藏 widget 导航聚焦回调。
  * @returns 是否成功消费 handoff。
  */
 function applyResolvedVimHandoff(
     view: EditorView,
     result: VimHandoffResult,
-    focusFrontmatterNavigationTarget: (position: "first" | "last") => boolean,
+    focusWidgetNavigationTarget: (
+        widget: VimHandoffWidget,
+        position: VimHandoffWidgetPosition,
+        blockFrom?: number,
+    ) => boolean,
 ): boolean {
     if (result.kind === "move-selection") {
         const targetLine = view.state.doc.line(result.targetLineNumber);
@@ -215,8 +232,8 @@ function applyResolvedVimHandoff(
         return true;
     }
 
-    if (result.kind === "focus-frontmatter-navigation") {
-        return focusFrontmatterNavigationTarget(result.position);
+    if (result.kind === "focus-widget-navigation") {
+        return focusWidgetNavigationTarget(result.widget, result.position, result.blockFrom);
     }
 
     return false;
@@ -266,8 +283,14 @@ export function handleEditorKeydown(options: HandleEditorKeydownOptions): void {
         : null;
     const isFrontmatterNavigationTarget = !!eventTarget?.closest(options.frontmatterSelectors.navigation);
     const isFrontmatterFieldTarget = !!eventTarget?.closest(options.frontmatterSelectors.focusable);
+    const isMarkdownTableTarget = !!eventTarget?.closest(options.markdownTableSelectors.shell);
 
-    if (options.isVimModeEnabled() && !isFrontmatterNavigationTarget && !isFrontmatterFieldTarget) {
+    if (
+        options.isVimModeEnabled()
+        && !isFrontmatterNavigationTarget
+        && !isFrontmatterFieldTarget
+        && !isMarkdownTableTarget
+    ) {
         const selection = view.state.selection.main;
         const bodyAnchor = dependencies.resolveEditorBodyAnchor(view.state);
         const firstBodyLineNumber = view.state.doc.lineAt(bodyAnchor).number;
@@ -289,7 +312,7 @@ export function handleEditorKeydown(options: HandleEditorKeydownOptions): void {
             const handled = applyResolvedVimHandoff(
                 view,
                 handoffResult,
-                options.focusFrontmatterNavigationTarget,
+                options.focusWidgetNavigationTarget,
             );
             if (handled) {
                 event.preventDefault();

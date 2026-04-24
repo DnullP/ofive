@@ -66,6 +66,7 @@ function createFeatureSettings(): FeatureSettings {
         editorFontSize: 16,
         editorTabSize: 4,
         editorLineWrapping: true,
+        editorTabRestoreMode: "viewport",
         editorLineNumbers: "absolute",
         autoSaveEnabled: true,
         autoSaveDelayMs: 1500,

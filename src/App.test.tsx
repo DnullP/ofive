@@ -13,7 +13,7 @@ const actualAutoSaveService = await import("./host/editor/autoSaveService");
 const actualVaultStore = await import("./host/vault/vaultStore");
 const actualWindowEffectsSync = await import("./host/window/useWindowEffectsSync");
 const APP_TEST_TITLEBAR = "titlebar";
-const APP_TEST_DOCKVIEW = "dockview-layout";
+const APP_TEST_WORKBENCH = "workbench-layout";
 const APP_TEST_SETTINGS_TAB = "settings-tab";
 
 mock.module("react-i18next", () => ({
@@ -24,9 +24,8 @@ mock.module("react-i18next", () => ({
 
 mock.module("./host/layout", () => ({
     CustomTitlebar: () => <div>{APP_TEST_TITLEBAR}</div>,
-    DockviewLayout: () => <div>{APP_TEST_DOCKVIEW}</div>,
     SettingsTab: () => <div>{APP_TEST_SETTINGS_TAB}</div>,
-    WorkbenchLayoutHost: () => <div>{APP_TEST_DOCKVIEW}</div>,
+    WorkbenchLayoutHost: () => <div>{APP_TEST_WORKBENCH}</div>,
 }));
 
 mock.module("./host/events/appEventBus", () => ({
@@ -99,6 +98,6 @@ describe("App", () => {
         const markup = renderToStaticMarkup(<App />);
 
         expect(markup).toContain("titlebar");
-        expect(markup).toContain("dockview-layout");
+        expect(markup).toContain("workbench-layout");
     });
 });

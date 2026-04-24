@@ -118,6 +118,19 @@ func TestMinimaxGenerateContentStreamsVendorResponseIntoMultipleYields(t *testin
 	}
 }
 
+func TestNewMinimaxLLMUsesStreamingHTTPClient(t *testing.T) {
+	t.Parallel()
+
+	llm := NewMinimaxLLM("minimax-anthropic", "https://example.com", "MiniMax-M2.7", "test-key")
+
+	if llm.client == nil {
+		t.Fatal("expected minimax client to be initialized")
+	}
+	if llm.client.Timeout != 0 {
+		t.Fatalf("expected minimax streaming client to avoid total timeout, got %s", llm.client.Timeout)
+	}
+}
+
 func TestMinimaxGenerateContentParsesThinkingBlocks(t *testing.T) {
 	t.Parallel()
 

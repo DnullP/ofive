@@ -23,7 +23,7 @@ import React, { useEffect, useState, useCallback, type ReactNode } from "react";
 import { Link2 } from "lucide-react";
 import { registerCommand } from "../../host/commands/commandSystem";
 import { registerPanel } from "../../host/registry/panelRegistry";
-import type { PanelRenderContext } from "../../host/layout/DockviewLayout";
+import type { PanelRenderContext } from "../../host/layout/workbenchContracts";
 import { useActiveEditor } from "../../host/editor/activeEditorStore";
 import { getBacklinksForFile, type BacklinkItem } from "../../api/vaultApi";
 import i18n from "../../i18n";
