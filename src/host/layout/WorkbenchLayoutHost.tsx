@@ -4,6 +4,7 @@ import React, {
     useEffect,
     useMemo,
     useRef,
+    useState,
     type MutableRefObject,
     type ReactNode,
 } from "react";
@@ -60,6 +61,7 @@ import {
     executeCommand,
     getCommandDefinitions,
     type CommandContext,
+    type CreateEntryDraftRequest,
     type CommandId,
 } from "../commands/commandSystem";
 import {
@@ -75,6 +77,7 @@ import {
 import { dispatchShortcut } from "../commands/shortcutDispatcher";
 import { createConditionContext } from "../conditions/conditionEvaluator";
 import i18n from "../../i18n";
+import { CreateEntryModal } from "./CreateEntryModal";
 import "../../../node_modules/layout-v2/dist/layout-v2.css";
 import "./WorkbenchLayoutHost.tokens.css";
 import "./WorkbenchLayoutHost.css";
@@ -358,6 +361,14 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     const rightSidebarVisibleRef = useRef(initialSidebarState.right.visible);
     const sectionRatiosRef = useRef<Record<string, number> | undefined>(sidebarSnapshot?.sectionRatios);
     const sidebarSnapshotRef = useRef(sidebarSnapshot);
+    const [createEntryDraftRequest, setCreateEntryDraftRequest] = useState<{
+        kind: CreateEntryDraftRequest["kind"];
+        baseDirectory: string;
+        title: string;
+        placeholder: string;
+        initialValue: string;
+        resolve: (value: string | null) => void;
+    } | null>(null);
     sidebarSnapshotRef.current = sidebarSnapshot;
 
     /* ── Open file helper ── */
@@ -392,6 +403,43 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         void ensureActivityBarConfigLoaded(currentVaultPath);
         void ensureShortcutBindingsLoaded(currentVaultPath);
     }, [configState.loadedVaultPath, vaultState.currentVaultPath, vaultState.backendReady]);
+
+    const settleCreateEntryDraftRequest = useCallback((value: string | null): void => {
+        setCreateEntryDraftRequest((currentRequest) => {
+            if (!currentRequest) {
+                return null;
+            }
+
+            window.setTimeout(() => {
+                currentRequest.resolve(value);
+            }, 0);
+            return null;
+        });
+    }, []);
+
+    const requestCreateEntryDraft = useCallback(
+        (request: CreateEntryDraftRequest) =>
+            new Promise<string | null>((resolve) => {
+                setCreateEntryDraftRequest((currentRequest) => {
+                    if (currentRequest) {
+                        window.setTimeout(() => {
+                            currentRequest.resolve(null);
+                        }, 0);
+                    }
+
+                    console.info("[workbench-layout-host] open create-entry modal", {
+                        kind: request.kind,
+                        baseDirectory: request.baseDirectory,
+                    });
+
+                    return {
+                        ...request,
+                        resolve,
+                    };
+                });
+            }),
+        [],
+    );
 
     /* ── Build command context helper ── */
 
@@ -431,7 +479,8 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             return true;
         },
         quitApplication: () => requestApplicationQuit(),
-    }), [openFileHelper]);
+        requestCreateEntryDraft,
+    }), [openFileHelper, requestCreateEntryDraft]);
 
     /* ── Active tab → active editor sync ── */
 
@@ -794,6 +843,10 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 initialSidebarState={initialSidebarState}
                 initialSectionRatios={sidebarSnapshot?.sectionRatios}
                 hideEmptyPanelBar
+                renderInactiveTabContent={false}
+                tabDragPreviewRenderMode="overlay"
+                preserveActiveTabContentDuringDrag
+                renderTabContentInDragPreviewLayout={false}
                 renderActivityIcon={renderActivityIcon}
                 renderPanelContent={renderPanelContent}
                 onActivateActivity={handleActivateActivity}
@@ -810,6 +863,26 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                     {overlay.render(overlayRenderContext)}
                 </div>
             ))}
+            <CreateEntryModal
+                isOpen={createEntryDraftRequest !== null}
+                kind={createEntryDraftRequest?.kind ?? "file"}
+                baseDirectory={createEntryDraftRequest?.baseDirectory ?? ""}
+                title={createEntryDraftRequest?.title ?? ""}
+                placeholder={createEntryDraftRequest?.placeholder ?? ""}
+                initialValue={createEntryDraftRequest?.initialValue ?? ""}
+                onClose={() => {
+                    console.info("[workbench-layout-host] close create-entry modal");
+                    settleCreateEntryDraftRequest(null);
+                }}
+                onConfirm={(draftName) => {
+                    console.info("[workbench-layout-host] confirm create-entry modal", {
+                        kind: createEntryDraftRequest?.kind,
+                        baseDirectory: createEntryDraftRequest?.baseDirectory,
+                        draftName,
+                    });
+                    settleCreateEntryDraftRequest(draftName);
+                }}
+            />
         </div>
     );
 }

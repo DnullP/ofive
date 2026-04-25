@@ -299,6 +299,33 @@ function captureEditorViewState(
     };
 }
 
+function restoreEditorViewportWithoutFocus(
+    view: Pick<EditorView, "scrollDOM">,
+    snapshot: Pick<PersistedEditorViewState, "scrollTop" | "scrollLeft">,
+): void {
+    view.scrollDOM.scrollTop = snapshot.scrollTop;
+    view.scrollDOM.scrollLeft = snapshot.scrollLeft;
+
+    window.requestAnimationFrame(() => {
+        view.scrollDOM.scrollTop = snapshot.scrollTop;
+        view.scrollDOM.scrollLeft = snapshot.scrollLeft;
+    });
+}
+
+function blurEditorViewIfFocused(view: Pick<EditorView, "dom">): void {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && view.dom.contains(activeElement)) {
+        activeElement.blur();
+    }
+
+    window.requestAnimationFrame(() => {
+        const nextActiveElement = document.activeElement;
+        if (nextActiveElement instanceof HTMLElement && view.dom.contains(nextActiveElement)) {
+            nextActiveElement.blur();
+        }
+    });
+}
+
 export function restoreEditorSelectionWithoutScrolling(
     view: Pick<EditorView, "state" | "dispatch" | "scrollDOM">,
     selection: RestoredEditorSelection,
@@ -552,7 +579,9 @@ export function useCodeMirrorEditorLifecycle(
             viewRef.current = new EditorView({
                 state,
                 parent: options.hostRef.current,
-                scrollTo: restoredViewState?.scrollSnapshot ?? undefined,
+                scrollTo: restoredViewState && options.editorTabRestoreMode === "cursor"
+                    ? restoredViewState.scrollSnapshot ?? undefined
+                    : undefined,
             });
         } catch (constructionError) {
             console.error("[editor] EditorView construction failed", {
@@ -570,12 +599,10 @@ export function useCodeMirrorEditorLifecycle(
             if (options.editorTabRestoreMode === "cursor") {
                 revealEditorSelection(viewRef.current, restoredViewState);
             } else {
-                if (restoredViewState.scrollSnapshot === null) {
-                    viewRef.current.scrollDOM.scrollTop = restoredViewState.scrollTop;
-                    viewRef.current.scrollDOM.scrollLeft = restoredViewState.scrollLeft;
-                }
-
+                restoreEditorViewportWithoutFocus(viewRef.current, restoredViewState);
                 restoreEditorSelectionWithoutScrolling(viewRef.current, restoredViewState);
+                restoreEditorViewportWithoutFocus(viewRef.current, restoredViewState);
+                blurEditorViewIfFocused(viewRef.current);
             }
         }
 

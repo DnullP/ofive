@@ -26,6 +26,7 @@ import { readWorkbenchLayoutMode } from "../../src/host/layout/workbenchLayoutMo
 import { CodeMirrorEditorTab } from "../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
 import { KnowledgeGraphTab } from "../../src/plugins/knowledge-graph/tab/KnowledgeGraphTab";
 import { CanvasTab } from "../../src/plugins/canvas/CanvasTab";
+import { activatePlugin as activateCommandPalettePlugin } from "../../src/plugins/command-palette/commandPalettePlugin";
 import { SettingsTab } from "../../src/host/layout/SettingsTab";
 import { useConfigSync } from "../../src/host/config/configStore";
 import { registerActivity } from "../../src/host/registry/activityRegistry";
@@ -518,6 +519,8 @@ const MOCK_KNOWLEDGE_GRAPH_ACTIVITY_ID = "knowledge-graph";
 function ensureMockComponentsRegistered(): void {
     if (mockRegistered) return;
     mockRegistered = true;
+
+    activateCommandPalettePlugin();
 
     const filesIcon = React.createElement(FolderOpen, { size: 18, strokeWidth: 1.8 });
     const searchIcon = React.createElement(Search, { size: 18, strokeWidth: 1.8 });

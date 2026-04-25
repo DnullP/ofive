@@ -576,14 +576,14 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
     }, [initialDoc]);
 
     useEffect(() => {
-        if (effectiveDisplayMode !== "edit" || !isActiveEditor) {
+        if (effectiveDisplayMode !== "edit" || !isActiveEditor || editorTabRestoreMode === "viewport") {
             return;
         }
 
         window.requestAnimationFrame(() => {
             focusActiveEditorSurface();
         });
-    }, [effectiveDisplayMode, isActiveEditor]);
+    }, [effectiveDisplayMode, editorTabRestoreMode, isActiveEditor]);
 
     /* 仅当前活跃 editor 订阅定位请求，避免非活跃 tab 响应外部导航事件 */
     useEffect(() => {

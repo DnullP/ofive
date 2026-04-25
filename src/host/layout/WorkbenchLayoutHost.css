@@ -199,6 +199,17 @@
     display: none;
 }
 
+/* layout-v2 inactive tab card: 保持非激活 tab 的组件缓存，同时用祖先透明度压住 xyflow 等子组件重设 visibility 后的视觉逃逸。 */
+.workbench-layout-v2 .layout-v2-tab-section__card--inactive {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* layout-v2 active tab card: 明确恢复当前 tab 可见性，避免宿主覆盖规则影响激活内容。 */
+.workbench-layout-v2 .layout-v2-tab-section__card--active {
+    opacity: 1;
+}
+
 /* Override layout-v2 panel-section pane styling: remove decorative chrome so
    ofive panels fill the entire sidebar area flush. */
 .workbench-layout-v2 .layout-v2-panel-section__content {
