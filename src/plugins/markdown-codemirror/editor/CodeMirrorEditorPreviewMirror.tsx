@@ -20,7 +20,46 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 type EditorPreviewSourceGetter = () => HTMLElement | null;
 
+const EDITOR_PREVIEW_SNAPSHOT_CACHE_LIMIT = 128;
 const editorPreviewSources = new Map<string, EditorPreviewSourceGetter>();
+const editorPreviewSnapshotCache = new Map<string, HTMLElement>();
+
+/**
+ * @function cacheEditorPreviewSnapshot
+ * @description 缓存指定 editor 的最近一次可见 DOM 镜像，供 inactive tab 在预览阶段复用。
+ * @param articleId editor tab 对应的文章标识。
+ * @param source 源 editor 根 DOM。
+ * @returns void。
+ */
+function cacheEditorPreviewSnapshot(articleId: string, source: HTMLElement): void {
+    editorPreviewSnapshotCache.delete(articleId);
+    editorPreviewSnapshotCache.set(articleId, createEditorPreviewMirrorClone(source));
+
+    while (editorPreviewSnapshotCache.size > EDITOR_PREVIEW_SNAPSHOT_CACHE_LIMIT) {
+        const oldestArticleId = editorPreviewSnapshotCache.keys().next().value;
+        if (typeof oldestArticleId !== "string") {
+            return;
+        }
+        editorPreviewSnapshotCache.delete(oldestArticleId);
+    }
+}
+
+/**
+ * @function cloneCachedEditorPreviewSnapshot
+ * @description 克隆缓存中的 editor DOM 镜像，避免 preview 直接复用同一个 DOM 节点。
+ * @param articleId editor tab 对应的文章标识。
+ * @returns 缓存存在时返回新的 DOM 克隆，否则返回 null。
+ */
+function cloneCachedEditorPreviewSnapshot(articleId: string): HTMLElement | null {
+    const snapshot = editorPreviewSnapshotCache.get(articleId) ?? null;
+    if (!snapshot) {
+        return null;
+    }
+
+    const clone = snapshot.cloneNode(true) as HTMLElement;
+    copyScrollableOffsets(snapshot, clone);
+    return clone;
+}
 
 /**
  * @function registerCodeMirrorEditorPreviewSource
@@ -34,9 +73,18 @@ export function registerCodeMirrorEditorPreviewSource(
     getSourceElement: EditorPreviewSourceGetter,
 ): () => void {
     editorPreviewSources.set(articleId, getSourceElement);
+    const sourceElement = getSourceElement();
+    if (sourceElement) {
+        cacheEditorPreviewSnapshot(articleId, sourceElement);
+    }
     console.debug("[editor-preview-mirror] source registered", { articleId });
 
     return () => {
+        const sourceElement = getSourceElement();
+        if (sourceElement) {
+            cacheEditorPreviewSnapshot(articleId, sourceElement);
+        }
+
         if (editorPreviewSources.get(articleId) === getSourceElement) {
             editorPreviewSources.delete(articleId);
             console.debug("[editor-preview-mirror] source unregistered", { articleId });
@@ -140,19 +188,28 @@ export function CodeMirrorEditorPreviewMirror(props: CodeMirrorEditorPreviewMirr
 
         mirrorHost.innerHTML = "";
         const sourceElement = editorPreviewSources.get(articleId)?.() ?? null;
+        let mirrorClone: HTMLElement | null = null;
         if (!sourceElement) {
-            console.warn("[editor-preview-mirror] source missing", { articleId, title });
-            setHasMirror(false);
-            return;
+            mirrorClone = cloneCachedEditorPreviewSnapshot(articleId);
+            if (!mirrorClone) {
+                console.warn("[editor-preview-mirror] source missing", { articleId, title });
+                setHasMirror(false);
+                return;
+            }
+        } else {
+            mirrorClone = createEditorPreviewMirrorClone(sourceElement);
+            cacheEditorPreviewSnapshot(articleId, sourceElement);
         }
 
-        const mirrorClone = createEditorPreviewMirrorClone(sourceElement);
         mirrorHost.appendChild(mirrorClone);
         setHasMirror(true);
 
-        window.requestAnimationFrame(() => {
-            copyScrollableOffsets(sourceElement, mirrorClone);
-        });
+        if (sourceElement) {
+            window.requestAnimationFrame(() => {
+                copyScrollableOffsets(sourceElement, mirrorClone);
+                cacheEditorPreviewSnapshot(articleId, sourceElement);
+            });
+        }
 
         return () => {
             mirrorHost.innerHTML = "";

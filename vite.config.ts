@@ -110,6 +110,11 @@ function resolveManualChunk(id: string): string | undefined {
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
+  optimizeDeps: {
+    // layout-v2 is linked via `file:../layout-v2`; excluding it avoids stale
+    // optimized-dep caches after local rebuilds during tauri dev restarts.
+    exclude: ["layout-v2"],
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

@@ -82,7 +82,7 @@ import { createConditionContext } from "../conditions/conditionEvaluator";
 import i18n from "../../i18n";
 import { CreateEntryModal } from "./CreateEntryModal";
 import { CodeMirrorEditorPreviewMirror } from "../../plugins/markdown-codemirror/editor/CodeMirrorEditorPreviewMirror";
-import "../../../node_modules/layout-v2/dist/layout-v2.css";
+import "layout-v2/styles.css";
 import "./WorkbenchLayoutHost.tokens.css";
 import "./WorkbenchLayoutHost.css";
 
@@ -745,7 +745,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
     /**
      * @function renderTabDragPreviewContent
-     * @description 为 layout-v2 split preview 渲染宿主侧轻量内容；Markdown editor 使用 DOM 镜像而不是重新挂载 EditorView。
+     * @description 为 layout-v2 split preview 渲染宿主侧轻量内容；Markdown editor 在 overlay 预览树中使用 DOM 镜像而不是重新挂载 EditorView。
      * @param tab layout-v2 当前 preview tab 定义。
      * @param context layout-v2 preview 内容上下文。
      * @returns preview 内容；非 CodeMirror tab 返回 undefined 以使用 layout-v2 默认占位。
@@ -755,7 +755,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         context: TabDragPreviewContentRenderContext,
     ): ReactNode => {
         const payload = readWorkbenchTabPayload(tab);
-        if (!context.isPreviewTabSection || payload.component !== "codemirror") {
+        if (payload.component !== "codemirror" || (context.renderMode !== "overlay" && !context.isPreviewTabSection)) {
             return undefined;
         }
 

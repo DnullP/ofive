@@ -29,6 +29,58 @@ type ConsoleMethod = (...args: unknown[]) => void;
 let initialized = false;
 
 /**
+ * @function serializeLogArg
+ * @description 将单个 console 参数序列化为可传输文本。
+ * @param item 原始日志参数。
+ * @returns 序列化后的字符串。
+ */
+function serializeLogArg(item: unknown): string {
+    if (typeof item === "string") {
+        return item;
+    }
+
+    if (item instanceof Error) {
+        return JSON.stringify({
+            name: item.name,
+            message: item.message,
+            stack: item.stack,
+        });
+    }
+
+    try {
+        return JSON.stringify(item);
+    } catch {
+        return String(item);
+    }
+}
+
+/**
+ * @function formatConsolePlaceholders
+ * @description 处理 React 等库常用的 `%s` console 占位符，避免后端日志出现原始模板文本。
+ * @param args 原始日志参数。
+ * @returns 展开占位符后的日志参数。
+ */
+function formatConsolePlaceholders(args: unknown[]): string[] {
+    if (args.length === 0 || typeof args[0] !== "string") {
+        return args.map((item) => serializeLogArg(item));
+    }
+
+    let placeholderIndex = 1;
+    const formattedHead = args[0].replace(/%s/g, () => {
+        if (placeholderIndex >= args.length) {
+            return "%s";
+        }
+
+        const replacement = serializeLogArg(args[placeholderIndex]);
+        placeholderIndex += 1;
+        return replacement;
+    });
+
+    const trailingArgs = args.slice(placeholderIndex).map((item) => serializeLogArg(item));
+    return [formattedHead, ...trailingArgs];
+}
+
+/**
  * @function isTauriRuntime
  * @description 判断是否运行在 Tauri 宿主环境。
  * @returns Tauri 环境返回 true。
@@ -53,27 +105,7 @@ function isTauriRuntime(): boolean {
  * @returns 序列化后的字符串。
  */
 function stringifyLogArgs(args: unknown[]): string {
-    return args
-        .map((item) => {
-            if (typeof item === "string") {
-                return item;
-            }
-
-            if (item instanceof Error) {
-                return JSON.stringify({
-                    name: item.name,
-                    message: item.message,
-                    stack: item.stack,
-                });
-            }
-
-            try {
-                return JSON.stringify(item);
-            } catch {
-                return String(item);
-            }
-        })
-        .join(" ");
+    return formatConsolePlaceholders(args).join(" ");
 }
 
 /**

@@ -17,6 +17,7 @@ const MOUSE_DRAG_TAG = "@mouse-drag";
 const LIVE_EDITOR_SELECTOR = ".cm-editor:not([data-editor-preview-mirror-node='true'])";
 const PREVIEW_MIRROR_SELECTOR = "[data-editor-preview-mirror='true']";
 const PREVIEW_MIRROR_EDITOR_SELECTOR = ".cm-editor[data-editor-preview-mirror-node='true']";
+const PREVIEW_MIRROR_FALLBACK_SELECTOR = ".cm-editor-preview-mirror__fallback";
 const NOTES_TO_OPEN = [
     "test-resources/notes/guide.md",
     "test-resources/notes/network-segment.md",
@@ -193,6 +194,8 @@ test.describe("editor split performance", () => {
         await expect(previewTabSection).toBeVisible();
         await expect(previewTabSection.locator(PREVIEW_MIRROR_SELECTOR)).toBeVisible();
         await expect(previewTabSection.locator(PREVIEW_MIRROR_EDITOR_SELECTOR)).toHaveCount(1);
+        await expect(previewOverlay.locator(PREVIEW_MIRROR_FALLBACK_SELECTOR)).toHaveCount(0);
+        await expect(previewOverlay).not.toContainText("Preview:");
         await expect(previewOverlay.locator(LIVE_EDITOR_SELECTOR)).toHaveCount(0);
         await expect(page.locator(LIVE_EDITOR_SELECTOR)).toHaveCount(1);
 

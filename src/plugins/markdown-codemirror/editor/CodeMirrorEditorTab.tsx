@@ -9,7 +9,7 @@
  *  - ./codemirrorTheme
  */
 
-import { Component, useEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
+import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
 import { BookOpen, SquarePen } from "lucide-react";
 import { EditorView } from "codemirror";
 import { indentLess, indentMore, redo, toggleComment, undo } from "@codemirror/commands";
@@ -302,7 +302,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
     const [readContent, setReadContent] = useState<string>(initialDoc);
 
     const articleId = props.api.id;
-    useEffect(() => {
+    useLayoutEffect(() => {
         return registerCodeMirrorEditorPreviewSource(articleId, () => tabRootRef.current);
     }, [articleId]);
 
