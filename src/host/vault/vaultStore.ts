@@ -31,10 +31,34 @@ import i18n from "../../i18n";
 export const EMPTY_VAULT_PATH = "";
 
 /**
+ * @constant BROWSER_FALLBACK_DEFAULT_VAULT_PATH
+ * @description 浏览器 fallback 模式下默认打开的 mock vault，保证 web 开发入口可直接看到样例文章。
+ */
+const BROWSER_FALLBACK_DEFAULT_VAULT_PATH = "/mock/notes";
+
+/**
  * @constant LAST_VAULT_PATH_STORAGE_KEY
  * @description 本地持久化“上次打开仓库路径”的存储键。
  */
 const LAST_VAULT_PATH_STORAGE_KEY = "ofive:last-vault-path";
+
+/**
+ * @function isTauriRuntime
+ * @description 判断当前是否运行在 Tauri 环境。
+ * @returns 若检测到 Tauri 注入对象则返回 true。
+ */
+function isTauriRuntime(): boolean {
+    if (typeof window === "undefined") {
+        return false;
+    }
+
+    const runtimeWindow = window as Window & {
+        __TAURI_INTERNALS__?: unknown;
+        __TAURI__?: unknown;
+    };
+
+    return Boolean(runtimeWindow.__TAURI_INTERNALS__ || runtimeWindow.__TAURI__);
+}
 
 /**
  * @constant TREE_REFRESH_EVENT_TYPES
@@ -52,17 +76,21 @@ const TREE_REFRESH_EVENT_TYPES: VaultFsEventPayload["eventType"][] = [
  * @returns 若存在有效路径则返回该路径，否则返回空路径。
  */
 function readPersistedVaultPath(): string {
-    if (!isRememberLastVaultEnabled()) {
-        return EMPTY_VAULT_PATH;
-    }
-
     if (typeof window === "undefined") {
         return EMPTY_VAULT_PATH;
     }
 
+    const fallbackPath = isTauriRuntime()
+        ? EMPTY_VAULT_PATH
+        : BROWSER_FALLBACK_DEFAULT_VAULT_PATH;
+
+    if (!isRememberLastVaultEnabled()) {
+        return fallbackPath;
+    }
+
     const persisted = window.localStorage.getItem(LAST_VAULT_PATH_STORAGE_KEY);
     if (!persisted || persisted.trim().length === 0) {
-        return EMPTY_VAULT_PATH;
+        return fallbackPath;
     }
 
     return persisted;

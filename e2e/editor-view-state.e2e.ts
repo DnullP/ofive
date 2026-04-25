@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
 const SCROLL_NOTE_PATH = "test-resources/notes/scroll-regression.md";
 const ALT_SCROLL_NOTE_PATH = "test-resources/notes/scroll-regression-alt.md";
+const FRONTMATTER_NOTE_PATH = "test-resources/notes/network-segment.md";
 
 async function waitForMockWorkbench(page: Page): Promise<void> {
     await page.goto(MOCK_PAGE);
@@ -80,6 +81,25 @@ async function readVisibleEditorState(page: Page): Promise<{
     });
 }
 
+async function readVisibleEditorFrontmatterState(page: Page): Promise<{
+    frontmatterWidgetCount: number;
+    hiddenLineCount: number;
+    hiddenAnchorCount: number;
+}> {
+    return page.evaluate(() => {
+        const activeCard = document.querySelector<HTMLElement>(".layout-v2-tab-section__card[aria-hidden='false']");
+        if (!activeCard) {
+            throw new Error("readVisibleEditorFrontmatterState: visible editor missing");
+        }
+
+        return {
+            frontmatterWidgetCount: activeCard.querySelectorAll(".cm-frontmatter-widget").length,
+            hiddenLineCount: activeCard.querySelectorAll(".cm-hidden-block-line").length,
+            hiddenAnchorCount: activeCard.querySelectorAll(".cm-hidden-block-anchor-line").length,
+        };
+    });
+}
+
 async function updateEditorTabRestoreMode(page: Page, nextMode: "viewport" | "cursor"): Promise<void> {
     await page.evaluate(async (mode) => {
         const configStoreModule = await import("/src/host/config/configStore.ts");
@@ -113,6 +133,15 @@ test.describe("editor view state regression", () => {
 
         await page.getByRole("button", { name: "scroll-regression.md" }).first().click();
         expect((await readVisibleEditorState(page)).title).toBe("scroll-regression");
+    });
+
+    test("viewport mode keeps frontmatter collapsed on first open", async ({ page }) => {
+        await openMockNote(page, FRONTMATTER_NOTE_PATH);
+
+        const frontmatterState = await readVisibleEditorFrontmatterState(page);
+        expect(frontmatterState.frontmatterWidgetCount).toBe(1);
+        expect(frontmatterState.hiddenLineCount).toBeGreaterThan(0);
+        expect(frontmatterState.hiddenAnchorCount).toBe(1);
     });
 
     test("viewport restore mode preserves reading progress without restoring editor focus", async ({ page }) => {

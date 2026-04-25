@@ -35,7 +35,7 @@ import { registerPanel } from "../../src/host/registry/panelRegistry";
 import { registerTabComponent } from "../../src/host/registry/tabComponentRegistry";
 import { buildFileTabId, normalizeRelativePath } from "../../src/host/layout/openFileService";
 import { publishNotification } from "../../src/host/notifications/notificationCenter";
-import { readVaultMarkdownFile } from "../../src/api/vaultApi";
+import { readVaultMarkdownFile, setCurrentVault } from "../../src/api/vaultApi";
 import { MockVaultPanel } from "./MockVaultPanel";
 import "../../src/plugins/ai-chat/aiChatPlugin.css";
 import "../../src/plugins/backlinks/backlinksPlugin.css";
@@ -744,6 +744,27 @@ export function MockApp(): ReactNode {
     const [glassInactiveSurfaceOpacity, setGlassInactiveSurfaceOpacity] = useState<number>(() => resolveInitialNumberFlag("inactiveSurface", 0.12));
     const [glassBlurRadius, setGlassBlurRadius] = useState<number>(() => resolveInitialNumberFlag("blur", 16));
     const [isSplitReplayRunning, setIsSplitReplayRunning] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        console.info("[MockApp] set current mock vault", { mockVaultPath });
+        void setCurrentVault(mockVaultPath)
+            .then(() => {
+                if (!cancelled) {
+                    console.info("[MockApp] current mock vault ready", { mockVaultPath });
+                }
+            })
+            .catch((error) => {
+                console.error("[MockApp] failed to set current mock vault", {
+                    mockVaultPath,
+                    message: error instanceof Error ? error.message : String(error),
+                });
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [mockVaultPath]);
 
     useConfigSync(mockVaultPath, true);
     ensureMockComponentsRegistered();

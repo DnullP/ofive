@@ -87,6 +87,7 @@ import {
 import { getRegisteredEditPluginExtensions } from "./editPluginRegistry";
 import { editorBaseSetup } from "./editorBaseSetup";
 import type { EditorChineseSegmentationController } from "./editorChineseSegmentation";
+import { resolveEditorBodyAnchor } from "./editorBodyAnchor";
 import { attachPasteImageHandler } from "./editorPasteImageHandler";
 import { buildLineNumbersExtension } from "./lineNumbersModeExtension";
 import { canMutateEditorDocument } from "./editorModePolicy";
@@ -368,6 +369,60 @@ export function revealEditorSelection(
 }
 
 /**
+ * @function clampEditorOffset
+ * @description 将编辑器偏移量限制在当前文档范围内，避免首次恢复时落到无效位置。
+ * @param offset 目标偏移量。
+ * @param docLength 文档长度。
+ * @returns 夹取后的安全偏移量。
+ */
+function clampEditorOffset(offset: number, docLength: number): number {
+    return Math.max(0, Math.min(offset, docLength));
+}
+
+/**
+ * @function resolveInitialEditorSelection
+ * @description 解析编辑器首次创建时应种下的初始选区。
+ *   当文章含有 frontmatter 且没有已保存视图状态时，默认将光标放到正文锚点，
+ *   避免首帧把隐藏的 frontmatter 源码直接暴露出来。
+ * @param options 初始选区所需上下文。
+ * @returns 初始选区；若无需覆盖默认选区则返回 null。
+ */
+export function resolveInitialEditorSelection(options: {
+    initialDoc: string;
+    restoredViewState: PersistedEditorViewState | null;
+    editorTabRestoreMode: EditorTabRestoreMode;
+    initialCursorOffset: number | null;
+}): RestoredEditorSelection | null {
+    if (options.restoredViewState && options.editorTabRestoreMode === "cursor") {
+        return {
+            anchor: options.restoredViewState.anchor,
+            head: options.restoredViewState.head,
+        };
+    }
+
+    const docLength = options.initialDoc.length;
+    if (typeof options.initialCursorOffset === "number") {
+        const clampedOffset = clampEditorOffset(options.initialCursorOffset, docLength);
+        return {
+            anchor: clampedOffset,
+            head: clampedOffset,
+        };
+    }
+
+    const bodyAnchor = resolveEditorBodyAnchor(EditorState.create({
+        doc: options.initialDoc,
+    }));
+    if (bodyAnchor <= 0) {
+        return null;
+    }
+
+    return {
+        anchor: bodyAnchor,
+        head: bodyAnchor,
+    };
+}
+
+/**
  * @function useCodeMirrorEditorLifecycle
  * @description 管理 EditorView 的创建、更新、gutter 补偿同步与清理。
  * @param options 生命周期 Hook 参数。
@@ -435,6 +490,12 @@ export function useCodeMirrorEditorLifecycle(
                 ? clampEditorViewState(persistedViewState, options.initialDoc.length)
                 : null;
         })();
+        const initialSelection = resolveInitialEditorSelection({
+            initialDoc: options.initialDoc,
+            restoredViewState,
+            editorTabRestoreMode: options.editorTabRestoreMode,
+            initialCursorOffset: options.initialCursorOffset,
+        });
 
         const extensions = [
             vimModeCompartmentRef.current.of(options.vimModeEnabled ? vim() : []),
@@ -566,12 +627,7 @@ export function useCodeMirrorEditorLifecycle(
 
         const state = EditorState.create({
             doc: options.initialDoc,
-            selection: restoredViewState && options.editorTabRestoreMode === "cursor"
-                ? {
-                    anchor: restoredViewState.anchor,
-                    head: restoredViewState.head,
-                }
-                : undefined,
+            selection: initialSelection ?? undefined,
             extensions: extensions as Extension,
         });
 
@@ -677,7 +733,10 @@ export function useCodeMirrorEditorLifecycle(
             && !restoredViewState
         ) {
             options.hasAppliedInitialAutoFocusRef.current = true;
-            const targetOffset = Math.max(0, Math.min(options.initialCursorOffset ?? state.doc.length, state.doc.length));
+            const targetOffset = clampEditorOffset(
+                options.initialCursorOffset ?? state.selection.main.head,
+                state.doc.length,
+            );
             window.requestAnimationFrame(() => {
                 const liveView = viewRef.current;
                 if (!liveView) {

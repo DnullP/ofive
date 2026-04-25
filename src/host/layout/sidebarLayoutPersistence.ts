@@ -6,6 +6,7 @@
  * @dependencies
  *   - ../../api/vaultApi
  *   - ./layoutStateReducers
+ *   - layout-v2
  *
  * @example
  *   const snapshot = getSidebarLayoutFromVaultConfig(config);
@@ -15,6 +16,13 @@
 
 import type { VaultConfig } from "../../api/vaultApi";
 import type { PanelDefinitionInfo, PanelPosition, PanelRuntimeState } from "./layoutStateReducers";
+import type {
+    SectionNode,
+    WorkbenchPanelLayoutSnapshot,
+    WorkbenchPanelSectionLayoutSnapshot,
+    WorkbenchSectionData,
+    WorkbenchSectionRole,
+} from "layout-v2";
 
 /** 侧边栏布局配置键。 */
 export const SIDEBAR_LAYOUT_CONFIG_KEY = "sidebarLayout";
@@ -79,6 +87,8 @@ export interface SidebarLayoutSnapshot {
     convertiblePanelStates: SidebarConvertibleViewSnapshot[];
     /** section 分割比例（sectionId → ratio），用于恢复拖拽后的尺寸。 */
     sectionRatios?: Record<string, number>;
+    /** panel icon split 拓扑快照，用于恢复动态 panel section。 */
+    panelLayout?: WorkbenchPanelLayoutSnapshot;
 }
 
 /**
@@ -213,6 +223,154 @@ function normalizeConvertiblePanelState(value: unknown): SidebarConvertibleViewS
 }
 
 /**
+ * @function normalizeWorkbenchSectionRole
+ * @description 规范化持久化 section role，非法值回退为 container 以避免恢复崩溃。
+ * @param value 原始 role。
+ * @returns 合法 role。
+ */
+function normalizeWorkbenchSectionRole(value: unknown): WorkbenchSectionRole {
+    if (value === "root" || value === "container" || value === "activity-bar" || value === "sidebar" || value === "main") {
+        return value;
+    }
+    return "container";
+}
+
+/**
+ * @function normalizeSectionResizableEdges
+ * @description 规范化 section 可 resize 边信息。
+ * @param value 原始边信息。
+ * @returns 完整边信息。
+ */
+function normalizeSectionResizableEdges(value: unknown): SectionNode<WorkbenchSectionData>["resizableEdges"] {
+    const edges = toSafeObject(value);
+    return {
+        top: typeof edges?.top === "boolean" ? edges.top : true,
+        right: typeof edges?.right === "boolean" ? edges.right : true,
+        bottom: typeof edges?.bottom === "boolean" ? edges.bottom : true,
+        left: typeof edges?.left === "boolean" ? edges.left : true,
+    };
+}
+
+/**
+ * @function normalizePanelLayoutSectionNode
+ * @description 递归规范化 panel layout section tree，非法节点返回 null。
+ * @param value 原始 section tree 节点。
+ * @returns 可交给 layout-v2 恢复的 section tree 节点。
+ */
+function normalizePanelLayoutSectionNode(value: unknown): SectionNode<WorkbenchSectionData> | null {
+    const node = toSafeObject(value);
+    const data = toSafeObject(node?.data);
+    const component = toSafeObject(data?.component);
+    if (!node || !data || !component) {
+        return null;
+    }
+
+    const id = typeof node.id === "string" ? node.id.trim() : "";
+    const title = typeof node.title === "string" ? node.title : id;
+    const componentType = typeof component.type === "string" ? component.type.trim() : "";
+    if (!id || !componentType) {
+        return null;
+    }
+
+    const splitRaw = node.split;
+    let split: SectionNode<WorkbenchSectionData>["split"] = null;
+    if (splitRaw !== null && splitRaw !== undefined) {
+        const splitObject = toSafeObject(splitRaw);
+        const children = Array.isArray(splitObject?.children) ? splitObject.children : [];
+        const first = normalizePanelLayoutSectionNode(children[0]);
+        const second = normalizePanelLayoutSectionNode(children[1]);
+        const direction = splitObject?.direction === "vertical" ? "vertical" : "horizontal";
+        const ratio = typeof splitObject?.ratio === "number" && Number.isFinite(splitObject.ratio)
+            ? splitObject.ratio
+            : 0.5;
+
+        if (!first || !second) {
+            return null;
+        }
+
+        split = {
+            direction,
+            ratio,
+            children: [first, second],
+        };
+    }
+
+    return {
+        id,
+        title,
+        data: {
+            role: normalizeWorkbenchSectionRole(data.role),
+            component: {
+                type: componentType,
+                props: toSafeObject(component.props) ?? {},
+            } as WorkbenchSectionData["component"],
+        },
+        resizableEdges: normalizeSectionResizableEdges(node.resizableEdges),
+        meta: toSafeObject(node.meta) ?? undefined,
+        split,
+    };
+}
+
+/**
+ * @function normalizePanelSectionLayoutSnapshot
+ * @description 规范化单个 panel section 持久化快照。
+ * @param value 原始 section 快照。
+ * @returns 合法快照；非法时返回 null。
+ */
+function normalizePanelSectionLayoutSnapshot(
+    value: unknown,
+): WorkbenchPanelSectionLayoutSnapshot | null {
+    const item = toSafeObject(value);
+    if (!item) {
+        return null;
+    }
+
+    const id = typeof item.id === "string" ? item.id.trim() : "";
+    if (!id) {
+        return null;
+    }
+
+    const panelIds = Array.isArray(item.panelIds)
+        ? item.panelIds.filter((panelId): panelId is string => typeof panelId === "string" && panelId.trim().length > 0)
+        : [];
+    const focusedPanelId = typeof item.focusedPanelId === "string" ? item.focusedPanelId : null;
+
+    return {
+        id,
+        panelIds,
+        focusedPanelId,
+        isCollapsed: typeof item.isCollapsed === "boolean" ? item.isCollapsed : false,
+        isRoot: typeof item.isRoot === "boolean" ? item.isRoot : undefined,
+    };
+}
+
+/**
+ * @function normalizePanelLayoutSnapshot
+ * @description 规范化 panel icon split 拓扑快照。
+ * @param value 原始 panel layout 快照。
+ * @returns 合法快照；不存在或非法时返回 undefined。
+ */
+function normalizePanelLayoutSnapshot(value: unknown): WorkbenchPanelLayoutSnapshot | undefined {
+    const item = toSafeObject(value);
+    if (!item) {
+        return undefined;
+    }
+
+    const root = normalizePanelLayoutSectionNode(item.root);
+    const sections = Array.isArray(item.sections)
+        ? item.sections
+              .map((section) => normalizePanelSectionLayoutSnapshot(section))
+              .filter((section): section is WorkbenchPanelSectionLayoutSnapshot => section !== null)
+        : [];
+
+    if (!root || sections.length === 0) {
+        return undefined;
+    }
+
+    return { root, sections };
+}
+
+/**
  * @function parseSidebarLayoutConfig
  * @description 从 VaultConfig.entries 解析侧边栏工作区快照。
  * @param entries 仓库配置 entries。
@@ -247,6 +405,7 @@ export function parseSidebarLayoutConfig(entries: Record<string, unknown>): Side
               ),
           ) as Record<string, number>
         : undefined;
+    const panelLayout = normalizePanelLayoutSnapshot(root.panelLayout);
 
     return {
         version: 1,
@@ -256,6 +415,7 @@ export function parseSidebarLayoutConfig(entries: Record<string, unknown>): Side
         paneStates,
         convertiblePanelStates,
         sectionRatios: sectionRatios && Object.keys(sectionRatios).length > 0 ? sectionRatios : undefined,
+        panelLayout,
     };
 }
 
@@ -292,6 +452,7 @@ export function buildSidebarLayoutConfigValue(
             sourceParams: item.sourceParams ? { ...item.sourceParams } : undefined,
         })),
         sectionRatios: snapshot.sectionRatios ? { ...snapshot.sectionRatios } : undefined,
+        panelLayout: snapshot.panelLayout,
     };
 }
 

@@ -15,6 +15,7 @@
 import { describe, expect, test } from "bun:test";
 import {
     revealEditorSelection,
+    resolveInitialEditorSelection,
     restoreEditorSelectionWithoutScrolling,
     safeDestroyEditorView,
     syncEditorTabGutterWidth,
@@ -242,5 +243,59 @@ describe("revealEditorSelection", () => {
         expect(dispatched).toHaveLength(1);
         expect(dispatched[0]?.selection).toEqual({ anchor: 12, head: 34 });
         expect(dispatched[0]?.effects).toBeTruthy();
+    });
+});
+
+describe("resolveInitialEditorSelection", () => {
+    test("seeds the first open of a frontmatter note at the body anchor", () => {
+        const initialDoc = [
+            "---",
+            "title: Demo",
+            "---",
+            "# Body",
+            "",
+        ].join("\n");
+        const bodyAnchor = initialDoc.indexOf("# Body");
+
+        expect(resolveInitialEditorSelection({
+            initialDoc,
+            restoredViewState: null,
+            editorTabRestoreMode: "viewport",
+            initialCursorOffset: null,
+        })).toEqual({
+            anchor: bodyAnchor,
+            head: bodyAnchor,
+        });
+    });
+
+    test("prefers an explicit initial cursor offset over the body anchor", () => {
+        expect(resolveInitialEditorSelection({
+            initialDoc: "---\ntitle: Demo\n---\n# Body\n",
+            restoredViewState: null,
+            editorTabRestoreMode: "viewport",
+            initialCursorOffset: 7,
+        })).toEqual({
+            anchor: 7,
+            head: 7,
+        });
+    });
+
+    test("prefers restored cursor selection in cursor restore mode", () => {
+        expect(resolveInitialEditorSelection({
+            initialDoc: "---\ntitle: Demo\n---\n# Body\n",
+            restoredViewState: {
+                articleId: "file:test.md",
+                anchor: 19,
+                head: 23,
+                scrollTop: 180,
+                scrollLeft: 0,
+                scrollSnapshot: null,
+            },
+            editorTabRestoreMode: "cursor",
+            initialCursorOffset: null,
+        })).toEqual({
+            anchor: 19,
+            head: 23,
+        });
     });
 });

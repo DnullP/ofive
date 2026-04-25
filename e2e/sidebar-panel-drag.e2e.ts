@@ -268,3 +268,98 @@ test.describe("右侧栏 activity icon 切换面板", () => {
         await expect(rightSidebar).toHaveCount(0);
     });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ *  layout-v2 panel icon split 持久化恢复
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/** 浏览器 fallback vault config 的 localStorage key 前缀。 */
+const BROWSER_FALLBACK_CONFIG_PREFIX = "ofive:browser-fallback:vault-config:";
+
+/**
+ * 将 panel icon 拖到目标 panel content 底部以触发 split。
+ *
+ * @param page - Playwright Page。
+ * @param panelId - 被拖拽的 panel id。
+ * @param targetPanelSectionId - 目标 panel section id。
+ */
+async function splitPanelToBottom(
+    page: import("@playwright/test").Page,
+    panelId: string,
+    targetPanelSectionId: string,
+): Promise<void> {
+    const source = page.locator(
+        `.layout-v2-panel-section__panel-tab[data-layout-panel-id='${panelId}']`,
+    ).first();
+    const target = page.locator(
+        `[data-layout-role='panel-content'][data-layout-panel-section-id='${targetPanelSectionId}']`,
+    ).first();
+
+    await expect(source).toBeVisible();
+    await expect(target).toBeVisible();
+
+    const sourceBox = await source.boundingBox();
+    const targetBox = await target.boundingBox();
+    expect(sourceBox).not.toBeNull();
+    expect(targetBox).not.toBeNull();
+
+    await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+        targetBox!.x + targetBox!.width / 2,
+        targetBox!.y + targetBox!.height - 8,
+        { steps: 12 },
+    );
+    await page.mouse.up();
+}
+
+test.describe("layout-v2 panel icon split 持久化恢复", () => {
+    test("panel icon split 后 reload 应恢复拓扑且不触发 React <fa> 错误", async ({ page }) => {
+        const pageErrors: string[] = [];
+        const reactWarnings: string[] = [];
+        const vaultPath = `/mock/panel-icon-split-restore-${Date.now()}`;
+        const storageKey = `${BROWSER_FALLBACK_CONFIG_PREFIX}${vaultPath}`;
+
+        page.on("pageerror", (error) => {
+            pageErrors.push(error.message);
+        });
+        page.on("console", (message) => {
+            const text = message.text();
+            if (text.includes("An error occurred in the <") || text.includes("<fa>")) {
+                reactWarnings.push(text);
+            }
+        });
+
+        await page.goto(`${MOCK_PAGE}?showControls=0&mockVaultPath=${encodeURIComponent(vaultPath)}`);
+        await page.evaluate((key) => window.localStorage.removeItem(key), storageKey);
+        await page.reload();
+        await page.locator("[data-layout-role='panel-section']").first().waitFor({ state: "visible" });
+
+        await splitPanelToBottom(page, "backlinks", "right-panel-section");
+
+        await expect.poll(async () => page.evaluate((key) => {
+            const raw = window.localStorage.getItem(key);
+            if (!raw) return false;
+            const config = JSON.parse(raw) as {
+                entries?: { sidebarLayout?: { panelLayout?: { sections?: Array<{ id?: string }> } } };
+            };
+            return config.entries?.sidebarLayout?.panelLayout?.sections?.some(
+                (section) => section.id === "right-sidebar-panels",
+            ) ?? false;
+        }, storageKey)).toBe(true);
+
+        await page.reload();
+        await page.locator("[data-layout-role='panel-section']").first().waitFor({ state: "visible" });
+
+        const restoredSectionIds = await page.locator("[data-layout-role='panel-section']").evaluateAll(
+            (elements) => elements.map((element) => element.getAttribute("data-layout-panel-section-id")),
+        );
+
+        expect(restoredSectionIds).toContain("right-sidebar-panels");
+        await expect(page.locator(
+            "[data-layout-role='panel'][data-layout-panel-section-id='right-sidebar-panels'][data-layout-panel-id='backlinks']",
+        )).toBeVisible();
+        expect(pageErrors).toEqual([]);
+        expect(reactWarnings).toEqual([]);
+    });
+});

@@ -18,6 +18,7 @@ import {
     type WorkbenchApi,
     type WorkbenchPanelContext,
     type WorkbenchPanelDefinition,
+    type WorkbenchPanelLayoutSnapshot,
     type WorkbenchSidebarState,
     type WorkbenchTabDefinition,
 } from "layout-v2";
@@ -364,7 +365,9 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     const leftSidebarVisibleRef = useRef(initialSidebarState.left.visible);
     const rightSidebarVisibleRef = useRef(initialSidebarState.right.visible);
     const sectionRatiosRef = useRef<Record<string, number> | undefined>(sidebarSnapshot?.sectionRatios);
+    const panelLayoutSnapshotRef = useRef<WorkbenchPanelLayoutSnapshot | undefined>(sidebarSnapshot?.panelLayout);
     const sidebarSnapshotRef = useRef(sidebarSnapshot);
+    const syncedPanelLayoutSidebarSnapshotRef = useRef(sidebarSnapshot);
     const [createEntryDraftRequest, setCreateEntryDraftRequest] = useState<{
         kind: CreateEntryDraftRequest["kind"];
         baseDirectory: string;
@@ -374,6 +377,10 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         resolve: (value: string | null) => void;
     } | null>(null);
     sidebarSnapshotRef.current = sidebarSnapshot;
+    if (sidebarSnapshot !== syncedPanelLayoutSidebarSnapshotRef.current) {
+        syncedPanelLayoutSidebarSnapshotRef.current = sidebarSnapshot;
+        panelLayoutSnapshotRef.current = sidebarSnapshot?.panelLayout;
+    }
 
     /* ── Open file helper ── */
 
@@ -615,6 +622,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 paneStates: snap?.paneStates ?? [],
                 convertiblePanelStates: snap?.convertiblePanelStates ?? [],
                 sectionRatios: sectionRatiosRef.current,
+                panelLayout: panelLayoutSnapshotRef.current,
             };
 
             const serializedSnapshot = JSON.stringify(snapshot);
@@ -633,11 +641,15 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     /* ── Section ratio persistence (debounced) ── */
 
     const sectionRatioPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const panelLayoutPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         return () => {
             if (sectionRatioPersistTimerRef.current) {
                 clearTimeout(sectionRatioPersistTimerRef.current);
+            }
+            if (panelLayoutPersistTimerRef.current) {
+                clearTimeout(panelLayoutPersistTimerRef.current);
             }
         };
     }, []);
@@ -676,6 +688,58 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                     paneStates: snap?.paneStates ?? [],
                     convertiblePanelStates: snap?.convertiblePanelStates ?? [],
                     sectionRatios: sectionRatiosRef.current,
+                    panelLayout: panelLayoutSnapshotRef.current,
+                };
+
+                const serializedSnapshot = JSON.stringify(snapshot);
+                if (persistedSnapshotRef.current === serializedSnapshot) return;
+
+                persistedSnapshotRef.current = serializedSnapshot;
+                void saveSidebarLayoutSnapshot(snapshot);
+            }, 300);
+        },
+        [
+            hasRightSidebar,
+            configState.loadedVaultPath,
+            vaultState.currentVaultPath,
+        ],
+    );
+
+    const handlePanelLayoutChange = useCallback(
+        (panelLayout: WorkbenchPanelLayoutSnapshot) => {
+            panelLayoutSnapshotRef.current = panelLayout;
+
+            if (panelLayoutPersistTimerRef.current) {
+                clearTimeout(panelLayoutPersistTimerRef.current);
+            }
+
+            panelLayoutPersistTimerRef.current = setTimeout(() => {
+                panelLayoutPersistTimerRef.current = null;
+
+                const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
+                if (!currentVaultPath && !configState.backendConfig) return;
+                if (!configState.featureSettings.restoreWorkspaceLayout) return;
+
+                const snap = sidebarSnapshotRef.current;
+                const snapshot: SidebarLayoutSnapshot = {
+                    version: 1,
+                    left: {
+                        width: snap?.left.width ?? DEFAULT_LEFT_RAIL_WIDTH,
+                        visible: leftSidebarVisibleRef.current,
+                        activeActivityId: snap?.left.activeActivityId ?? null,
+                        activePanelId: snap?.left.activePanelId ?? null,
+                    },
+                    right: {
+                        width: snap?.right.width ?? DEFAULT_RIGHT_RAIL_WIDTH,
+                        visible: hasRightSidebar ? rightSidebarVisibleRef.current : false,
+                        activeActivityId: snap?.right.activeActivityId ?? null,
+                        activePanelId: snap?.right.activePanelId ?? null,
+                    },
+                    panelStates: snap?.panelStates ?? [],
+                    paneStates: snap?.paneStates ?? [],
+                    convertiblePanelStates: snap?.convertiblePanelStates ?? [],
+                    sectionRatios: sectionRatiosRef.current,
+                    panelLayout,
                 };
 
                 const serializedSnapshot = JSON.stringify(snapshot);
@@ -870,6 +934,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 hasRightSidebar={hasRightSidebar}
                 initialSidebarState={initialSidebarState}
                 initialSectionRatios={sidebarSnapshot?.sectionRatios}
+                initialPanelLayoutSnapshot={sidebarSnapshot?.panelLayout}
                 hideEmptyPanelBar
                 renderInactiveTabContent={false}
                 tabDragPreviewRenderMode="overlay"
@@ -881,6 +946,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 onActivateActivity={handleActivateActivity}
                 onSidebarStateChange={handleSidebarStateChange}
                 onSectionRatioChange={handleSectionRatioChange}
+                onPanelLayoutChange={handlePanelLayoutChange}
                 onActivityIconContextMenu={handleActivityIconContextMenu}
                 onActiveTabChange={handleActiveTabChange}
                 onActivityBarBackgroundContextMenu={handleActivityBarBackgroundContextMenu}

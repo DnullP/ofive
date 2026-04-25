@@ -63,6 +63,67 @@ const snapshot: SidebarLayoutSnapshot = {
     convertiblePanelStates: [
         { descriptorId: "calendar", stateKey: "calendar", sourceParams: { month: "2026-03" } },
     ],
+    panelLayout: {
+        root: {
+            id: "root",
+            title: "Workbench Root",
+            data: {
+                role: "root",
+                component: {
+                    type: "empty",
+                    props: { label: "Root", description: "workbench root" },
+                },
+            },
+            resizableEdges: { top: true, right: true, bottom: true, left: true },
+            split: {
+                direction: "horizontal",
+                ratio: 0.5,
+                children: [
+                    {
+                        id: "left-sidebar",
+                        title: "Left Sidebar",
+                        data: {
+                            role: "sidebar",
+                            component: {
+                                type: "panel-section",
+                                props: { panelSectionId: "left-panel-section" },
+                            },
+                        },
+                        resizableEdges: { top: true, right: true, bottom: true, left: true },
+                        split: null,
+                    },
+                    {
+                        id: "right-sidebar",
+                        title: "Right Sidebar",
+                        data: {
+                            role: "sidebar",
+                            component: {
+                                type: "panel-section",
+                                props: { panelSectionId: "right-panel-section" },
+                            },
+                        },
+                        resizableEdges: { top: true, right: true, bottom: true, left: true },
+                        split: null,
+                    },
+                ],
+            },
+        },
+        sections: [
+            {
+                id: "left-panel-section",
+                panelIds: ["files"],
+                focusedPanelId: "files",
+                isCollapsed: false,
+                isRoot: true,
+            },
+            {
+                id: "right-panel-section",
+                panelIds: ["calendar-panel"],
+                focusedPanelId: "calendar-panel",
+                isCollapsed: false,
+            },
+        ],
+    },
 };
 
 describe("parseSidebarLayoutConfig", () => {
@@ -108,6 +169,21 @@ describe("parseSidebarLayoutConfig", () => {
         expect(result?.convertiblePanelStates).toEqual([
             { descriptorId: "calendar", stateKey: "calendar", sourceParams: undefined },
         ]);
+    });
+
+    it("应忽略非法 panelLayout 快照以避免恢复崩溃", () => {
+        const result = parseSidebarLayoutConfig({
+            [SIDEBAR_LAYOUT_CONFIG_KEY]: {
+                left: { width: 280, visible: true },
+                right: { width: 260, visible: true },
+                panelLayout: {
+                    root: { id: "root", data: null },
+                    sections: [{ id: "left-panel-section", panelIds: ["files"] }],
+                },
+            },
+        });
+
+        expect(result?.panelLayout).toBeUndefined();
     });
 });
 
