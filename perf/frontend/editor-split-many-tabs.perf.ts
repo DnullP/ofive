@@ -20,6 +20,7 @@ import { readPerfMetrics, writeFrontendPerfReport, type BrowserPerfMetricRecord 
 const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0&bulkEditorPerf=1";
 const MANY_EDITOR_TAB_COUNT = 24;
 const MAX_EXPECTED_SPLIT_EDITOR_DESTROY_LOGS = 3;
+const LIVE_EDITOR_SELECTOR = ".cm-editor:not([data-editor-preview-mirror-node='true'])";
 const PERF_NOTE_PATHS = Array.from({ length: MANY_EDITOR_TAB_COUNT }, (_, index) => {
     const paddedIndex = String(index + 1).padStart(3, "0");
     return `test-resources/notes/perf-editor-${paddedIndex}.md`;
@@ -208,7 +209,7 @@ async function dragLocatorToPoint(
 
     const postDropSettleStartedAt = performance.now();
     await expect(page.locator(".layout-v2-tab-section")).toHaveCount(2);
-    await expect(page.locator(".cm-editor")).toHaveCount(2);
+    await expect(page.locator(LIVE_EDITOR_SELECTOR)).toHaveCount(2);
     const postDropSettleDurationMs = Number((performance.now() - postDropSettleStartedAt).toFixed(3));
     const destroyLogCountAfterPostDropSettle = readDestroyLogCount();
 
@@ -274,7 +275,7 @@ async function measureSplitWithManyEditorTabs(
     const activeTabTitle = PERF_NOTE_PATHS[PERF_NOTE_PATHS.length - 1].split("/").pop() ?? "";
 
     await expect(page.locator(".layout-v2-tab-section__tab-main", { hasText: activeTabTitle })).toBeVisible();
-    const editorCountBeforeSplit = await page.locator(".cm-editor").count();
+    const editorCountBeforeSplit = await page.locator(LIVE_EDITOR_SELECTOR).count();
     const destroyLogCountBeforeSplit = editorDestroyLogs.length;
     const longTasksBeforeSplit = await readLongTaskSnapshot(page);
     const splitTiming = await measureSplitActiveTabToRight(page, activeTabTitle, () => editorDestroyLogs.length);
@@ -288,7 +289,7 @@ async function measureSplitWithManyEditorTabs(
         splitPointerUpDispatchDurationMs: splitTiming.pointerUpDispatchDurationMs,
         splitPostDropSettleDurationMs: splitTiming.postDropSettleDurationMs,
         editorCountBeforeSplit,
-        editorCountAfterSplit: await page.locator(".cm-editor").count(),
+        editorCountAfterSplit: await page.locator(LIVE_EDITOR_SELECTOR).count(),
         tabSectionCountAfterSplit: await page.locator(".layout-v2-tab-section").count(),
         editorDestroyLogCountDuringSplit: editorDestroyLogs.length - destroyLogCountBeforeSplit,
         editorDestroyLogCountDuringPointerMove: splitTiming.pointerMoveDestroyLogCount,

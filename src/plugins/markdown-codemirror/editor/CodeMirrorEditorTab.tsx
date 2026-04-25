@@ -90,6 +90,7 @@ import {
 } from "./editorTitleRenameService";
 import { attachEditorKeyboardBridge } from "./editorKeyboardBridge";
 import { useCodeMirrorEditorLifecycle } from "./useCodeMirrorEditorLifecycle";
+import { registerCodeMirrorEditorPreviewSource } from "./CodeMirrorEditorPreviewMirror";
 import type { WorkbenchTabProps } from "../../../host/layout/workbenchContracts";
 
 ensureBuiltinSyntaxRenderersRegistered();
@@ -301,6 +302,10 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
     const [readContent, setReadContent] = useState<string>(initialDoc);
 
     const articleId = props.api.id;
+    useEffect(() => {
+        return registerCodeMirrorEditorPreviewSource(articleId, () => tabRootRef.current);
+    }, [articleId]);
+
     const segmentationController = useMemo(
         () => createEditorChineseSegmentationController({
             articleId,

@@ -10,7 +10,10 @@ import React, {
 } from "react";
 import { Settings } from "lucide-react";
 import {
+    readWorkbenchTabPayload,
     VSCodeWorkbench,
+    type TabDragPreviewContentRenderContext,
+    type TabSectionTabDefinition,
     type WorkbenchActivityDefinition,
     type WorkbenchApi,
     type WorkbenchPanelContext,
@@ -78,6 +81,7 @@ import { dispatchShortcut } from "../commands/shortcutDispatcher";
 import { createConditionContext } from "../conditions/conditionEvaluator";
 import i18n from "../../i18n";
 import { CreateEntryModal } from "./CreateEntryModal";
+import { CodeMirrorEditorPreviewMirror } from "../../plugins/markdown-codemirror/editor/CodeMirrorEditorPreviewMirror";
 import "../../../node_modules/layout-v2/dist/layout-v2.css";
 import "./WorkbenchLayoutHost.tokens.css";
 import "./WorkbenchLayoutHost.css";
@@ -739,6 +743,30 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         [],
     );
 
+    /**
+     * @function renderTabDragPreviewContent
+     * @description 为 layout-v2 split preview 渲染宿主侧轻量内容；Markdown editor 使用 DOM 镜像而不是重新挂载 EditorView。
+     * @param tab layout-v2 当前 preview tab 定义。
+     * @param context layout-v2 preview 内容上下文。
+     * @returns preview 内容；非 CodeMirror tab 返回 undefined 以使用 layout-v2 默认占位。
+     */
+    const renderTabDragPreviewContent = useCallback((
+        tab: TabSectionTabDefinition,
+        context: TabDragPreviewContentRenderContext,
+    ): ReactNode => {
+        const payload = readWorkbenchTabPayload(tab);
+        if (!context.isPreviewTabSection || payload.component !== "codemirror") {
+            return undefined;
+        }
+
+        return (
+            <CodeMirrorEditorPreviewMirror
+                articleId={tab.id}
+                title={tab.title}
+            />
+        );
+    }, []);
+
     /* ── Activity bar context menus ── */
 
     const handleActivityIconContextMenu = useCallback(
@@ -847,6 +875,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 tabDragPreviewRenderMode="overlay"
                 preserveActiveTabContentDuringDrag
                 renderTabContentInDragPreviewLayout={false}
+                renderTabDragPreviewContent={renderTabDragPreviewContent}
                 renderActivityIcon={renderActivityIcon}
                 renderPanelContent={renderPanelContent}
                 onActivateActivity={handleActivateActivity}

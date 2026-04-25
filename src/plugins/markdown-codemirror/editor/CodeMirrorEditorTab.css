@@ -10,6 +10,49 @@
     background: var(--editor-bg-color);
 }
 
+/* 编辑器 split preview 镜像容器：承载克隆 DOM，避免创建第二个真实 EditorView。 */
+.cm-editor-preview-mirror {
+    position: relative;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    background: var(--editor-bg-color);
+    pointer-events: none;
+    user-select: none;
+}
+
+/* 编辑器 split preview 镜像挂载点：让克隆出来的 `.cm-tab` 能继承完整高度。 */
+.cm-editor-preview-mirror__host {
+    height: 100%;
+    width: 100%;
+    min-height: 0;
+}
+
+/* 编辑器 split preview 镜像根节点：保证克隆 editor 在 preview section 内铺满。 */
+.cm-editor-preview-mirror__host > .cm-tab {
+    height: 100%;
+    width: 100%;
+}
+
+/* 编辑器 split preview 镜像克隆：明确关闭交互，避免 preview DOM 抢焦点或触发输入。 */
+.cm-editor-preview-mirror [data-editor-preview-mirror-clone="true"] {
+    pointer-events: none;
+    user-select: none;
+}
+
+/* 编辑器 split preview 镜像兜底：源 editor DOM 暂不可用时保留可识别的预览内容。 */
+.cm-editor-preview-mirror__fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    color: var(--editor-panel-muted-text-color);
+    font-size: 12px;
+    background: var(--editor-bg-color);
+}
+
 /* 编辑器标题头部：承载顶部标题输入栏和视图模式切换按钮。 */
 .cm-tab-header {
     flex-shrink: 0;

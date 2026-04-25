@@ -14,6 +14,9 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
 const MOUSE_DRAG_TAG = "@mouse-drag";
+const LIVE_EDITOR_SELECTOR = ".cm-editor:not([data-editor-preview-mirror-node='true'])";
+const PREVIEW_MIRROR_SELECTOR = "[data-editor-preview-mirror='true']";
+const PREVIEW_MIRROR_EDITOR_SELECTOR = ".cm-editor[data-editor-preview-mirror-node='true']";
 const NOTES_TO_OPEN = [
     "test-resources/notes/guide.md",
     "test-resources/notes/network-segment.md",
@@ -177,24 +180,28 @@ test.describe("editor split performance", () => {
         }
 
         await expect(page.locator(".layout-v2-tab-section__tab-main", { hasText: "table-vim-boundary.md" })).toBeVisible();
-        await expect(page.locator(".cm-editor")).toHaveCount(1);
+        await expect(page.locator(LIVE_EDITOR_SELECTOR)).toHaveCount(1);
 
         await previewSplitActiveTabToRight(page, "table-vim-boundary.md");
 
         const previewOverlay = page.locator("[data-layout-tab-preview-overlay='true']");
         await expect(previewOverlay).toBeVisible();
         await expect(previewOverlay.locator(".layout-v2-tab-section")).toHaveCount(2);
-        await expect(previewOverlay.locator(".layout-v2-tab-section[data-tab-section-id^='preview-tab-section']", {
+        const previewTabSection = previewOverlay.locator(".layout-v2-tab-section[data-tab-section-id^='preview-tab-section']", {
             hasText: "table-vim-boundary.md",
-        })).toBeVisible();
-        await expect(previewOverlay.locator(".cm-editor")).toHaveCount(0);
-        await expect(page.locator(".cm-editor")).toHaveCount(1);
+        });
+        await expect(previewTabSection).toBeVisible();
+        await expect(previewTabSection.locator(PREVIEW_MIRROR_SELECTOR)).toBeVisible();
+        await expect(previewTabSection.locator(PREVIEW_MIRROR_EDITOR_SELECTOR)).toHaveCount(1);
+        await expect(previewOverlay.locator(LIVE_EDITOR_SELECTOR)).toHaveCount(0);
+        await expect(page.locator(LIVE_EDITOR_SELECTOR)).toHaveCount(1);
 
         await page.mouse.up();
         await page.waitForTimeout(200);
 
         await expect(page.locator(".layout-v2-tab-section")).toHaveCount(2);
-        await expect(page.locator(".cm-editor")).toHaveCount(2);
+        await expect(page.locator(PREVIEW_MIRROR_SELECTOR)).toHaveCount(0);
+        await expect(page.locator(LIVE_EDITOR_SELECTOR)).toHaveCount(2);
         expect(pageErrors).toEqual([]);
     });
 });
