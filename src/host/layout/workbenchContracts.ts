@@ -8,6 +8,7 @@ export interface WorkbenchPanelApi {
     setActive(): void;
     setTitle?(title: string): void;
     updateParameters?(params: Record<string, unknown>): void;
+    markContentReady?(): void;
 }
 
 export interface WorkbenchPanelHandle {
@@ -33,6 +34,7 @@ export interface WorkbenchTabApi {
     setActive(): void;
     setTitle?(title: string): void;
     updateParameters?(params: Record<string, unknown>): void;
+    markContentReady?(): void;
 }
 
 export interface WorkbenchTabProps<TParams extends Record<string, unknown> = Record<string, unknown>> {
@@ -76,6 +78,7 @@ export interface PanelRenderContext {
     closeTab: (tabId: string) => void;
     setActiveTab: (tabId: string) => void;
     activatePanel: (panelId: string) => void;
+    markContentReady?: () => void;
     executeCommand: (commandId: CommandId) => void;
     requestMoveFileToDirectory: (relativePath: string) => void;
 }
@@ -90,5 +93,6 @@ export interface PanelDefinition {
     activityTitle?: string;
     activityIcon?: ReactNode;
     activitySection?: "top" | "bottom";
+    deferPresentationUntilReady?: boolean;
     render: (context: PanelRenderContext) => ReactNode;
 }

@@ -45,6 +45,7 @@ export function activatePlugin(): () => void {
         id: "codemirror",
         component: CodeMirrorEditorTab as any,
         lifecycleScope: "vault",
+        deferPresentationUntilReady: true,
     });
 
     const unregisterFileOpener = registerFileOpener({

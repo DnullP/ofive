@@ -40,6 +40,7 @@ import type { PanelRenderContext, PanelPosition } from "../layout/workbenchContr
  * @field defaultPosition - 默认侧栏位置：left / right
  * @field defaultOrder   - 默认排序值（数值越小越靠前）
  * @field render         - 面板渲染函数，接收 PanelRenderContext
+ * @field deferPresentationUntilReady - 是否等待面板自行提交首开 ready 后再展示
  */
 export interface PanelDescriptor {
     /** 面板唯一标识 */
@@ -54,6 +55,8 @@ export interface PanelDescriptor {
     defaultOrder: number;
     /** 面板渲染函数 */
     render: (context: PanelRenderContext) => ReactNode;
+    /** 是否等待面板通过 context.markContentReady 提交首开展示。 */
+    deferPresentationUntilReady?: boolean;
 }
 
 /* ────────────────── 内部状态 ────────────────── */

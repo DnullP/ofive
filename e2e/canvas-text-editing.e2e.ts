@@ -21,27 +21,6 @@ const REACT_FLOW_NODE_TYPES_WARNING = "created a new nodeTypes or edgeTypes obje
 const CANVAS_TEXT_NODE_SNIPPET = "切换 light / dark / kraft";
 
 /**
- * @function getEffectiveOpacity
- * @description 读取元素到根节点的透明度乘积，用于判断被父级 card 透明隐藏的复杂子组件是否仍会视觉泄漏。
- * @param page Playwright 页面对象。
- * @param selector 目标元素选择器。
- * @returns 透明度乘积；元素不存在时返回 null。
- */
-async function getEffectiveOpacity(page: Page, selector: string): Promise<number | null> {
-    return page.locator(selector).first().evaluate((element) => {
-        let current: Element | null = element;
-        let opacity = 1;
-
-        while (current) {
-            opacity *= Number.parseFloat(window.getComputedStyle(current).opacity || "1");
-            current = current.parentElement;
-        }
-
-        return opacity;
-    }).catch(() => null);
-}
-
-/**
  * @function ensureMockNotesTreeExpanded
  * @description 确保 mock 文件树中的 notes 目录已展开。
  * @param page Playwright 页面对象。
@@ -115,12 +94,10 @@ function collectConsoleWarnings(page: Page): string[] {
 }
 
 test.describe("canvas text editing", () => {
-    test("switching away from canvas should hide React Flow nodes from inactive tab content", async ({ page }) => {
+    test("switching away from canvas should unmount inactive canvas tab content", async ({ page }) => {
         await openCanvasSample(page);
 
-        const canvasNodeSelector = `.canvas-tab__node:has-text("${CANVAS_TEXT_NODE_SNIPPET}")`;
-        await expect(page.locator(canvasNodeSelector).first()).toBeVisible();
-        expect(await getEffectiveOpacity(page, canvasNodeSelector)).toBe(1);
+        await expect(page.locator(".canvas-tab__node", { hasText: CANVAS_TEXT_NODE_SNIPPET }).first()).toBeVisible();
 
         await ensureMockNotesTreeExpanded(page);
         await page.locator(".tree-item[data-tree-path='test-resources/notes/guide.md']").dblclick();
@@ -128,11 +105,10 @@ test.describe("canvas text editing", () => {
 
         await expect(page.locator(".layout-v2-tab-section__tab--focused", { hasText: "guide.md" })).toBeVisible();
         await expect(page.locator(".layout-v2-tab-section__card--active .cm-editor").first()).toBeVisible();
-        const inactiveCanvasCard = page.locator(".layout-v2-tab-section__card--inactive", {
+        await expect(page.locator(".layout-v2-tab-section__card--inactive", {
             has: page.locator(".canvas-tab"),
-        }).first();
-        await expect(inactiveCanvasCard).toHaveCSS("opacity", "0");
-        expect(await getEffectiveOpacity(page, canvasNodeSelector)).toBe(0);
+        })).toHaveCount(0);
+        await expect(page.locator(".canvas-tab__node", { hasText: CANVAS_TEXT_NODE_SNIPPET })).toHaveCount(0);
     });
 
     test("pressing Enter should persist the edited text and avoid React Flow nodeTypes warnings", async ({ page }) => {

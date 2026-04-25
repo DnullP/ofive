@@ -696,7 +696,11 @@ function ensureMockComponentsRegistered(): void {
 
     registerTabComponent({ id: "home", component: MockHomeTab as never });
     registerTabComponent({ id: MOCK_SPLIT_DEMO_COMPONENT_ID, component: MockSplitDemoTab as never });
-    registerTabComponent({ id: "codemirror", component: CodeMirrorEditorTab as never });
+    registerTabComponent({
+        id: "codemirror",
+        component: CodeMirrorEditorTab as never,
+        deferPresentationUntilReady: true,
+    });
     registerTabComponent({ id: "canvas", component: CanvasTab as never });
     registerTabComponent({ id: MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID, component: KnowledgeGraphTab as never });
     registerTabComponent({ id: MOCK_CALENDAR_TAB_COMPONENT_ID, component: MockCalendarTab as never });

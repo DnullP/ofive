@@ -371,7 +371,7 @@ export const storeConsumerCoverage = {
         "tests/knowledgeGraphInteractions.test.ts",
     ],
     "src/plugins/calendar/CalendarView.tsx": [
-        "e2e/calendar-convertible-view.e2e.ts",
+        "e2e/vault-switch-regression.e2e.ts",
     ],
     "src/plugins/custom-activity/CustomActivityModal.tsx": [
         "e2e/custom-activity.e2e.ts",

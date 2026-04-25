@@ -332,6 +332,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
     // composition/blur guards, and focus handoff around title rename.
     const [titleDraft, setTitleDraft] = useState<string>(displayTitle);
     const [isTitleRenaming, setIsTitleRenaming] = useState<boolean>(false);
+    const [initialContentPresented, setInitialContentPresented] = useState<boolean>(false);
     const titleRenameInFlightRef = useRef<boolean>(false);
     const titleImeCompositionGuard = useRef(createImeCompositionGuard()).current;
     const activeEditor = useActiveEditor();
@@ -412,6 +413,15 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         }
 
         liveView.focus();
+    };
+
+    /**
+     * @function commitInitialContentPresentation
+     * @description 编辑器首开内容 ready 后通知 layout 提交展示，并补发活跃页签焦点恢复。
+     */
+    const commitInitialContentPresentation = (): void => {
+        props.api.markContentReady?.();
+        setInitialContentPresented(true);
     };
 
     /**
@@ -570,6 +580,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         onRequestExitFrontmatterVimNavigation: exitFrontmatterVimNavigationToBody,
         onRequestFocusFrontmatterVimNavigation: focusFrontmatterVimNavigationTarget,
         onRequestFocusMarkdownTableVimNavigation: focusMarkdownTableVimNavigationTarget,
+        onInitialContentReady: commitInitialContentPresentation,
     });
 
     useEffect(() => {
@@ -581,14 +592,19 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
     }, [initialDoc]);
 
     useEffect(() => {
-        if (effectiveDisplayMode !== "edit" || !isActiveEditor || editorTabRestoreMode === "viewport") {
+        if (
+            effectiveDisplayMode !== "edit" ||
+            !isActiveEditor ||
+            editorTabRestoreMode === "viewport" ||
+            !initialContentPresented
+        ) {
             return;
         }
 
         window.requestAnimationFrame(() => {
             focusActiveEditorSurface();
         });
-    }, [effectiveDisplayMode, editorTabRestoreMode, isActiveEditor]);
+    }, [effectiveDisplayMode, editorTabRestoreMode, initialContentPresented, isActiveEditor]);
 
     /* 仅当前活跃 editor 订阅定位请求，避免非活跃 tab 响应外部导航事件 */
     useEffect(() => {

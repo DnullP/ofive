@@ -13,6 +13,7 @@ import {
     readWorkbenchTabPayload,
     VSCodeWorkbench,
     type TabDragPreviewContentRenderContext,
+    type PanelSectionPanelDefinition,
     type TabSectionTabDefinition,
     type WorkbenchActivityDefinition,
     type WorkbenchApi,
@@ -83,7 +84,7 @@ import { createConditionContext } from "../conditions/conditionEvaluator";
 import i18n from "../../i18n";
 import { CreateEntryModal } from "./CreateEntryModal";
 import { CodeMirrorEditorPreviewMirror } from "../../plugins/markdown-codemirror/editor/CodeMirrorEditorPreviewMirror";
-import "layout-v2/styles.css";
+import "../../../node_modules/layout-v2/dist/layout-v2.css";
 import "./WorkbenchLayoutHost.tokens.css";
 import "./WorkbenchLayoutHost.css";
 
@@ -93,6 +94,7 @@ const DEFAULT_LEFT_RAIL_WIDTH = 280;
 const DEFAULT_RIGHT_RAIL_WIDTH = 260;
 const CUSTOM_ACTIVITY_REGISTRATION_PREFIX = "custom-activity:";
 const CUSTOM_ACTIVITY_CREATE_COMMAND_ID = "customActivity.create";
+const KEEP_ALIVE_INACTIVE_TAB_COMPONENT_IDS = new Set(["knowledgegraph"]);
 
 /* ────────── Props ────────── */
 
@@ -196,6 +198,7 @@ function buildPanelRenderContext(
         closeTab: workbenchContext.closeTab,
         setActiveTab: workbenchContext.setActiveTab,
         activatePanel: workbenchContext.activatePanel,
+        markContentReady: workbenchContext.markContentReady,
         executeCommand: (commandId) => {
             executeCommand(commandId as CommandId, buildCommandContext());
         },
@@ -216,7 +219,7 @@ function buildPanelRenderContext(
 const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props: {
     Component: (props: Record<string, unknown>) => ReactNode;
     params: Record<string, unknown>;
-    api: { id: string; close: () => void; setActive: () => void };
+    api: { id: string; close: () => void; setActive: () => void; markContentReady?: () => void };
     workbenchApiRef: MutableRefObject<WorkbenchApi | null>;
 }): ReactNode {
     const { Component, params, api, workbenchApiRef } = props;
@@ -226,7 +229,8 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
         close: api.close,
         setActive: api.setActive,
         setTitle: (title: string) => workbenchApiRef.current?.updateTab(api.id, { title }),
-    }), [api.id, api.close, api.setActive]);
+        markContentReady: api.markContentReady,
+    }), [api.id, api.close, api.setActive, api.markContentReady]);
 
     const containerApi = useMemo(() => ({
         getPanel: (tabId: string) => {
@@ -325,8 +329,26 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         [registeredPanels],
     );
 
+    const deferredPresentationTabComponentIds = useMemo(
+        () => new Set(
+            registeredTabComponents
+                .filter((descriptor) => descriptor.deferPresentationUntilReady)
+                .map((descriptor) => descriptor.id),
+        ),
+        [registeredTabComponents],
+    );
+
+    const deferredPresentationPanelIds = useMemo(
+        () => new Set(
+            registeredPanels
+                .filter((descriptor) => descriptor.deferPresentationUntilReady)
+                .map((descriptor) => descriptor.id),
+        ),
+        [registeredPanels],
+    );
+
     const tabComponents = useMemo(() => {
-        const result: Record<string, (props: { params: Record<string, unknown>; api: { id: string; close: () => void; setActive: () => void } }) => ReactNode> = {};
+        const result: Record<string, (props: { params: Record<string, unknown>; api: { id: string; close: () => void; setActive: () => void; markContentReady?: () => void } }) => ReactNode> = {};
         for (const descriptor of registeredTabComponents) {
             const Component = descriptor.component as unknown as (props: Record<string, unknown>) => ReactNode;
             result[descriptor.id] = ({ params, api }) => (
@@ -831,6 +853,38 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         );
     }, []);
 
+    /**
+     * @function shouldRenderInactiveTabContent
+     * @description 只为需要保留运行态的轻量 tab 保持 inactive 内容挂载，避免图谱切换后重新加载。
+     * @param tab layout-v2 tab 定义。
+     * @returns 该 tab 处于非激活状态时是否继续渲染内容。
+     */
+    const shouldRenderInactiveTabContent = useCallback((tab: TabSectionTabDefinition): boolean => {
+        const payload = readWorkbenchTabPayload(tab);
+        return KEEP_ALIVE_INACTIVE_TAB_COMPONENT_IDS.has(payload.component);
+    }, []);
+
+    /**
+     * @function shouldDeferTabContentPresentation
+     * @description 判断 tab 首次展示是否需要等待组件自行提交 ready。
+     * @param tab layout-v2 tab 定义。
+     * @returns 该 tab 是否进入提交展示流程。
+     */
+    const shouldDeferTabContentPresentation = useCallback((tab: TabSectionTabDefinition): boolean => {
+        const payload = readWorkbenchTabPayload(tab);
+        return deferredPresentationTabComponentIds.has(payload.component);
+    }, [deferredPresentationTabComponentIds]);
+
+    /**
+     * @function shouldDeferPanelContentPresentation
+     * @description 判断 panel 首次展示是否需要等待面板自行提交 ready。
+     * @param panel layout-v2 panel 定义。
+     * @returns 该 panel 是否进入提交展示流程。
+     */
+    const shouldDeferPanelContentPresentation = useCallback((panel: PanelSectionPanelDefinition): boolean => {
+        return deferredPresentationPanelIds.has(panel.id);
+    }, [deferredPresentationPanelIds]);
+
     /* ── Activity bar context menus ── */
 
     const handleActivityIconContextMenu = useCallback(
@@ -936,7 +990,9 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 initialSectionRatios={sidebarSnapshot?.sectionRatios}
                 initialPanelLayoutSnapshot={sidebarSnapshot?.panelLayout}
                 hideEmptyPanelBar
-                renderInactiveTabContent={false}
+                renderInactiveTabContent={shouldRenderInactiveTabContent}
+                deferTabContentPresentation={shouldDeferTabContentPresentation}
+                deferPanelContentPresentation={shouldDeferPanelContentPresentation}
                 tabDragPreviewRenderMode="overlay"
                 preserveActiveTabContentDuringDrag
                 renderTabContentInDragPreviewLayout={false}

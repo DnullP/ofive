@@ -81,6 +81,10 @@ async function readVisibleEditorState(page: Page): Promise<{
     });
 }
 
+async function waitForVisibleEditorTitle(page: Page, expectedTitle: string): Promise<void> {
+    await expect.poll(async () => (await readVisibleEditorState(page)).title).toBe(expectedTitle);
+}
+
 async function readVisibleEditorFrontmatterState(page: Page): Promise<{
     frontmatterWidgetCount: number;
     hiddenLineCount: number;
@@ -97,6 +101,93 @@ async function readVisibleEditorFrontmatterState(page: Page): Promise<{
             hiddenLineCount: activeCard.querySelectorAll(".cm-hidden-block-line").length,
             hiddenAnchorCount: activeCard.querySelectorAll(".cm-hidden-block-anchor-line").length,
         };
+    });
+}
+
+async function startFrontmatterPresentationMonitor(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const monitorKey = "__OFIVE_FRONTMATTER_PRESENTATION_MONITOR__";
+        const existingMonitor = (window as any)[monitorKey];
+        if (existingMonitor?.stop) {
+            existingMonitor.stop();
+        }
+
+        const samples: Array<{
+            title: string | null;
+            presentationState: string | null;
+            frontmatterWidgetCount: number;
+            hiddenLineCount: number;
+            rawVisibleDelimiterCount: number;
+        }> = [];
+        let frameId = 0;
+
+        const isRenderedElementVisible = (element: HTMLElement): boolean => {
+            const style = window.getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+        };
+
+        const readRawVisibleDelimiterCount = (activeCard: HTMLElement): number => {
+            return Array.from(activeCard.querySelectorAll<HTMLElement>(".cm-line"))
+                .filter((lineElement) => {
+                    if (lineElement.textContent?.trim() !== "---") {
+                        return false;
+                    }
+
+                    if (
+                        lineElement.classList.contains("cm-hidden-block-line") ||
+                        lineElement.classList.contains("cm-hidden-block-anchor-line")
+                    ) {
+                        return false;
+                    }
+
+                    return isRenderedElementVisible(lineElement);
+                }).length;
+        };
+
+        const sample = (): void => {
+            const activeEditorCard = Array.from(document.querySelectorAll<HTMLElement>(
+                ".layout-v2-tab-section__card[aria-hidden='false']",
+            )).find((card) => card.querySelector(".cm-editor"));
+
+            if (activeEditorCard) {
+                const titleInput = activeEditorCard.querySelector<HTMLInputElement>(".cm-tab-title-input");
+                samples.push({
+                    title: titleInput instanceof HTMLInputElement ? titleInput.value : null,
+                    presentationState: activeEditorCard.dataset.layoutPresentationState ?? null,
+                    frontmatterWidgetCount: activeEditorCard.querySelectorAll(".cm-frontmatter-widget .fmv-editor").length,
+                    hiddenLineCount: activeEditorCard.querySelectorAll(".cm-hidden-block-line").length,
+                    rawVisibleDelimiterCount: readRawVisibleDelimiterCount(activeEditorCard),
+                });
+            }
+
+            frameId = window.requestAnimationFrame(sample);
+        };
+
+        frameId = window.requestAnimationFrame(sample);
+        (window as any)[monitorKey] = {
+            samples,
+            stop: () => window.cancelAnimationFrame(frameId),
+        };
+    });
+}
+
+async function stopFrontmatterPresentationMonitor(page: Page): Promise<Array<{
+    title: string | null;
+    presentationState: string | null;
+    frontmatterWidgetCount: number;
+    hiddenLineCount: number;
+    rawVisibleDelimiterCount: number;
+}>> {
+    return page.evaluate(() => {
+        const monitorKey = "__OFIVE_FRONTMATTER_PRESENTATION_MONITOR__";
+        const monitor = (window as any)[monitorKey];
+        if (!monitor) {
+            return [];
+        }
+
+        monitor.stop();
+        return monitor.samples;
     });
 }
 
@@ -126,22 +217,32 @@ test.describe("editor view state regression", () => {
         await openMockNote(page, ALT_SCROLL_NOTE_PATH);
 
         await page.getByRole("button", { name: "scroll-regression.md" }).first().click();
-        expect((await readVisibleEditorState(page)).title).toBe("scroll-regression");
+        await waitForVisibleEditorTitle(page, "scroll-regression");
 
         await page.getByRole("button", { name: "scroll-regression-alt.md" }).first().click();
-        expect((await readVisibleEditorState(page)).title).toBe("scroll-regression-alt");
+        await waitForVisibleEditorTitle(page, "scroll-regression-alt");
 
         await page.getByRole("button", { name: "scroll-regression.md" }).first().click();
-        expect((await readVisibleEditorState(page)).title).toBe("scroll-regression");
+        await waitForVisibleEditorTitle(page, "scroll-regression");
     });
 
     test("viewport mode keeps frontmatter collapsed on first open", async ({ page }) => {
+        await startFrontmatterPresentationMonitor(page);
         await openMockNote(page, FRONTMATTER_NOTE_PATH);
+        await waitForEditorActivationFrame(page);
 
         const frontmatterState = await readVisibleEditorFrontmatterState(page);
         expect(frontmatterState.frontmatterWidgetCount).toBe(1);
         expect(frontmatterState.hiddenLineCount).toBeGreaterThan(0);
         expect(frontmatterState.hiddenAnchorCount).toBe(1);
+
+        const samples = await stopFrontmatterPresentationMonitor(page);
+        const editorSamples = samples.filter((sample) => sample.title === "network-segment");
+        expect(editorSamples.length).toBeGreaterThan(0);
+        expect(editorSamples.every((sample) => sample.presentationState === "committed")).toBe(true);
+        expect(editorSamples.every((sample) => sample.frontmatterWidgetCount === 1)).toBe(true);
+        expect(editorSamples.every((sample) => sample.hiddenLineCount > 0)).toBe(true);
+        expect(editorSamples.every((sample) => sample.rawVisibleDelimiterCount === 0)).toBe(true);
     });
 
     test("viewport restore mode preserves reading progress without restoring editor focus", async ({ page }) => {
@@ -159,6 +260,7 @@ test.describe("editor view state regression", () => {
 
         await page.getByRole("button", { name: "scroll-regression-alt.md" }).first().click();
         await page.getByRole("button", { name: "scroll-regression.md" }).first().click();
+        await waitForVisibleEditorTitle(page, "scroll-regression");
 
         const afterSwitch = await readVisibleEditorState(page);
         expect(afterSwitch.title).toBe("scroll-regression");
@@ -187,6 +289,7 @@ test.describe("editor view state regression", () => {
 
         await page.getByRole("button", { name: "scroll-regression-alt.md" }).first().click();
         await page.getByRole("button", { name: "scroll-regression.md" }).first().click();
+        await waitForVisibleEditorTitle(page, "scroll-regression");
         await waitForEditorActivationFrame(page);
 
         const afterSwitch = await readVisibleEditorState(page);
@@ -208,6 +311,7 @@ test.describe("editor view state regression", () => {
 
         await page.getByRole("button", { name: "首页" }).first().click();
         await page.getByRole("button", { name: "scroll-regression.md" }).first().click();
+        await waitForVisibleEditorTitle(page, "scroll-regression");
 
         const afterSwitch = await readVisibleEditorState(page);
         expect(afterSwitch.title).toBe("scroll-regression");

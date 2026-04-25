@@ -14,6 +14,9 @@
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+const ACTIVE_EDITOR_CARD_SELECTOR = ".layout-v2-tab-section__card--active";
+const ACTIVE_FRONTMATTER_WIDGET_SELECTOR = `${ACTIVE_EDITOR_CARD_SELECTOR} .cm-frontmatter-widget`;
+
 /**
  * @function waitForMockLayoutReady
  * @description 等待 mock 页面布局与资源树进入可交互状态。
@@ -50,7 +53,7 @@ async function openMockFrontmatterNote(page: Page): Promise<void> {
     await page.getByRole("button", { name: "▸ test-resources" }).click();
     await page.getByRole("button", { name: "▸ notes" }).click();
     await page.getByRole("button", { name: "network-segment.md" }).click();
-    await expect(page.locator(".cm-frontmatter-widget")).toBeVisible();
+    await expect(page.locator(ACTIVE_FRONTMATTER_WIDGET_SELECTOR).first()).toBeVisible();
 }
 
 /**
@@ -99,7 +102,7 @@ async function openMockFrontmatterNoteViaQuickSwitcher(page: Page, relativePath:
         });
     }, relativePath);
 
-    await expect(page.locator(".cm-frontmatter-widget")).toBeVisible();
+    await expect(page.locator(ACTIVE_FRONTMATTER_WIDGET_SELECTOR).first()).toBeVisible();
 }
 
 /**
@@ -111,7 +114,9 @@ async function openMockFrontmatterNoteViaQuickSwitcher(page: Page, relativePath:
  */
 async function focusFrontmatterNavigationRow(page: Page, fieldKey: string): Promise<void> {
     await page.evaluate((nextFieldKey) => {
-        const row = document.querySelector<HTMLElement>(`[data-frontmatter-field-key="${nextFieldKey}"]`);
+        const row = document.querySelector<HTMLElement>(
+            `.layout-v2-tab-section__card--active [data-frontmatter-field-key="${nextFieldKey}"]`,
+        );
         row?.focus();
     }, fieldKey);
 }
@@ -126,7 +131,7 @@ async function focusFrontmatterNavigationRow(page: Page, fieldKey: string): Prom
 async function focusFrontmatterKeyInput(page: Page, fieldKey: string): Promise<void> {
     await page.evaluate((nextFieldKey) => {
         const keyField = document.querySelector<HTMLTextAreaElement>(
-            `[data-frontmatter-field-key="${nextFieldKey}"] [data-frontmatter-focus-role="key"].fmv-inline-text-control`,
+            `.layout-v2-tab-section__card--active [data-frontmatter-field-key="${nextFieldKey}"] [data-frontmatter-focus-role="key"].fmv-inline-text-control`,
         );
         if (!keyField) {
             throw new Error(`Frontmatter key field not found: ${nextFieldKey}`);
@@ -148,7 +153,7 @@ async function focusFrontmatterKeyInput(page: Page, fieldKey: string): Promise<v
 async function dispatchImeConfirmEnterOnFrontmatterKey(page: Page, fieldKey: string): Promise<void> {
     await page.evaluate((nextFieldKey) => {
         const keyField = document.querySelector<HTMLTextAreaElement>(
-            `[data-frontmatter-field-key="${nextFieldKey}"] [data-frontmatter-focus-role="key"].fmv-inline-text-control`,
+            `.layout-v2-tab-section__card--active [data-frontmatter-field-key="${nextFieldKey}"] [data-frontmatter-focus-role="key"].fmv-inline-text-control`,
         );
 
         if (!keyField) {
@@ -180,7 +185,7 @@ async function dispatchImeConfirmEnterOnFrontmatterKey(page: Page, fieldKey: str
  */
 async function focusEditorBodyFirstLine(page: Page): Promise<void> {
     await page.evaluate(() => {
-        const content = document.querySelector(".cm-content") as (HTMLElement & {
+        const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as (HTMLElement & {
             cmTile?: { view?: { focus: () => void; state: { doc: { toString(): string } }; dispatch: (spec: unknown) => void } };
         }) | null;
         const view = content?.cmTile?.view;
@@ -222,7 +227,7 @@ test.describe("frontmatter 可见性", () => {
 
         await openMockFrontmatterNote(page);
 
-        const frontmatterWidget = page.locator(".cm-frontmatter-widget");
+        const frontmatterWidget = page.locator(ACTIVE_FRONTMATTER_WIDGET_SELECTOR).first();
         await expectVisibleWithPositiveRect(frontmatterWidget);
 
         await expect(frontmatterWidget.locator("textarea.fmv-input").first()).toHaveValue("Network Segment");
@@ -254,10 +259,10 @@ test.describe("frontmatter 可见性", () => {
         const navigationState = await page.evaluate(() => {
             const activeElement = document.activeElement as HTMLElement | null;
             const titleInput = document.querySelector<HTMLInputElement>(
-                '[data-frontmatter-field-key="title"] [data-frontmatter-focus-role="value"]',
+                '.layout-v2-tab-section__card--active [data-frontmatter-field-key="title"] [data-frontmatter-focus-role="value"]',
             );
-            const widget = document.querySelector(".cm-frontmatter-widget");
-            const editorText = document.querySelector(".cm-content")?.textContent ?? "";
+            const widget = document.querySelector(".layout-v2-tab-section__card--active .cm-frontmatter-widget");
+            const editorText = document.querySelector(".layout-v2-tab-section__card--active .cm-content")?.textContent ?? "";
 
             return {
                 activeFieldKey: activeElement?.getAttribute("data-frontmatter-field-key") ?? null,
@@ -288,10 +293,10 @@ test.describe("frontmatter 可见性", () => {
         const navigationState = await page.evaluate(() => {
             const activeElement = document.activeElement as HTMLElement | null;
             const renamedKeyInput = document.querySelector<HTMLTextAreaElement>(
-                '[data-frontmatter-field-key="titleUpdated"] [data-frontmatter-focus-role="key"].fmv-inline-text-control',
+                '.layout-v2-tab-section__card--active [data-frontmatter-field-key="titleUpdated"] [data-frontmatter-focus-role="key"].fmv-inline-text-control',
             );
-            const widget = document.querySelector(".cm-frontmatter-widget");
-            const editorText = document.querySelector(".cm-content")?.textContent ?? "";
+            const widget = document.querySelector(".layout-v2-tab-section__card--active .cm-frontmatter-widget");
+            const editorText = document.querySelector(".layout-v2-tab-section__card--active .cm-content")?.textContent ?? "";
 
             return {
                 activeFieldKey: activeElement?.getAttribute("data-frontmatter-field-key") ?? null,
@@ -314,7 +319,7 @@ test.describe("frontmatter 可见性", () => {
         await openMockFrontmatterNote(page);
 
         await page.evaluate(() => {
-            const addButton = document.querySelector<HTMLButtonElement>(".fmv-add-button");
+            const addButton = document.querySelector<HTMLButtonElement>(".layout-v2-tab-section__card--active .fmv-add-button");
             addButton?.click();
         });
 
@@ -340,7 +345,7 @@ test.describe("frontmatter 可见性", () => {
         const typedState = await page.evaluate(() => {
             const activeElement = document.activeElement as HTMLElement | null;
             const valueControl = document.querySelector<HTMLTextAreaElement>(
-                '[data-frontmatter-field-key="newField"] [data-frontmatter-focus-role="value"].fmv-inline-text-control',
+                '.layout-v2-tab-section__card--active [data-frontmatter-field-key="newField"] [data-frontmatter-focus-role="value"].fmv-inline-text-control',
             );
             return {
                 activeTag: activeElement?.tagName ?? null,
@@ -388,11 +393,11 @@ test.describe("frontmatter 可见性", () => {
         await page.keyboard.press("j");
 
         const navigationState = await page.evaluate(() => {
-            const content = document.querySelector(".cm-content") as (HTMLElement & {
+            const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as (HTMLElement & {
                 cmTile?: { view?: { state: { doc: { toString(): string } } } };
             }) | null;
             const activeElement = document.activeElement as HTMLElement | null;
-            const widget = document.querySelector(".cm-frontmatter-widget");
+            const widget = document.querySelector(".layout-v2-tab-section__card--active .cm-frontmatter-widget");
 
             return {
                 activeTag: activeElement?.tagName ?? null,

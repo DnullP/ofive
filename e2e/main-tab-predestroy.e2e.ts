@@ -57,9 +57,11 @@ async function createRightSideSplit(page: Page): Promise<void> {
     );
 }
 
-async function readTabSections(page: Page): Promise<Array<{ id: string | null; titles: string[] }>> {
+async function readProjectedTabSections(page: Page): Promise<Array<{ id: string | null; titles: string[] }>> {
     return page.evaluate(() => {
-        return Array.from(document.querySelectorAll<HTMLElement>(".layout-v2-tab-section")).map((node) => ({
+        const overlayRoot = document.querySelector<HTMLElement>("[data-layout-tab-preview-overlay='true']");
+        const queryRoot: ParentNode = overlayRoot ?? document;
+        return Array.from(queryRoot.querySelectorAll<HTMLElement>(".layout-v2-tab-section")).map((node) => ({
             id: node.getAttribute("data-tab-section-id"),
             titles: Array.from(node.querySelectorAll<HTMLElement>(".layout-v2-tab-section__tab-title")).map((item) => item.textContent ?? ""),
         }));
@@ -88,9 +90,10 @@ test.describe("main tab pre-destroy", () => {
         await page.mouse.move(startX - 24, startY, { steps: 10 });
         await page.waitForTimeout(120);
 
-        const sections = await readTabSections(page);
+        const sections = await readProjectedTabSections(page);
         expect(sections).toHaveLength(1);
         expect(sections[0]?.id).toBe("main-tabs");
+        expect(sections.some((section) => section.titles.length === 0)).toBe(false);
         await expect(page.getByText("No open tabs")).toHaveCount(0);
 
         await page.mouse.up();

@@ -42,6 +42,7 @@ export type TabLifecycleScope = "global" | "vault";
  * @field id        - 组件唯一标识（即 component key，如 "codemirror"）
  * @field component - React 组件，接收宿主 workbench 的 Tab props
  * @field lifecycleScope - 仓库切换时的生命周期作用域
+ * @field deferPresentationUntilReady - 是否等待组件自行提交首开 ready 后再展示
  */
 export interface TabComponentDescriptor {
     /** 组件唯一标识（component key） */
@@ -50,6 +51,8 @@ export interface TabComponentDescriptor {
     component: (props: WorkbenchTabProps<Record<string, unknown>>) => ReactNode;
     /** 仓库切换时的生命周期作用域，未声明时默认视为 global */
     lifecycleScope?: TabLifecycleScope;
+    /** 是否等待组件通过 api.markContentReady 提交首开展示。 */
+    deferPresentationUntilReady?: boolean;
 }
 
 /* ────────────────── 内部状态 ────────────────── */

@@ -198,6 +198,115 @@ export interface UseCodeMirrorEditorLifecycleOptions {
         blockFrom: number;
         position: "first" | "last";
     }): boolean;
+    /** 编辑器首开内容完成初始化后的提交回调。 */
+    onInitialContentReady?(): void;
+}
+
+/**
+ * @function editorDocumentStartsWithFrontmatter
+ * @description 判断当前文档首行是否为 frontmatter 起始分隔符。
+ * @param view CodeMirror 编辑器视图。
+ * @returns 存在 frontmatter 起始分隔符时返回 true。
+ */
+function editorDocumentStartsWithFrontmatter(view: EditorView): boolean {
+    const firstLine = view.state.doc.line(1).text.trim();
+    return firstLine === "---";
+}
+
+/**
+ * @function isEditorInitialPresentationReady
+ * @description 判断编辑器首开展示依赖的 DOM 是否已经稳定。
+ * @param view CodeMirror 编辑器视图。
+ * @returns 可提交展示时返回 true。
+ */
+function isEditorInitialPresentationReady(view: EditorView): boolean {
+    if (!editorDocumentStartsWithFrontmatter(view)) {
+        return true;
+    }
+
+    const visualFrontmatter = view.dom.querySelector(".cm-frontmatter-widget .fmv-editor");
+    const hiddenFrontmatterLines = view.dom.querySelectorAll(
+        ".cm-hidden-block-line, .cm-hidden-block-anchor-line",
+    );
+
+    return visualFrontmatter instanceof HTMLElement && hiddenFrontmatterLines.length > 0;
+}
+
+/**
+ * @function scheduleEditorInitialPresentationReady
+ * @description 等待编辑器首开依赖的 DOM ready 后通知 layout 提交展示。
+ * @param view CodeMirror 编辑器视图。
+ * @param articleId 当前文章 id。
+ * @param filePath 当前文件路径。
+ * @param onReady ready 回调。
+ * @returns 取消等待函数。
+ */
+function scheduleEditorInitialPresentationReady(
+    view: EditorView,
+    articleId: string,
+    filePath: string,
+    onReady: (() => void) | undefined,
+): () => void {
+    let disposed = false;
+    let frameId = 0;
+    const hasFrontmatter = editorDocumentStartsWithFrontmatter(view);
+    const observer = typeof MutationObserver !== "undefined"
+        ? new MutationObserver(() => {
+            queueCheck();
+        })
+        : null;
+
+    const complete = (): void => {
+        if (disposed) {
+            return;
+        }
+
+        disposed = true;
+        observer?.disconnect();
+        console.info("[editor] initial content ready", {
+            articleId,
+            filePath,
+            hasFrontmatter,
+        });
+        onReady?.();
+    };
+
+    const checkReady = (): void => {
+        if (disposed) {
+            return;
+        }
+
+        if (isEditorInitialPresentationReady(view)) {
+            complete();
+        }
+    };
+
+    function queueCheck(): void {
+        if (disposed || frameId !== 0) {
+            return;
+        }
+
+        frameId = window.requestAnimationFrame(() => {
+            frameId = 0;
+            checkReady();
+        });
+    }
+
+    observer?.observe(view.dom, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class"],
+    });
+    queueCheck();
+
+    return () => {
+        disposed = true;
+        observer?.disconnect();
+        if (frameId !== 0) {
+            window.cancelAnimationFrame(frameId);
+        }
+    };
 }
 
 /**
@@ -631,6 +740,8 @@ export function useCodeMirrorEditorLifecycle(
             extensions: extensions as Extension,
         });
 
+        let cancelInitialPresentationReady: (() => void) | null = null;
+
         try {
             viewRef.current = new EditorView({
                 state,
@@ -726,12 +837,16 @@ export function useCodeMirrorEditorLifecycle(
             content: state.doc.toString(),
         });
 
-        if (
-            viewRef.current
-            && options.initialAutoFocus
-            && !options.hasAppliedInitialAutoFocusRef.current
-            && !restoredViewState
-        ) {
+        const focusInitialEditorIfNeeded = (): void => {
+            if (
+                !viewRef.current
+                || !options.initialAutoFocus
+                || options.hasAppliedInitialAutoFocusRef.current
+                || restoredViewState
+            ) {
+                return;
+            }
+
             options.hasAppliedInitialAutoFocusRef.current = true;
             const targetOffset = clampEditorOffset(
                 options.initialCursorOffset ?? state.selection.main.head,
@@ -751,12 +866,25 @@ export function useCodeMirrorEditorLifecycle(
                 });
                 liveView.focus();
             });
+        };
+
+        if (viewRef.current) {
+            cancelInitialPresentationReady = scheduleEditorInitialPresentationReady(
+                viewRef.current,
+                options.articleId,
+                options.currentFilePathRef.current,
+                () => {
+                    options.onInitialContentReady?.();
+                    focusInitialEditorIfNeeded();
+                },
+            );
         }
 
         const activeLine = state.doc.lineAt(state.selection.main.head);
         void options.prefetchLineSegmentation(activeLine.number, activeLine.text);
 
         return () => {
+            cancelInitialPresentationReady?.();
             options.clearPendingSegmentation();
             gutterResizeObserver?.disconnect();
             gutterMutationObserver?.disconnect();
