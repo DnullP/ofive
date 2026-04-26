@@ -14,6 +14,8 @@ import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 let deletedMarkdownPath = "";
 let deletedCanvasPath = "";
+let deleteConfirmationRequests: Array<{ relativePath: string; isDir: boolean }> = [];
+let shouldConfirmDelete = true;
 
 /**
  * @function flushAsyncCommandExecution
@@ -75,6 +77,8 @@ describe("commandSystem file.deleteFocused", () => {
         resetEditorContext();
         deletedMarkdownPath = "";
         deletedCanvasPath = "";
+        deleteConfirmationRequests = [];
+        shouldConfirmDelete = true;
     });
 
     /**
@@ -97,12 +101,51 @@ describe("commandSystem file.deleteFocused", () => {
             },
             openFileTab: () => undefined,
             getExistingMarkdownPaths: () => [],
+            requestDeleteConfirmation: async (request) => {
+                deleteConfirmationRequests.push(request);
+                return shouldConfirmDelete;
+            },
         });
 
         await flushAsyncCommandExecution();
 
+        expect(deleteConfirmationRequests).toEqual([
+            { relativePath: "notes/demo.md", isDir: false },
+        ]);
         expect(deletedMarkdownPath).toBe("notes/demo.md");
         expect(closedTabId).toBe("file:notes/demo.md");
+    });
+
+    it("should cancel delete when confirmation is rejected", async () => {
+        shouldConfirmDelete = false;
+        reportArticleFocus({
+            articleId: "file:notes/demo.md",
+            path: "notes/demo.md",
+            content: "# Demo",
+        });
+
+        let closedTabId = "";
+
+        executeCommand("file.deleteFocused", {
+            activeTabId: null,
+            closeTab: (tabId) => {
+                closedTabId = tabId;
+            },
+            openFileTab: () => undefined,
+            getExistingMarkdownPaths: () => [],
+            requestDeleteConfirmation: async (request) => {
+                deleteConfirmationRequests.push(request);
+                return shouldConfirmDelete;
+            },
+        });
+
+        await flushAsyncCommandExecution();
+
+        expect(deleteConfirmationRequests).toEqual([
+            { relativePath: "notes/demo.md", isDir: false },
+        ]);
+        expect(deletedMarkdownPath).toBe("");
+        expect(closedTabId).toBe("");
     });
 
     /**
@@ -130,10 +173,17 @@ describe("commandSystem file.deleteFocused", () => {
             },
             openFileTab: () => undefined,
             getExistingMarkdownPaths: () => [],
+            requestDeleteConfirmation: async (request) => {
+                deleteConfirmationRequests.push(request);
+                return shouldConfirmDelete;
+            },
         });
 
         await flushAsyncCommandExecution();
 
+        expect(deleteConfirmationRequests).toEqual([
+            { relativePath: "notes/board.canvas", isDir: false },
+        ]);
         expect(deletedCanvasPath).toBe("notes/board.canvas");
         expect(closedTabId).toBe("file:notes/board.canvas");
     });

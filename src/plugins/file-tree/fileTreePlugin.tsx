@@ -212,6 +212,26 @@ export function activatePlugin(): () => void {
                     isDir: selected.isDir,
                 });
 
+                if (!context.requestDeleteConfirmation) {
+                    console.warn("[fileTreePlugin] fileTree.deleteSelected skipped: delete confirmation unavailable", {
+                        path: selected.path,
+                        isDir: selected.isDir,
+                    });
+                    return;
+                }
+
+                const confirmed = await context.requestDeleteConfirmation({
+                    relativePath: selected.path,
+                    isDir: selected.isDir,
+                });
+                if (!confirmed) {
+                    console.info("[fileTreePlugin] fileTree.deleteSelected cancelled", {
+                        path: selected.path,
+                        isDir: selected.isDir,
+                    });
+                    return;
+                }
+
                 try {
                     if (selected.isDir) {
                         await deleteVaultDirectory(selected.path);

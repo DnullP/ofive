@@ -91,6 +91,7 @@ const LAST_VAULT_PATH_STORAGE_KEY = "ofive:last-vault-path";
  * @field editorTabSize - Tab 缩进宽度（空格数），范围 1–8
  * @field editorLineWrapping - 是否开启自动换行
  * @field editorTabRestoreMode - Tab 切换/重建时优先恢复视图位置还是光标位置
+ * @field editorTabOutEnabled - 是否开启编辑器 TabOut（光标位于闭合括号前时按 Tab 跳出）
  * @field editorLineNumbers - 行号显示模式："off" 隐藏 | "absolute" 绝对行号 | "relative" 相对行号
  * @field autoSaveEnabled - 是否开启自动保存
  * @field autoSaveDelayMs - 自动保存防抖延迟（毫秒），范围 500–10000
@@ -151,6 +152,8 @@ export interface FeatureSettings {
     editorLineWrapping: boolean;
     /** Tab 切换/重建时优先恢复视图位置还是光标位置，默认 "viewport" */
     editorTabRestoreMode: EditorTabRestoreMode;
+    /** 光标位于闭合括号前时按 Tab 跳到闭合括号右侧，默认 true */
+    editorTabOutEnabled: boolean;
     /** 行号显示模式："off" 隐藏 | "absolute" 绝对行号 | "relative" 相对行号，默认 "absolute" */
     editorLineNumbers: "off" | "absolute" | "relative";
     /** 是否开启自动保存，默认 true */
@@ -242,6 +245,7 @@ export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
     editorTabSize: 4,
     editorLineWrapping: true,
     editorTabRestoreMode: "viewport",
+    editorTabOutEnabled: true,
     editorLineNumbers: "absolute",
     autoSaveEnabled: true,
     autoSaveDelayMs: 1500,
@@ -474,6 +478,10 @@ function normalizeBackendConfig(config: VaultConfig): {
     const editorTabRestoreMode = isEditorTabRestoreMode(featuresObj.editorTabRestoreMode)
         ? featuresObj.editorTabRestoreMode
         : DEFAULT_FEATURE_SETTINGS.editorTabRestoreMode;
+    const editorTabOutEnabled =
+        typeof featuresObj.editorTabOutEnabled === "boolean"
+            ? featuresObj.editorTabOutEnabled
+            : DEFAULT_FEATURE_SETTINGS.editorTabOutEnabled;
     /* 行号模式：兼容旧版 boolean 值（true→"absolute"，false→"off"） */
     const editorLineNumbers: "off" | "absolute" | "relative" = (() => {
         const raw = featuresObj.editorLineNumbers;
@@ -548,6 +556,7 @@ function normalizeBackendConfig(config: VaultConfig): {
         editorTabSize,
         editorLineWrapping,
         editorTabRestoreMode,
+        editorTabOutEnabled,
         editorLineNumbers,
         autoSaveEnabled,
         autoSaveDelayMs,
@@ -592,6 +601,7 @@ function normalizeBackendConfig(config: VaultConfig): {
         featuresObj.editorTabSize !== editorTabSize ||
         featuresObj.editorLineWrapping !== editorLineWrapping ||
         featuresObj.editorTabRestoreMode !== editorTabRestoreMode ||
+        featuresObj.editorTabOutEnabled !== editorTabOutEnabled ||
         featuresObj.editorLineNumbers !== editorLineNumbers ||
         featuresObj.autoSaveEnabled !== autoSaveEnabled ||
         featuresObj.autoSaveDelayMs !== autoSaveDelayMs ||
@@ -629,6 +639,7 @@ function normalizeBackendConfig(config: VaultConfig): {
             editorTabSize,
             editorLineWrapping,
             editorTabRestoreMode,
+            editorTabOutEnabled,
             editorLineNumbers,
             autoSaveEnabled,
             autoSaveDelayMs,

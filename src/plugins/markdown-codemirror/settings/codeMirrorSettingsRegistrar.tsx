@@ -101,6 +101,17 @@ export function registerCodeMirrorSettingsSection(): () => void {
             ],
         },
         {
+            id: "tab-out",
+            sectionId: "codemirror-editor",
+            order: 27,
+            kind: "toggle",
+            title: "settings.tabOut",
+            description: "settings.tabOutDesc",
+            searchTerms: ["tab out", "bracket", "括号", "跳出括号"],
+            useValue: () => useConfigState().featureSettings.editorTabOutEnabled,
+            updateValue: (nextValue) => updateFeatureSetting("editorTabOutEnabled", nextValue),
+        },
+        {
             id: "line-numbers",
             sectionId: "codemirror-editor",
             order: 30,

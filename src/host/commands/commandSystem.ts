@@ -38,5 +38,6 @@ export type {
     CommandScope,
     CommandShortcutMeta,
     CreateEntryDraftRequest,
+    DeleteConfirmationRequest,
     EditorNativeCommandId,
 } from "./commandTypes";

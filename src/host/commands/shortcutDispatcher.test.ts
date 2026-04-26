@@ -184,6 +184,44 @@ describe("dispatchShortcut", () => {
         expect(result.reason).toBe("conditioned-match");
     });
 
+    test("global source should route shared Cmd+Backspace to editor delete when editor is focused", () => {
+        defineCommand("file.deleteFocused", { condition: "editorFocused" });
+        defineCommand("fileTree.deleteSelected", { condition: "fileTreeFocused" });
+
+        const result = dispatchShortcut({
+            event: createKeyboardEventLike("Cmd+Backspace"),
+            bindings: {
+                "file.deleteFocused": "Cmd+Backspace",
+                "fileTree.deleteSelected": "Cmd+Backspace",
+            },
+            source: "global",
+            conditionContext: createConditionContext({ focusedComponent: "tab:codemirror" }),
+        });
+
+        expect(result.kind).toBe("execute");
+        expect(result.commandId).toBe("file.deleteFocused");
+        expect(result.reason).toBe("conditioned-match");
+    });
+
+    test("global source should route shared Cmd+Backspace to file tree delete when file tree is focused", () => {
+        defineCommand("file.deleteFocused", { condition: "editorFocused" });
+        defineCommand("fileTree.deleteSelected", { condition: "fileTreeFocused" });
+
+        const result = dispatchShortcut({
+            event: createKeyboardEventLike("Cmd+Backspace"),
+            bindings: {
+                "file.deleteFocused": "Cmd+Backspace",
+                "fileTree.deleteSelected": "Cmd+Backspace",
+            },
+            source: "global",
+            conditionContext: createConditionContext({ focusedComponent: "panel:files" }),
+        });
+
+        expect(result.kind).toBe("execute");
+        expect(result.commandId).toBe("fileTree.deleteSelected");
+        expect(result.reason).toBe("conditioned-match");
+    });
+
     test("global source should defer editor-scoped command execution", () => {
         defineCommand("test.editor.command", {
             scope: "editor",
@@ -283,6 +321,26 @@ describe("dispatchShortcut", () => {
 
         expect(result.kind).toBe("execute");
         expect(result.commandId).toBe("test.editor.selectAll");
+    });
+
+    test("editor source should execute segmented delete on Alt+Backspace only in editor body context", () => {
+        defineCommand("editor.segmentedDeleteBackward", {
+            scope: "editor",
+            condition: "editorBodyFocused",
+        });
+
+        const result = dispatchShortcut({
+            event: createKeyboardEventLike("Alt+Backspace"),
+            bindings: {
+                "editor.segmentedDeleteBackward": "Alt+Backspace",
+            },
+            source: "editor",
+            conditionContext: createConditionContext({ focusedComponent: "tab:codemirror" }),
+            managedShortcutCandidates: ["Alt+Backspace"],
+        });
+
+        expect(result.kind).toBe("execute");
+        expect(result.commandId).toBe("editor.segmentedDeleteBackward");
     });
 
     test("should support composite command conditions with AND semantics", () => {

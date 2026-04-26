@@ -33,6 +33,7 @@ export const EDITOR_MANAGED_NATIVE_COMMAND_IDS: EditorNativeCommandId[] = [
     "editor.insertTask",
     "editor.insertFrontmatter",
     "editor.insertTable",
+    "editor.segmentedDeleteBackward",
 ];
 
 /**
@@ -57,6 +58,7 @@ export const EDITOR_NATIVE_FALLBACK_SHORTCUTS: Record<EditorNativeCommandId, str
     "editor.insertTask": [],
     "editor.insertFrontmatter": [],
     "editor.insertTable": [],
+    "editor.segmentedDeleteBackward": ["Alt+Backspace"],
 };
 
 /**

@@ -93,6 +93,29 @@ async function deleteVaultEntryByPath(relativePath: string): Promise<void> {
     await deleteVaultBinaryFile(relativePath);
 }
 
+function inferDeleteTargetIsDirectory(relativePath: string): boolean {
+    return !relativePath.includes(".");
+}
+
+async function requestDeleteConfirmation(
+    context: CommandContext,
+    relativePath: string,
+    isDir: boolean,
+): Promise<boolean> {
+    if (!context.requestDeleteConfirmation) {
+        console.warn("[command-system] delete skipped: delete confirmation unavailable", {
+            path: relativePath,
+            isDir,
+        });
+        return false;
+    }
+
+    return context.requestDeleteConfirmation({
+        relativePath,
+        isDir,
+    });
+}
+
 /**
  * @function resolveParentDirectoryByPath
  * @description 根据文件路径解析父目录。
@@ -324,6 +347,19 @@ export const FILE_COMMAND_DEFINITIONS = {
                 articleId: targetArticle.articleId,
                 path: targetArticle.path,
             });
+
+            const confirmed = await requestDeleteConfirmation(
+                context,
+                targetArticle.path,
+                inferDeleteTargetIsDirectory(targetArticle.path),
+            );
+            if (!confirmed) {
+                console.info("[command-system] deleteFocused cancelled", {
+                    articleId: targetArticle.articleId,
+                    path: targetArticle.path,
+                });
+                return;
+            }
 
             await deleteVaultEntryByPath(targetArticle.path);
             context.closeTab(targetArticle.articleId);

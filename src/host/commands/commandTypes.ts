@@ -62,7 +62,8 @@ export type BuiltinCommandId =
     | "editor.insertLink"
     | "editor.insertTask"
     | "editor.insertFrontmatter"
-    | "editor.insertTable";
+    | "editor.insertTable"
+    | "editor.segmentedDeleteBackward";
 
 /**
  * @type CommandId
@@ -92,7 +93,8 @@ export type EditorNativeCommandId =
     | "editor.insertLink"
     | "editor.insertTask"
     | "editor.insertFrontmatter"
-    | "editor.insertTable";
+    | "editor.insertTable"
+    | "editor.segmentedDeleteBackward";
 
 /**
  * @interface CreateEntryDraftRequest
@@ -109,6 +111,17 @@ export interface CreateEntryDraftRequest {
     placeholder: string;
     /** 初始建议名称 */
     initialValue: string;
+}
+
+/**
+ * @interface DeleteConfirmationRequest
+ * @description 删除前确认请求：供命令系统在执行破坏性删除前向宿主 UI 请求确认。
+ */
+export interface DeleteConfirmationRequest {
+    /** 目标条目相对路径 */
+    relativePath: string;
+    /** 是否为目录 */
+    isDir: boolean;
 }
 
 /**
@@ -172,6 +185,8 @@ export interface CommandContext {
     getFileTreePasteTargetDirectory?: () => string;
     /** 通过宿主 UI 请求用户输入待创建名称 */
     requestCreateEntryDraft?: (request: CreateEntryDraftRequest) => Promise<string | null>;
+    /** 通过宿主 UI 请求删除前确认 */
+    requestDeleteConfirmation?: (request: DeleteConfirmationRequest) => Promise<boolean>;
 }
 
 /**

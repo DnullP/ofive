@@ -66,9 +66,8 @@ function createEventStub(
 }
 
 describe("handleEditorKeydown", () => {
-    test("should execute segmented delete for Cmd+Backspace in edit mode", () => {
+    test("should route Cmd+Backspace through delete current file command", () => {
         const view = createViewStub("中文测试");
-        const executeSegmentedDeleteBackward = mock(async () => undefined);
         const executeEditorCommand = mock(() => undefined);
         const event = createEventStub({
             key: "Backspace",
@@ -79,12 +78,10 @@ describe("handleEditorKeydown", () => {
             articleId: "file:demo",
             event,
             view,
-            getBindings: () => ({ "editor.find": "Cmd+F" }),
+            getBindings: () => ({ "file.deleteFocused": "Cmd+Backspace" }),
             getManagedShortcutCandidates: () => [],
             getCurrentVaultPath: () => "/vault",
-            getDisplayMode: () => "edit",
             isVimModeEnabled: () => false,
-            executeSegmentedDeleteBackward,
             executeEditorCommand,
             focusWidgetNavigationTarget: mock(() => false),
             frontmatterSelectors: {
@@ -95,14 +92,62 @@ describe("handleEditorKeydown", () => {
                 shell: "[data-markdown-table-block-from]",
             },
             dependencies: {
-                canMutateEditorDocument: () => true,
+                dispatchShortcut: () => ({
+                    kind: "execute",
+                    commandId: "file.deleteFocused",
+                    shouldPreventDefault: true,
+                    shouldStopPropagation: true,
+                    notifyTabClose: false,
+                    reason: "conditioned-match",
+                }),
             },
         });
 
-        expect(executeSegmentedDeleteBackward).toHaveBeenCalledWith(view);
+        expect(executeEditorCommand).toHaveBeenCalledWith("file.deleteFocused");
         expect(event.preventDefault).toHaveBeenCalledTimes(1);
         expect(event.stopPropagation).toHaveBeenCalledTimes(1);
-        expect(executeEditorCommand).not.toHaveBeenCalled();
+    });
+
+    test("should route Alt+Backspace through segmented delete command in edit mode", () => {
+        const view = createViewStub("中文测试");
+        const executeEditorCommand = mock(() => undefined);
+        const event = createEventStub({
+            key: "Backspace",
+            altKey: true,
+        });
+
+        handleEditorKeydown({
+            articleId: "file:demo",
+            event,
+            view,
+            getBindings: () => ({ "editor.segmentedDeleteBackward": "Alt+Backspace" }),
+            getManagedShortcutCandidates: () => [],
+            getCurrentVaultPath: () => "/vault",
+            isVimModeEnabled: () => false,
+            executeEditorCommand,
+            focusWidgetNavigationTarget: mock(() => false),
+            frontmatterSelectors: {
+                focusable: "[data-frontmatter-field-focusable='true']",
+                navigation: "[data-frontmatter-vim-nav='true']",
+            },
+            markdownTableSelectors: {
+                shell: "[data-markdown-table-block-from]",
+            },
+            dependencies: {
+                dispatchShortcut: () => ({
+                    kind: "execute",
+                    commandId: "editor.segmentedDeleteBackward",
+                    shouldPreventDefault: true,
+                    shouldStopPropagation: true,
+                    notifyTabClose: false,
+                    reason: "conditioned-match",
+                }),
+            },
+        });
+
+        expect(executeEditorCommand).toHaveBeenCalledWith("editor.segmentedDeleteBackward");
+        expect(event.preventDefault).toHaveBeenCalledTimes(1);
+        expect(event.stopPropagation).toHaveBeenCalledTimes(1);
     });
 
     test("should consume vim handoff before shortcut dispatch", () => {
@@ -127,9 +172,7 @@ describe("handleEditorKeydown", () => {
             getBindings: () => ({ "editor.find": "Cmd+F" }),
             getManagedShortcutCandidates: () => [],
             getCurrentVaultPath: () => "/vault",
-            getDisplayMode: () => "edit",
             isVimModeEnabled: () => true,
-            executeSegmentedDeleteBackward: mock(async () => undefined),
             executeEditorCommand: mock(() => undefined),
             focusWidgetNavigationTarget,
             frontmatterSelectors: {
@@ -172,9 +215,7 @@ describe("handleEditorKeydown", () => {
             getBindings: () => ({ "sidebar.left.toggle": "Cmd+Shift+J" }),
             getManagedShortcutCandidates: () => ["Cmd+Shift+J"],
             getCurrentVaultPath: () => "/vault",
-            getDisplayMode: () => "edit",
             isVimModeEnabled: () => false,
-            executeSegmentedDeleteBackward: mock(async () => undefined),
             executeEditorCommand,
             focusWidgetNavigationTarget: mock(() => false),
             frontmatterSelectors: {
@@ -219,9 +260,7 @@ describe("handleEditorKeydown", () => {
                 getBindings: () => ({}),
                 getManagedShortcutCandidates: () => [],
                 getCurrentVaultPath: () => "/vault",
-                getDisplayMode: () => "edit",
                 isVimModeEnabled: () => false,
-                executeSegmentedDeleteBackward: mock(async () => undefined),
                 executeEditorCommand: mock(() => undefined),
                 focusWidgetNavigationTarget: mock(() => false),
                 frontmatterSelectors: {
@@ -270,9 +309,7 @@ describe("handleEditorKeydown", () => {
             getBindings: () => ({}),
             getManagedShortcutCandidates: () => [],
             getCurrentVaultPath: () => "/vault",
-            getDisplayMode: () => "edit",
             isVimModeEnabled: () => true,
-            executeSegmentedDeleteBackward: mock(async () => undefined),
             executeEditorCommand: mock(() => undefined),
             focusWidgetNavigationTarget: mock(() => false),
             frontmatterSelectors: {
@@ -290,6 +327,49 @@ describe("handleEditorKeydown", () => {
 
         expect(resolveRegisteredVimHandoff).not.toHaveBeenCalled();
         expect(dispatchShortcut).toHaveBeenCalledTimes(1);
+        expect(event.preventDefault).not.toHaveBeenCalled();
+        expect(event.stopPropagation).not.toHaveBeenCalled();
+    });
+
+    test("should not steal Alt+Backspace from markdown table widget shortcuts", () => {
+        const view = createViewStub("| a | b |\n| --- | --- |\n| c | d |");
+        const executeEditorCommand = mock(() => undefined);
+        const event = createEventStub({
+            key: "Backspace",
+            altKey: true,
+            target: {
+                closest: (selector: string) => {
+                    if (selector === "[data-markdown-table-block-from]") {
+                        return {} as Element;
+                    }
+                    return null;
+                },
+            } as unknown as EventTarget,
+        });
+
+        handleEditorKeydown({
+            articleId: "file:demo",
+            event,
+            view,
+            getBindings: () => ({ "editor.segmentedDeleteBackward": "Alt+Backspace" }),
+            getManagedShortcutCandidates: () => ["Alt+Backspace"],
+            getCurrentVaultPath: () => "/vault",
+            isVimModeEnabled: () => false,
+            executeEditorCommand,
+            focusWidgetNavigationTarget: mock(() => false),
+            frontmatterSelectors: {
+                focusable: "[data-frontmatter-field-focusable='true']",
+                navigation: "[data-frontmatter-vim-nav='true']",
+            },
+            markdownTableSelectors: {
+                shell: "[data-markdown-table-block-from]",
+            },
+            dependencies: {
+                isMarkdownTableEditorFocused: () => true,
+            },
+        });
+
+        expect(executeEditorCommand).not.toHaveBeenCalled();
         expect(event.preventDefault).not.toHaveBeenCalled();
         expect(event.stopPropagation).not.toHaveBeenCalled();
     });

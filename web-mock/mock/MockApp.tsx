@@ -26,18 +26,20 @@ import { readWorkbenchLayoutMode } from "../../src/host/layout/workbenchLayoutMo
 import { CodeMirrorEditorTab } from "../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
 import { KnowledgeGraphTab } from "../../src/plugins/knowledge-graph/tab/KnowledgeGraphTab";
 import { CanvasTab } from "../../src/plugins/canvas/CanvasTab";
+import { ImageViewerTab } from "../../src/plugins/image-viewer/tab/ImageViewerTab";
 import { CalendarPanel } from "../../src/plugins/calendar/CalendarPanel";
 import { CalendarTab } from "../../src/plugins/calendar/CalendarTab";
 import { activatePlugin as activateCommandPalettePlugin } from "../../src/plugins/command-palette/commandPalettePlugin";
 import { SettingsTab } from "../../src/host/layout/SettingsTab";
 import { useConfigSync } from "../../src/host/config/configStore";
+import { registerCommands } from "../../src/host/commands/commandSystem";
 import { registerActivity } from "../../src/host/registry/activityRegistry";
 import { registerFileOpener } from "../../src/host/registry/fileOpenerRegistry";
 import { registerPanel } from "../../src/host/registry/panelRegistry";
 import { registerTabComponent } from "../../src/host/registry/tabComponentRegistry";
-import { buildFileTabId, normalizeRelativePath } from "../../src/host/layout/openFileService";
+import { buildFileTabId, joinVaultAbsolutePath, normalizeRelativePath } from "../../src/host/layout/openFileService";
 import { publishNotification } from "../../src/host/notifications/notificationCenter";
-import { readVaultMarkdownFile, setCurrentVault } from "../../src/api/vaultApi";
+import { readVaultCanvasFile, readVaultMarkdownFile, setCurrentVault } from "../../src/api/vaultApi";
 import { MockVaultPanel } from "./MockVaultPanel";
 import "../../src/plugins/ai-chat/aiChatPlugin.css";
 import "../../src/plugins/backlinks/backlinksPlugin.css";
@@ -65,6 +67,14 @@ const LOG_NOTIFICATION_TEST_ACTIVITY_ID = "log-notification-test-activity";
 function isMockMarkdownPath(relativePath: string): boolean {
     const normalizedPath = relativePath.toLowerCase();
     return normalizedPath.endsWith(".md") || normalizedPath.endsWith(".markdown");
+}
+
+function isMockCanvasPath(relativePath: string): boolean {
+    return relativePath.toLowerCase().endsWith(".canvas");
+}
+
+function isMockImagePath(relativePath: string): boolean {
+    return /\.(png|jpg|jpeg|gif|webp|bmp|svg|ico)$/i.test(relativePath);
 }
 
 function resolveMockVaultPath(): string {
@@ -487,6 +497,35 @@ function ensureMockComponentsRegistered(): void {
     mockRegistered = true;
 
     activateCommandPalettePlugin();
+    registerCommands([
+        {
+            id: "fileTree.deleteSelected",
+            title: "commands.deleteSelectedFile",
+            condition: "fileTreeFocused",
+            shortcut: {
+                defaultBinding: "Cmd+Backspace",
+                editableInSettings: true,
+            },
+            async execute(context) {
+                const selectedItem = context.getFileTreeSelectedItem?.() ?? null;
+                if (!selectedItem) {
+                    console.warn("[MockApp] fileTree.deleteSelected skipped: no selection");
+                    return;
+                }
+
+                const confirmed = await context.requestDeleteConfirmation?.({
+                    relativePath: selectedItem.path,
+                    isDir: selectedItem.isDir,
+                });
+                if (!confirmed) {
+                    console.info("[MockApp] fileTree.deleteSelected cancelled", selectedItem);
+                    return;
+                }
+
+                console.info("[MockApp] fileTree.deleteSelected", selectedItem);
+            },
+        },
+    ]);
 
     const filesIcon = React.createElement(FolderOpen, { size: 18, strokeWidth: 1.8 });
     const searchIcon = React.createElement(Search, { size: 18, strokeWidth: 1.8 });
@@ -668,6 +707,7 @@ function ensureMockComponentsRegistered(): void {
         deferPresentationUntilReady: true,
     });
     registerTabComponent({ id: "canvas", component: CanvasTab as never });
+    registerTabComponent({ id: "imageviewer", component: ImageViewerTab as never });
     registerTabComponent({ id: MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID, component: KnowledgeGraphTab as never });
     registerTabComponent({ id: MOCK_CALENDAR_TAB_COMPONENT_ID, component: CalendarTab as never });
     registerTabComponent({ id: MOCK_ARCHITECTURE_COMPONENT_ID, component: MockArchitectureDevtoolsTab as never });
@@ -692,6 +732,48 @@ function ensureMockComponentsRegistered(): void {
                 params: {
                     path: normalizedPath,
                     content,
+                },
+            };
+        },
+    });
+    registerFileOpener({
+        id: "mock.canvas.default-viewer",
+        label: "Mock Canvas",
+        kind: "canvas",
+        priority: 100,
+        matches: ({ relativePath }) => isMockCanvasPath(relativePath),
+        async resolveTab({ relativePath, contentOverride }) {
+            const normalizedPath = normalizeRelativePath(relativePath);
+            const content = typeof contentOverride === "string"
+                ? contentOverride
+                : await readVaultCanvasFile(normalizedPath).then((result) => result.content);
+
+            return {
+                id: buildFileTabId(normalizedPath),
+                title: normalizedPath.split("/").pop() ?? normalizedPath,
+                component: "canvas",
+                params: {
+                    path: normalizedPath,
+                    content,
+                },
+            };
+        },
+    });
+    registerFileOpener({
+        id: "mock.image.default-viewer",
+        label: "Mock Image Viewer",
+        kind: "image",
+        priority: 100,
+        matches: ({ relativePath }) => isMockImagePath(relativePath),
+        async resolveTab({ relativePath, currentVaultPath }) {
+            const normalizedPath = normalizeRelativePath(relativePath);
+            return {
+                id: buildFileTabId(normalizedPath),
+                title: normalizedPath.split("/").pop() ?? normalizedPath,
+                component: "imageviewer",
+                params: {
+                    path: normalizedPath,
+                    absolutePath: joinVaultAbsolutePath(currentVaultPath, normalizedPath),
                 },
             };
         },

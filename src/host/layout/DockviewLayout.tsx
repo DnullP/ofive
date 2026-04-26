@@ -91,6 +91,7 @@ import {
 import {
     requestApplicationQuit,
 } from "../commands/systemShortcutSubsystem";
+import { requestVaultDeleteConfirmation } from "../commands/deleteConfirmation";
 import { dispatchShortcut } from "../commands/shortcutDispatcher";
 import { createConditionContext } from "../conditions/conditionEvaluator";
 import { applyPanelOrderForPosition } from "./panelOrderUtils";
@@ -3497,6 +3498,7 @@ export function DockviewLayout({
         quitApplication: async () => {
             await requestApplicationQuit();
         },
+        requestDeleteConfirmation: requestVaultDeleteConfirmation,
         getFileTreeSelectedItem: () => {
             const activeEl = document.activeElement as HTMLElement | null;
             if (!activeEl?.closest(".file-tree")) {

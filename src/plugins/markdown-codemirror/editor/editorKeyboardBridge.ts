@@ -18,9 +18,7 @@
  *     getBindings: () => bindings,
  *     getManagedShortcutCandidates: () => candidates,
  *     getCurrentVaultPath: () => "/vault",
- *     getDisplayMode: () => "edit",
  *     isVimModeEnabled: () => true,
- *     executeSegmentedDeleteBackward: async () => undefined,
  *     executeEditorCommand: (commandId) => console.log(commandId),
  *     focusWidgetNavigationTarget: () => false,
  *     frontmatterSelectors: {
@@ -40,9 +38,7 @@ import type { CommandId } from "../../../host/commands/commandSystem";
 import { dispatchShortcut } from "../../../host/commands/shortcutDispatcher";
 import { notifyTabCloseShortcutTriggered } from "../../../host/commands/shortcutEvents";
 import { createConditionContext } from "../../../host/conditions/conditionEvaluator";
-import type { EditorDisplayMode } from "../../../host/editor/editorDisplayModeStore";
 import { resolveEditorBodyAnchor } from "./editorBodyAnchor";
-import { canMutateEditorDocument } from "./editorModePolicy";
 import {
     resolveRegisteredVimHandoff,
     type VimHandoffResult,
@@ -127,8 +123,6 @@ export interface EditorKeyboardBridgeDependencies {
     isMarkdownTableEditorFocused: typeof isMarkdownTableEditorFocused;
     /** 刷新 Markdown 表格编辑器缓冲。 */
     flushFocusedMarkdownTableEditor: typeof flushFocusedMarkdownTableEditor;
-    /** 编辑态写保护判断。 */
-    canMutateEditorDocument: typeof canMutateEditorDocument;
     /** 正文首锚点解析器。 */
     resolveEditorBodyAnchor: typeof resolveEditorBodyAnchor;
 }
@@ -148,12 +142,8 @@ export interface EditorKeyboardBridgeBaseOptions {
     getManagedShortcutCandidates(): string[];
     /** 读取当前 vault 路径。 */
     getCurrentVaultPath(): string | null | undefined;
-    /** 读取当前显示模式。 */
-    getDisplayMode(): EditorDisplayMode;
     /** 读取当前 Vim 开关状态。 */
     isVimModeEnabled(): boolean;
-    /** 执行删词删除。 */
-    executeSegmentedDeleteBackward(view: EditorView): Promise<void>;
     /** 执行宿主命令。 */
     executeEditorCommand(commandId: CommandId): void;
     /** 将焦点切入隐藏 widget 的导航层。 */
@@ -186,7 +176,6 @@ const DEFAULT_DEPENDENCIES: EditorKeyboardBridgeDependencies = {
     notifyTabCloseShortcutTriggered,
     isMarkdownTableEditorFocused,
     flushFocusedMarkdownTableEditor,
-    canMutateEditorDocument,
     resolveEditorBodyAnchor,
 };
 
@@ -249,6 +238,7 @@ function applyResolvedVimHandoff(
 function resolveEditorShortcutFocusedComponent(
     target: EventTarget | null,
     selectors: FrontmatterKeyboardSelectors,
+    markdownTableSelectors: MarkdownTableKeyboardSelectors,
 ): string {
     if (
         typeof HTMLElement !== "undefined" &&
@@ -256,6 +246,10 @@ function resolveEditorShortcutFocusedComponent(
         target.closest(selectors.focusable)
     ) {
         return "tab:codemirror-frontmatter";
+    }
+
+    if (isClosestCapableTarget(target) && target.closest(markdownTableSelectors.shell)) {
+        return "tab:codemirror-widget";
     }
 
     return "tab:codemirror";
@@ -322,22 +316,6 @@ export function handleEditorKeydown(options: HandleEditorKeydownOptions): void {
         }
     }
 
-    const isCmdBackspace =
-        event.key === "Backspace" &&
-        event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        !event.shiftKey;
-    if (isCmdBackspace) {
-        if (!dependencies.canMutateEditorDocument(options.getDisplayMode())) {
-            return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        void options.executeSegmentedDeleteBackward(view);
-        return;
-    }
-
     const resolution = dependencies.dispatchShortcut({
         event: event as KeyboardEvent,
         bindings: options.getBindings(),
@@ -346,12 +324,13 @@ export function handleEditorKeydown(options: HandleEditorKeydownOptions): void {
             focusedComponent: resolveEditorShortcutFocusedComponent(
                 event.target,
                 options.frontmatterSelectors,
+                options.markdownTableSelectors,
             ),
             activeTabId: options.articleId,
             activeEditorArticleId: options.articleId,
             currentVaultPath: options.getCurrentVaultPath(),
         }),
-        managedShortcutCandidates: options.getManagedShortcutCandidates(),
+        managedShortcutCandidates: isMarkdownTableTarget ? [] : options.getManagedShortcutCandidates(),
     });
 
     if (dependencies.isMarkdownTableEditorFocused()) {

@@ -17,6 +17,7 @@ import {
     type TabSectionTabDefinition,
     type WorkbenchActivityDefinition,
     type WorkbenchApi,
+    type WorkbenchLayoutSnapshot,
     type WorkbenchPanelContext,
     type WorkbenchPanelDefinition,
     type WorkbenchPanelLayoutSnapshot,
@@ -53,8 +54,15 @@ import {
     setRightSidebarVisibilitySnapshot,
     subscribeRightSidebarToggleRequest,
 } from "./rightSidebarVisibilityBridge";
-import { openFileWithResolver } from "./openFileService";
+import { openFileWithResolver, resolveFileTabDefinition } from "./openFileService";
 import { useConfigState } from "../config/configStore";
+import {
+    buildWorkspaceLayoutConfigValue,
+    countWorkspaceLayoutTabs,
+    getWorkspaceLayoutFromVaultConfig,
+    hydrateWorkspaceLayoutSnapshot,
+    saveWorkspaceLayoutSnapshot,
+} from "./workspaceLayoutPersistence";
 import {
     resolveActivityTitle,
     resolveTitle,
@@ -73,6 +81,7 @@ import {
     type CreateEntryDraftRequest,
     type CommandId,
 } from "../commands/commandSystem";
+import { requestVaultDeleteConfirmation } from "../commands/deleteConfirmation";
 
 const WORKBENCH_ACTIVITY_ITEM_CONTEXT_MENU_ID = "workbench-v2.activity.item";
 const WORKBENCH_ACTIVITY_BACKGROUND_CONTEXT_MENU_ID = "workbench-v2.activity.background";
@@ -84,6 +93,8 @@ interface WorkbenchContextMenuPayload {
 }
 import {
     detectFocusedComponentFromEvent,
+    PANEL_ID_DATA_ATTR,
+    TAB_COMPONENT_DATA_ATTR,
 } from "../commands/focusContext";
 import {
     notifyTabCloseShortcutTriggered,
@@ -108,6 +119,50 @@ const DEFAULT_RIGHT_RAIL_WIDTH = 260;
 const CUSTOM_ACTIVITY_REGISTRATION_PREFIX = "custom-activity:";
 const CUSTOM_ACTIVITY_CREATE_COMMAND_ID = "customActivity.create";
 const KEEP_ALIVE_INACTIVE_TAB_COMPONENT_IDS = new Set(["knowledgegraph"]);
+
+function getFocusedFileTreeElement(): HTMLElement | null {
+    if (typeof document === "undefined") {
+        return null;
+    }
+
+    const activeEl = document.activeElement as HTMLElement | null;
+    if (!activeEl?.closest(".file-tree")) {
+        return null;
+    }
+
+    return activeEl.closest("[data-tree-path]") as HTMLElement | null;
+}
+
+function resolveFocusedFileTreeSelectedItem(): { path: string; isDir: boolean } | null {
+    const treeItemEl = getFocusedFileTreeElement();
+    if (!treeItemEl) {
+        return null;
+    }
+
+    const path = treeItemEl.getAttribute("data-tree-path");
+    if (!path) {
+        return null;
+    }
+
+    return {
+        path,
+        isDir: treeItemEl.getAttribute("data-tree-is-dir") === "true",
+    };
+}
+
+function resolveFocusedFileTreePasteTargetDirectory(): string {
+    const selectedItem = resolveFocusedFileTreeSelectedItem();
+    if (!selectedItem) {
+        return "";
+    }
+
+    if (selectedItem.isDir) {
+        return selectedItem.path;
+    }
+
+    const splitIndex = selectedItem.path.lastIndexOf("/");
+    return splitIndex >= 0 ? selectedItem.path.slice(0, splitIndex) : "";
+}
 
 /* ────────── Props ────────── */
 
@@ -315,6 +370,16 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         [configState.backendConfig, configState.featureSettings.restoreWorkspaceLayout],
     );
 
+    const workspaceSnapshot = useMemo(
+        () => {
+            if (!configState.featureSettings.restoreWorkspaceLayout) return null;
+            return getWorkspaceLayoutFromVaultConfig(configState.backendConfig);
+        },
+        [configState.backendConfig, configState.featureSettings.restoreWorkspaceLayout],
+    );
+    const [hydratedWorkspaceSnapshot, setHydratedWorkspaceSnapshot] = useState<WorkbenchLayoutSnapshot | null>(null);
+    const [workspaceLayoutHydrationComplete, setWorkspaceLayoutHydrationComplete] = useState(false);
+
     const hasRightSidebar = useMemo(
         () =>
             registeredPanels.some((panel) => panel.defaultPosition === "right") ||
@@ -372,12 +437,17 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         for (const descriptor of registeredTabComponents) {
             const Component = descriptor.component as unknown as (props: Record<string, unknown>) => ReactNode;
             result[descriptor.id] = ({ params, api }) => (
-                <StableTabComponentWrapper
-                    Component={Component}
-                    params={params}
-                    api={api}
-                    workbenchApiRef={workbenchApiRef}
-                />
+                <div
+                    className="workbench-layout-v2__tab-focus-scope"
+                    {...{ [TAB_COMPONENT_DATA_ATTR]: descriptor.id }}
+                >
+                    <StableTabComponentWrapper
+                        Component={Component}
+                        params={params}
+                        api={api}
+                        workbenchApiRef={workbenchApiRef}
+                    />
+                </div>
             );
         }
         return result;
@@ -410,6 +480,8 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     const panelLayoutSnapshotRef = useRef<WorkbenchPanelLayoutSnapshot | undefined>(sidebarSnapshot?.panelLayout);
     const sidebarSnapshotRef = useRef(sidebarSnapshot);
     const syncedPanelLayoutSidebarSnapshotRef = useRef(sidebarSnapshot);
+    const persistedWorkspaceLayoutRef = useRef<string | null>(null);
+    const workspaceLayoutRestorePendingRef = useRef(false);
     const [createEntryDraftRequest, setCreateEntryDraftRequest] = useState<{
         kind: CreateEntryDraftRequest["kind"];
         baseDirectory: string;
@@ -423,6 +495,12 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         syncedPanelLayoutSidebarSnapshotRef.current = sidebarSnapshot;
         panelLayoutSnapshotRef.current = sidebarSnapshot?.panelLayout;
     }
+
+    useEffect(() => {
+        persistedWorkspaceLayoutRef.current = workspaceSnapshot
+            ? JSON.stringify(buildWorkspaceLayoutConfigValue(workspaceSnapshot))
+            : null;
+    }, [workspaceSnapshot]);
 
     /* ── Open file helper ── */
 
@@ -447,6 +525,76 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         },
         [vaultState.currentVaultPath, configState.loadedVaultPath],
     );
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (!workspaceSnapshot || !configState.featureSettings.restoreWorkspaceLayout) {
+            workspaceLayoutRestorePendingRef.current = false;
+            setWorkspaceLayoutHydrationComplete(false);
+            setHydratedWorkspaceSnapshot(null);
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        workspaceLayoutRestorePendingRef.current = true;
+        setWorkspaceLayoutHydrationComplete(false);
+        const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath || undefined;
+        void hydrateWorkspaceLayoutSnapshot(workspaceSnapshot, async (tab) => {
+            const relativePath = typeof tab.params?.path === "string"
+                ? tab.params.path.replace(/\\/g, "/")
+                : null;
+            if (!relativePath) {
+                return tab;
+            }
+
+            const resolvedTab = await resolveFileTabDefinition({
+                relativePath,
+                currentVaultPath,
+            });
+            if (!resolvedTab) {
+                return null;
+            }
+
+            return {
+                id: resolvedTab.id,
+                title: resolvedTab.title,
+                component: resolvedTab.component,
+                params: resolvedTab.params,
+            };
+        }).then((snapshot) => {
+            if (cancelled) {
+                return;
+            }
+
+            workspaceLayoutRestorePendingRef.current = false;
+            setWorkspaceLayoutHydrationComplete(true);
+            setHydratedWorkspaceSnapshot(
+                countWorkspaceLayoutTabs(snapshot) > 0 ? snapshot : null,
+            );
+        }).catch((error) => {
+            if (cancelled) {
+                return;
+            }
+
+            workspaceLayoutRestorePendingRef.current = false;
+            setWorkspaceLayoutHydrationComplete(true);
+            console.warn("[workbench-layout-host] workspace layout hydration failed", {
+                message: error instanceof Error ? error.message : String(error),
+            });
+            setHydratedWorkspaceSnapshot(null);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        workspaceSnapshot,
+        configState.featureSettings.restoreWorkspaceLayout,
+        configState.loadedVaultPath,
+        vaultState.currentVaultPath,
+    ]);
 
     /* ── Activity bar config loading ── */
 
@@ -532,6 +680,9 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             return true;
         },
         quitApplication: () => requestApplicationQuit(),
+        getFileTreeSelectedItem: resolveFocusedFileTreeSelectedItem,
+        getFileTreePasteTargetDirectory: resolveFocusedFileTreePasteTargetDirectory,
+        requestDeleteConfirmation: requestVaultDeleteConfirmation,
         requestCreateEntryDraft,
     }), [openFileHelper, requestCreateEntryDraft]);
 
@@ -684,6 +835,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
     const sectionRatioPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const panelLayoutPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const workspaceLayoutPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         return () => {
@@ -692,6 +844,9 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             }
             if (panelLayoutPersistTimerRef.current) {
                 clearTimeout(panelLayoutPersistTimerRef.current);
+            }
+            if (workspaceLayoutPersistTimerRef.current) {
+                clearTimeout(workspaceLayoutPersistTimerRef.current);
             }
         };
     }, []);
@@ -798,6 +953,42 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         ],
     );
 
+    const handleWorkspaceLayoutSnapshotChange = useCallback(
+        (snapshot: WorkbenchLayoutSnapshot) => {
+            const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
+            if (!currentVaultPath || !configState.backendConfig) return;
+            if (!configState.featureSettings.restoreWorkspaceLayout) return;
+            if (workspaceSnapshot && !workspaceLayoutHydrationComplete) return;
+            if (workspaceLayoutRestorePendingRef.current) return;
+
+            const serializedSnapshot = JSON.stringify(buildWorkspaceLayoutConfigValue(snapshot));
+            if (persistedWorkspaceLayoutRef.current === serializedSnapshot) return;
+
+            persistedWorkspaceLayoutRef.current = serializedSnapshot;
+
+            if (workspaceLayoutPersistTimerRef.current) {
+                clearTimeout(workspaceLayoutPersistTimerRef.current);
+            }
+
+            workspaceLayoutPersistTimerRef.current = setTimeout(() => {
+                workspaceLayoutPersistTimerRef.current = null;
+                void saveWorkspaceLayoutSnapshot(snapshot).catch((error) => {
+                    console.warn("[workbench-layout-host] workspace layout save failed", {
+                        message: error instanceof Error ? error.message : String(error),
+                    });
+                });
+            }, 300);
+        },
+        [
+            configState.backendConfig,
+            configState.loadedVaultPath,
+            configState.featureSettings.restoreWorkspaceLayout,
+            vaultState.currentVaultPath,
+            workspaceLayoutHydrationComplete,
+            workspaceSnapshot,
+        ],
+    );
+
     /* ── Callbacks ── */
 
     const handleActivateActivity = useCallback(
@@ -833,7 +1024,14 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                     </div>
                 );
             }
-            return panel.render(buildPanelRenderContext(context, openFileHelper, buildCommandContext));
+            return (
+                <div
+                    className="workbench-layout-v2__panel-focus-scope"
+                    {...{ [PANEL_ID_DATA_ATTR]: panelId }}
+                >
+                    {panel.render(buildPanelRenderContext(context, openFileHelper, buildCommandContext))}
+                </div>
+            );
         },
         [panelsById, openFileHelper, buildCommandContext],
     );
@@ -1025,6 +1223,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 initialSidebarState={initialSidebarState}
                 initialSectionRatios={sidebarSnapshot?.sectionRatios}
                 initialPanelLayoutSnapshot={sidebarSnapshot?.panelLayout}
+                initialLayoutSnapshot={hydratedWorkspaceSnapshot}
                 hideEmptyPanelBar
                 renderInactiveTabContent={shouldRenderInactiveTabContent}
                 deferTabContentPresentation={shouldDeferTabContentPresentation}
@@ -1039,6 +1238,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 onSidebarStateChange={handleSidebarStateChange}
                 onSectionRatioChange={handleSectionRatioChange}
                 onPanelLayoutChange={handlePanelLayoutChange}
+                onLayoutSnapshotChange={handleWorkspaceLayoutSnapshotChange}
                 onActivityIconContextMenu={handleActivityIconContextMenu}
                 onActiveTabChange={handleActiveTabChange}
                 onActivityBarBackgroundContextMenu={handleActivityBarBackgroundContextMenu}

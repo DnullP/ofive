@@ -177,4 +177,15 @@ export const EDITOR_COMMAND_DEFINITIONS = {
             editableInSettings: true,
         },
     }),
+    "editor.segmentedDeleteBackward": {
+        ...createEditorNativeCommandDefinition({
+            id: "editor.segmentedDeleteBackward",
+            title: "commands.segmentedDeleteBackward",
+            shortcut: {
+                defaultBinding: "Alt+Backspace",
+                editableInSettings: true,
+            },
+        }),
+        condition: "editorBodyFocused",
+    },
 } satisfies Record<string, CommandDefinition>;

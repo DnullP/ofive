@@ -30,6 +30,7 @@ describe("editorModePolicy", () => {
         expect(canExecuteEditorNativeCommandInMode("read", "editor.insertTask")).toBe(false);
         expect(canExecuteEditorNativeCommandInMode("read", "editor.insertFrontmatter")).toBe(false);
         expect(canExecuteEditorNativeCommandInMode("read", "editor.insertTable")).toBe(false);
+        expect(canExecuteEditorNativeCommandInMode("read", "editor.segmentedDeleteBackward")).toBe(false);
     });
 
     test("should expose mutation boundary and mode toggle", () => {

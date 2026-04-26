@@ -251,6 +251,7 @@ const MOCK_FILE_CONTENTS: Record<string, string> = {
     "test-resources/notes/table-vim-boundary.md": TABLE_VIM_BOUNDARY_SAMPLE,
     "test-resources/notes/guide.md": "# Guide\n\n- 系统代理对一般应用程序生效\n- 终端无代理, 需要在`./zshrc`中配置, 或者直接`export \"HTTP_PROXY\"`\n- docker本身不走系统代理和终端代[[Cron1234]]理中的任何一个, 需要单独配置\n\nDocker本身是通过[[Daemon (linux)]]进程启动的, 而deamon默认是没有代理的, 需要在systemd的配置中进行设置.\n",
     "test-resources/notes/glass-validation.canvas": CANVAS_SAMPLE,
+    "test-resources/notes/mock-image.png": "",
 };
 
 const BULK_EDITOR_PERF_FILE_CONTENTS = createBulkEditorPerfFileContents();
@@ -277,13 +278,17 @@ interface MockVaultPanelProps {
 
 function createFileTab(item: FileTreeItem, content: string): TabInstanceDefinition {
     const fileName = item.path.split("/").pop() ?? item.path;
+    const normalizedPath = item.path.toLowerCase();
+    const isCanvas = normalizedPath.endsWith(".canvas");
+    const isImage = /\.(png|jpg|jpeg|gif|webp|bmp|svg|ico)$/i.test(item.path);
+
     return {
         id: `file:${item.path}`,
         title: fileName,
-        component: item.path.toLowerCase().endsWith(".canvas") ? "canvas" : "codemirror",
+        component: isCanvas ? "canvas" : (isImage ? "imageviewer" : "codemirror"),
         params: {
             path: item.path,
-            content,
+            ...(isImage ? { absolutePath: `${MOCK_VAULT_PATH}/${item.path}` } : { content }),
         },
     };
 }

@@ -32,6 +32,7 @@
  *     vimModeEnabled,
  *     editorTabSize,
  *     editorLineWrapping,
+ *     editorTabOutEnabled,
  *     editorLineNumbers,
  *     initialAutoFocus: props.params.autoFocus === true,
  *     initialCursorOffset: typeof props.params.initialCursorOffset === "number"
@@ -89,6 +90,7 @@ import { editorBaseSetup } from "./editorBaseSetup";
 import type { EditorChineseSegmentationController } from "./editorChineseSegmentation";
 import { resolveEditorBodyAnchor } from "./editorBodyAnchor";
 import { attachPasteImageHandler } from "./editorPasteImageHandler";
+import { createEditorTabOutKeymap } from "./editorTabOutExtension";
 import { buildLineNumbersExtension } from "./lineNumbersModeExtension";
 import { canMutateEditorDocument } from "./editorModePolicy";
 import { createCodeBlockHighlightExtension } from "./syntaxPlugins/codeBlockHighlightExtension";
@@ -161,6 +163,8 @@ export interface UseCodeMirrorEditorLifecycleOptions {
     editorTabSize: number;
     /** 是否自动换行。 */
     editorLineWrapping: boolean;
+    /** 是否开启 TabOut。 */
+    editorTabOutEnabled: boolean;
     /** 页签恢复策略。 */
     editorTabRestoreMode: EditorTabRestoreMode;
     /** 行号模式。 */
@@ -545,6 +549,7 @@ export function useCodeMirrorEditorLifecycle(
     const fontFamilyCompartmentRef = useRef<Compartment>(new Compartment());
     const fontSizeCompartmentRef = useRef<Compartment>(new Compartment());
     const tabSizeCompartmentRef = useRef<Compartment>(new Compartment());
+    const tabOutCompartmentRef = useRef<Compartment>(new Compartment());
     const lineWrappingCompartmentRef = useRef<Compartment>(new Compartment());
     const lineNumbersCompartmentRef = useRef<Compartment>(new Compartment());
     const exitFrontmatterVimNavigationRef = useRef(options.onRequestExitFrontmatterVimNavigation);
@@ -619,6 +624,7 @@ export function useCodeMirrorEditorLifecycle(
             ),
             fontSizeCompartmentRef.current.of([]),
             tabSizeCompartmentRef.current.of(EditorState.tabSize.of(options.editorTabSize)),
+            tabOutCompartmentRef.current.of(createEditorTabOutKeymap(options.editorTabOutEnabled)),
             lineWrappingCompartmentRef.current.of(
                 options.editorLineWrapping ? EditorView.lineWrapping : [],
             ),
@@ -954,6 +960,21 @@ export function useCodeMirrorEditorLifecycle(
 
         console.info("[editor] tab size changed", { articleId: options.articleId, editorTabSize: options.editorTabSize });
     }, [options.editorTabSize, options.articleId]);
+
+    useEffect(() => {
+        const view = viewRef.current;
+        if (!view) {
+            return;
+        }
+
+        view.dispatch({
+            effects: tabOutCompartmentRef.current.reconfigure(
+                createEditorTabOutKeymap(options.editorTabOutEnabled),
+            ),
+        });
+
+        console.info("[editor] tab out changed", { articleId: options.articleId, editorTabOutEnabled: options.editorTabOutEnabled });
+    }, [options.editorTabOutEnabled, options.articleId]);
 
     useEffect(() => {
         const view = viewRef.current;

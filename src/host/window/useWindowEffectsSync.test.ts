@@ -67,6 +67,7 @@ function createFeatureSettings(): FeatureSettings {
         editorTabSize: 4,
         editorLineWrapping: true,
         editorTabRestoreMode: "viewport",
+        editorTabOutEnabled: true,
         editorLineNumbers: "absolute",
         autoSaveEnabled: true,
         autoSaveDelayMs: 1500,

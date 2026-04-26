@@ -28,6 +28,7 @@ import {
     type CommandId,
     type EditorNativeCommandId,
 } from "../../../host/commands/commandSystem";
+import { requestVaultDeleteConfirmation } from "../../../host/commands/deleteConfirmation";
 import { useShortcutState } from "../../../host/commands/shortcutStore";
 import { useVaultState } from "../../../host/vault/vaultStore";
 import {
@@ -262,6 +263,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         "editor.insertTask": "",
         "editor.insertFrontmatter": "",
         "editor.insertTable": "",
+        "editor.segmentedDeleteBackward": "Alt+Backspace",
         "fileTree.copySelected": "Cmd+C",
         "fileTree.pasteInDirectory": "Cmd+V",
         "fileTree.deleteSelected": "Cmd+Backspace",
@@ -285,6 +287,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
     const editorFontSize = featureSettings.editorFontSize;
     const editorTabSize = featureSettings.editorTabSize;
     const editorLineWrapping = featureSettings.editorLineWrapping;
+    const editorTabOutEnabled = featureSettings.editorTabOutEnabled;
     const editorTabRestoreMode = featureSettings.editorTabRestoreMode;
     const editorLineNumbers = featureSettings.editorLineNumbers;
     const sharedTypographyVariables = useMemo(() => ({
@@ -561,6 +564,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         editorFontSize,
         editorTabSize,
         editorLineWrapping,
+        editorTabOutEnabled,
         editorTabRestoreMode,
         editorLineNumbers,
         initialAutoFocus: props.params.autoFocus === true,
@@ -753,6 +757,16 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
             return insertTable(view);
         }
 
+        if (commandId === "editor.segmentedDeleteBackward") {
+            void executeSegmentedDeleteBackward(view).catch((error) => {
+                console.error("[editor] segmented delete failed", {
+                    articleId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            });
+            return true;
+        }
+
         return false;
     };
 
@@ -777,6 +791,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                     .filter((entry) => !entry.isDir)
                     .filter((entry) => entry.path.endsWith(".md") || entry.path.endsWith(".markdown"))
                     .map((entry) => entry.path),
+            requestDeleteConfirmation: requestVaultDeleteConfirmation,
             executeEditorNativeCommand,
         });
     };
@@ -824,9 +839,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
             getBindings: () => bindingsRef.current,
             getManagedShortcutCandidates: () => managedEditorShortcutCandidatesRef.current,
             getCurrentVaultPath: () => currentVaultPath,
-            getDisplayMode: () => displayModeRef.current,
             isVimModeEnabled: () => vimModeEnabledRef.current,
-            executeSegmentedDeleteBackward,
             executeEditorCommand: (commandId) => {
                 executeEditorCommandRef.current(commandId);
             },
