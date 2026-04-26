@@ -8,7 +8,7 @@
  *  - react-i18next
  *  - ../../api/vaultApi
  *  - ../../host/events/appEventBus
- *  - ../../host/layout/nativeContextMenu
+ *  - ../../host/layout/contextMenuCenter
  *  - ../../host/vault/vaultStore
  *  - ./calendarDateUtils
  *  - ./calendarViewState
@@ -18,7 +18,7 @@
  *  - CalendarView
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import {
     createVaultMarkdownFile,
@@ -26,7 +26,10 @@ import {
     type FrontmatterQueryMatchItem,
 } from "../../api/vaultApi";
 import { subscribeVaultFsBusEvent } from "../../host/events/appEventBus";
-import { showNativeContextMenu } from "../../host/layout/nativeContextMenu";
+import {
+    showRegisteredContextMenu,
+    useContextMenuProvider,
+} from "../../host/layout/contextMenuCenter";
 import { useVaultState } from "../../host/vault/vaultStore";
 import {
     buildCalendarMonthGrid,
@@ -40,12 +43,21 @@ import { deriveCalendarViewRenderState } from "./calendarViewRenderState";
 import { getCalendarViewState, setCalendarViewState } from "./calendarViewState";
 import "./CalendarTab.css";
 
+const CALENDAR_DAY_CONTEXT_MENU_ID = "calendar.day";
+let nextCalendarContextMenuInstanceId = 0;
+
 /** 日历详情面板中的笔记条目。 */
 interface CalendarNoteItem {
     /** 文件相对路径。 */
     relativePath: string;
     /** 显示标题。 */
     title: string;
+}
+
+interface CalendarDayContextPayload {
+    dayKey: string;
+    dailyNoteRelativePath: string;
+    dailyNoteExists: boolean;
 }
 
 /** 日历数据加载状态。 */
@@ -56,6 +68,10 @@ interface CalendarLoadState {
     error: string | null;
     /** 查询命中列表。 */
     matches: FrontmatterQueryMatchItem[];
+    /** 是否已有一次可展示的数据快照。 */
+    hasLoadedSnapshot: boolean;
+    /** 已加载快照所属的 vault 路径。 */
+    loadedVaultPath: string | null;
 }
 
 /** Panel 模式浮动笔记窗定位信息。 */
@@ -82,6 +98,7 @@ export interface CalendarViewProps {
 }
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+const PANEL_POPOVER_DISMISS_ANIMATION_MS = 160;
 
 function isMarkdownRelativePath(path: string | null | undefined): boolean {
     if (!path) {
@@ -154,13 +171,20 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
         loading: true,
         error: null,
         matches: [],
+        hasLoadedSnapshot: false,
+        loadedVaultPath: null,
     });
     const [isPanelNotesPopoverOpen, setIsPanelNotesPopoverOpen] = useState<boolean>(mode === "panel");
+    const [isPanelNotesPopoverClosing, setIsPanelNotesPopoverClosing] = useState(false);
     const [panelPopoverPosition, setPanelPopoverPosition] = useState<CalendarPanelPopoverPosition | null>(null);
     const reloadRef = useRef<(() => Promise<void>) | null>(null);
     const rootRef = useRef<HTMLElement | null>(null);
+    const [dayContextMenuId] = useState(
+        () => `${CALENDAR_DAY_CONTEXT_MENU_ID}:${String(++nextCalendarContextMenuInstanceId)}`,
+    );
     const calendarSurfaceRef = useRef<HTMLElement | null>(null);
     const panelNotesPopoverRef = useRef<HTMLDivElement | null>(null);
+    const panelPopoverDismissTimerRef = useRef<number | null>(null);
     const dayButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
     const markdownPathSet = useMemo(() => {
@@ -175,12 +199,14 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
     const calendarGrid = useMemo(() => buildCalendarMonthGrid(anchorDate), [anchorDate]);
     const selectedNotes = notesByDay.get(selectedDayKey) ?? [];
     const isPanelMode = mode === "panel";
+    const hasCurrentVaultSnapshot = loadState.hasLoadedSnapshot && loadState.loadedVaultPath === currentVaultPath;
     const renderState = useMemo(() => deriveCalendarViewRenderState({
         loading: loadState.loading,
         error: loadState.error,
         currentVaultPath,
         matchCount: loadState.matches.length,
-    }), [currentVaultPath, loadState.error, loadState.loading, loadState.matches.length]);
+        hasLoadedSnapshot: hasCurrentVaultSnapshot,
+    }), [currentVaultPath, hasCurrentVaultSnapshot, loadState.error, loadState.loading, loadState.matches.length]);
     const monthLabel = useMemo(() => {
         return new Intl.DateTimeFormat(i18n.language, {
             year: "numeric",
@@ -196,8 +222,42 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
     }, [anchorDate, selectedDayKey, stateKey]);
 
     useEffect(() => {
+        if (panelPopoverDismissTimerRef.current !== null) {
+            window.clearTimeout(panelPopoverDismissTimerRef.current);
+            panelPopoverDismissTimerRef.current = null;
+        }
+        setIsPanelNotesPopoverClosing(false);
         setIsPanelNotesPopoverOpen(mode === "panel");
     }, [mode]);
+
+    const dismissPanelNotesPopover = useCallback((): void => {
+        if (!isPanelMode || !isPanelNotesPopoverOpen || isPanelNotesPopoverClosing) {
+            return;
+        }
+
+        console.info("[calendar-view] panel popover dismissed by outside pointer", {
+            selectedDayKey,
+            stateKey,
+        });
+        setIsPanelNotesPopoverClosing(true);
+        if (panelPopoverDismissTimerRef.current !== null) {
+            window.clearTimeout(panelPopoverDismissTimerRef.current);
+        }
+        panelPopoverDismissTimerRef.current = window.setTimeout(() => {
+            panelPopoverDismissTimerRef.current = null;
+            setIsPanelNotesPopoverOpen(false);
+            setIsPanelNotesPopoverClosing(false);
+        }, PANEL_POPOVER_DISMISS_ANIMATION_MS);
+    }, [isPanelMode, isPanelNotesPopoverClosing, isPanelNotesPopoverOpen, selectedDayKey, stateKey]);
+
+    useEffect(() => {
+        return () => {
+            if (panelPopoverDismissTimerRef.current !== null) {
+                window.clearTimeout(panelPopoverDismissTimerRef.current);
+                panelPopoverDismissTimerRef.current = null;
+            }
+        };
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -205,13 +265,28 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
         const loadCalendarNotes = async (): Promise<void> => {
             if (!currentVaultPath) {
                 if (!cancelled) {
-                    setLoadState({ loading: false, error: null, matches: [] });
+                    setLoadState({
+                        loading: false,
+                        error: null,
+                        matches: [],
+                        hasLoadedSnapshot: false,
+                        loadedVaultPath: null,
+                    });
                 }
                 return;
             }
 
             if (!cancelled) {
-                setLoadState((previous) => ({ ...previous, loading: true, error: null }));
+                setLoadState((previous) => {
+                    const canKeepSnapshot = previous.hasLoadedSnapshot && previous.loadedVaultPath === currentVaultPath;
+                    return {
+                        loading: true,
+                        error: null,
+                        matches: canKeepSnapshot ? previous.matches : [],
+                        hasLoadedSnapshot: canKeepSnapshot,
+                        loadedVaultPath: canKeepSnapshot ? previous.loadedVaultPath : null,
+                    };
+                });
             }
 
             try {
@@ -221,7 +296,13 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                     return;
                 }
 
-                setLoadState({ loading: false, error: null, matches: response.matches });
+                setLoadState({
+                    loading: false,
+                    error: null,
+                    matches: response.matches,
+                    hasLoadedSnapshot: true,
+                    loadedVaultPath: currentVaultPath,
+                });
                 console.info("[calendar-view] load success", { matchCount: response.matches.length, mode, stateKey });
             } catch (error) {
                 const message = error instanceof Error ? error.message : t("calendar.loadFailed", { message: "unknown" });
@@ -229,7 +310,13 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                     return;
                 }
 
-                setLoadState({ loading: false, error: message, matches: [] });
+                setLoadState((previous) => ({
+                    loading: false,
+                    error: message,
+                    matches: previous.hasLoadedSnapshot && previous.loadedVaultPath === currentVaultPath ? previous.matches : [],
+                    hasLoadedSnapshot: previous.hasLoadedSnapshot && previous.loadedVaultPath === currentVaultPath,
+                    loadedVaultPath: previous.loadedVaultPath === currentVaultPath ? previous.loadedVaultPath : null,
+                }));
                 console.error("[calendar-view] load failed", { message, mode, stateKey });
             }
         };
@@ -270,22 +357,18 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                 return;
             }
 
-            if (rootRef.current?.contains(target)) {
+            if (panelNotesPopoverRef.current?.contains(target)) {
                 return;
             }
 
-            console.info("[calendar-view] panel popover dismissed by outside pointer", {
-                selectedDayKey,
-                stateKey,
-            });
-            setIsPanelNotesPopoverOpen(false);
+            dismissPanelNotesPopover();
         };
 
         document.addEventListener("pointerdown", handlePointerDown);
         return () => {
             document.removeEventListener("pointerdown", handlePointerDown);
         };
-    }, [isPanelMode, isPanelNotesPopoverOpen, selectedDayKey, stateKey]);
+    }, [dismissPanelNotesPopover, isPanelMode, isPanelNotesPopoverOpen]);
 
     useLayoutEffect(() => {
         if (!isPanelMode || !isPanelNotesPopoverOpen) {
@@ -336,33 +419,44 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
         });
     }, [isPanelMode, isPanelNotesPopoverOpen, selectedDayKey, selectedNotes.length, calendarGrid, monthLabel]);
 
+    useContextMenuProvider<CalendarDayContextPayload>({
+        id: dayContextMenuId,
+        buildMenu: (payload) => [
+            {
+                id: "calendar.daily-note",
+                text: payload.dailyNoteExists ? t("calendar.openDailyNote") : t("calendar.createDailyNote"),
+            },
+        ],
+        handleAction: async (selectedAction, payload) => {
+            if (selectedAction !== "calendar.daily-note") {
+                return;
+            }
+
+            if (!payload.dailyNoteExists) {
+                const initialContent = buildDailyNoteInitialContent(payload.dayKey);
+                await createVaultMarkdownFile(payload.dailyNoteRelativePath, initialContent);
+                console.info("[calendar-view] daily note created", {
+                    dayKey: payload.dayKey,
+                    relativePath: payload.dailyNoteRelativePath,
+                });
+                void reloadRef.current?.();
+            }
+
+            await openNote(payload.dailyNoteRelativePath);
+        },
+    });
+
     const handleDayContextMenu = async (
         event: React.MouseEvent<HTMLButtonElement>,
         dayKey: string,
     ): Promise<void> => {
-        event.preventDefault();
-
         const dailyNoteRelativePath = buildDailyNoteRelativePath(dayKey);
         const dailyNoteExists = markdownPathSet.has(dailyNoteRelativePath);
-        const selectedAction = await showNativeContextMenu([
-            {
-                id: "calendar.daily-note",
-                text: dailyNoteExists ? t("calendar.openDailyNote") : t("calendar.createDailyNote"),
-            },
-        ]);
-
-        if (selectedAction !== "calendar.daily-note") {
-            return;
-        }
-
-        if (!dailyNoteExists) {
-            const initialContent = buildDailyNoteInitialContent(dayKey);
-            await createVaultMarkdownFile(dailyNoteRelativePath, initialContent);
-            console.info("[calendar-view] daily note created", { dayKey, relativePath: dailyNoteRelativePath });
-            void reloadRef.current?.();
-        }
-
-        await openNote(dailyNoteRelativePath);
+        await showRegisteredContextMenu(dayContextMenuId, event, {
+            dayKey,
+            dailyNoteRelativePath,
+            dailyNoteExists,
+        });
     };
 
     return (
@@ -461,6 +555,11 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                                         }}
                                         onClick={() => {
                                             console.info("[calendar-view] day selected", { dayKey: cell.dayKey, noteCount, mode, stateKey });
+                                            if (panelPopoverDismissTimerRef.current !== null) {
+                                                window.clearTimeout(panelPopoverDismissTimerRef.current);
+                                                panelPopoverDismissTimerRef.current = null;
+                                            }
+                                            setIsPanelNotesPopoverClosing(false);
                                             setSelectedDayKey(cell.dayKey);
                                             if (isPanelMode) {
                                                 setIsPanelNotesPopoverOpen(true);
@@ -485,7 +584,11 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                         {isPanelMode && isPanelNotesPopoverOpen ? (
                             <div
                                 ref={panelNotesPopoverRef}
-                                className={`calendar-tab__panel-popover${panelPopoverPosition ? " is-positioned" : ""}`}
+                                className={[
+                                    "calendar-tab__panel-popover",
+                                    panelPopoverPosition ? "is-positioned" : "",
+                                    isPanelNotesPopoverClosing ? "is-closing" : "",
+                                ].filter(Boolean).join(" ")}
                                 data-floating-surface="true"
                                 style={panelPopoverPosition ? {
                                     left: `${panelPopoverPosition.left}px`,
@@ -493,27 +596,6 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                                 } : undefined}
                                 data-placement={panelPopoverPosition?.placement ?? "below"}
                             >
-                                <div className="calendar-tab__panel-popover-header">
-                                    <div className="calendar-tab__panel-popover-heading-group">
-                                        <h3 className="calendar-tab__panel-popover-title">{t("calendar.notesForDay", { day: selectedDayKey })}</h3>
-                                        <span className="calendar-tab__panel-popover-subtitle">{t("calendar.notesForDayCount", { count: selectedNotes.length })}</span>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        className="calendar-tab__panel-popover-close"
-                                        onClick={() => {
-                                            console.info("[calendar-view] panel popover dismissed by close button", {
-                                                selectedDayKey,
-                                                stateKey,
-                                            });
-                                            setIsPanelNotesPopoverOpen(false);
-                                        }}
-                                        aria-label={t("common.close")}
-                                    >
-                                        ×
-                                    </button>
-                                </div>
-
                                 {selectedNotes.length === 0 ? (
                                     <div className="calendar-tab__panel-popover-empty">{t("calendar.notesForDayEmpty")}</div>
                                 ) : (

@@ -46,6 +46,7 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
     const [backlinks, setBacklinks] = useState<BacklinkItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [loadedPath, setLoadedPath] = useState<string | null>(null);
 
     /**
      * 翻译辅助函数，使用插件注册的 i18n 资源。
@@ -107,6 +108,7 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
         if (!activeEditor) {
             setBacklinks([]);
             setError(null);
+            setLoadedPath(null);
             return;
         }
 
@@ -116,6 +118,7 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
                 articleId: activeEditor.articleId,
             });
             setBacklinks([]);
+            setLoadedPath(null);
             return;
         }
 
@@ -129,6 +132,7 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
             .then((items) => {
                 if (!cancelled) {
                     setBacklinks(items);
+                    setLoadedPath(path);
                     setLoading(false);
                     console.info("[backlinksPlugin] backlinks state updated", {
                         path,
@@ -158,8 +162,10 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
         return renderInactiveEmptyState();
     }
 
+    const hasActivePathSnapshot = loadedPath === activeEditor.path;
+
     /* ── 加载中状态 ── */
-    if (loading) {
+    if (loading && !hasActivePathSnapshot) {
         return (
             <div className="backlinks-panel">
                 <div className="backlinks-panel-header">{activeEditor.title}</div>
@@ -169,7 +175,7 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
     }
 
     /* ── 错误状态 ── */
-    if (error) {
+    if (error && !hasActivePathSnapshot) {
         return (
             <div className="backlinks-panel">
                 <div className="backlinks-panel-header">{activeEditor.title}</div>
@@ -181,6 +187,15 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
         );
     }
 
+    if (!hasActivePathSnapshot) {
+        return (
+            <div className="backlinks-panel">
+                <div className="backlinks-panel-header">{activeEditor.title}</div>
+                <div className="backlinks-empty">{t("backlinks.loading")}</div>
+            </div>
+        );
+    }
+
     /* ── 正常渲染 ── */
     return (
         <div className="backlinks-panel">
@@ -188,7 +203,9 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
                 {activeEditor.title}
                 {/* backlinks-count: 引用计数标签 */}
                 <span className="backlinks-count">
-                    {t("backlinks.referencedBy", { count: backlinks.length })}
+                    {loading
+                        ? t("backlinks.loading")
+                        : t("backlinks.referencedBy", { count: backlinks.length })}
                 </span>
             </div>
             {backlinks.length === 0 ? (

@@ -104,7 +104,11 @@ import {
     updateActivityBarConfig,
 } from "./activityBarStore";
 import { useConfigState } from "../config/configStore";
-import { showNativeContextMenu } from "./nativeContextMenu";
+import {
+    showRegisteredContextMenu,
+    useContextMenuProvider,
+    type NativeContextMenuItem,
+} from "./contextMenuCenter";
 import {
     hasWorkspaceFileDragPayloadFiles,
     WORKSPACE_FILE_DRAG_LOCAL_SCOPE_EVENT,
@@ -112,7 +116,6 @@ import {
     type WorkspaceFileDragLocalScopeEventDetail,
 } from "./workspaceFileDragPayload";
 import type { WorkspaceFileDragPayloadItem } from "./workspaceFileDragPayload";
-import type { NativeContextMenuItem } from "./nativeContextMenu";
 import {
     ActivityBar,
     SidebarHeader,
@@ -122,6 +125,15 @@ import {
     type ActivityIconItem,
     type IconDragState,
 } from "./sidebar";
+
+const DOCKVIEW_ACTIVITY_ITEM_CONTEXT_MENU_ID = "dockview.activity.item";
+const DOCKVIEW_ACTIVITY_BACKGROUND_CONTEXT_MENU_ID = "dockview.activity.background";
+let nextDockviewContextMenuInstanceId = 0;
+
+interface DockviewContextMenuPayload {
+    menuItems: NativeContextMenuItem[];
+    handleAction: (selectedId: string) => void | Promise<void>;
+}
 import {
     registerOverlay,
     useSidebarHeaderActions,
@@ -765,6 +777,13 @@ export function DockviewLayout({
 }: DockviewLayoutProps): ReactNode {
     const { t } = useTranslation();
     const currentLanguage = i18n.language;
+    const [contextMenuIds] = useState(() => {
+        const instanceId = String(++nextDockviewContextMenuInstanceId);
+        return {
+            activityItem: `${DOCKVIEW_ACTIVITY_ITEM_CONTEXT_MENU_ID}:${instanceId}`,
+            activityBackground: `${DOCKVIEW_ACTIVITY_BACKGROUND_CONTEXT_MENU_ID}:${instanceId}`,
+        };
+    });
 
     /* ── 从全局注册中心获取数据 ── */
     const registeredActivities = useActivities();
@@ -4182,6 +4201,18 @@ export function DockviewLayout({
 
     /* ────────────────── 活动栏右键菜单 ────────────────── */
 
+    useContextMenuProvider<DockviewContextMenuPayload>({
+        id: contextMenuIds.activityItem,
+        buildMenu: (payload) => payload.menuItems,
+        handleAction: (selectedId, payload) => payload.handleAction(selectedId),
+    });
+
+    useContextMenuProvider<DockviewContextMenuPayload>({
+        id: contextMenuIds.activityBackground,
+        buildMenu: (payload) => payload.menuItems,
+        handleAction: (selectedId, payload) => payload.handleAction(selectedId),
+    });
+
     /**
      * 右键点击活动栏图标：提供"向上对齐"、"向下对齐"、"隐藏"选项。
      * @param item 被右键的活动项。
@@ -4189,10 +4220,7 @@ export function DockviewLayout({
     const handleActivityItemContextMenu = (
         item: ActivityIconItem,
     ) => async (e: ReactMouseEvent<HTMLButtonElement>): Promise<void> => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const menuItems = [];
+        const menuItems: NativeContextMenuItem[] = [];
         if (item.section !== "top") {
             menuItems.push({ id: "align-top", text: t("dockview.activityAlignTop") });
         }
@@ -4205,11 +4233,9 @@ export function DockviewLayout({
         }
         menuItems.push({ id: "create-custom-activity", text: t("dockview.activityCreateCustom") });
 
-        const selectedId = await showNativeContextMenu(menuItems);
-        if (!selectedId) {
-            return;
-        }
-
+        await showRegisteredContextMenu(contextMenuIds.activityItem, e, {
+            menuItems,
+            handleAction: (selectedId: string) => {
         if (selectedId === "align-top" || selectedId === "align-bottom") {
             const newSection = selectedId === "align-top" ? "top" : "bottom";
             const withoutItem = mergedActivityItems.filter((i) => i.id !== item.id);
@@ -4282,6 +4308,8 @@ export function DockviewLayout({
         } else if (selectedId === "create-custom-activity") {
             executeCommand(CUSTOM_ACTIVITY_CREATE_COMMAND_ID, buildCommandContext());
         }
+            },
+        });
     };
 
     /**
@@ -4295,8 +4323,6 @@ export function DockviewLayout({
         if (target.closest(".activity-bar-item")) {
             return;
         }
-        e.preventDefault();
-
         const menuItems: NativeContextMenuItem[] = mergedActivityItems.map((item) => ({
             id: item.id,
             text: item.title,
@@ -4307,11 +4333,9 @@ export function DockviewLayout({
             text: t("dockview.activityCreateCustom"),
         });
 
-        const selectedId = await showNativeContextMenu(menuItems);
-        if (!selectedId) {
-            return;
-        }
-
+        await showRegisteredContextMenu(contextMenuIds.activityBackground, e, {
+            menuItems,
+            handleAction: (selectedId: string) => {
         if (selectedId === "create-custom-activity") {
             executeCommand(CUSTOM_ACTIVITY_CREATE_COMMAND_ID, buildCommandContext());
             return;
@@ -4326,6 +4350,8 @@ export function DockviewLayout({
         console.info("[activity-bar] visibility toggled", {
             itemId: selectedId,
             nowVisible: !mergedActivityItems.find((i) => i.id === selectedId)?.visible,
+        });
+            },
         });
     };
 

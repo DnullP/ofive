@@ -16,6 +16,7 @@ describe("calendarViewRenderState", () => {
             error: null,
             currentVaultPath: "E:/vault",
             matchCount: 0,
+            hasLoadedSnapshot: true,
         });
 
         expect(renderState.showCalendarBody).toBe(true);
@@ -28,6 +29,7 @@ describe("calendarViewRenderState", () => {
             error: null,
             currentVaultPath: "E:/vault",
             matchCount: 3,
+            hasLoadedSnapshot: false,
         });
 
         expect(renderState.showLoadingStatus).toBe(true);
@@ -41,6 +43,7 @@ describe("calendarViewRenderState", () => {
             error: "boom",
             currentVaultPath: "E:/vault",
             matchCount: 3,
+            hasLoadedSnapshot: false,
         });
 
         expect(renderState.showErrorStatus).toBe(true);
@@ -53,9 +56,38 @@ describe("calendarViewRenderState", () => {
             error: null,
             currentVaultPath: null,
             matchCount: 0,
+            hasLoadedSnapshot: false,
         });
 
         expect(renderState.showNoVaultStatus).toBe(true);
         expect(renderState.showCalendarBody).toBe(false);
+    });
+
+    it("当前 vault 尚无快照时不应显示旧月历主体", () => {
+        const renderState = deriveCalendarViewRenderState({
+            loading: false,
+            error: null,
+            currentVaultPath: "E:/vault-b",
+            matchCount: 3,
+            hasLoadedSnapshot: false,
+        });
+
+        expect(renderState.showCalendarBody).toBe(false);
+        expect(renderState.showLoadingStatus).toBe(false);
+        expect(renderState.showNoDateNotesStatus).toBe(false);
+    });
+
+    it("后台刷新时已有快照应继续显示月历主体", () => {
+        const renderState = deriveCalendarViewRenderState({
+            loading: true,
+            error: null,
+            currentVaultPath: "E:/vault",
+            matchCount: 3,
+            hasLoadedSnapshot: true,
+        });
+
+        expect(renderState.showLoadingStatus).toBe(false);
+        expect(renderState.showCalendarBody).toBe(true);
+        expect(renderState.showNoDateNotesStatus).toBe(false);
     });
 });

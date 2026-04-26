@@ -15,6 +15,8 @@ import { useVaultState } from "./host/vault/vaultStore";
 import { useWindowDragGestureSupport } from "./utils/windowDragGesture";
 import { ensureBuiltinComponentsRegistered } from "./host/registry/registerBuiltinComponents";
 import { useWindowEffectsSync } from "./host/window/useWindowEffectsSync";
+import { useMainWindowFullscreenEscapeGuard } from "./host/window/useMainWindowFullscreenEscapeGuard";
+import { useGlobalContextMenuBlocker } from "./host/layout/contextMenuCenter";
 import "./App.css";
 
 function HomeTab(): ReactNode {
@@ -33,6 +35,8 @@ function App() {
   useVaultTreeSync();
   useThemeSync();
   useWindowEffectsSync();
+  useMainWindowFullscreenEscapeGuard();
+  useGlobalContextMenuBlocker();
   useWindowDragGestureSupport();
   useAutoSaveLifecycle();
 

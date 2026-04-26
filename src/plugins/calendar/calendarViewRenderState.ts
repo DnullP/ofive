@@ -31,6 +31,8 @@ export interface CalendarViewRenderStateInput {
     currentVaultPath: string | null;
     /** 当前命中的日期笔记数量。 */
     matchCount: number;
+    /** 是否已经有可继续展示的数据快照。 */
+    hasLoadedSnapshot: boolean;
 }
 
 /**
@@ -61,13 +63,15 @@ export function deriveCalendarViewRenderState(
 ): CalendarViewRenderState {
     const hasVault = Boolean(input.currentVaultPath);
     const hasError = Boolean(input.error);
-    const ready = !input.loading && !hasError && hasVault;
+    const canRenderSnapshot = hasVault && input.hasLoadedSnapshot;
+    const ready = !input.loading && !hasError && canRenderSnapshot;
+    const canRenderBody = canRenderSnapshot || ready;
 
     return {
-        showLoadingStatus: input.loading,
+        showLoadingStatus: input.loading && !canRenderSnapshot,
         showErrorStatus: !input.loading && hasError,
         showNoVaultStatus: !input.loading && !hasError && !hasVault,
-        showNoDateNotesStatus: ready && input.matchCount === 0,
-        showCalendarBody: ready,
+        showNoDateNotesStatus: canRenderBody && !hasError && input.matchCount === 0,
+        showCalendarBody: canRenderBody,
     };
 }

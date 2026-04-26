@@ -4,7 +4,7 @@
  * @dependencies
  *  - react
  *  - yaml
- *  - ../../../../host/layout/nativeContextMenu
+ *  - ../../../../host/layout/contextMenuCenter
  *  - ./FrontmatterYamlVisualEditor.css
  *
  * @example
@@ -30,7 +30,10 @@ import * as LucideIcons from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import YAML from "yaml";
-import { showNativeContextMenu } from "../../../../host/layout/nativeContextMenu";
+import {
+    showRegisteredContextMenu,
+    useContextMenuProvider,
+} from "../../../../host/layout/contextMenuCenter";
 import {
     isPlainFrontmatterVimKey,
     resolveFrontmatterEnterAction,
@@ -41,6 +44,13 @@ import {
     shouldSubmitPlainEnter,
 } from "../../../../utils/imeInputGuard";
 import "./FrontmatterYamlVisualEditor.css";
+
+const FRONTMATTER_FIELD_CONTEXT_MENU_ID = "frontmatter.field";
+let nextFrontmatterContextMenuInstanceId = 0;
+
+interface FrontmatterFieldContextPayload {
+    fieldKey: string;
+}
 
 const {
     BookOpen,
@@ -650,6 +660,9 @@ function resolveFieldIcon(value: VisualYamlValue): LucideIcon {
 export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorProps): ReactNode {
     const { t } = useTranslation();
     const wrapperRef = useRef<HTMLElement | null>(null);
+    const [fieldContextMenuId] = useState(
+        () => `${FRONTMATTER_FIELD_CONTEXT_MENU_ID}:${String(++nextFrontmatterContextMenuInstanceId)}`,
+    );
     const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const [recordDraft, setRecordDraft] = useState<Record<string, VisualYamlValue>>(() =>
         parseYamlToRecord(props.initialYamlText),
@@ -1035,13 +1048,9 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
         });
     };
 
-    /**
-     * @function requestFieldTypeSelection
-     * @description 通过原生右键菜单请求用户选择字段的数据类型。
-     * @returns 选中的字段类型；取消时返回 null。
-     */
-    const requestFieldContextAction = async (): Promise<FrontmatterContextAction | null> => {
-        const selectedAction = await showNativeContextMenu([
+    useContextMenuProvider<FrontmatterFieldContextPayload>({
+        id: fieldContextMenuId,
+        buildMenu: () => [
             { id: "string", text: t("frontmatter.typeString") },
             { id: "number", text: t("frontmatter.typeNumber") },
             { id: "boolean", text: t("frontmatter.typeBoolean") },
@@ -1049,22 +1058,29 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
             { id: "date", text: t("frontmatter.typeDate") },
             { id: "null", text: t("frontmatter.typeNull") },
             { id: "remove", text: t("frontmatter.removeField") },
-        ]);
+        ],
+        handleAction: (selectedAction, payload) => {
+            const contextAction = selectedAction as FrontmatterContextAction;
+            if (
+                contextAction !== "string" &&
+                contextAction !== "number" &&
+                contextAction !== "boolean" &&
+                contextAction !== "list" &&
+                contextAction !== "date" &&
+                contextAction !== "null" &&
+                contextAction !== "remove"
+            ) {
+                return;
+            }
 
-        if (
-            selectedAction === "string" ||
-            selectedAction === "number" ||
-            selectedAction === "boolean" ||
-            selectedAction === "list" ||
-            selectedAction === "date" ||
-            selectedAction === "null" ||
-            selectedAction === "remove"
-        ) {
-            return selectedAction;
-        }
+            if (contextAction === "remove") {
+                removeField(payload.fieldKey);
+                return;
+            }
 
-        return null;
-    };
+            changeFieldType(payload.fieldKey, contextAction);
+        },
+    });
 
     /**
      * @function changeFieldType
@@ -1130,18 +1146,11 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
      * @description 打开指定字段的类型切换菜单。
      * @param fieldKey 字段名。
      */
-    const openFieldTypeMenu = async (fieldKey: string): Promise<void> => {
-        const selectedType = await requestFieldContextAction();
-        if (!selectedType) {
-            return;
-        }
-
-        if (selectedType === "remove") {
-            removeField(fieldKey);
-            return;
-        }
-
-        changeFieldType(fieldKey, selectedType);
+    const openFieldTypeMenu = async (
+        event: MouseEvent<HTMLButtonElement>,
+        fieldKey: string,
+    ): Promise<void> => {
+        await showRegisteredContextMenu(fieldContextMenuId, event, { fieldKey });
     };
 
     /**
@@ -1154,18 +1163,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
         event: MouseEvent<HTMLDivElement>,
         fieldKey: string,
     ): Promise<void> => {
-        event.preventDefault();
-        const selectedAction = await requestFieldContextAction();
-        if (!selectedAction) {
-            return;
-        }
-
-        if (selectedAction === "remove") {
-            removeField(fieldKey);
-            return;
-        }
-
-        changeFieldType(fieldKey, selectedAction);
+        await showRegisteredContextMenu(fieldContextMenuId, event, { fieldKey });
     };
 
     /**
@@ -1590,8 +1588,8 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                                             <button
                                                 type="button"
                                                 className="fmv-field-icon-button"
-                                                onClick={() => {
-                                                    void openFieldTypeMenu(key);
+                                                onClick={(event) => {
+                                                    void openFieldTypeMenu(event, key);
                                                 }}
                                                 title={t("frontmatter.changeType")}
                                                 aria-label={t("frontmatter.changeType")}

@@ -11,11 +11,19 @@ import { FileText, Folder, FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "./FileTree.css";
 import { writeWorkspaceFileDragPayload } from "../../../host/layout/workspaceFileDragPayload";
-import { showNativeContextMenu } from "../../../host/layout/nativeContextMenu";
+import {
+  showRegisteredContextMenu,
+  useContextMenuProvider,
+  type NativeContextMenuItem,
+} from "../../../host/layout/contextMenuCenter";
 import {
   shouldDeferBlurCommitAfterComposition,
   shouldSubmitPlainEnter,
 } from "../../../utils/imeInputGuard";
+
+const FILE_TREE_ITEM_CONTEXT_MENU_ID = "file-tree.item";
+const FILE_TREE_ROOT_CONTEXT_MENU_ID = "file-tree.root";
+let nextFileTreeContextMenuInstanceId = 0;
 
 export interface FileTreeItem {
   id: string;
@@ -56,6 +64,12 @@ interface FileTreeProps {
   onCreateFileInDirectory?: (targetDirectoryRelativePath: string, draftName: string) => void;
   onCreateCanvasInDirectory?: (targetDirectoryRelativePath: string, draftName: string) => void;
   onCreateFolderInDirectory?: (targetDirectoryRelativePath: string, draftName: string) => void;
+}
+
+interface FileTreeItemContextPayload {
+  selectedItems: FileTreeItem[];
+  targetDirectory: string;
+  isBatchSelection: boolean;
 }
 
 function resolveParentDirectory(path: string): string {
@@ -603,6 +617,10 @@ export function FileTree({
 }: FileTreeProps): ReactNode {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [contextMenuIds] = useState(() => ({
+    item: `${FILE_TREE_ITEM_CONTEXT_MENU_ID}:${String(++nextFileTreeContextMenuInstanceId)}`,
+    root: `${FILE_TREE_ROOT_CONTEXT_MENU_ID}:${String(nextFileTreeContextMenuInstanceId)}`,
+  }));
   const handledRenameRequestIdRef = useRef<string | null>(null);
   const tree = useMemo(() => buildTree(items), [items]);
   const itemByPath = useMemo(
@@ -879,8 +897,9 @@ export function FileTree({
     setCreatingDraft("");
   };
 
-  const openCreateContextMenu = async (targetDirectoryRelativePath: string): Promise<void> => {
-    const selectedAction = await showNativeContextMenu([
+  useContextMenuProvider<string>({
+    id: contextMenuIds.root,
+    buildMenu: () => [
       {
         id: "create-file",
         text: t("common.newFile"),
@@ -893,8 +912,8 @@ export function FileTree({
         id: "create-folder",
         text: t("common.newFolder"),
       },
-    ]);
-
+    ],
+    handleAction: (selectedAction, targetDirectoryRelativePath) => {
     if (selectedAction === "create-file") {
       if (!onCreateFileInDirectory) {
         return;
@@ -917,55 +936,17 @@ export function FileTree({
       }
       startCreateInDirectory("folder", targetDirectoryRelativePath);
     }
-  };
+    },
+  });
 
-  const handleItemClick = (event: ReactMouseEvent<HTMLButtonElement>, node: TreeNode): void => {
-    const isToggleSelection = event.metaKey || event.ctrlKey;
-    const isRangeSelection = event.shiftKey;
-
-    if (isRangeSelection) {
-      selectRange(node.path);
-      return;
-    }
-
-    if (isToggleSelection) {
-      toggleSelection(node.path);
-      return;
-    }
-
-    selectExclusive(node.path);
-    if (node.isFolder) {
-      toggleFolder(node.path);
-      return;
-    }
-    openItem(node);
-  };
-
-  const handleContextMenu = async (
-    event: ReactMouseEvent<HTMLButtonElement>,
-    node: TreeNode,
-  ): Promise<void> => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const nextSelectionPaths = selectedPaths.has(node.path)
-      ? selectedPaths
-      : new Set([node.path]);
-    if (!selectedPaths.has(node.path)) {
-      setSelectedPaths(nextSelectionPaths);
-      setSelectionAnchorPath(node.path);
-    }
-
-    const selectedItems = normalizeSelectionItems(buildSelectionItems(nextSelectionPaths));
-    const targetDirectory = node.isFolder ? node.path : resolveParentDirectory(node.path);
-    const isBatchSelection = selectedItems.length > 1;
-
-    const selectedAction = await showNativeContextMenu(
-      isBatchSelection
+  useContextMenuProvider<FileTreeItemContextPayload>({
+    id: contextMenuIds.item,
+    buildMenu: (payload): NativeContextMenuItem[] =>
+      payload.isBatchSelection
         ? [
           {
             id: "selection-summary",
-            text: t("moveFileModal.selectionSummary", { count: selectedItems.length }),
+            text: t("moveFileModal.selectionSummary", { count: payload.selectedItems.length }),
             enabled: false,
           },
           {
@@ -1008,66 +989,106 @@ export function FileTree({
             enabled: true,
           },
         ],
-    );
-
-    if (selectedAction === "create-file") {
-      if (!onCreateFileInDirectory) {
+    handleAction: (selectedAction, payload) => {
+      if (selectedAction === "create-file") {
+        if (!onCreateFileInDirectory) {
+          return;
+        }
+        startCreateInDirectory("file", payload.targetDirectory);
         return;
       }
-      startCreateInDirectory("file", targetDirectory);
-      return;
-    }
 
-    if (selectedAction === "create-canvas") {
-      if (!onCreateCanvasInDirectory) {
+      if (selectedAction === "create-canvas") {
+        if (!onCreateCanvasInDirectory) {
+          return;
+        }
+        startCreateInDirectory("canvas", payload.targetDirectory);
         return;
       }
-      startCreateInDirectory("canvas", targetDirectory);
-      return;
-    }
 
-    if (selectedAction === "create-folder") {
-      if (!onCreateFolderInDirectory) {
+      if (selectedAction === "create-folder") {
+        if (!onCreateFolderInDirectory) {
+          return;
+        }
+        startCreateInDirectory("folder", payload.targetDirectory);
         return;
       }
-      startCreateInDirectory("folder", targetDirectory);
-      return;
-    }
 
-    if (!selectedAction) {
-      return;
-    }
-
-    const selectedItem = selectedItems[0];
-    if (!selectedItem) {
-      return;
-    }
-
-    if (selectedAction === "rename") {
-      const currentFileName = selectedItem.path.split("/").pop() ?? selectedItem.path;
-      setEditingItemPath(selectedItem.path);
-      setRenameDraft(currentFileName);
-      return;
-    }
-
-    if (selectedAction === "delete") {
-      if (selectedItems.length > 1) {
-        onDeleteItems?.(selectedItems);
-      } else {
-        onDeleteItem?.(selectedItem);
+      const selectedItem = payload.selectedItems[0];
+      if (!selectedItem) {
+        return;
       }
+
+      if (selectedAction === "rename") {
+        const currentFileName = selectedItem.path.split("/").pop() ?? selectedItem.path;
+        setEditingItemPath(selectedItem.path);
+        setRenameDraft(currentFileName);
+        return;
+      }
+
+      if (selectedAction === "delete") {
+        if (payload.selectedItems.length > 1) {
+          onDeleteItems?.(payload.selectedItems);
+        } else {
+          onDeleteItem?.(selectedItem);
+        }
+        return;
+      }
+
+      if (selectedAction === "move-to") {
+        if (payload.selectedItems.length > 1) {
+          onMoveItemsToDirectory?.(payload.selectedItems);
+        } else if (onMoveItemsToDirectory) {
+          onMoveItemsToDirectory([selectedItem]);
+        } else {
+          onMoveToItem?.(selectedItem);
+        }
+      }
+    },
+  });
+
+  const handleItemClick = (event: ReactMouseEvent<HTMLButtonElement>, node: TreeNode): void => {
+    const isToggleSelection = event.metaKey || event.ctrlKey;
+    const isRangeSelection = event.shiftKey;
+
+    if (isRangeSelection) {
+      selectRange(node.path);
       return;
     }
 
-    if (selectedAction === "move-to") {
-      if (selectedItems.length > 1) {
-        onMoveItemsToDirectory?.(selectedItems);
-      } else if (onMoveItemsToDirectory) {
-        onMoveItemsToDirectory([selectedItem]);
-      } else {
-        onMoveToItem?.(selectedItem);
-      }
+    if (isToggleSelection) {
+      toggleSelection(node.path);
+      return;
     }
+
+    selectExclusive(node.path);
+    if (node.isFolder) {
+      toggleFolder(node.path);
+      return;
+    }
+    openItem(node);
+  };
+
+  const handleContextMenu = async (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    node: TreeNode,
+  ): Promise<void> => {
+    const nextSelectionPaths = selectedPaths.has(node.path)
+      ? selectedPaths
+      : new Set([node.path]);
+    if (!selectedPaths.has(node.path)) {
+      setSelectedPaths(nextSelectionPaths);
+      setSelectionAnchorPath(node.path);
+    }
+
+    const selectedItems = normalizeSelectionItems(buildSelectionItems(nextSelectionPaths));
+    const targetDirectory = node.isFolder ? node.path : resolveParentDirectory(node.path);
+    const isBatchSelection = selectedItems.length > 1;
+    await showRegisteredContextMenu(contextMenuIds.item, event, {
+      selectedItems,
+      targetDirectory,
+      isBatchSelection,
+    });
   };
 
   const handleRootContextMenu = (event: ReactMouseEvent<HTMLElement>): void => {
@@ -1076,8 +1097,7 @@ export function FileTree({
       return;
     }
 
-    event.preventDefault();
-    void openCreateContextMenu("");
+    void showRegisteredContextMenu(contextMenuIds.root, event, "");
   };
 
   const clearDragState = (): void => {

@@ -367,61 +367,16 @@
     transform: translateY(0) scale(1);
 }
 
+/* Panel 浮窗退出态：先播放收起动画，再由组件卸载 DOM。 */
+.calendar-tab__panel-popover.is-closing {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px) scale(0.98);
+}
+
 /* 向上弹出时的 panel 浮窗：切换动画原点便于视觉跟随锚点。 */
 .calendar-tab__panel-popover[data-placement="above"] {
     transform-origin: bottom left;
-}
-
-/* Panel 浮窗标题栏：排列日期标题组与关闭按钮。 */
-.calendar-tab__panel-popover-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 8px;
-    user-select: none;
-}
-
-/* Panel 浮窗标题组：纵向堆叠日期标题与数量。 */
-.calendar-tab__panel-popover-heading-group {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-}
-
-/* Panel 浮窗标题：显示当前选中日期。 */
-.calendar-tab__panel-popover-title {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 700;
-}
-
-/* Panel 浮窗副标题：显示命中笔记数量。 */
-.calendar-tab__panel-popover-subtitle {
-    font-size: 12px;
-    color: var(--text-secondary);
-}
-
-/* Panel 浮窗关闭按钮：提供轻量关闭入口，不打断锚定布局。 */
-.calendar-tab__panel-popover-close {
-    width: 24px;
-    height: 24px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    padding: 0;
-    flex-shrink: 0;
-}
-
-/* Panel 浮窗关闭按钮悬浮态：明确可点击反馈。 */
-.calendar-tab__panel-popover-close:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
 }
 
 /* Panel 浮窗空状态：在无笔记时保持较高信息密度与可读性。 */

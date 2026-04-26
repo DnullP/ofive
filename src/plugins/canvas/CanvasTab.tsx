@@ -63,7 +63,10 @@ import {
     notifyWorkspaceFileDragLocalScope,
     readWorkspaceFileDragPayload,
 } from "../../host/layout/workspaceFileDragPayload";
-import { showNativeContextMenu } from "../../host/layout/nativeContextMenu";
+import {
+    showRegisteredContextMenu,
+    useContextMenuProvider,
+} from "../../host/layout/contextMenuCenter";
 import { openFileInWorkbench } from "../../host/layout/openFileService";
 import {
     createEmptyCanvasDocument,
@@ -81,6 +84,18 @@ import {
 import { CanvasMarkdown } from "./CanvasMarkdown";
 import "./CanvasTab.tokens.css";
 import "./CanvasTab.css";
+
+const CANVAS_CREATE_CONTEXT_MENU_ID = "canvas.create";
+const CANVAS_GROUP_CONTEXT_MENU_ID = "canvas.group";
+
+interface CanvasCreateContextPayload {
+    clientX: number;
+    clientY: number;
+}
+
+interface CanvasGroupContextPayload {
+    groupId: string;
+}
 
 interface CanvasNodeRendererProps extends NodeProps<CanvasFlowNode> {
     data: CanvasNodeData;
@@ -341,6 +356,10 @@ export function CanvasTab(props: WorkbenchTabProps<Record<string, unknown>>): Re
     const pendingTextEditCommitRef = useRef(false);
     const isEditingTextComposingRef = useRef(false);
     const canvasRuntimeIdRef = useRef<string>(`canvas-runtime-${Math.random().toString(36).slice(2)}`);
+    const contextMenuIdsRef = useRef({
+        create: `${CANVAS_CREATE_CONTEXT_MENU_ID}:${canvasRuntimeIdRef.current}`,
+        group: `${CANVAS_GROUP_CONTEXT_MENU_ID}:${canvasRuntimeIdRef.current}`,
+    });
 
     const cancelTextEditing = useCallback((): void => {
         pendingTextEditCommitRef.current = false;
@@ -618,8 +637,9 @@ export function CanvasTab(props: WorkbenchTabProps<Record<string, unknown>>): Re
         console.info("[canvasTab] ungroup group node", { path, groupId });
     }, [cancelTextEditing, document, path]);
 
-    const openCanvasCreateMenu = async (clientX: number, clientY: number): Promise<void> => {
-        const selectedAction = await showNativeContextMenu([
+    useContextMenuProvider<CanvasCreateContextPayload>({
+        id: contextMenuIdsRef.current.create,
+        buildMenu: () => [
             { id: "create-text", text: t("canvas.addText") },
             { id: "create-file", text: t("canvas.addFile") },
             {
@@ -627,40 +647,39 @@ export function CanvasTab(props: WorkbenchTabProps<Record<string, unknown>>): Re
                 text: t("canvas.groupSelection"),
                 enabled: canCreateGroupFromSelection,
             },
-        ]);
+        ],
+        handleAction: (selectedAction, payload) => {
+            const position = resolveFlowPosition(payload.clientX, payload.clientY);
+            if (selectedAction === "create-text") {
+                addTextAt(position.x, position.y);
+                return;
+            }
 
-        if (!selectedAction) {
-            return;
-        }
+            if (selectedAction === "create-file") {
+                addFileAt(position.x, position.y);
+                return;
+            }
 
-        const position = resolveFlowPosition(clientX, clientY);
-        if (selectedAction === "create-text") {
-            addTextAt(position.x, position.y);
-            return;
-        }
+            if (selectedAction === "group-selection") {
+                createGroupFromCurrentSelection();
+            }
+        },
+    });
 
-        if (selectedAction === "create-file") {
-            addFileAt(position.x, position.y);
-            return;
-        }
-
-        if (selectedAction === "group-selection") {
-            createGroupFromCurrentSelection();
-        }
-    };
-
-    const openGroupContextMenu = async (groupId: string): Promise<void> => {
-        const selectedAction = await showNativeContextMenu([
+    useContextMenuProvider<CanvasGroupContextPayload>({
+        id: contextMenuIdsRef.current.group,
+        buildMenu: () => [
             {
                 id: "ungroup",
                 text: t("canvas.ungroup"),
             },
-        ]);
-
-        if (selectedAction === "ungroup") {
-            ungroupGroupNode(groupId);
-        }
-    };
+        ],
+        handleAction: (selectedAction, payload) => {
+            if (selectedAction === "ungroup") {
+                ungroupGroupNode(payload.groupId);
+            }
+        },
+    });
 
     /**
      * @function loadCanvasDocument
@@ -855,19 +874,24 @@ export function CanvasTab(props: WorkbenchTabProps<Record<string, unknown>>): Re
     };
 
     const onCanvasContextMenu = (event: MouseEvent | ReactMouseEvent): void => {
-        event.preventDefault();
-        void openCanvasCreateMenu(event.clientX, event.clientY);
+        void showRegisteredContextMenu(contextMenuIdsRef.current.create, event, {
+            clientX: event.clientX,
+            clientY: event.clientY,
+        });
     };
 
     const onNodeContextMenu = (event: MouseEvent | ReactMouseEvent, node: CanvasFlowNode): void => {
-        event.preventDefault();
-
         if (node.data.kind === "group") {
-            void openGroupContextMenu(node.id);
+            void showRegisteredContextMenu(contextMenuIdsRef.current.group, event, {
+                groupId: node.id,
+            });
             return;
         }
 
-        void openCanvasCreateMenu(event.clientX, event.clientY);
+        void showRegisteredContextMenu(contextMenuIdsRef.current.create, event, {
+            clientX: event.clientX,
+            clientY: event.clientY,
+        });
     };
 
     const consumeWorkspaceFileDrag = (event: ReactDragEvent<HTMLDivElement>): boolean => {
@@ -1031,8 +1055,10 @@ export function CanvasTab(props: WorkbenchTabProps<Record<string, unknown>>): Re
                         onPaneContextMenu={onCanvasContextMenu}
                         onNodeContextMenu={onNodeContextMenu}
                         onSelectionContextMenu={(event) => {
-                            event.preventDefault();
-                            void openCanvasCreateMenu(event.clientX, event.clientY);
+                            void showRegisteredContextMenu(contextMenuIdsRef.current.create, event, {
+                                clientX: event.clientX,
+                                clientY: event.clientY,
+                            });
                         }}
                         onEdgeContextMenu={onCanvasContextMenu}
                         onNodeDoubleClick={onNodeDoubleClick}

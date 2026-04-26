@@ -36,7 +36,11 @@ import {
     useActivityBarConfig,
     type DefaultActivityItemInfo,
 } from "./activityBarStore";
-import { showNativeContextMenu, type NativeContextMenuItem } from "./nativeContextMenu";
+import {
+    showRegisteredContextMenu,
+    useContextMenuProvider,
+    type NativeContextMenuItem,
+} from "./contextMenuCenter";
 import { emitCustomActivityRemovalRequestedEvent, emitEditorCommandRequestedEvent } from "../events/appEventBus";
 import { clearActiveEditor, getActiveEditorSnapshot, reportActiveEditor } from "../editor/activeEditorStore";
 import { requestApplicationQuit } from "../commands/systemShortcutSubsystem";
@@ -69,6 +73,15 @@ import {
     type CreateEntryDraftRequest,
     type CommandId,
 } from "../commands/commandSystem";
+
+const WORKBENCH_ACTIVITY_ITEM_CONTEXT_MENU_ID = "workbench-v2.activity.item";
+const WORKBENCH_ACTIVITY_BACKGROUND_CONTEXT_MENU_ID = "workbench-v2.activity.background";
+let nextWorkbenchContextMenuInstanceId = 0;
+
+interface WorkbenchContextMenuPayload {
+    menuItems: NativeContextMenuItem[];
+    handleAction: (selectedId: string) => void | Promise<void>;
+}
 import {
     detectFocusedComponentFromEvent,
 } from "../commands/focusContext";
@@ -286,6 +299,13 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     const configState = useConfigState();
     const vaultState = useVaultState();
     const shortcutState = useShortcutState();
+    const [contextMenuIds] = useState(() => {
+        const instanceId = String(++nextWorkbenchContextMenuInstanceId);
+        return {
+            activityItem: `${WORKBENCH_ACTIVITY_ITEM_CONTEXT_MENU_ID}:${instanceId}`,
+            activityBackground: `${WORKBENCH_ACTIVITY_BACKGROUND_CONTEXT_MENU_ID}:${instanceId}`,
+        };
+    });
 
     const sidebarSnapshot = useMemo(
         () => {
@@ -887,6 +907,18 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
     /* ── Activity bar context menus ── */
 
+    useContextMenuProvider<WorkbenchContextMenuPayload>({
+        id: contextMenuIds.activityItem,
+        buildMenu: (payload) => payload.menuItems,
+        handleAction: (selectedId, payload) => payload.handleAction(selectedId),
+    });
+
+    useContextMenuProvider<WorkbenchContextMenuPayload>({
+        id: contextMenuIds.activityBackground,
+        buildMenu: (payload) => payload.menuItems,
+        handleAction: (selectedId, payload) => payload.handleAction(selectedId),
+    });
+
     const handleActivityIconContextMenu = useCallback(
         async (iconId: string, _event: { clientX: number; clientY: number }) => {
             const item = mergedActivityItems.find((i) => i.id === iconId);
@@ -905,9 +937,9 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             }
             menuItems.push({ id: "create-custom-activity", text: i18n.t("dockview.activityCreateCustom") });
 
-            const selectedId = await showNativeContextMenu(menuItems);
-            if (!selectedId) return;
-
+            await showRegisteredContextMenu(contextMenuIds.activityItem, _event, {
+                menuItems,
+                handleAction: (selectedId: string) => {
             if (selectedId === "align-top" || selectedId === "align-bottom") {
                 const newSection = selectedId === "align-top" ? "top" : "bottom";
                 const withoutItem = mergedActivityItems.filter((i) => i.id !== iconId);
@@ -941,6 +973,8 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             } else if (selectedId === "create-custom-activity") {
                 executeCommand(CUSTOM_ACTIVITY_CREATE_COMMAND_ID as CommandId, buildCommandContext());
             }
+                },
+            });
         },
         [mergedActivityItems, buildCommandContext],
     );
@@ -960,9 +994,9 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 });
             }
 
-            const selectedId = await showNativeContextMenu(menuItems);
-            if (!selectedId) return;
-
+            await showRegisteredContextMenu(contextMenuIds.activityBackground, _event, {
+                menuItems,
+                handleAction: (selectedId: string) => {
             if (selectedId === "create-custom-activity") {
                 executeCommand(CUSTOM_ACTIVITY_CREATE_COMMAND_ID as CommandId, buildCommandContext());
                 return;
@@ -973,6 +1007,8 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             );
             updateActivityBarConfig({
                 items: updated.map((i) => ({ id: i.id, section: i.section, visible: i.visible, bar: i.bar })),
+            });
+                },
             });
         },
         [mergedActivityItems, activitiesById, buildCommandContext],

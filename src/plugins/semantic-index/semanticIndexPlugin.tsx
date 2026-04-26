@@ -513,6 +513,7 @@ function SemanticIndexSettingsSection(): ReactNode {
     const [status, setStatus] = useState<SemanticIndexStatus | null>(null);
     const [modelCatalog, setModelCatalog] = useState<SemanticIndexModelCatalog | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [installingModelId, setInstallingModelId] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<string | null>(null);
@@ -660,7 +661,7 @@ function SemanticIndexSettingsSection(): ReactNode {
         console.info("[semanticIndexPlugin] refreshing semantic-index status and model catalog", {
             currentVaultPath,
         });
-        setIsLoading(true);
+        setIsRefreshing(true);
         try {
             const [nextStatus, nextCatalog] = await Promise.all([
                 getSemanticIndexStatus(),
@@ -682,7 +683,7 @@ function SemanticIndexSettingsSection(): ReactNode {
             setFeedback(message);
             setFeedbackIsError(true);
         } finally {
-            setIsLoading(false);
+            setIsRefreshing(false);
         }
     };
 
@@ -848,12 +849,12 @@ function SemanticIndexSettingsSection(): ReactNode {
                 <button
                     type="button"
                     className="settings-shortcut-action-btn"
-                    disabled={isLoading || isSaving || installingModelId !== null}
+                    disabled={isLoading || isRefreshing || isSaving || installingModelId !== null}
                     onClick={() => {
                         void handleRefresh();
                     }}
                 >
-                    {t("semanticIndexPlugin.refresh")}
+                    {isRefreshing ? t("common.loading") : t("semanticIndexPlugin.refresh")}
                 </button>
             </div>
 
@@ -899,7 +900,7 @@ function SemanticIndexSettingsSection(): ReactNode {
                     <select
                         className="semantic-index-settings-select-input"
                         value={draftSettings.chunkingStrategy}
-                        disabled={isLoading || isSaving || installingModelId !== null}
+                        disabled={isLoading || isRefreshing || isSaving || installingModelId !== null}
                         onChange={(event) => {
                             const nextChunkingStrategy = event.target.value as ChunkingStrategyKind;
                             console.info("[semanticIndexPlugin] chunking strategy draft changed", {
@@ -941,7 +942,7 @@ function SemanticIndexSettingsSection(): ReactNode {
                         max={MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT}
                         step={1}
                         value={draftSettings.searchResultLimit}
-                        disabled={isLoading || isSaving || installingModelId !== null}
+                        disabled={isLoading || isRefreshing || isSaving || installingModelId !== null}
                         onChange={(event) => {
                             const nextSearchResultLimit = clampSemanticIndexSearchResultLimit(
                                 event.target.value,
@@ -999,7 +1000,7 @@ function SemanticIndexSettingsSection(): ReactNode {
                                         <button
                                             type="button"
                                             className="settings-shortcut-action-btn semantic-index-settings-install-btn"
-                                            disabled={isInstalled || isInstalling || installingModelId !== null || isSaving}
+                                            disabled={isInstalled || isInstalling || installingModelId !== null || isRefreshing || isSaving}
                                             onClick={() => {
                                                 void handleInstallModel(item.modelId);
                                             }}
@@ -1057,7 +1058,7 @@ function SemanticIndexSettingsSection(): ReactNode {
                     <button
                         type="button"
                         className="semantic-index-settings-primary-action"
-                        disabled={!canSave || isSaving || installingModelId !== null}
+                        disabled={!canSave || isRefreshing || isSaving || installingModelId !== null}
                         onClick={() => {
                             void handleSave();
                         }}

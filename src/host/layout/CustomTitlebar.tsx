@@ -10,6 +10,7 @@ import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Expand, Minus, PanelRightClose, PanelRightOpen, Square, X } from "lucide-react";
 import { requestApplicationQuit } from "../commands/systemShortcutSubsystem";
+import { toggleMainWindowFullscreen } from "../window/mainWindowFullscreenController";
 import {
     requestToggleRightSidebarVisibility,
     useRightSidebarVisibility,
@@ -77,10 +78,7 @@ export function CustomTitlebar(): ReactNode {
         }
 
         try {
-            const { getCurrentWindow } = await import("@tauri-apps/api/window");
-            const appWindow = getCurrentWindow();
-            const isFullscreen = await appWindow.isFullscreen();
-            await appWindow.setFullscreen(!isFullscreen);
+            await toggleMainWindowFullscreen();
         } catch (error) {
             console.error("[window] toggle fullscreen failed", error);
         }

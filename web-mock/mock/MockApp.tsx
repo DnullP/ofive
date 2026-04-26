@@ -26,6 +26,8 @@ import { readWorkbenchLayoutMode } from "../../src/host/layout/workbenchLayoutMo
 import { CodeMirrorEditorTab } from "../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
 import { KnowledgeGraphTab } from "../../src/plugins/knowledge-graph/tab/KnowledgeGraphTab";
 import { CanvasTab } from "../../src/plugins/canvas/CanvasTab";
+import { CalendarPanel } from "../../src/plugins/calendar/CalendarPanel";
+import { CalendarTab } from "../../src/plugins/calendar/CalendarTab";
 import { activatePlugin as activateCommandPalettePlugin } from "../../src/plugins/command-palette/commandPalettePlugin";
 import { SettingsTab } from "../../src/host/layout/SettingsTab";
 import { useConfigSync } from "../../src/host/config/configStore";
@@ -389,28 +391,6 @@ function MockSearchPanel(): ReactNode {
     );
 }
 
-function MockCalendarPanel(): ReactNode {
-    return (
-        <div className="outline-panel">
-            <div className="outline-panel-header">
-                日历
-                <span className="outline-persisted-hint">Panel</span>
-            </div>
-            <ul className="outline-list">
-                <li>
-                    <button type="button" className="outline-item">04-23 今天: 2 篇笔记</button>
-                </li>
-                <li>
-                    <button type="button" className="outline-item">04-24 明天: 1 个计划项</button>
-                </li>
-                <li>
-                    <button type="button" className="outline-item">04-28 下周一: 周回顾</button>
-                </li>
-            </ul>
-        </div>
-    );
-}
-
 function MockWorkbenchPlaceholder(props: {
     title: string;
     description: string;
@@ -458,20 +438,6 @@ function MockWorkbenchPlaceholder(props: {
                 ))}
             </div>
         </div>
-    );
-}
-
-function MockCalendarTab(): ReactNode {
-    return (
-        <MockWorkbenchPlaceholder
-            title="日历"
-            description="mock 现在保留和 Tauri 一致的日历入口，方便在同一套 workbench 壳上看布局与拖拽行为。"
-            points={[
-                "今天: Daily note / 会议纪要 / 周计划",
-                "月底: 项目复盘与归档",
-                "入口结构与右侧 panel 的 activityId 对齐为 calendar",
-            ]}
-        />
     );
 }
 
@@ -683,7 +649,7 @@ function ensureMockComponentsRegistered(): void {
         activityId: CALENDAR_ACTIVITY_ID,
         defaultPosition: "right",
         defaultOrder: 2,
-        render: () => React.createElement(MockCalendarPanel),
+        render: (context) => React.createElement(CalendarPanel, context),
     });
     registerPanel({
         id: "ai-chat-mock",
@@ -703,7 +669,7 @@ function ensureMockComponentsRegistered(): void {
     });
     registerTabComponent({ id: "canvas", component: CanvasTab as never });
     registerTabComponent({ id: MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID, component: KnowledgeGraphTab as never });
-    registerTabComponent({ id: MOCK_CALENDAR_TAB_COMPONENT_ID, component: MockCalendarTab as never });
+    registerTabComponent({ id: MOCK_CALENDAR_TAB_COMPONENT_ID, component: CalendarTab as never });
     registerTabComponent({ id: MOCK_ARCHITECTURE_COMPONENT_ID, component: MockArchitectureDevtoolsTab as never });
     registerTabComponent({ id: MOCK_TASK_BOARD_COMPONENT_ID, component: MockTaskBoardTab as never });
     registerTabComponent({ id: "settings", component: SettingsTab as never });
