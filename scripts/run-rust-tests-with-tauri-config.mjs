@@ -113,11 +113,11 @@ function listIntegrationTestTargets() {
 }
 
 /**
- * @function resolveSidecarBinaryPath
- * @description 解析当前主机平台对应的 sidecar 二进制路径。
- * @returns {string} sidecar 二进制绝对路径。
+ * @function resolveHostTuple
+ * @description 读取当前 Rust 主机 target triple。
+ * @returns {string} 当前主机 triple。
  */
-function resolveSidecarBinaryPath() {
+function resolveHostTuple() {
     const hostTuple = spawnSync("rustc", ["--print", "host-tuple"], {
         cwd: workspaceRoot,
         encoding: "utf8",
@@ -127,11 +127,42 @@ function resolveSidecarBinaryPath() {
         throw new Error(hostTuple.error?.message ?? "读取 Rust host tuple 失败");
     }
 
+    return hostTuple.stdout.trim();
+}
+
+/**
+ * @function resolveSidecarBinaryPath
+ * @description 解析当前主机平台对应的 sidecar 二进制路径。
+ * @param {string} id sidecar 基础 ID。
+ * @returns {string} sidecar 二进制绝对路径。
+ */
+function resolveSidecarBinaryPath(id) {
+    const hostTuple = resolveHostTuple();
     const extension = process.platform === "win32" ? ".exe" : "";
     return path.join(
         srcTauriRoot,
         "binaries",
-        `ofive-ai-sidecar-${hostTuple.stdout.trim()}${extension}`,
+        `${id}-${hostTuple}${extension}`,
+    );
+}
+
+/**
+ * @function ensurePlaceholderBinary
+ * @description 准备一个让 Tauri build script 通过资源路径校验的占位 sidecar。
+ * @param {string} binaryPath 目标二进制路径。
+ * @param {string} label 占位说明。
+ * @returns {void}
+ */
+function ensurePlaceholderBinary(binaryPath, label) {
+    if (fs.existsSync(binaryPath)) {
+        return;
+    }
+
+    fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
+    fs.writeFileSync(
+        binaryPath,
+        `placeholder sidecar for ${label}\n`,
+        "utf8",
     );
 }
 
@@ -143,18 +174,16 @@ function resolveSidecarBinaryPath() {
  * @throws {Error} 当 sidecar 画像缺少真实二进制时抛出异常。
  */
 function ensureSidecarBinaryForProfile(profile) {
-    const binaryPath = resolveSidecarBinaryPath();
+    const toolboxBinaryPath = resolveSidecarBinaryPath("ofive-toolbox");
+    ensurePlaceholderBinary(toolboxBinaryPath, "ofive-toolbox Rust tests");
+
+    const binaryPath = resolveSidecarBinaryPath("ofive-ai-sidecar");
     if (fs.existsSync(binaryPath)) {
         return;
     }
 
     if (profile === "core") {
-        fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
-        fs.writeFileSync(
-            binaryPath,
-            "placeholder sidecar for non-sidecar Rust tests\n",
-            "utf8",
-        );
+        ensurePlaceholderBinary(binaryPath, "non-sidecar Rust tests");
         return;
     }
 

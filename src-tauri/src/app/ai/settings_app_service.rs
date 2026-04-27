@@ -4,12 +4,12 @@
 
 use tauri::State;
 
-use crate::shared::ai_service::{
-    AiChatHistoryState, AiChatSettings, AiVendorDefinition, AiVendorModelDefinition,
-};
 use crate::app::ai::plugin_app_service;
 use crate::infra::ai::vendor_model_fetcher;
 use crate::infra::persistence::ai_chat_store;
+use crate::shared::ai_service::{
+    AiChatHistoryState, AiChatSettings, AiVendorDefinition, AiVendorModelDefinition,
+};
 use crate::shared::backend_plugin_contracts::BackendPluginConfig;
 use crate::state::AppState;
 

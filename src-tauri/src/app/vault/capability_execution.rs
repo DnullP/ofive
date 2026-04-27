@@ -30,10 +30,9 @@ pub(crate) fn execute_vault_capability(
             request.input.clone(),
             context,
         )),
-        "vault.search_canvas_files" => Some(execute_search_canvas_files(
-            request.input.clone(),
-            context,
-        )),
+        "vault.search_canvas_files" => {
+            Some(execute_search_canvas_files(request.input.clone(), context))
+        }
         "vault.resolve_wikilink_target" => Some(execute_resolve_wikilink_target(
             request.input.clone(),
             context,
@@ -85,6 +84,7 @@ struct RelativePathInput {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SearchMarkdownFilesInput {
+    #[serde(default)]
     query: String,
     limit: Option<usize>,
 }
@@ -286,10 +286,8 @@ fn execute_apply_markdown_patch(
     context: &CapabilityExecutionContext<'_>,
 ) -> Result<Value, String> {
     let input: ApplyMarkdownPatchInput = parse_input(input, "vault.apply_markdown_patch")?;
-    let unified_diff = ensure_patch_targets_relative_path(
-        &input.relative_path,
-        &input.unified_diff,
-    )?;
+    let unified_diff =
+        ensure_patch_targets_relative_path(&input.relative_path, &input.unified_diff)?;
     let output = markdown_patch_app_service::apply_unified_markdown_diff_in_root(
         context.vault_root,
         unified_diff,
@@ -459,7 +457,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_nanos())
             .unwrap_or(0);
-        let root = std::env::temp_dir().join(format!("ofive-vault-capability-test-{unique}-{sequence}"));
+        let root =
+            std::env::temp_dir().join(format!("ofive-vault-capability-test-{unique}-{sequence}"));
         fs::create_dir_all(root.join(".ofive")).expect("应成功创建测试根目录");
         root
     }
@@ -496,7 +495,10 @@ mod tests {
             .expect("应由 Vault 模块接管该能力")
             .expect("解析 WikiLink 应成功");
 
-        assert_eq!(result.get("relativePath").and_then(|value| value.as_str()), Some("notes/topic/readme.md"));
+        assert_eq!(
+            result.get("relativePath").and_then(|value| value.as_str()),
+            Some("notes/topic/readme.md")
+        );
     }
 
     #[test]
@@ -518,7 +520,72 @@ mod tests {
 
         let items = result.as_array().expect("输出应为数组");
         assert!(!items.is_empty());
-        assert_eq!(items[0].get("relativePath").and_then(|value| value.as_str()), Some("notes/topic.md"));
+        assert_eq!(
+            items[0]
+                .get("relativePath")
+                .and_then(|value| value.as_str()),
+            Some("notes/topic.md")
+        );
+    }
+
+    #[test]
+    fn execute_vault_capability_should_suggest_wikilink_targets_without_query() {
+        let root = create_test_root();
+        write_markdown_file(&root, "notes/topic.md", "# Topic\n");
+        write_markdown_file(&root, "notes/guide.md", "# Guide\n\n[[topic]]\n");
+
+        let request = CapabilityExecutionRequest {
+            capability_id: "vault.suggest_wikilink_targets".to_string(),
+            consumer: crate::domain::capability::CapabilityConsumer::AiTool,
+            input: json!({"limit": 5}),
+        };
+        let context = CapabilityExecutionContext { vault_root: &root };
+
+        let result = execute_vault_capability(&request, &context)
+            .expect("应由 Vault 模块接管该能力")
+            .expect("缺省 query 应按空查询返回 WikiLink 建议");
+
+        let items = result.as_array().expect("输出应为数组");
+        assert!(!items.is_empty());
+        assert_eq!(
+            items[0]
+                .get("relativePath")
+                .and_then(|value| value.as_str()),
+            Some("notes/topic.md")
+        );
+    }
+
+    #[test]
+    fn execute_vault_capability_should_search_markdown_files_without_query() {
+        let root = create_test_root();
+        write_markdown_file(&root, "notes/alpha.md", "# Alpha\n");
+        write_markdown_file(&root, "notes/beta.md", "# Beta\n");
+
+        let request = CapabilityExecutionRequest {
+            capability_id: "vault.search_markdown_files".to_string(),
+            consumer: crate::domain::capability::CapabilityConsumer::AiTool,
+            input: json!({"limit": 5}),
+        };
+        let context = CapabilityExecutionContext { vault_root: &root };
+
+        let result = execute_vault_capability(&request, &context)
+            .expect("应由 Vault 模块接管该能力")
+            .expect("缺省 query 应按空查询返回 Markdown 文件列表");
+
+        let items = result.as_array().expect("输出应为数组");
+        assert_eq!(items.len(), 2);
+        assert_eq!(
+            items[0]
+                .get("relativePath")
+                .and_then(|value| value.as_str()),
+            Some("notes/alpha.md")
+        );
+        assert_eq!(
+            items[1]
+                .get("relativePath")
+                .and_then(|value| value.as_str()),
+            Some("notes/beta.md")
+        );
     }
 
     #[test]
@@ -549,8 +616,51 @@ mod tests {
         let items = result.as_array().expect("输出应为数组");
         assert_eq!(items.len(), 1);
         assert_eq!(
-            items[0].get("relativePath").and_then(|value| value.as_str()),
+            items[0]
+                .get("relativePath")
+                .and_then(|value| value.as_str()),
             Some("boards/product-roadmap.canvas")
+        );
+    }
+
+    #[test]
+    fn execute_vault_capability_should_search_canvas_files_without_query() {
+        let root = create_test_root();
+        write_canvas_file(
+            &root,
+            "boards/archive.canvas",
+            "{\n  \"nodes\": [],\n  \"edges\": []\n}\n",
+        );
+        write_canvas_file(
+            &root,
+            "boards/roadmap.canvas",
+            "{\n  \"nodes\": [],\n  \"edges\": []\n}\n",
+        );
+
+        let request = CapabilityExecutionRequest {
+            capability_id: "vault.search_canvas_files".to_string(),
+            consumer: crate::domain::capability::CapabilityConsumer::AiTool,
+            input: json!({"limit": 5}),
+        };
+        let context = CapabilityExecutionContext { vault_root: &root };
+
+        let result = execute_vault_capability(&request, &context)
+            .expect("应由 Vault 模块接管该能力")
+            .expect("缺省 query 应按空查询返回 Canvas 文件列表");
+
+        let items = result.as_array().expect("输出应为数组");
+        assert_eq!(items.len(), 2);
+        assert_eq!(
+            items[0]
+                .get("relativePath")
+                .and_then(|value| value.as_str()),
+            Some("boards/archive.canvas")
+        );
+        assert_eq!(
+            items[1]
+                .get("relativePath")
+                .and_then(|value| value.as_str()),
+            Some("boards/roadmap.canvas")
         );
     }
 
@@ -669,8 +779,16 @@ mod tests {
             .expect("应由 Vault 模块接管 patch 能力")
             .expect("应用 Markdown patch 应成功");
 
-        assert_eq!(result.get("relativePath").and_then(|value| value.as_str()), Some("notes/guide.md"));
-        assert_eq!(result.get("appliedBlockCount").and_then(|value| value.as_u64()), Some(1));
+        assert_eq!(
+            result.get("relativePath").and_then(|value| value.as_str()),
+            Some("notes/guide.md")
+        );
+        assert_eq!(
+            result
+                .get("appliedBlockCount")
+                .and_then(|value| value.as_u64()),
+            Some(1)
+        );
         assert_eq!(
             fs::read_to_string(root.join("notes/guide.md")).expect("应能读取修改后的文件"),
             "# Guide\n\nalpha\nbeta patched\ngamma\n"

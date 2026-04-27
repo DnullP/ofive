@@ -1,3 +1,22 @@
+---
+title: "ofive 后端模块扩展标准流程"
+kind: "workflow"
+status: "active"
+updated: "2026-04-26"
+owners:
+  - "backend"
+tags:
+  - "ofive"
+  - "backend"
+  - "module"
+  - "capability"
+  - "persistence"
+related:
+  - "ofive-backend-module-platform"
+  - "ofive-ai-sidecar-and-capabilities"
+  - "ofive-semantic-index"
+---
+
 # ofive 后端模块扩展标准流程 v1
 
 > 这是后端专项流程文档。
@@ -5,6 +24,8 @@
 > 如果你要新增的是完整功能，而不是纯后端能力，请先看总流程文档：`docs/feature-extension-workflow.md`。
 > 如果你要继续推进多端同步模块，请同时参考：`docs/sync-module-roadmap.md`。
 > 本文只负责回答“后端模块如何接入平台、如何保持模块边界稳定”。
+>
+> 项目 wiki 入口：[[ofive-backend-module-platform|后端模块平台]]。
 
 ## 1. 文档定位
 

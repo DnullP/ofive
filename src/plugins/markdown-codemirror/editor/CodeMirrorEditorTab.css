@@ -619,6 +619,9 @@
 /* Wiki Link 别名 Widget：替代 `target|alias` 源码，只展示可读别名文本 */
 .cm-tab-editor .cm-rendered-wikilink-display {
     display: inline;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
 }
 
 /* Wiki Link 悬浮样式：提示可直接点击导航 */
@@ -1014,9 +1017,31 @@
     word-break: break-all;
 }
 
+/* 标题行内的 WikiLink：优先继承标题字号/字重，再叠加链接的颜色、下划线和点击行为。 */
+.cm-tab-editor .cm-line.cm-rendered-header-line .cm-rendered-header {
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+}
+
+.cm-tab-editor .cm-line.cm-rendered-header-line .cm-rendered-wikilink,
+.cm-tab-editor .cm-line.cm-rendered-header-line .cm-rendered-wikilink-display,
+.cm-tab-reader .cm-rendered-header .cm-rendered-wikilink {
+    color: var(--editor-link-color);
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+    text-decoration: underline !important;
+    text-underline-offset: 2px;
+}
+
 /* 一级标题样式 */
 .cm-tab-editor .cm-rendered-header-h1,
 .cm-tab-reader .cm-rendered-header-h1 {
+    font-size: 1.9em;
+}
+
+.cm-tab-editor .cm-line.cm-rendered-header-line-h1 {
     font-size: 1.9em;
 }
 
@@ -1026,9 +1051,17 @@
     font-size: 1.6em;
 }
 
+.cm-tab-editor .cm-line.cm-rendered-header-line-h2 {
+    font-size: 1.6em;
+}
+
 /* 三级标题样式 */
 .cm-tab-editor .cm-rendered-header-h3,
 .cm-tab-reader .cm-rendered-header-h3 {
+    font-size: 1.35em;
+}
+
+.cm-tab-editor .cm-line.cm-rendered-header-line-h3 {
     font-size: 1.35em;
 }
 
@@ -1038,9 +1071,17 @@
     font-size: 1.2em;
 }
 
+.cm-tab-editor .cm-line.cm-rendered-header-line-h4 {
+    font-size: 1.2em;
+}
+
 /* 五级标题样式 */
 .cm-tab-editor .cm-rendered-header-h5,
 .cm-tab-reader .cm-rendered-header-h5 {
+    font-size: 1.05em;
+}
+
+.cm-tab-editor .cm-line.cm-rendered-header-line-h5 {
     font-size: 1.05em;
 }
 
@@ -1049,6 +1090,10 @@
 .cm-tab-reader .cm-rendered-header-h6 {
     font-size: 1em;
     opacity: 0.9;
+}
+
+.cm-tab-editor .cm-line.cm-rendered-header-line-h6 {
+    font-size: 1em;
 }
 
 /* Frontmatter 可视化容器：替换 YAML 区块后承载所有字段编辑控件 */

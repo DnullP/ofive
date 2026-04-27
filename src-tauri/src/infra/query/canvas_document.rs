@@ -83,8 +83,14 @@ mod tests {
             document.nodes[0].extra_fields.get("unknownField"),
             Some(&json!(true))
         );
-        assert_eq!(document.edges[0].from_side, Some(VaultCanvasEdgeSide::Right));
-        assert_eq!(document.metadata.and_then(|metadata| metadata.title), Some("Roadmap".to_string()));
+        assert_eq!(
+            document.edges[0].from_side,
+            Some(VaultCanvasEdgeSide::Right)
+        );
+        assert_eq!(
+            document.metadata.and_then(|metadata| metadata.title),
+            Some("Roadmap".to_string())
+        );
     }
 
     #[test]
@@ -121,8 +127,8 @@ mod tests {
             extra_fields: BTreeMap::from([("theme".to_string(), json!("glass"))]),
         };
 
-        let serialized = serialize_vault_canvas_document(&document)
-            .expect("序列化 Canvas 文档应成功");
+        let serialized =
+            serialize_vault_canvas_document(&document).expect("序列化 Canvas 文档应成功");
         let parsed = parse_vault_canvas_document(&serialized).expect("反序列化应成功");
 
         assert_eq!(parsed, document);
@@ -169,8 +175,8 @@ mod tests {
             extra_fields: BTreeMap::new(),
         };
 
-        let serialized = serialize_vault_canvas_document(&document)
-            .expect("序列化 Canvas 文档应成功");
+        let serialized =
+            serialize_vault_canvas_document(&document).expect("序列化 Canvas 文档应成功");
         let parsed = parse_vault_canvas_document(&serialized).expect("反序列化应成功");
 
         assert_eq!(parsed, document);

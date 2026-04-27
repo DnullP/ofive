@@ -172,6 +172,105 @@ func TestExecuteCapabilityPlanningLoopHandlesToolBlockAndReturnsFinalAnswer(t *t
 	}
 }
 
+func TestExecuteCapabilityPlanningLoopWithConfirmationReturnsPendingConfirmation(t *testing.T) {
+	t.Parallel()
+
+	response := "<OFIVE_TOOL_CALL>\n{\"capabilityId\":\"vault.create_markdown_file\",\"input\":{\"relativePath\":\"Notes/New.md\",\"content\":\"# New\"}}\n</OFIVE_TOOL_CALL>"
+
+	finalText, confirmation, err := executeCapabilityPlanningLoopWithConfirmation(
+		context.Background(),
+		"创建 Notes/New.md",
+		CapabilityBridgeConfig{
+			CallbackURL:   "http://127.0.0.1:9/capabilities/call",
+			CallbackToken: "test-token",
+			Tools: []ToolDescriptor{{
+				CapabilityID:         "vault.create_markdown_file",
+				Name:                 "vault_create_markdown_file",
+				RequiresConfirmation: true,
+			}},
+		},
+		func(_ context.Context, _ string) (string, error) {
+			return response, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("executeCapabilityPlanningLoopWithConfirmation returned error: %v", err)
+	}
+	if finalText != "" {
+		t.Fatalf("expected no final text before confirmation, got %q", finalText)
+	}
+	if confirmation == nil {
+		t.Fatal("expected pending confirmation")
+	}
+	if confirmation.ToolName != "vault.create_markdown_file" {
+		t.Fatalf("unexpected confirmation tool: %s", confirmation.ToolName)
+	}
+	if !strings.Contains(confirmation.ToolArgsJSON, "Notes/New.md") {
+		t.Fatalf("expected confirmation args to include target path, got %s", confirmation.ToolArgsJSON)
+	}
+}
+
+func TestStreamManagedCapabilityConfirmationResponseExecutesConfirmedTool(t *testing.T) {
+	t.Parallel()
+
+	var capturedCapabilityID string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		defer request.Body.Close()
+
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+
+		var payload struct {
+			CapabilityID string `json:"capabilityId"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		capturedCapabilityID = payload.CapabilityID
+
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"schemaVersion":"2026-03-17","capabilityId":"vault.create_markdown_file","success":true,"output":{"relativePath":"Notes/New.md","created":true},"error":""}`))
+	}))
+	defer server.Close()
+
+	var chunks []StreamChunk
+	err := streamManagedCapabilityConfirmationResponse(
+		context.Background(),
+		true,
+		&persistedConfirmationState{
+			SessionID:      "session-1",
+			ConfirmationID: "confirm-1",
+			ToolName:       "vault.create_markdown_file",
+			ToolArgsJSON:   `{"relativePath":"Notes/New.md","content":"# New"}`,
+		},
+		CapabilityBridgeConfig{
+			CallbackURL:   server.URL,
+			CallbackToken: "test-token",
+			Tools: []ToolDescriptor{{
+				CapabilityID:         "vault.create_markdown_file",
+				Name:                 "vault_create_markdown_file",
+				RequiresConfirmation: true,
+			}},
+		},
+		nil,
+		func(chunk StreamChunk) error {
+			chunks = append(chunks, chunk)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("streamManagedCapabilityConfirmationResponse returned error: %v", err)
+	}
+	if capturedCapabilityID != "vault.create_markdown_file" {
+		t.Fatalf("unexpected capability id: %s", capturedCapabilityID)
+	}
+	if len(chunks) == 0 || !strings.Contains(chunks[len(chunks)-1].AccumulatedText, "[tool:vault.create_markdown_file]") {
+		t.Fatalf("expected tool output chunk, got %+v", chunks)
+	}
+}
+
 func TestExtractPlannedCapabilityCallSupportsCapabilityAlias(t *testing.T) {
 	t.Parallel()
 

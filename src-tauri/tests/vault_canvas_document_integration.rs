@@ -30,15 +30,28 @@ fn get_vault_canvas_document_should_parse_canvas_payload() {
     )
     .expect("创建 Canvas 文件应成功");
 
-    let response = get_vault_canvas_document_in_root(&vault.root, "boards/roadmap.canvas".to_string())
-        .expect("读取结构化 Canvas 文档应成功");
+    let response =
+        get_vault_canvas_document_in_root(&vault.root, "boards/roadmap.canvas".to_string())
+            .expect("读取结构化 Canvas 文档应成功");
 
     assert_eq!(response.relative_path, "boards/roadmap.canvas");
     assert_eq!(response.document.nodes.len(), 1);
-    assert_eq!(response.document.nodes[0].node_type, VaultCanvasNodeKind::Text);
+    assert_eq!(
+        response.document.nodes[0].node_type,
+        VaultCanvasNodeKind::Text
+    );
     assert_eq!(response.document.nodes[0].x, 8.5);
-    assert_eq!(response.document.extra_fields.get("viewport"), Some(&json!({"zoom": 1.1})));
-    assert_eq!(response.document.metadata.and_then(|metadata| metadata.title), Some("Roadmap".to_string()));
+    assert_eq!(
+        response.document.extra_fields.get("viewport"),
+        Some(&json!({"zoom": 1.1}))
+    );
+    assert_eq!(
+        response
+            .document
+            .metadata
+            .and_then(|metadata| metadata.title),
+        Some("Roadmap".to_string())
+    );
 }
 
 #[test]

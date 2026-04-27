@@ -8,8 +8,8 @@ use std::time::Duration;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 
-use crate::shared::ai_service::{AiChatSettings, AiVendorModelDefinition};
 use crate::infra::persistence::ai_chat_store;
+use crate::shared::ai_service::{AiChatSettings, AiVendorModelDefinition};
 
 const MINIMAX_MODELS: &[&str] = &[
     "MiniMax-M2",

@@ -24,9 +24,10 @@ pub(crate) fn execute_semantic_index_capability(
     context: &CapabilityExecutionContext<'_>,
 ) -> Option<Result<Value, String>> {
     match request.capability_id.as_str() {
-        "semantic.search_markdown_chunks" => {
-            Some(execute_search_markdown_chunks(request.input.clone(), context))
-        }
+        "semantic.search_markdown_chunks" => Some(execute_search_markdown_chunks(
+            request.input.clone(),
+            context,
+        )),
         _ => None,
     }
 }
@@ -37,9 +38,7 @@ fn execute_search_markdown_chunks(
     context: &CapabilityExecutionContext<'_>,
 ) -> Result<Value, String> {
     let request: SemanticSearchRequest = serde_json::from_value(input).map_err(|error| {
-        format!(
-            "failed to parse capability input for semantic.search_markdown_chunks: {error}"
-        )
+        format!("failed to parse capability input for semantic.search_markdown_chunks: {error}")
     })?;
 
     let output = index_app_service::search_markdown_chunks_in_root(request, context.vault_root)?;

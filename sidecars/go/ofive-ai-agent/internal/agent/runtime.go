@@ -16,6 +16,7 @@ import (
 
 	"google.golang.org/adk/runner"
 	"google.golang.org/adk/session"
+	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/toolconfirmation"
 
 	"ofive/sidecars/go/ofive-ai-agent/internal/capabilities"
@@ -493,6 +494,25 @@ func (r *Runtime) StreamConfirmation(
 		}
 	}
 
+	if canUseCapabilityPlanning(bridgeConfig) && persistedConfirmation != nil {
+		if err := streamManagedCapabilityConfirmationResponse(
+			ctx,
+			confirmed,
+			persistedConfirmation,
+			bridgeConfig,
+			trace,
+			emit,
+		); err != nil {
+			return err
+		}
+		return deletePersistedPendingConfirmation(
+			ctx,
+			sessionID,
+			confirmationID,
+			bridgeConfig,
+		)
+	}
+
 	if strings.TrimSpace(vendorConfig.VendorID) == "" ||
 		strings.TrimSpace(vendorConfig.VendorID) == "mock-echo" {
 		if err := streamMockConfirmationResponse(
@@ -747,7 +767,9 @@ func streamADKContent(
 ) error {
 	state := streamADKState{}
 
-	for event, err := range runnerInstance.Run(ctx, userID, sessionID, content, agent.RunConfig{}) {
+	for event, err := range runnerInstance.Run(ctx, userID, sessionID, content, agent.RunConfig{
+		StreamingMode: agent.StreamingModeSSE,
+	}) {
 		if err != nil {
 			_ = emitDebugTrace(emitDebugEvent(emit), DebugTraceEvent{
 				Level: "error",
@@ -860,7 +882,10 @@ func processADKEventContent(
 	state.historyContentBlocks = buildHistoryContentBlocksFromParts(content.Parts)
 
 	if len(reasoningParts) > 0 {
-		state.reasoningText = strings.Join(reasoningParts, "\n")
+		state.reasoningText = mergeStreamEventText(
+			state.reasoningText,
+			strings.Join(reasoningParts, "\n"),
+		)
 		if err := emitStreamTextDelta(
 			agentDisplayName,
 			state.reasoningText,
@@ -876,7 +901,10 @@ func processADKEventContent(
 		return nil
 	}
 
-	state.responseText = strings.Join(textParts, "\n")
+	state.responseText = mergeStreamEventText(
+		state.responseText,
+		strings.Join(textParts, "\n"),
+	)
 	return emitStreamTextDelta(
 		agentDisplayName,
 		state.responseText,
@@ -884,6 +912,22 @@ func processADKEventContent(
 		false,
 		emit,
 	)
+}
+
+func mergeStreamEventText(current string, next string) string {
+	if strings.TrimSpace(next) == "" {
+		return current
+	}
+	if current == "" {
+		return next
+	}
+	if next == current || strings.HasPrefix(next, current) {
+		return next
+	}
+	if strings.HasPrefix(current, next) {
+		return current
+	}
+	return current + "\n" + next
 }
 
 func extractPendingToolConfirmation(content *genai.Content) *pendingToolConfirmation {
@@ -989,7 +1033,7 @@ func (r *Runtime) buildAgent(
 			})
 		})
 
-		toolsets, err := buildMCPToolsets(bridgeConfig)
+		toolsets, err := buildAgentToolsets(bridgeConfig)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1036,7 +1080,7 @@ func (r *Runtime) buildAgent(
 			})
 		})
 
-		toolsets, err := buildMCPToolsets(bridgeConfig)
+		toolsets, err := buildAgentToolsets(bridgeConfig)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1086,6 +1130,13 @@ func canUseCapabilityPlanning(bridgeConfig CapabilityBridgeConfig) bool {
 	}
 	_, ok := capabilityClientFromBridge(bridgeConfig)
 	return ok && len(bridgeConfig.Tools) > 0
+}
+
+func buildAgentToolsets(bridgeConfig CapabilityBridgeConfig) ([]tool.Toolset, error) {
+	if strings.TrimSpace(bridgeConfig.MCPServerURL) != "" {
+		return buildMCPToolsets(bridgeConfig)
+	}
+	return buildCapabilityToolsets(bridgeConfig)
 }
 
 func runADKTurn(
@@ -1148,8 +1199,14 @@ func buildAgentInstruction(
 			strings.TrimSpace(tool.Description),
 		))
 	}
+	managedToolCallGuidance := "Use the provided native function tools directly whenever they are available. Do not write " +
+		plannedCapabilityCallStartTag + " blocks in normal answers. Legacy fallback only: when native function calling is not available, respond with exactly one " +
+		plannedCapabilityCallStartTag + " ... " + plannedCapabilityCallEndTag +
+		" block and no extra text. The block JSON shape is {\"capabilityId\":\"vault.read_markdown_file\",\"input\":{...}}. " +
+		"Use capabilityId from the available tools list. For confirmation=true tools, still emit the block; ofive will ask the user before the managed CLI tool is executed. "
 
 	return baseInstruction + "\n\n" +
+		managedToolCallGuidance +
 		"When the user asks about local vault content, notes, outlines, backlinks, search results, or graph data, you must use the provided tools instead of guessing or claiming you cannot access local files. " +
 		"Never invent tools, parameters, or file contents. If the user's request would require writing, renaming, deleting, or any other modification but no such executable tool is listed, explicitly say that the current assistant session only has non-mutating tools available and do not claim success. " +
 		"After tool results are available, answer directly and stay grounded in those results. " +

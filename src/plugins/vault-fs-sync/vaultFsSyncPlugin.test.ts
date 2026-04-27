@@ -28,6 +28,8 @@ mock.module("../../api/vaultApi", () => ({
         feature_settings: {},
     }),
     isSelfTriggeredVaultConfigEvent: () => false,
+    subscribeVaultFsEvents: async () => () => undefined,
+    subscribeVaultConfigEvents: async () => () => undefined,
 }));
 
 const {
@@ -86,7 +88,7 @@ function createDependencies(
             };
         },
         emitPersistedContentUpdatedEvent,
-        getFocusedArticleSnapshot: () => ({ path: "notes/demo.md" }),
+        hasArticleSnapshotByPath: (path) => path === "notes/demo.md",
         reportArticleContentByPath,
         ...overrides,
     };
@@ -128,7 +130,23 @@ describe("vaultFsSyncPlugin", () => {
         dispose();
     });
 
-    it("应在聚焦 Markdown 被外部修改时刷新编辑器内容", async () => {
+    it("应将外部 moved 事件转发为持久态内容更新事件", async () => {
+        const { dependencies, emitFsEvent } = createDependencies();
+
+        const dispose = activateVaultFsSyncPluginRuntime(dependencies);
+        await emitFsEvent(createPayload({
+            eventType: "moved",
+            relativePath: "notes/other.md",
+        }));
+
+        expect(dependencies.emitPersistedContentUpdatedEvent).toHaveBeenCalledWith({
+            relativePath: "notes/other.md",
+            source: "external",
+        });
+        dispose();
+    });
+
+    it("应在已缓存 Markdown 被外部修改时刷新全部同路径文章内容", async () => {
         const { dependencies, emitFsEvent } = createDependencies();
 
         const dispose = activateVaultFsSyncPluginRuntime(dependencies);

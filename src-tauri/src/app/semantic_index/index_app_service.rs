@@ -14,18 +14,15 @@ use crate::infra::persistence::extension_private_store;
 use crate::infra::vector::{
     available_chunking_strategies, available_embedding_providers, available_vector_stores,
     build_chunking_strategy, build_embedding_provider, build_vector_store,
-    ensure_sqlite_vec_runtime, semantic_index_embedding_cache_dir,
-    SemanticIndexDocumentWrite,
+    ensure_sqlite_vec_runtime, semantic_index_embedding_cache_dir, SemanticIndexDocumentWrite,
 };
 use crate::shared::semantic_index_contracts::{
-    DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
-    MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
+    SemanticIndexBackendCatalog, SemanticIndexModelCatalog, SemanticIndexModelCatalogItem,
+    SemanticIndexModelInstallStatus, SemanticIndexQueueStatus, SemanticIndexSettings,
+    SemanticIndexSnapshot, SemanticIndexStatus, SemanticIndexedChunkRecord,
+    SemanticIndexedDocumentRecord, SemanticSearchRequest, SemanticSearchResponse,
+    DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT, MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
     MIN_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
-    SemanticIndexBackendCatalog, SemanticIndexedChunkRecord,
-    SemanticIndexedDocumentRecord, SemanticIndexModelCatalog,
-    SemanticIndexModelCatalogItem, SemanticIndexModelInstallStatus,
-    SemanticIndexQueueStatus, SemanticIndexSettings, SemanticIndexSnapshot,
-    SemanticIndexStatus, SemanticSearchRequest, SemanticSearchResponse,
 };
 use serde::{Deserialize, Serialize};
 
@@ -405,7 +402,8 @@ pub(crate) fn upsert_indexed_markdown_document_in_root(
         chunks,
     };
     let embedding_provider = build_embedding_provider(settings.embedding_provider)?;
-    let embedding_dimensions = embedding_provider.embedding_dimensions(&settings.model_id, vault_root)?;
+    let embedding_dimensions =
+        embedding_provider.embedding_dimensions(&settings.model_id, vault_root)?;
     let embeddings = embedding_provider.embed_passages(
         &settings.model_id,
         &record
@@ -555,11 +553,8 @@ pub(crate) fn search_markdown_chunks_in_root(
     }
 
     let embedding_provider = build_embedding_provider(settings.embedding_provider)?;
-    let query_embedding = embedding_provider.embed_query(
-        &settings.model_id,
-        &request.query,
-        vault_root,
-    )?;
+    let query_embedding =
+        embedding_provider.embed_query(&settings.model_id, &request.query, vault_root)?;
     let vector_store = build_vector_store(settings.vector_store)?;
     let normalized_request = normalize_semantic_search_request(request, &settings);
     let results = vector_store.search(
@@ -655,13 +650,10 @@ fn normalize_semantic_search_request(
     request: SemanticSearchRequest,
     settings: &SemanticIndexSettings,
 ) -> SemanticSearchRequest {
-    let effective_limit = request
-        .limit
-        .unwrap_or(settings.search_result_limit)
-        .clamp(
-            MIN_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
-            settings.search_result_limit,
-        );
+    let effective_limit = request.limit.unwrap_or(settings.search_result_limit).clamp(
+        MIN_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
+        settings.search_result_limit,
+    );
 
     SemanticSearchRequest {
         limit: Some(effective_limit),
@@ -699,13 +691,16 @@ fn validate_runtime_selection(settings: &SemanticIndexSettings) -> Result<(), St
 }
 
 /// 读取模型安装注册表。
-fn load_semantic_index_model_install_registry() -> Result<SemanticIndexModelInstallRegistry, String> {
-    Ok(storage_registry_facade::load_app_storage_state::<SemanticIndexModelInstallRegistry>(
-        SEMANTIC_INDEX_APP_STORAGE_CONSUMER_MODULE_ID,
-        SEMANTIC_INDEX_OWNER,
-        SEMANTIC_INDEX_MODEL_INSTALLS_STATE_KEY,
-    )?
-    .unwrap_or_default())
+fn load_semantic_index_model_install_registry() -> Result<SemanticIndexModelInstallRegistry, String>
+{
+    Ok(
+        storage_registry_facade::load_app_storage_state::<SemanticIndexModelInstallRegistry>(
+            SEMANTIC_INDEX_APP_STORAGE_CONSUMER_MODULE_ID,
+            SEMANTIC_INDEX_OWNER,
+            SEMANTIC_INDEX_MODEL_INSTALLS_STATE_KEY,
+        )?
+        .unwrap_or_default(),
+    )
 }
 
 /// 读取当前队列状态。
@@ -713,12 +708,14 @@ fn load_semantic_index_queue_status_in_root(
     vault_root: &Path,
     enabled: bool,
 ) -> Result<SemanticIndexQueueStatus, String> {
-    Ok(extension_private_store::load_extension_private_state::<SemanticIndexQueueStatus>(
-        vault_root,
-        SEMANTIC_INDEX_OWNER,
-        SEMANTIC_INDEX_QUEUE_STATUS_STATE_KEY,
-    )?
-    .unwrap_or_else(|| default_semantic_index_queue_status(enabled)))
+    Ok(
+        extension_private_store::load_extension_private_state::<SemanticIndexQueueStatus>(
+            vault_root,
+            SEMANTIC_INDEX_OWNER,
+            SEMANTIC_INDEX_QUEUE_STATUS_STATE_KEY,
+        )?
+        .unwrap_or_else(|| default_semantic_index_queue_status(enabled)),
+    )
 }
 
 /// 保存当前队列状态。
@@ -799,9 +796,10 @@ fn is_model_ready_for_sync(model_id: &str) -> Result<bool, String> {
     }
 
     let install_registry = load_semantic_index_model_install_registry()?;
-    Ok(install_registry.models.iter().any(|record| {
-        record.model_id == model_id && record.installed_at_ms.is_some()
-    }))
+    Ok(install_registry
+        .models
+        .iter()
+        .any(|record| record.model_id == model_id && record.installed_at_ms.is_some()))
 }
 
 /// 判断指定模型缓存目录是否已存在有效文件。
@@ -942,10 +940,7 @@ fn run_semantic_index_full_sync_in_root(vault_root: &Path) -> Result<(), String>
 }
 
 /// 在全量同步出现致命错误时写回失败状态。
-fn mark_semantic_index_full_sync_failed(
-    vault_root: &Path,
-    error: String,
-) -> Result<(), String> {
+fn mark_semantic_index_full_sync_failed(vault_root: &Path, error: String) -> Result<(), String> {
     let settings = load_semantic_index_settings_in_root(vault_root).unwrap_or_default();
     let mut queue_status = load_semantic_index_queue_status_in_root(vault_root, settings.enabled)?;
     queue_status.worker_status = "error".to_string();
@@ -1002,20 +997,18 @@ fn compute_stable_hash_hex(content: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        get_semantic_index_backend_catalog, get_semantic_index_status_in_root,
-        get_semantic_index_model_catalog_in_root,
-        install_semantic_index_model_in_root,
-        load_indexed_markdown_document_in_root, load_semantic_index_settings_in_root,
-        load_semantic_index_snapshot_in_root, save_semantic_index_settings_in_root,
-        search_markdown_chunks_in_root, upsert_indexed_markdown_document_in_root,
-        delete_indexed_markdown_document_in_root,
-        start_semantic_index_full_sync_in_root,
+        delete_indexed_markdown_document_in_root, get_semantic_index_backend_catalog,
+        get_semantic_index_model_catalog_in_root, get_semantic_index_status_in_root,
+        install_semantic_index_model_in_root, load_indexed_markdown_document_in_root,
+        load_semantic_index_settings_in_root, load_semantic_index_snapshot_in_root,
+        save_semantic_index_settings_in_root, search_markdown_chunks_in_root,
+        start_semantic_index_full_sync_in_root, upsert_indexed_markdown_document_in_root,
     };
     use crate::app::app_storage::storage_registry_facade::set_app_storage_test_root;
     use crate::shared::semantic_index_contracts::{
-        ChunkingStrategyKind, DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
-        EmbeddingProviderKind, SemanticIndexModelInstallStatus,
+        ChunkingStrategyKind, EmbeddingProviderKind, SemanticIndexModelInstallStatus,
         SemanticIndexSettings, SemanticSearchRequest, VectorStoreKind,
+        DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
     };
     use std::fs;
     use std::path::Path;
@@ -1041,8 +1034,7 @@ mod tests {
                 .lock()
                 .expect("app storage test lock should succeed");
             let root = test_root.join(".app-storage-test");
-            set_app_storage_test_root(Some(root.clone()))
-                .expect("test root should set");
+            set_app_storage_test_root(Some(root.clone())).expect("test root should set");
             Self { _lock: lock, root }
         }
     }
@@ -1060,10 +1052,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_nanos())
             .unwrap_or(0);
-        let root = std::env::temp_dir().join(format!(
-            "ofive-semantic-index-{}-{}",
-            nanos, sequence
-        ));
+        let root =
+            std::env::temp_dir().join(format!("ofive-semantic-index-{}-{}", nanos, sequence));
         fs::create_dir_all(&root).expect("test root should be created");
         root
     }
@@ -1076,9 +1066,15 @@ mod tests {
             .expect("default settings should load without persistence record");
 
         assert!(!settings.enabled);
-        assert_eq!(settings.embedding_provider, EmbeddingProviderKind::FastEmbed);
+        assert_eq!(
+            settings.embedding_provider,
+            EmbeddingProviderKind::FastEmbed
+        );
         assert_eq!(settings.vector_store, VectorStoreKind::SqliteVec);
-        assert_eq!(settings.chunking_strategy, ChunkingStrategyKind::HeadingParagraph);
+        assert_eq!(
+            settings.chunking_strategy,
+            ChunkingStrategyKind::HeadingParagraph
+        );
         assert_eq!(settings.model_id, "intfloat/multilingual-e5-small");
         assert_eq!(
             settings.search_result_limit,
@@ -1107,8 +1103,8 @@ mod tests {
         )
         .expect("settings save should succeed");
 
-        let loaded = load_semantic_index_settings_in_root(&root)
-            .expect("saved settings should load");
+        let loaded =
+            load_semantic_index_settings_in_root(&root).expect("saved settings should load");
 
         assert_eq!(saved, loaded);
 
@@ -1119,8 +1115,8 @@ mod tests {
     fn model_catalog_should_report_default_models_as_not_installed_before_install() {
         let root = create_test_root();
         let _app_guard = AppStorageTestGuard::new(&root);
-        let catalog = get_semantic_index_model_catalog_in_root(&root)
-            .expect("model catalog should load");
+        let catalog =
+            get_semantic_index_model_catalog_in_root(&root).expect("model catalog should load");
 
         assert_eq!(catalog.models.len(), 2);
         assert!(catalog.models.iter().any(|item| !item.is_selected));
@@ -1141,7 +1137,10 @@ mod tests {
             &root,
         )
         .expect("model install should succeed in test mode");
-        assert_eq!(installed.install_status, SemanticIndexModelInstallStatus::Installed);
+        assert_eq!(
+            installed.install_status,
+            SemanticIndexModelInstallStatus::Installed
+        );
         assert_eq!(installed.dimensions, Some(16));
 
         let catalog = get_semantic_index_model_catalog_in_root(&root)
@@ -1151,7 +1150,10 @@ mod tests {
             .iter()
             .find(|item| item.model_id == "intfloat/multilingual-e5-small")
             .expect("installed model should remain in catalog");
-        assert_eq!(selected.install_status, SemanticIndexModelInstallStatus::Installed);
+        assert_eq!(
+            selected.install_status,
+            SemanticIndexModelInstallStatus::Installed
+        );
 
         let _ = fs::remove_dir_all(root);
     }
@@ -1266,7 +1268,10 @@ mod tests {
         assert_eq!(status.status, "disabled");
         assert_eq!(status.embedding_provider, EmbeddingProviderKind::FastEmbed);
         assert_eq!(status.vector_store, VectorStoreKind::SqliteVec);
-        assert_eq!(status.chunking_strategy, ChunkingStrategyKind::HeadingParagraph);
+        assert_eq!(
+            status.chunking_strategy,
+            ChunkingStrategyKind::HeadingParagraph
+        );
         assert_eq!(status.model_id, "intfloat/multilingual-e5-small");
         assert_eq!(status.schema_version, 1);
         assert_eq!(status.last_error, None);
@@ -1402,14 +1407,11 @@ mod tests {
             &root,
         )
         .expect("settings save should succeed");
-        install_semantic_index_model_in_root(
-            "intfloat/multilingual-e5-small".to_string(),
-            &root,
-        )
-        .expect("model install should succeed in test mode");
+        install_semantic_index_model_in_root("intfloat/multilingual-e5-small".to_string(), &root)
+            .expect("model install should succeed in test mode");
 
-        let initial_queue_status = start_semantic_index_full_sync_in_root(&root)
-            .expect("full sync should start");
+        let initial_queue_status =
+            start_semantic_index_full_sync_in_root(&root).expect("full sync should start");
         assert_eq!(initial_queue_status.worker_status, "running");
 
         let final_status = (0..200)

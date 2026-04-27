@@ -54,5 +54,7 @@ fn forward_frontend_log_should_capture_warn_and_error_notifications() {
     assert_eq!(warn_payload.source, "frontend-log");
     assert_eq!(error_payload.level, "error");
     assert_eq!(error_payload.source, "frontend-log");
-    assert!(payloads.iter().all(|payload| !payload.message.contains("integration-info-message")));
+    assert!(payloads
+        .iter()
+        .all(|payload| !payload.message.contains("integration-info-message")));
 }

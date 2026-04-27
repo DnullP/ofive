@@ -46,6 +46,7 @@ mock.module("../../api/vaultApi", () => ({
 const {
     getConfigSnapshot,
     syncConfigStateForVault,
+    updateBackendConfig,
     DEFAULT_FEATURE_SETTINGS,
 } = await import("./configStore");
 
@@ -204,6 +205,60 @@ describe("configStore defaults", () => {
                 frontmatterTemplate: DEFAULT_FEATURE_SETTINGS.frontmatterTemplate,
                 restoreWorkspaceLayout: DEFAULT_FEATURE_SETTINGS.restoreWorkspaceLayout,
             },
+        });
+    });
+
+    it("并发写入仓库配置时不应让后写入覆盖先写入的其它 entries", async () => {
+        currentVaultConfig = {
+            schemaVersion: 1,
+            entries: {
+                features: {
+                    restoreWorkspaceLayout: true,
+                },
+            },
+        };
+
+        await syncConfigStateForVault("/tmp/concurrent-config-writes", true);
+        savedVaultConfigs.length = 0;
+
+        await Promise.all([
+            updateBackendConfig((config) => ({
+                ...config,
+                entries: {
+                    ...config.entries,
+                    sidebarLayout: {
+                        panelLayout: {
+                            root: { id: "root", split: null },
+                            sections: [{ id: "right-sidebar-panels", panelIds: ["backlinks"] }],
+                        },
+                    },
+                },
+            })),
+            updateBackendConfig((config) => ({
+                ...config,
+                entries: {
+                    ...config.entries,
+                    workspaceLayout: {
+                        version: 1,
+                        root: { id: "root", split: null },
+                        tabSections: [],
+                        activeGroupId: "main-tabs",
+                    },
+                },
+            })),
+        ]);
+
+        expect(currentVaultConfig.entries.sidebarLayout).toEqual({
+            panelLayout: {
+                root: { id: "root", split: null },
+                sections: [{ id: "right-sidebar-panels", panelIds: ["backlinks"] }],
+            },
+        });
+        expect(currentVaultConfig.entries.workspaceLayout).toEqual({
+            version: 1,
+            root: { id: "root", split: null },
+            tabSections: [],
+            activeGroupId: "main-tabs",
         });
     });
 });

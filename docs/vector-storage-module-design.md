@@ -1,3 +1,22 @@
+---
+title: "ofive 向量存储模块设计草案"
+kind: "design"
+status: "active"
+updated: "2026-04-26"
+owners:
+  - "backend"
+  - "ai"
+tags:
+  - "ofive"
+  - "semantic-index"
+  - "vector"
+  - "embedding"
+  - "design"
+related:
+  - "ofive-semantic-index"
+  - "ofive-ai-sidecar-and-capabilities"
+---
+
 # ofive 向量存储模块设计草案 v1
 
 > 本文档定义 ofive 后端“向量存储模块”的初版设计。
@@ -11,6 +30,8 @@
 - `docs/feature-extension-workflow.md`
 - `docs/backend-module-extension-workflow.md`
 - `docs/sync-module-roadmap.md`
+- [[ofive-semantic-index|语义索引]]
+- [[ofive-ai-sidecar-and-capabilities|AI Sidecar 与 Capability]]
 
 ## 1. 设计结论
 

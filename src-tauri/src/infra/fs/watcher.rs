@@ -125,7 +125,9 @@ fn maybe_emit_config_event(
     old_relative_path: Option<String>,
 ) {
     let should_emit = relative_path.as_deref().is_some_and(is_config_file_path)
-        || old_relative_path.as_deref().is_some_and(is_config_file_path);
+        || old_relative_path
+            .as_deref()
+            .is_some_and(is_config_file_path);
 
     if !should_emit {
         return;
@@ -192,7 +194,10 @@ fn handle_notify_event(app_handle: &AppHandle, root: &Path, event: Event) {
         EventKind::Create(_) => {
             event.paths.iter().for_each(|path| {
                 let relative_path = to_relative_path(path, root);
-                if relative_path.as_deref().is_some_and(is_internal_system_path) {
+                if relative_path
+                    .as_deref()
+                    .is_some_and(is_internal_system_path)
+                {
                     return;
                 }
                 let source_trace_id = take_pending_trace_id(app_handle, relative_path.as_deref());
@@ -221,8 +226,12 @@ fn handle_notify_event(app_handle: &AppHandle, root: &Path, event: Event) {
             let first_relative = first_abs_path.and_then(|path| to_relative_path(path, root));
             let second_relative = second_abs_path.and_then(|path| to_relative_path(path, root));
 
-            let hits_internal = first_relative.as_deref().is_some_and(is_internal_system_path)
-                || second_relative.as_deref().is_some_and(is_internal_system_path);
+            let hits_internal = first_relative
+                .as_deref()
+                .is_some_and(is_internal_system_path)
+                || second_relative
+                    .as_deref()
+                    .is_some_and(is_internal_system_path);
             if hits_internal {
                 return;
             }
@@ -354,7 +363,10 @@ fn handle_notify_event(app_handle: &AppHandle, root: &Path, event: Event) {
         EventKind::Modify(_) => {
             event.paths.iter().for_each(|path| {
                 let relative_path = to_relative_path(path, root);
-                if relative_path.as_deref().is_some_and(is_internal_system_path) {
+                if relative_path
+                    .as_deref()
+                    .is_some_and(is_internal_system_path)
+                {
                     return;
                 }
                 let source_trace_id = take_pending_trace_id(app_handle, relative_path.as_deref());
@@ -384,7 +396,10 @@ fn handle_notify_event(app_handle: &AppHandle, root: &Path, event: Event) {
                         .strip_prefix(&format!("{}{}", root.display(), std::path::MAIN_SEPARATOR))
                         .map(|item| item.replace('\\', "/"))
                 });
-                if relative_path.as_deref().is_some_and(is_internal_system_path) {
+                if relative_path
+                    .as_deref()
+                    .is_some_and(is_internal_system_path)
+                {
                     return;
                 }
                 let source_trace_id = take_pending_trace_id(app_handle, relative_path.as_deref());

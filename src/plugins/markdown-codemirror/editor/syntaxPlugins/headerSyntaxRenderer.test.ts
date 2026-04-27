@@ -50,8 +50,11 @@ describe("applyHeaderLineDecorations", () => {
 
         applyHeaderLineDecorations(context);
 
-        expect(ranges).toHaveLength(2);
+        expect(ranges).toHaveLength(3);
         expect(ranges[0]).toMatchObject({ from: 0, to: 2 });
         expect(ranges[1]).toMatchObject({ from: 2, to: 11 });
+        expect(ranges[2]).toMatchObject({ from: 0, to: 0 });
+        expect((ranges[2]?.decoration as unknown as { spec?: { class?: string } }).spec?.class)
+            .toContain("cm-rendered-header-line-h1");
     });
 });

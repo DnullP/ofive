@@ -153,12 +153,7 @@ pub fn create_vault_canvas_file(
 ) -> Result<WriteMarkdownResponse, String> {
     timed_command!(
         "create_vault_canvas_file",
-        vault_app_service::create_vault_canvas_file(
-            relative_path,
-            content,
-            source_trace_id,
-            state,
-        )
+        vault_app_service::create_vault_canvas_file(relative_path, content, source_trace_id, state,)
     )
 }
 

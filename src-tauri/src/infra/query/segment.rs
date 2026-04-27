@@ -169,8 +169,8 @@ mod tests {
     fn warmup_chinese_segmenter_keeps_segmentation_available() {
         warmup_chinese_segmenter();
 
-        let tokens = segment_chinese_text("市场结构".to_string())
-            .expect("预热后分词能力应保持可用");
+        let tokens =
+            segment_chinese_text("市场结构".to_string()).expect("预热后分词能力应保持可用");
 
         assert!(!tokens.is_empty(), "预热后中文文本应仍能产生 token");
     }
@@ -181,8 +181,8 @@ mod tests {
         warmup_chinese_segmenter();
         warmup_chinese_segmenter();
 
-        let tokens = segment_chinese_text("通信协议栈".to_string())
-            .expect("重复预热后分词能力应保持可用");
+        let tokens =
+            segment_chinese_text("通信协议栈".to_string()).expect("重复预热后分词能力应保持可用");
 
         assert!(!tokens.is_empty(), "重复预热后中文文本应仍能产生 token");
     }

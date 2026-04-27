@@ -59,6 +59,13 @@ export function applyHeaderLineDecorations(context: LineSyntaxDecorationContext)
         context.lineFrom + context.lineText.length,
         Decoration.mark({ class: `cm-rendered-header cm-rendered-header-h${String(level)}` }),
     );
+    pushLineSyntaxDecoration(
+        context.ranges,
+        context.lineFrom,
+        Decoration.line({
+            class: `cm-rendered-header-line cm-rendered-header-line-h${String(level)}`,
+        }),
+    );
 }
 
 /**

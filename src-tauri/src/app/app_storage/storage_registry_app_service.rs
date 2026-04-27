@@ -85,18 +85,13 @@ fn ensure_consumer_allowed(
     consumer_module_id: &str,
     descriptor: &AppStorageOwnerDescriptor,
 ) -> Result<(), String> {
-    if descriptor
-        .consumer_module_ids
-        .contains(&consumer_module_id)
-    {
+    if descriptor.consumer_module_ids.contains(&consumer_module_id) {
         return Ok(());
     }
 
     Err(format!(
         "应用级存储 owner 不允许该消费者访问 owner={} consumer_module_id={} description={}",
-        descriptor.owner,
-        consumer_module_id,
-        descriptor.description
+        descriptor.owner, consumer_module_id, descriptor.description
     ))
 }
 
@@ -112,8 +107,8 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::{Mutex, OnceLock};
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(1);

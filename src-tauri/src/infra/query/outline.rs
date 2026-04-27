@@ -33,7 +33,10 @@ pub(crate) fn extract_headings(content: &str) -> Vec<OutlineHeading> {
 
         let trimmed = line.trim_end();
         if let Some(rest) = trimmed.strip_prefix('#') {
-            let hashes = 1 + rest.chars().take_while(|character| *character == '#').count();
+            let hashes = 1 + rest
+                .chars()
+                .take_while(|character| *character == '#')
+                .count();
             if hashes <= 6 {
                 let after_hashes = &trimmed[hashes..];
                 if after_hashes.is_empty() {

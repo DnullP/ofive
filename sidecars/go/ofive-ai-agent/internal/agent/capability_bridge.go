@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"ofive/sidecars/go/ofive-ai-agent/internal/capabilities"
 )
@@ -66,9 +67,33 @@ func executeCapabilityPlanningLoop(
 	bridgeConfig CapabilityBridgeConfig,
 	respond func(context.Context, string) (string, error),
 ) (string, error) {
+	responseText, confirmation, err := executeCapabilityPlanningLoopWithConfirmation(
+		ctx,
+		originalMessage,
+		bridgeConfig,
+		respond,
+	)
+	if err != nil {
+		return "", err
+	}
+	if confirmation != nil {
+		return "", fmt.Errorf(
+			"capability %s requires confirmation and cannot be completed by non-stream planning",
+			confirmation.ToolName,
+		)
+	}
+	return responseText, nil
+}
+
+func executeCapabilityPlanningLoopWithConfirmation(
+	ctx context.Context,
+	originalMessage string,
+	bridgeConfig CapabilityBridgeConfig,
+	respond func(context.Context, string) (string, error),
+) (string, *pendingToolConfirmation, error) {
 	client, ok := capabilityClientFromBridge(bridgeConfig)
 	if !ok {
-		return "", fmt.Errorf("capability bridge is not configured")
+		return "", nil, fmt.Errorf("capability bridge is not configured")
 	}
 	defer client.Close()
 
@@ -76,15 +101,15 @@ func executeCapabilityPlanningLoop(
 	for attempt := 0; attempt < maxCapabilityPlanningTurns; attempt++ {
 		responseText, err := respond(ctx, prompt)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 
 		plannedCall, hasCall, err := extractPlannedCapabilityCall(responseText)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		if !hasCall {
-			return responseText, nil
+			return responseText, nil, nil
 		}
 
 		capabilityName := plannedCall.CapabilityID
@@ -97,7 +122,11 @@ func executeCapabilityPlanningLoop(
 
 		capabilityID, err := resolveCapabilityID(capabilityName, bridgeConfig.Tools)
 		if err != nil {
-			return "", err
+			return "", nil, err
+		}
+
+		if tool, ok := findToolDescriptorByCapabilityID(capabilityID, bridgeConfig.Tools); ok && tool.RequiresConfirmation {
+			return "", buildPendingCapabilityConfirmation(capabilityID, plannedCall.Input), nil
 		}
 
 		formattedOutput, rawOutput, err := executeCapabilityCall(
@@ -108,13 +137,13 @@ func executeCapabilityPlanningLoop(
 			nil,
 		)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 
 		prompt = buildCapabilityResultPrompt(originalMessage, capabilityID, formattedOutput, rawOutput)
 	}
 
-	return "", fmt.Errorf("capability planning exceeded %d turns", maxCapabilityPlanningTurns)
+	return "", nil, fmt.Errorf("capability planning exceeded %d turns", maxCapabilityPlanningTurns)
 }
 
 type explicitCapabilityCommand struct {
@@ -181,6 +210,56 @@ func executeCapabilityCall(
 	return string(formattedOutput), result.Output, nil
 }
 
+func streamManagedCapabilityConfirmationResponse(
+	ctx context.Context,
+	confirmed bool,
+	confirmation *persistedConfirmationState,
+	bridgeConfig CapabilityBridgeConfig,
+	trace func(DebugTraceEvent) error,
+	emit func(StreamChunk) error,
+) error {
+	if confirmation == nil {
+		return fmt.Errorf("managed capability confirmation state is required")
+	}
+
+	if !confirmed {
+		return emitChunkedTextResponse(
+			fmt.Sprintf("[confirmation:rejected] %s\n%s", confirmation.ToolName, confirmation.ToolArgsJSON),
+			capabilityBridgeAgentName,
+			emit,
+		)
+	}
+
+	client, ok := capabilityClientFromBridge(bridgeConfig)
+	if !ok {
+		return fmt.Errorf("capability bridge is not configured")
+	}
+	defer client.Close()
+
+	capabilityID, err := resolveCapabilityID(confirmation.ToolName, bridgeConfig.Tools)
+	if err != nil {
+		return err
+	}
+
+	var input any = map[string]any{}
+	if strings.TrimSpace(confirmation.ToolArgsJSON) != "" {
+		if err := json.Unmarshal([]byte(confirmation.ToolArgsJSON), &input); err != nil {
+			return fmt.Errorf("invalid confirmed capability input json: %w", err)
+		}
+	}
+
+	formattedOutput, _, err := executeCapabilityCall(ctx, client, capabilityID, input, trace)
+	if err != nil {
+		return err
+	}
+
+	return emitChunkedTextResponse(
+		fmt.Sprintf("[tool:%s]\n%s", capabilityID, formattedOutput),
+		capabilityBridgeAgentName,
+		emit,
+	)
+}
+
 func marshalCapabilityInput(input any) string {
 	encoded, err := json.Marshal(input)
 	if err != nil {
@@ -235,6 +314,34 @@ func buildCapabilityResultPrompt(
 		plannedCapabilityCallStartTag,
 		plannedCapabilityCallEndTag,
 	)
+}
+
+func findToolDescriptorByCapabilityID(capabilityID string, tools []ToolDescriptor) (ToolDescriptor, bool) {
+	for _, tool := range tools {
+		if strings.TrimSpace(tool.CapabilityID) == strings.TrimSpace(capabilityID) {
+			return tool, true
+		}
+	}
+	return ToolDescriptor{}, false
+}
+
+func buildPendingCapabilityConfirmation(capabilityID string, input any) *pendingToolConfirmation {
+	return &pendingToolConfirmation{
+		ID:           fmt.Sprintf("ofive-cli-%d", time.Now().UnixNano()),
+		Hint:         fmt.Sprintf("Execute %s through ofive's managed CLI tool runtime?", capabilityID),
+		ToolName:     capabilityID,
+		ToolArgsJSON: marshalConfirmationArgs(normalizeCapabilityConfirmationInput(input)),
+	}
+}
+
+func normalizeCapabilityConfirmationInput(input any) map[string]any {
+	if input == nil {
+		return map[string]any{}
+	}
+	if mapInput, ok := input.(map[string]any); ok {
+		return mapInput
+	}
+	return map[string]any{"value": input}
 }
 
 type capabilityCaller interface {

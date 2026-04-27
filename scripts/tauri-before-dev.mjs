@@ -14,9 +14,12 @@ const STALE_PROCESS_SHUTDOWN_WAIT_MS = 1200;
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
 const nodeExecutable = process.execPath;
+const buildLayoutV2ScriptPath = path.join(repoRoot, "scripts", "build-local-layout-v2.mjs");
 const buildScriptPath = path.join(repoRoot, "scripts", "build-sidecar.mjs");
 const viteEntryPath = path.join(repoRoot, "node_modules", "vite", "bin", "vite.js");
 
+const BUILD_LAYOUT_V2_COMMAND = nodeExecutable;
+const BUILD_LAYOUT_V2_ARGS = [buildLayoutV2ScriptPath];
 const BUILD_COMMAND = nodeExecutable;
 const BUILD_ARGS = [buildScriptPath];
 const DEV_SERVER_COMMAND = nodeExecutable;
@@ -59,6 +62,26 @@ function isProcessAlive(pid) {
         return true;
     } catch (error) {
         return false;
+    }
+}
+
+/**
+ * @function buildLayoutV2
+ * @description 构建本地 layout-v2 依赖，确保前端 dev server 消费最新共享布局产物。
+ */
+function buildLayoutV2() {
+    const result = spawnSync(BUILD_LAYOUT_V2_COMMAND, BUILD_LAYOUT_V2_ARGS, {
+        stdio: "inherit",
+        env: process.env,
+        cwd: repoRoot,
+    });
+
+    if (typeof result.status === "number" && result.status !== 0) {
+        process.exit(result.status);
+    }
+
+    if (result.error) {
+        throw result.error;
     }
 }
 
@@ -220,6 +243,7 @@ async function cleanupStaleRepoLocalDevServer() {
 }
 
 await cleanupStaleRepoLocalDevServer();
+buildLayoutV2();
 buildSidecar();
 
 const devServer = spawn(DEV_SERVER_COMMAND, DEV_SERVER_ARGS, {

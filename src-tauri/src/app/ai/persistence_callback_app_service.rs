@@ -70,9 +70,7 @@ pub(crate) async fn start_sidecar_persistence_callback_server(
         });
 
         if let Err(error) = server.await {
-            log::warn!(
-                "[ai-persistence-callback] callback server exited with error: {error}"
-            );
+            log::warn!("[ai-persistence-callback] callback server exited with error: {error}");
         }
     });
 

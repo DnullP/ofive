@@ -8,8 +8,8 @@ use tauri::{AppHandle, State};
 
 use crate::infra::fs::{vault_runtime, write_runtime};
 use crate::shared::vault_contracts::{
-    CopyEntryResponse, ReadBinaryFileResponse, ReadMarkdownResponse, SetVaultResponse,
-    VaultConfig, VaultTreeResponse, WriteBinaryFileResponse, WriteMarkdownResponse,
+    CopyEntryResponse, ReadBinaryFileResponse, ReadMarkdownResponse, SetVaultResponse, VaultConfig,
+    VaultTreeResponse, WriteBinaryFileResponse, WriteMarkdownResponse,
 };
 use crate::state::AppState;
 

@@ -793,7 +793,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             setRightSidebarVisibilitySnapshot(hasRightSidebar && state.right.visible);
 
             const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
-            if (!currentVaultPath && !configState.backendConfig) return;
+            if (!currentVaultPath || !configState.backendConfig) return;
             if (!configState.featureSettings.restoreWorkspaceLayout) return;
 
             const snap = sidebarSnapshotRef.current;
@@ -826,7 +826,9 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         },
         [
             hasRightSidebar,
+            configState.backendConfig,
             configState.loadedVaultPath,
+            configState.featureSettings.restoreWorkspaceLayout,
             vaultState.currentVaultPath,
         ],
     );
@@ -863,7 +865,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 sectionRatioPersistTimerRef.current = null;
 
                 const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
-                if (!currentVaultPath && !configState.backendConfig) return;
+                if (!currentVaultPath || !configState.backendConfig) return;
                 if (!configState.featureSettings.restoreWorkspaceLayout) return;
 
                 const snap = sidebarSnapshotRef.current;
@@ -897,13 +899,19 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         },
         [
             hasRightSidebar,
+            configState.backendConfig,
             configState.loadedVaultPath,
+            configState.featureSettings.restoreWorkspaceLayout,
             vaultState.currentVaultPath,
         ],
     );
 
     const handlePanelLayoutChange = useCallback(
         (panelLayout: WorkbenchPanelLayoutSnapshot) => {
+            const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
+            if (!currentVaultPath || !configState.backendConfig) return;
+            if (!configState.featureSettings.restoreWorkspaceLayout) return;
+
             panelLayoutSnapshotRef.current = panelLayout;
 
             if (panelLayoutPersistTimerRef.current) {
@@ -912,10 +920,6 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
             panelLayoutPersistTimerRef.current = setTimeout(() => {
                 panelLayoutPersistTimerRef.current = null;
-
-                const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
-                if (!currentVaultPath && !configState.backendConfig) return;
-                if (!configState.featureSettings.restoreWorkspaceLayout) return;
 
                 const snap = sidebarSnapshotRef.current;
                 const snapshot: SidebarLayoutSnapshot = {
@@ -948,7 +952,9 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         },
         [
             hasRightSidebar,
+            configState.backendConfig,
             configState.loadedVaultPath,
+            configState.featureSettings.restoreWorkspaceLayout,
             vaultState.currentVaultPath,
         ],
     );
@@ -1231,6 +1237,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 tabDragPreviewRenderMode="overlay"
                 preserveActiveTabContentDuringDrag
                 renderTabContentInDragPreviewLayout={false}
+                renderPanelContentInDragPreviewLayout={false}
                 renderTabDragPreviewContent={renderTabDragPreviewContent}
                 renderActivityIcon={renderActivityIcon}
                 renderPanelContent={renderPanelContent}

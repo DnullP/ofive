@@ -59,6 +59,25 @@ func TestEmitStreamTextDeltaReturnsReasoningSuffix(t *testing.T) {
 	}
 }
 
+func TestMergeStreamEventTextPreservesPreviousTurnReasoning(t *testing.T) {
+	t.Parallel()
+
+	first := mergeStreamEventText("", "先读取目标笔记")
+	if first != "先读取目标笔记" {
+		t.Fatalf("unexpected first text: %q", first)
+	}
+
+	accumulated := mergeStreamEventText(first, "已经拿到笔记内容")
+	if accumulated != "先读取目标笔记\n已经拿到笔记内容" {
+		t.Fatalf("expected separate non-prefix reasoning events to be preserved, got %q", accumulated)
+	}
+
+	prefixUpdate := mergeStreamEventText("标题", "标题是 A")
+	if prefixUpdate != "标题是 A" {
+		t.Fatalf("expected prefix update to replace current text, got %q", prefixUpdate)
+	}
+}
+
 func TestNormalizeDebugLevelFallsBackToDebug(t *testing.T) {
 	t.Parallel()
 
@@ -301,6 +320,15 @@ func TestBuildAgentInstructionIncludesPatchShapeGuidance(t *testing.T) {
 	if !strings.Contains(instruction, "single-file unifiedDiff string") {
 		t.Fatalf("expected patch shape guidance in instruction, got %q", instruction)
 	}
+	if !strings.Contains(instruction, "Use the provided native function tools directly") {
+		t.Fatalf("expected native function tool guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "Legacy fallback only") || !strings.Contains(instruction, plannedCapabilityCallStartTag) {
+		t.Fatalf("expected legacy managed CLI fallback guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "ofive will ask the user before the managed CLI tool is executed") {
+		t.Fatalf("expected managed CLI confirmation guidance in instruction, got %q", instruction)
+	}
 	if !strings.Contains(instruction, "--- and +++ headers") {
 		t.Fatalf("expected unified diff header guidance in instruction, got %q", instruction)
 	}
@@ -406,18 +434,30 @@ func TestBuildConversationStateInstructionIncludesUserInterruptionNote(t *testin
 	}
 }
 
-func TestCanUseCapabilityPlanningEnabledForLegacyCallback(t *testing.T) {
+func TestBuildAgentToolsetsUsesCallbackBridgeForManagedCapabilities(t *testing.T) {
 	t.Parallel()
 
-	if !canUseCapabilityPlanning(CapabilityBridgeConfig{
+	toolsets, err := buildAgentToolsets(CapabilityBridgeConfig{
 		CallbackURL:   "http://127.0.0.1:9000/capabilities/call",
 		CallbackToken: "test-token",
 		Tools: []ToolDescriptor{{
-			CapabilityID: "vault.read_markdown_file",
-			Name:         "vault_read_markdown_file",
+			CapabilityID:    "vault.read_markdown_file",
+			Name:            "vault_read_markdown_file",
+			InputSchemaJSON: `{"type":"object","required":["relativePath"]}`,
 		}},
-	}) {
-		t.Fatal("expected legacy capability planning to remain enabled for callback bridge")
+	})
+	if err != nil {
+		t.Fatalf("buildAgentToolsets returned error: %v", err)
+	}
+	if len(toolsets) != 1 {
+		t.Fatalf("expected one managed capability toolset, got %d", len(toolsets))
+	}
+	tools, err := toolsets[0].Tools(nil)
+	if err != nil {
+		t.Fatalf("managed toolset should list tools: %v", err)
+	}
+	if len(tools) != 1 || tools[0].Name() != "vault_read_markdown_file" {
+		t.Fatalf("unexpected managed tools: %+v", tools)
 	}
 }
 

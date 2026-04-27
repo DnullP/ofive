@@ -96,7 +96,9 @@ impl Log for OfiveLogger {
             }
         }
 
-        if let Some(payload) = build_log_notification_payload(level, target, &raw_message, current_unix_ms()) {
+        if let Some(payload) =
+            build_log_notification_payload(level, target, &raw_message, current_unix_ms())
+        {
             emit_log_notification(payload);
         }
     }
@@ -131,9 +133,7 @@ pub fn set_vault_log_path(dir: Option<PathBuf>) {
 pub fn install_tauri_log_notification_sink(app_handle: AppHandle) {
     set_log_notification_sink(Some(Arc::new(move |payload| {
         if let Err(error) = app_handle.emit(BACKEND_LOG_NOTIFICATION_EVENT_NAME, payload) {
-            write_internal_stderr(&format!(
-                "[logging] 日志通知事件发送失败: {error}"
-            ));
+            write_internal_stderr(&format!("[logging] 日志通知事件发送失败: {error}"));
         }
     })));
 }

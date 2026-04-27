@@ -2,6 +2,17 @@
 
 ofive 是一个基于 Tauri + React + TypeScript + Rust 的桌面笔记应用，前端通过 Vite 构建，后端桌面容器由 Tauri 提供，AI sidecar 使用 Go 构建。
 
+## 项目文档
+
+开发和维护者入口：
+
+- [docs/README.md](docs/README.md)
+- [docs/wiki/ofive-project-wiki.md](docs/wiki/ofive-project-wiki.md)
+- [docs/wiki/ofive-maintainer-dashboard.md](docs/wiki/ofive-maintainer-dashboard.md)
+- [docs/wiki/ofive-feature-owner-map.md](docs/wiki/ofive-feature-owner-map.md)
+
+`docs/wiki/` 使用 ofive 的笔记管理逻辑组织：Markdown + YAML frontmatter + wikilink。可以在 ofive 内作为项目 vault 阅读、搜索、查询 frontmatter、查看反链和知识图谱。
+
 ## 构建前提
 
 无论在哪个平台，本项目都需要以下工具：

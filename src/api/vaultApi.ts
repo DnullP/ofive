@@ -428,6 +428,22 @@ let browserFallbackVaultPath = "";
 const BROWSER_FALLBACK_VAULT_CONFIG_STORAGE_KEY_PREFIX = "ofive:browser-fallback:vault-config:";
 let browserMockMarkdownContentsPromise: Promise<Record<string, string>> | null = null;
 
+function getBrowserFallbackConfigReadDelayMs(): number {
+    if (typeof window === "undefined") {
+        return 0;
+    }
+
+    const raw = new URLSearchParams(window.location.search).get("mockConfigReadDelayMs");
+    const delayMs = raw ? Number.parseInt(raw, 10) : 0;
+    return Number.isFinite(delayMs) && delayMs > 0 ? delayMs : 0;
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+        window.setTimeout(resolve, ms);
+    });
+}
+
 /**
  * @function getBrowserMockMarkdownContents
  * @description 按需加载浏览器 mock Markdown 内容，避免在非浏览器运行时导入 Vite 专属原始资源。
@@ -2516,6 +2532,10 @@ export async function subscribeVaultFsEvents(
  */
 export async function getCurrentVaultConfig(): Promise<VaultConfig> {
     if (!isTauriRuntime()) {
+        const delayMs = getBrowserFallbackConfigReadDelayMs();
+        if (delayMs > 0 && typeof window !== "undefined") {
+            await sleep(delayMs);
+        }
         return readBrowserFallbackVaultConfig();
     }
 

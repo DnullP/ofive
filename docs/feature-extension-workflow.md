@@ -1,3 +1,24 @@
+---
+title: "ofive 前后端功能扩展长期工作流"
+kind: "workflow"
+status: "active"
+updated: "2026-04-26"
+owners:
+  - "maintainers"
+  - "frontend"
+  - "backend"
+tags:
+  - "ofive"
+  - "feature-extension"
+  - "workflow"
+  - "frontend"
+  - "backend"
+related:
+  - "ofive-feature-owner-map"
+  - "ofive-plugin-system"
+  - "ofive-backend-module-platform"
+---
+
 # ofive 前后端功能扩展长期工作流 v1
 
 ## 1. 文档定位
@@ -22,7 +43,12 @@
 - 后端专项流程：`docs/backend-module-extension-workflow.md`
 - 前端插件开发说明：`docs/plugin-development-guide.md`
 - 同步模块待办与续做入口：`docs/sync-module-roadmap.md`
-- 后端基线目标与结论：`docs/backend-parallel-agent-target.md`
+
+相关 wiki：
+
+- [[ofive-feature-owner-map|功能 Owner 地图]]
+- [[ofive-plugin-system|插件系统]]
+- [[ofive-backend-module-platform|后端模块平台]]
 
 ## 1.1 快速 Checklist
 
@@ -151,10 +177,11 @@
 
 当前入口：
 
-- `src/host/store/configStore.ts`
-- `src/host/store/vaultStore.ts`
-- `src/host/store/themeStore.ts`
-- `src/host/store/editorContextStore.ts`
+- `src/host/config/configStore.ts`
+- `src/host/vault/vaultStore.ts`
+- `src/host/theme/themeStore.ts`
+- `src/host/editor/editorContextStore.ts`
+- `src/host/store/registerBuiltinManagedStores.ts`
 
 规则：
 

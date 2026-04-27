@@ -54,7 +54,11 @@ const SEMANTIC_INDEX_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[
     },
     ModulePrivateNamespaceTemplate {
         namespace: "crate::infra::vector::",
-        allowed_paths: &["src/app/semantic_index/", "src/infra/vector/", "src/test_support/"],
+        allowed_paths: &[
+            "src/app/semantic_index/",
+            "src/infra/vector/",
+            "src/test_support/",
+        ],
         rationale: "向量 infra 仅供语义索引模块内部编排使用",
     },
 ];

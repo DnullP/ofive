@@ -6,7 +6,7 @@
  *  - ./nativeContextMenu
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
     showNativeContextMenu,
     type NativeContextMenuItem,
@@ -76,7 +76,15 @@ export function getRegisteredContextMenuProviderIds(): string[] {
 export function useContextMenuProvider<TPayload>(
     provider: ContextMenuProvider<TPayload>,
 ): void {
-    useEffect(() => registerContextMenuProvider(provider), [provider]);
+    const providerRef = useRef(provider);
+    providerRef.current = provider;
+
+    useEffect(() => registerContextMenuProvider<TPayload>({
+        id: provider.id,
+        buildMenu: (payload, trigger) => providerRef.current.buildMenu(payload, trigger),
+        handleAction: (actionId, payload, trigger) =>
+            providerRef.current.handleAction?.(actionId, payload, trigger),
+    }), [provider.id]);
 }
 
 /**

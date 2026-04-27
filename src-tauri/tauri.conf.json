@@ -29,7 +29,8 @@
     "active": true,
     "targets": "all",
     "externalBin": [
-      "binaries/ofive-ai-sidecar"
+      "binaries/ofive-ai-sidecar",
+      "binaries/ofive-toolbox"
     ],
     "icon": [
       "icons/32x32.png",

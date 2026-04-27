@@ -1,6 +1,25 @@
+---
+title: "ofive 测试体系与测试手册"
+kind: "workflow"
+status: "active"
+updated: "2026-04-26"
+owners:
+  - "maintainers"
+tags:
+  - "ofive"
+  - "testing"
+  - "ci"
+  - "quality"
+related:
+  - "ofive-testing-and-ci"
+  - "ofive-build-and-dev-workflow"
+---
+
 # ofive 测试体系与测试手册
 
 本文档用于说明项目当前的测试体系、各测试面的职责边界、CI 质量门映射，以及日常开发与提测时应执行的 checklist。
+
+项目 wiki 入口：[[ofive-testing-and-ci|测试与 CI]]、[[ofive-build-and-dev-workflow|构建与开发工作流]]。
 
 ## 1. 测试体系总览
 
@@ -10,7 +29,7 @@
 | --- | --- | --- | --- | --- |
 | 前端单元测试 | `bun run test` / `bun run test:ci:unit` | [tests](../tests) | 是 | 覆盖纯前端逻辑、数据转换、局部交互规则 |
 | 前端功能 E2E | `bun run test:e2e` / `bun run test:e2e:ci` | [e2e](../e2e), [playwright.config.ts](../playwright.config.ts) | 是 | 覆盖浏览器层回归、关键用户流程、布局与交互 |
-| 真实鼠标拖拽 E2E 审计 | `bun run test:e2e:mouse-drag` | [e2e/dockview-split-animation.e2e.ts](../e2e/dockview-split-animation.e2e.ts), [.github/workflows/e2e-mouse-drag.yml](../.github/workflows/e2e-mouse-drag.yml) | 否，单独测试面 | 覆盖 Dockview 真实鼠标拖拽命中与动画观测 |
+| 真实鼠标拖拽 E2E 审计 | `bun run test:e2e:mouse-drag` | [e2e/sidebar-panel-drag.e2e.ts](../e2e/sidebar-panel-drag.e2e.ts), [.github/workflows/e2e-mouse-drag.yml](../.github/workflows/e2e-mouse-drag.yml) | 否，单独测试面 | 覆盖工作台真实鼠标拖拽命中与动画观测 |
 | 玻璃视觉专项测试 | 按需使用 `bunx playwright test --config playwright.glass.config.mjs` | [playwright.glass.config.mjs](../playwright.glass.config.mjs), [e2e/glass-visual.e2e.ts](../e2e/glass-visual.e2e.ts) | 否 | 验证毛玻璃/透明层视觉回归 |
 | 前端性能 smoke | `bun run test:perf:frontend` | [perf/frontend](../perf/frontend), [playwright.perf.config.ts](../playwright.perf.config.ts) | 否 | 覆盖图谱与前端关键路径的性能退化 |
 | Go sidecar 测试 | `bun run test:go` | [sidecars/go/ofive-ai-agent](../sidecars/go/ofive-ai-agent) | 是 | 覆盖 AI sidecar 内部逻辑与桥接行为 |
@@ -74,11 +93,14 @@
 
 当前功能 E2E 位于 [e2e](../e2e)：
 
-- [e2e/calendar-convertible-view.e2e.ts](../e2e/calendar-convertible-view.e2e.ts)
+- [e2e/calendar-refresh.e2e.ts](../e2e/calendar-refresh.e2e.ts)
+- [e2e/command-palette-create-entry.e2e.ts](../e2e/command-palette-create-entry.e2e.ts)
+- [e2e/context-menu-center.e2e.ts](../e2e/context-menu-center.e2e.ts)
 - [e2e/custom-activity.e2e.ts](../e2e/custom-activity.e2e.ts)
-- [e2e/dockview-split-animation.e2e.ts](../e2e/dockview-split-animation.e2e.ts)
+- [e2e/editor-split-performance.e2e.ts](../e2e/editor-split-performance.e2e.ts)
 - [e2e/frontmatter-visibility.e2e.ts](../e2e/frontmatter-visibility.e2e.ts)
 - [e2e/glass-visual.e2e.ts](../e2e/glass-visual.e2e.ts)
+- [e2e/main-tab-layout-restore.e2e.ts](../e2e/main-tab-layout-restore.e2e.ts)
 - [e2e/sidebar-motion.e2e.ts](../e2e/sidebar-motion.e2e.ts)
 - [e2e/sidebar-panel-drag.e2e.ts](../e2e/sidebar-panel-drag.e2e.ts)
 - [e2e/task-board.e2e.ts](../e2e/task-board.e2e.ts)
@@ -98,7 +120,7 @@
 特点：
 
 - 聚焦 Dockview 真实鼠标拖拽与动画观测
-- 当前集中在 [e2e/dockview-split-animation.e2e.ts](../e2e/dockview-split-animation.e2e.ts)
+- 当前集中在 [e2e/sidebar-panel-drag.e2e.ts](../e2e/sidebar-panel-drag.e2e.ts)
 - 使用 `@mouse-drag` 标签识别
 - 默认 CI 通过 `test:e2e:ci` 排除，单独由 [.github/workflows/e2e-mouse-drag.yml](../.github/workflows/e2e-mouse-drag.yml) 执行
 

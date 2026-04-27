@@ -10,9 +10,9 @@ use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tonic::Request;
 
-use crate::shared::ai_service::pb;
 use crate::infra::ai::grpc_client;
 use crate::infra::logging;
+use crate::shared::ai_service::pb;
 use crate::state::{AiSidecarRuntime, AppState};
 
 const SIDECAR_HEALTH_RETRY_COUNT: usize = 30;
@@ -28,7 +28,9 @@ pub(crate) async fn ensure_ai_sidecar_endpoint(
             .ai_sidecar_runtime
             .lock()
             .map_err(|error| format!("读取 AI sidecar 状态失败: {error}"))?;
-        guard.as_ref().map(|runtime| (runtime.port, runtime.endpoint.clone()))
+        guard
+            .as_ref()
+            .map(|runtime| (runtime.port, runtime.endpoint.clone()))
     };
 
     if let Some((port, endpoint)) = current_runtime {

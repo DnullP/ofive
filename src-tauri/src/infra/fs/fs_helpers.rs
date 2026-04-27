@@ -543,7 +543,7 @@ pub fn is_markdown_file(path: &Path) -> bool {
 pub fn is_canvas_file(path: &Path) -> bool {
     path.extension()
         .and_then(|item| item.to_str())
-    .is_some_and(|ext| ext.eq_ignore_ascii_case("canvas"))
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("canvas"))
 }
 
 /// 为路径补全 Markdown 扩展名候选。

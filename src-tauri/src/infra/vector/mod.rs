@@ -7,12 +7,9 @@ mod chunking;
 mod embedding_provider;
 mod vector_store;
 
-pub(crate) use chunking::{
-    available_chunking_strategies, build_chunking_strategy,
-};
+pub(crate) use chunking::{available_chunking_strategies, build_chunking_strategy};
 pub(crate) use embedding_provider::{
-    available_embedding_providers, build_embedding_provider,
-    semantic_index_embedding_cache_dir,
+    available_embedding_providers, build_embedding_provider, semantic_index_embedding_cache_dir,
 };
 pub(crate) use vector_store::{
     available_vector_stores, build_vector_store, ensure_sqlite_vec_runtime,

@@ -150,7 +150,13 @@ fn parse_unified_diff_header(line: &str, prefix: &str) -> Result<String, String>
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
-        .ok_or_else(|| format!("unified diff 缺少合法的 {} 文件头: {:?}", prefix.trim(), line))
+        .ok_or_else(|| {
+            format!(
+                "unified diff 缺少合法的 {} 文件头: {:?}",
+                prefix.trim(),
+                line
+            )
+        })
 }
 
 fn resolve_unified_diff_relative_path(old_path: &str, new_path: &str) -> Result<String, String> {
@@ -159,8 +165,7 @@ fn resolve_unified_diff_relative_path(old_path: &str, new_path: &str) -> Result<
     if normalized_old != normalized_new {
         return Err(format!(
             "unified diff 仅支持单文件修改，--- 与 +++ 路径必须一致，当前为 {:?} 与 {:?}",
-            old_path,
-            new_path,
+            old_path, new_path,
         ));
     }
     Ok(normalized_new)
@@ -185,10 +190,7 @@ fn normalize_unified_diff_path(path: &str) -> Result<String, String> {
     Ok(normalized)
 }
 
-fn parse_unified_diff_hunk(
-    lines: &[String],
-    hunk_index: usize,
-) -> Result<ParsedDiffBlock, String> {
+fn parse_unified_diff_hunk(lines: &[String], hunk_index: usize) -> Result<ParsedDiffBlock, String> {
     if lines.is_empty() {
         return Err(format!("unified diff hunk {} 不能为空", hunk_index));
     }
@@ -205,8 +207,7 @@ fn parse_unified_diff_hunk(
         if !matches!(prefix, ' ' | '-' | '+') {
             return Err(format!(
                 "unified diff hunk {} 包含非法行 {:?}，只支持以空格、+、- 开头的内容行",
-                hunk_index,
-                line,
+                hunk_index, line,
             ));
         }
 
@@ -217,7 +218,10 @@ fn parse_unified_diff_hunk(
     }
 
     let first_change_index = first_change_index.ok_or_else(|| {
-        format!("unified diff hunk {} 没有任何增删行，至少需要一行以 + 或 - 开头", hunk_index)
+        format!(
+            "unified diff hunk {} 没有任何增删行，至少需要一行以 + 或 - 开头",
+            hunk_index
+        )
     })?;
     let last_change_index = last_change_index.expect("change index should exist");
 
@@ -270,7 +274,10 @@ fn apply_parsed_diff_blocks_to_content(
     for (index, block) in blocks.iter().enumerate() {
         validate_patch_block(block, index)?;
         let matched = find_block_match(&lines, block, index)?;
-        lines.splice(matched.old_start..matched.old_end, block.new_lines.iter().cloned());
+        lines.splice(
+            matched.old_start..matched.old_end,
+            block.new_lines.iter().cloned(),
+        );
     }
 
     Ok(join_lines(&lines, had_trailing_newline))
@@ -382,7 +389,8 @@ fn find_block_match(
 }
 
 fn describe_best_mismatch(lines: &[String], block: &ParsedDiffBlock) -> String {
-    let total_match_len = block.before_context.len() + block.old_lines.len() + block.after_context.len();
+    let total_match_len =
+        block.before_context.len() + block.old_lines.len() + block.after_context.len();
     let max_start = lines.len().saturating_sub(total_match_len);
     let mut best_detail: Option<PatchMismatchDetail> = None;
 
@@ -391,9 +399,9 @@ fn describe_best_mismatch(lines: &[String], block: &ParsedDiffBlock) -> String {
             continue;
         };
 
-        let should_replace = best_detail.as_ref().is_none_or(|current| {
-            detail.matched_line_count > current.matched_line_count
-        });
+        let should_replace = best_detail
+            .as_ref()
+            .is_none_or(|current| detail.matched_line_count > current.matched_line_count);
         if should_replace {
             best_detail = Some(detail);
         }
@@ -528,7 +536,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_nanos())
             .unwrap_or(0);
-        let root = std::env::temp_dir().join(format!("ofive-markdown-patch-test-{unique}-{sequence}"));
+        let root =
+            std::env::temp_dir().join(format!("ofive-markdown-patch-test-{unique}-{sequence}"));
         fs::create_dir_all(&root).expect("应成功创建测试根目录");
         root
     }
@@ -605,9 +614,7 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert!(result
-            .expect_err("应返回歧义错误")
-            .contains("多个位置"));
+        assert!(result.expect_err("应返回歧义错误").contains("多个位置"));
     }
 
     #[test]

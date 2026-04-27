@@ -40,12 +40,12 @@ use std::path::Path;
 
 use tauri::State;
 
+use crate::infra::persistence::extension_private_store;
+use crate::infra::persistence::vault_config_store::{load_vault_config, save_vault_config};
 use crate::shared::ai_service::{
     AiChatConversationRecord, AiChatHistoryMessage, AiChatHistoryState, AiChatSettings,
     AiVendorDefinition, AiVendorFieldDefinition,
 };
-use crate::infra::persistence::extension_private_store;
-use crate::infra::persistence::vault_config_store::{load_vault_config, save_vault_config};
 use crate::shared::vault_contracts::VaultConfig;
 use crate::state::{get_vault_root, AppState};
 
@@ -663,12 +663,30 @@ fn sanitize_ai_chat_content_block(
 
     Some(crate::shared::ai_service::AiChatHistoryContentBlock {
         kind,
-        text: block.text.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()),
-        signature: block.signature.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()),
-        tool_use_id: block.tool_use_id.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()),
-        tool_name: block.tool_name.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()),
-        input_json: block.input_json.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()),
-        result_json: block.result_json.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()),
+        text: block
+            .text
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        signature: block
+            .signature
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        tool_use_id: block
+            .tool_use_id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        tool_name: block
+            .tool_name
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        input_json: block
+            .input_json
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        result_json: block
+            .result_json
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
     })
 }
 
@@ -679,10 +697,10 @@ mod tests {
         sanitize_ai_chat_settings, save_ai_chat_history_in_root, AI_CHAT_HISTORY_CONFIG_KEY,
         AI_CHAT_SETTINGS_CONFIG_KEY,
     };
+    use crate::infra::persistence::vault_config_store::{load_vault_config, save_vault_config};
     use crate::shared::ai_service::{
         AiChatConversationRecord, AiChatHistoryMessage, AiChatHistoryState, AiChatSettings,
     };
-    use crate::infra::persistence::vault_config_store::{load_vault_config, save_vault_config};
     use crate::shared::vault_contracts::VaultConfig;
     use serde_json::json;
     use std::collections::HashMap;

@@ -10,17 +10,14 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, State};
 
 use crate::infra::fs::fs_helpers::{
-    canonicalize_vault_path, collect_tree_entries, detect_mime_type,
-    resolve_canvas_path, resolve_existing_vault_file_path, resolve_markdown_path,
+    canonicalize_vault_path, collect_tree_entries, detect_mime_type, resolve_canvas_path,
+    resolve_existing_vault_file_path, resolve_markdown_path,
 };
 use crate::infra::fs::watcher;
-use crate::infra::persistence::vault_config_store::{
-    ensure_vault_config_file, load_vault_config,
-};
+use crate::infra::persistence::vault_config_store::{ensure_vault_config_file, load_vault_config};
 use crate::infra::query::query_index;
 use crate::shared::vault_contracts::{
-    ReadBinaryFileResponse, ReadMarkdownResponse, SetVaultResponse, VaultConfig,
-    VaultTreeResponse,
+    ReadBinaryFileResponse, ReadMarkdownResponse, SetVaultResponse, VaultConfig, VaultTreeResponse,
 };
 use crate::state::{get_vault_root, set_vault_root, AppState};
 

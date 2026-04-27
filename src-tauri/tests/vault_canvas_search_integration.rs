@@ -6,7 +6,9 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use ofive_lib::test_support::{create_vault_canvas_file_in_root, search_vault_canvas_files_in_root};
+use ofive_lib::test_support::{
+    create_vault_canvas_file_in_root, search_vault_canvas_files_in_root,
+};
 use support::TestVault;
 
 #[test]

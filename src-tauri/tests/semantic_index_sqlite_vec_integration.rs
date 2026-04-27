@@ -8,8 +8,7 @@ mod support;
 
 use ofive_lib::test_support::{
     delete_indexed_markdown_document, load_indexed_markdown_document,
-    search_markdown_chunks_for_consumer, upsert_indexed_markdown_document,
-    SemanticSearchRequest,
+    search_markdown_chunks_for_consumer, upsert_indexed_markdown_document, SemanticSearchRequest,
 };
 use support::SemanticIndexTestHarness;
 

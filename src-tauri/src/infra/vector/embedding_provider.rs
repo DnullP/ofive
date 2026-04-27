@@ -5,9 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::app::app_storage::storage_registry_facade;
-use crate::shared::semantic_index_contracts::{
-    EmbeddingProviderDescriptor, EmbeddingProviderKind,
-};
+use crate::shared::semantic_index_contracts::{EmbeddingProviderDescriptor, EmbeddingProviderKind};
 
 #[cfg(not(test))]
 use std::collections::HashMap;
@@ -21,10 +19,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 #[cfg(not(test))]
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
-const FASTEMBED_SUPPORTED_MODEL_IDS: &[&str] = &[
-    "intfloat/multilingual-e5-small",
-    "BAAI/bge-small-zh-v1.5",
-];
+const FASTEMBED_SUPPORTED_MODEL_IDS: &[&str] =
+    &["intfloat/multilingual-e5-small", "BAAI/bge-small-zh-v1.5"];
 const FASTEMBED_CONSUMER_MODULE_ID: &str = "semantic-index";
 #[cfg(test)]
 const FASTEMBED_PLACEHOLDER_DIMENSIONS: usize = 16;
@@ -107,10 +103,7 @@ impl EmbeddingProvider for FastEmbedEmbeddingProvider {
             return Ok(());
         }
 
-        Err(format!(
-            "unsupported fastembed model_id: {}",
-            model_id
-        ))
+        Err(format!("unsupported fastembed model_id: {}", model_id))
     }
 
     fn embedding_dimensions(&self, model_id: &str, vault_root: &Path) -> Result<usize, String> {
@@ -145,9 +138,7 @@ impl EmbeddingProvider for FastEmbedEmbeddingProvider {
             let _ = vault_root;
             Ok(texts
                 .iter()
-                .map(|text| {
-                    embed_text_deterministically(text, FASTEMBED_PLACEHOLDER_DIMENSIONS)
-                })
+                .map(|text| embed_text_deterministically(text, FASTEMBED_PLACEHOLDER_DIMENSIONS))
                 .collect())
         }
 
@@ -244,9 +235,9 @@ fn get_or_create_fastembed_runtime(
 
     let cache_key = format!("{}::{}", model_id, cache_dir.display());
     let runtimes = FASTEMBED_RUNTIME_BY_KEY.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut runtimes = runtimes.lock().map_err(|error| {
-        format!("failed to lock fastembed runtime registry: {error}")
-    })?;
+    let mut runtimes = runtimes
+        .lock()
+        .map_err(|error| format!("failed to lock fastembed runtime registry: {error}"))?;
     if let Some(runtime) = runtimes.get(&cache_key) {
         return Ok(runtime.clone());
     }
@@ -259,7 +250,10 @@ fn get_or_create_fastembed_runtime(
     )
     .map_err(|error| format!("failed to initialize fastembed model_id={model_id}: {error}"))?;
     let probe = embedding
-        .embed(vec![normalize_fastembed_input("query", "dimension probe")], Some(1))
+        .embed(
+            vec![normalize_fastembed_input("query", "dimension probe")],
+            Some(1),
+        )
         .map_err(|error| format!("failed to probe fastembed model dimensions: {error}"))?;
     let dimensions = probe
         .first()
@@ -355,8 +349,7 @@ fn stable_hash(text: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        available_embedding_providers, build_embedding_provider,
-        semantic_index_embedding_cache_dir,
+        available_embedding_providers, build_embedding_provider, semantic_index_embedding_cache_dir,
     };
     use crate::app::app_storage::storage_registry_facade::{
         resolve_app_storage_owner_dir, set_app_storage_test_root,
@@ -388,8 +381,7 @@ mod tests {
                     .map(|duration| duration.as_nanos())
                     .unwrap_or(0)
             ));
-            set_app_storage_test_root(Some(root.clone()))
-                .expect("test root should set");
+            set_app_storage_test_root(Some(root.clone())).expect("test root should set");
             Self { _lock: lock, root }
         }
     }
@@ -444,11 +436,8 @@ mod tests {
     fn fastembed_provider_should_resolve_module_private_cache_dir() {
         let _guard = AppStorageTestGuard::new();
         let cache_dir = semantic_index_embedding_cache_dir().expect("cache dir should resolve");
-        let owner_dir = resolve_app_storage_owner_dir(
-            "semantic-index",
-            "semantic-index",
-        )
-        .expect("owner dir should resolve");
+        let owner_dir = resolve_app_storage_owner_dir("semantic-index", "semantic-index")
+            .expect("owner dir should resolve");
 
         assert_eq!(cache_dir, owner_dir.join("models"));
     }

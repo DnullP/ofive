@@ -561,8 +561,8 @@ mod tests {
         request.module_id = "unknown-module".to_string();
         request.owner = "unknown-module".to_string();
 
-        let response = execute_persistence_request_in_root(&root, request)
-            .expect("未知模块应返回协议错误");
+        let response =
+            execute_persistence_request_in_root(&root, request).expect("未知模块应返回协议错误");
 
         assert_eq!(response.status, PersistenceResponseStatus::Error);
         assert_eq!(

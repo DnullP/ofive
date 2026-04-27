@@ -101,6 +101,7 @@ func (m *MinimaxLLM) GenerateContent(
 				payload.StopSequences = req.Config.StopSequences
 			}
 		}
+		payload.Thinking = buildMinimaxThinkingConfig(payload.Model, payload.MaxTokens)
 
 		body, err := json.Marshal(payload)
 		if err != nil {
@@ -201,6 +202,10 @@ func (m *MinimaxLLM) streamResponse(
 	var emitted bool
 	var completed bool
 
+	yieldIncrement := func(response *model.LLMResponse) bool {
+		return yieldMinimaxStreamResponse(response, yield)
+	}
+
 	raw, err := consumeSSEStream(body, func(event sseEvent) error {
 		data := strings.TrimSpace(event.Data)
 		if data == "" {
@@ -262,7 +267,7 @@ func (m *MinimaxLLM) streamResponse(
 				}
 				if strings.TrimSpace(block.block.Thinking) != "" {
 					emitted = true
-					if !yield(buildMinimaxLLMResponse(state.snapshot(), state.stopReason, state.inputTokens, state.outputTokens, false), nil) {
+					if !yieldIncrement(buildMinimaxLLMResponse(state.snapshot(), state.stopReason, state.inputTokens, state.outputTokens, false)) {
 						return io.EOF
 					}
 				}
@@ -274,7 +279,7 @@ func (m *MinimaxLLM) streamResponse(
 				block.block.Text += payload.Delta.Text
 				if strings.TrimSpace(block.block.Text) != "" {
 					emitted = true
-					if !yield(buildMinimaxLLMResponse(state.snapshot(), state.stopReason, state.inputTokens, state.outputTokens, false), nil) {
+					if !yieldIncrement(buildMinimaxLLMResponse(state.snapshot(), state.stopReason, state.inputTokens, state.outputTokens, false)) {
 						return io.EOF
 					}
 				}
@@ -343,6 +348,68 @@ func (m *MinimaxLLM) streamResponse(
 	return raw, nil
 }
 
+func yieldMinimaxStreamResponse(
+	response *model.LLMResponse,
+	yield func(*model.LLMResponse, error) bool,
+) bool {
+	if response == nil {
+		return true
+	}
+	next := cloneMinimaxLLMResponse(response)
+	next.Partial = true
+	return yield(next, nil)
+}
+
+func cloneMinimaxLLMResponse(response *model.LLMResponse) *model.LLMResponse {
+	if response == nil {
+		return nil
+	}
+	next := *response
+	if response.Content != nil {
+		content := *response.Content
+		content.Parts = cloneGenAIParts(response.Content.Parts)
+		next.Content = &content
+	}
+	return &next
+}
+
+func cloneGenAIParts(parts []*genai.Part) []*genai.Part {
+	if len(parts) == 0 {
+		return nil
+	}
+	cloned := make([]*genai.Part, 0, len(parts))
+	for _, part := range parts {
+		if part == nil {
+			cloned = append(cloned, nil)
+			continue
+		}
+		next := *part
+		if part.FunctionCall != nil {
+			functionCall := *part.FunctionCall
+			functionCall.Args = cloneStringAnyMap(part.FunctionCall.Args)
+			next.FunctionCall = &functionCall
+		}
+		if part.FunctionResponse != nil {
+			functionResponse := *part.FunctionResponse
+			functionResponse.Response = cloneStringAnyMap(part.FunctionResponse.Response)
+			next.FunctionResponse = &functionResponse
+		}
+		cloned = append(cloned, &next)
+	}
+	return cloned
+}
+
+func cloneStringAnyMap(value map[string]any) map[string]any {
+	if len(value) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(value))
+	for key, item := range value {
+		cloned[key] = item
+	}
+	return cloned
+}
+
 func (m *MinimaxLLM) emitTrace(title string, text string) error {
 	if m.trace == nil || strings.TrimSpace(text) == "" {
 		return nil
@@ -377,6 +444,33 @@ func resolveMinimaxMessagesEndpoint(endpoint string) string {
 		return trimmed
 	}
 	return trimmed + "/v1/messages"
+}
+
+func shouldEnableMinimaxThinking(model string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(model))
+	return strings.Contains(normalized, "minimax-m2")
+}
+
+func buildMinimaxThinkingConfig(model string, maxTokens int) *minimaxThinkingConfig {
+	if !shouldEnableMinimaxThinking(model) || maxTokens <= 1024 {
+		return nil
+	}
+
+	budget := maxTokens / 2
+	if budget > 2048 {
+		budget = 2048
+	}
+	if budget < 1024 {
+		budget = 1024
+	}
+	if budget >= maxTokens {
+		budget = maxTokens - 1
+	}
+
+	return &minimaxThinkingConfig{
+		Type:         "enabled",
+		BudgetTokens: budget,
+	}
 }
 
 func buildMinimaxMessages(req *model.LLMRequest) (string, []minimaxMessage) {
@@ -750,16 +844,22 @@ func (s *minimaxStreamState) snapshot() []minimaxContentBlock {
 }
 
 type minimaxChatRequest struct {
-	Model         string             `json:"model"`
-	System        string             `json:"system,omitempty"`
-	Messages      []minimaxMessage   `json:"messages"`
-	Tools         []minimaxTool      `json:"tools,omitempty"`
-	ToolChoice    *minimaxToolChoice `json:"tool_choice,omitempty"`
-	MaxTokens     int                `json:"max_tokens"`
-	Stream        bool               `json:"stream,omitempty"`
-	Temperature   *float32           `json:"temperature,omitempty"`
-	TopP          *float32           `json:"top_p,omitempty"`
-	StopSequences []string           `json:"stop_sequences,omitempty"`
+	Model         string                 `json:"model"`
+	System        string                 `json:"system,omitempty"`
+	Messages      []minimaxMessage       `json:"messages"`
+	Tools         []minimaxTool          `json:"tools,omitempty"`
+	ToolChoice    *minimaxToolChoice     `json:"tool_choice,omitempty"`
+	Thinking      *minimaxThinkingConfig `json:"thinking,omitempty"`
+	MaxTokens     int                    `json:"max_tokens"`
+	Stream        bool                   `json:"stream,omitempty"`
+	Temperature   *float32               `json:"temperature,omitempty"`
+	TopP          *float32               `json:"top_p,omitempty"`
+	StopSequences []string               `json:"stop_sequences,omitempty"`
+}
+
+type minimaxThinkingConfig struct {
+	Type         string `json:"type"`
+	BudgetTokens int    `json:"budget_tokens,omitempty"`
 }
 
 type minimaxMessage struct {

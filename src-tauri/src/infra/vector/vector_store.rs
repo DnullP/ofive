@@ -12,11 +12,11 @@ use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 use sqlite_vec::sqlite3_vec_init;
 
 use crate::infra::persistence::extension_private_store;
-use crate::shared::semantic_index_contracts::{VectorStoreDescriptor, VectorStoreKind};
 use crate::shared::semantic_index_contracts::{
-    SemanticIndexedChunkRecord, SemanticIndexedDocumentRecord, SemanticIndexSnapshot,
+    SemanticIndexSnapshot, SemanticIndexedChunkRecord, SemanticIndexedDocumentRecord,
     SemanticSearchRequest, SemanticSearchResultItem,
 };
+use crate::shared::semantic_index_contracts::{VectorStoreDescriptor, VectorStoreKind};
 
 const SQLITE_VEC_STORE_FILE_NAME: &str = "semantic-index.sqlite";
 static SQLITE_VEC_REGISTRATION: OnceLock<Result<(), String>> = OnceLock::new();
@@ -599,13 +599,15 @@ fn parse_chunking_strategy_name(
     value: &str,
 ) -> Result<crate::shared::semantic_index_contracts::ChunkingStrategyKind, String> {
     match value {
-        "heading-paragraph" => Ok(
-            crate::shared::semantic_index_contracts::ChunkingStrategyKind::HeadingParagraph,
-        ),
-        "whole-document" => Ok(
-            crate::shared::semantic_index_contracts::ChunkingStrategyKind::WholeDocument,
-        ),
-        _ => Err(format!("unknown semantic-index chunking strategy persisted in sqlite: {value}")),
+        "heading-paragraph" => {
+            Ok(crate::shared::semantic_index_contracts::ChunkingStrategyKind::HeadingParagraph)
+        }
+        "whole-document" => {
+            Ok(crate::shared::semantic_index_contracts::ChunkingStrategyKind::WholeDocument)
+        }
+        _ => Err(format!(
+            "unknown semantic-index chunking strategy persisted in sqlite: {value}"
+        )),
     }
 }
 
@@ -637,8 +639,7 @@ fn persist_embedding_dimensions(connection: &Connection, dimensions: usize) -> R
         if persisted_dimensions != dimensions {
             return Err(format!(
                 "semantic-index stored embedding dimension mismatch: expected={} actual={}",
-                persisted_dimensions,
-                dimensions
+                persisted_dimensions, dimensions
             ));
         }
 
@@ -710,10 +711,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_nanos())
             .unwrap_or(0);
-        let root = std::env::temp_dir().join(format!(
-            "ofive-sqlite-vec-store-{}-{}",
-            nanos, sequence
-        ));
+        let root =
+            std::env::temp_dir().join(format!("ofive-sqlite-vec-store-{}-{}", nanos, sequence));
         fs::create_dir_all(&root).expect("test root should be created");
         root
     }

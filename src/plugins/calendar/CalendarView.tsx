@@ -95,6 +95,8 @@ export interface CalendarViewProps {
     stateKey: string;
     /** 打开目标 Markdown 笔记。 */
     openNote: (relativePath: string) => Promise<void>;
+    /** 通知宿主该视图已具备首屏展示条件。 */
+    onReady?: () => void;
 }
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
@@ -156,7 +158,7 @@ function groupMatchesByDay(matches: FrontmatterQueryMatchItem[]): Map<string, Ca
  * @returns React 元素。
  */
 export function CalendarView(props: CalendarViewProps): ReactElement {
-    const { mode, stateKey, openNote } = props;
+    const { mode, stateKey, openNote, onReady } = props;
     const { t, i18n } = useTranslation();
     const { currentVaultPath, files } = useVaultState();
     const today = useMemo(() => new Date(), []);
@@ -179,6 +181,7 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
     const [panelPopoverPosition, setPanelPopoverPosition] = useState<CalendarPanelPopoverPosition | null>(null);
     const reloadRef = useRef<(() => Promise<void>) | null>(null);
     const rootRef = useRef<HTMLElement | null>(null);
+    const hasMarkedReadyRef = useRef(false);
     const [dayContextMenuId] = useState(
         () => `${CALENDAR_DAY_CONTEXT_MENU_ID}:${String(++nextCalendarContextMenuInstanceId)}`,
     );
@@ -272,6 +275,10 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                         hasLoadedSnapshot: false,
                         loadedVaultPath: null,
                     });
+                    if (!hasMarkedReadyRef.current) {
+                        hasMarkedReadyRef.current = true;
+                        onReady?.();
+                    }
                 }
                 return;
             }
@@ -303,6 +310,10 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                     hasLoadedSnapshot: true,
                     loadedVaultPath: currentVaultPath,
                 });
+                if (!hasMarkedReadyRef.current) {
+                    hasMarkedReadyRef.current = true;
+                    onReady?.();
+                }
                 console.info("[calendar-view] load success", { matchCount: response.matches.length, mode, stateKey });
             } catch (error) {
                 const message = error instanceof Error ? error.message : t("calendar.loadFailed", { message: "unknown" });
@@ -317,6 +328,10 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                     hasLoadedSnapshot: previous.hasLoadedSnapshot && previous.loadedVaultPath === currentVaultPath,
                     loadedVaultPath: previous.loadedVaultPath === currentVaultPath ? previous.loadedVaultPath : null,
                 }));
+                if (!hasMarkedReadyRef.current) {
+                    hasMarkedReadyRef.current = true;
+                    onReady?.();
+                }
                 console.error("[calendar-view] load failed", { message, mode, stateKey });
             }
         };
@@ -327,7 +342,7 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
         return () => {
             cancelled = true;
         };
-    }, [currentVaultPath, mode, stateKey, t]);
+    }, [currentVaultPath, mode, onReady, stateKey, t]);
 
     useEffect(() => {
         const unlisten = subscribeVaultFsBusEvent((payload) => {

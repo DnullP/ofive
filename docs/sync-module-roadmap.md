@@ -1,8 +1,27 @@
+---
+title: "ofive 同步模块续做清单"
+kind: "roadmap"
+status: "roadmap"
+updated: "2026-04-26"
+owners:
+  - "backend"
+tags:
+  - "ofive"
+  - "sync"
+  - "roadmap"
+  - "backend-module"
+related:
+  - "ofive-backend-module-platform"
+  - "ofive-maintainer-dashboard"
+---
+
 # ofive 同步模块续做清单 v1
 
 ## 1. 文档定位
 
 本文档用于记录多端同步模块当前已经落地的边界，以及后续待实现事项。
+
+项目 wiki 入口：[[ofive-backend-module-platform|后端模块平台]]、[[ofive-maintainer-dashboard|维护者管理视图]]。
 
 目标不是一次性把同步方案设计到最终形态，而是把“已经决定的边界”和“接下来应该继续做的最小步”固定下来，避免中断后重新梳理上下文。
 

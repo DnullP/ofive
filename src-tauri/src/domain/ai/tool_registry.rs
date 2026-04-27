@@ -19,8 +19,8 @@ mod tests {
     use serde_json::json;
 
     use crate::domain::capability::{
-        CapabilityConsumer, CapabilityDescriptor, CapabilityKind, CapabilityRegistry,
-        CapabilityRiskLevel,
+        build_builtin_capability_registry, CapabilityConsumer, CapabilityDescriptor,
+        CapabilityKind, CapabilityRegistry, CapabilityRiskLevel,
     };
 
     use super::build_ai_tool_catalog;
@@ -91,5 +91,35 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert!(tools[0].requires_confirmation);
         assert_eq!(tools[0].capability_id, "vault.create_note");
+    }
+
+    #[test]
+    fn ai_tool_catalog_should_allow_empty_vault_search_queries() {
+        let registry = build_builtin_capability_registry();
+        let tools = build_ai_tool_catalog(&registry);
+        let optional_query_capability_ids = [
+            "vault.search_markdown_files",
+            "vault.search_canvas_files",
+            "vault.suggest_wikilink_targets",
+        ];
+
+        for capability_id in optional_query_capability_ids {
+            let tool = tools
+                .iter()
+                .find(|item| item.capability_id == capability_id)
+                .expect("AI tool catalog should include optional-query vault search capability");
+
+            let required = tool
+                .input_schema
+                .get("required")
+                .and_then(|value| value.as_array())
+                .cloned()
+                .unwrap_or_default();
+
+            assert!(
+                !required.iter().any(|item| item.as_str() == Some("query")),
+                "{capability_id} supports empty query and must not require query in AI tool schema"
+            );
+        }
     }
 }

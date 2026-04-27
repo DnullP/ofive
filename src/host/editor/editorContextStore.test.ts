@@ -13,6 +13,7 @@ import { describe, expect, it } from "bun:test";
 import {
     getArticleSnapshotById,
     getFocusedArticleSnapshot,
+    hasArticleSnapshotByPath,
     reportArticleContent,
     reportArticleContentByPath,
     reportArticleFocus,
@@ -112,6 +113,9 @@ describe("editorContextStore content snapshot boundary", () => {
         });
 
         reportArticleContentByPath(path, content);
+
+        expect(hasArticleSnapshotByPath(path)).toBe(true);
+        expect(hasArticleSnapshotByPath("notes/missing.md")).toBe(false);
 
         const snapshot1 = getArticleSnapshotById("test-shared-1");
         const snapshot2 = getArticleSnapshotById("test-shared-2");

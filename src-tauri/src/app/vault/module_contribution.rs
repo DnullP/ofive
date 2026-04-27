@@ -45,7 +45,8 @@ const VAULT_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[
             "src/host/commands/vault_commands.rs",
             "src/test_support/",
         ],
-        rationale: "vault app service 是 Vault 模块私有实现边界；宿主启动桥接仅可访问显式声明的预热入口",
+        rationale:
+            "vault app service 是 Vault 模块私有实现边界；宿主启动桥接仅可访问显式声明的预热入口",
     },
     ModulePrivateNamespaceTemplate {
         namespace: "crate::app::vault::query_app_service",

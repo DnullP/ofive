@@ -312,6 +312,24 @@ export function getArticleSnapshotById(articleId: string): ArticleState | null {
 }
 
 /**
+ * @function hasArticleSnapshotByPath
+ * @description 判断指定路径是否存在已缓存文章快照。
+ * @param path 文章路径。
+ * @returns 是否存在同路径文章快照。
+ */
+export function hasArticleSnapshotByPath(path: string): boolean {
+    const snapshot = editorContextStore.getSnapshot();
+
+    for (const article of snapshot.articles.values()) {
+        if (article.path === path) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * @function reportArticleContentByPath
  * @description 按路径上报内容更新，会将对应路径的缓存文章全部刷新。
  * @param path 文章路径。

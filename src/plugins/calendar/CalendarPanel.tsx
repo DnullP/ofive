@@ -29,6 +29,7 @@ export function CalendarPanel(context: PanelRenderContext): ReactElement {
         <CalendarView
             mode="panel"
             stateKey={stateKey}
+            onReady={context.markContentReady}
             openNote={async (relativePath) => {
                 console.info("[calendar-panel] open note", { relativePath, stateKey });
                 await context.openFile({ relativePath });

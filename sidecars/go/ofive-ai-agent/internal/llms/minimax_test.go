@@ -64,6 +64,64 @@ func TestMinimaxGenerateContentUsesConfiguredVendorModel(t *testing.T) {
 	if !capturedRequest.Stream {
 		t.Fatal("expected minimax adapter to enable vendor streaming")
 	}
+	if capturedRequest.Thinking == nil {
+		t.Fatal("expected minimax m2 request to enable thinking")
+	}
+	if capturedRequest.Thinking.Type != "enabled" {
+		t.Fatalf("unexpected thinking type: %q", capturedRequest.Thinking.Type)
+	}
+	if capturedRequest.Thinking.BudgetTokens <= 0 || capturedRequest.Thinking.BudgetTokens >= capturedRequest.MaxTokens {
+		t.Fatalf(
+			"expected thinking budget to be positive and below max_tokens, got budget=%d max=%d",
+			capturedRequest.Thinking.BudgetTokens,
+			capturedRequest.MaxTokens,
+		)
+	}
+}
+
+func TestMinimaxGenerateContentSkipsThinkingWhenMaxTokensTooLow(t *testing.T) {
+	t.Parallel()
+
+	var capturedRequest minimaxChatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		defer request.Body.Close()
+
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		if err := json.Unmarshal(body, &capturedRequest); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":"msg_1","type":"message","role":"assistant","model":"MiniMax-M2.7","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer server.Close()
+
+	llm := NewMinimaxLLM("minimax-anthropic", server.URL, "MiniMax-M2.7", "test-key")
+	request := &model.LLMRequest{
+		Model: "minimax-anthropic",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("你好", genai.RoleUser),
+		},
+		Config: &genai.GenerateContentConfig{
+			MaxOutputTokens: 512,
+		},
+	}
+
+	for _, err := range collectResponses(llm.GenerateContent(context.Background(), request, false)) {
+		if err != nil {
+			t.Fatalf("GenerateContent returned error: %v", err)
+		}
+	}
+
+	if capturedRequest.MaxTokens != 512 {
+		t.Fatalf("expected configured max tokens to be sent, got %d", capturedRequest.MaxTokens)
+	}
+	if capturedRequest.Thinking != nil {
+		t.Fatalf("expected thinking to be skipped for low max_tokens, got %+v", capturedRequest.Thinking)
+	}
 }
 
 func TestMinimaxGenerateContentStreamsVendorResponseIntoMultipleYields(t *testing.T) {

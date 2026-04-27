@@ -28,12 +28,12 @@ use crate::infra::fs::fs_helpers::{
     collect_markdown_relative_paths, is_markdown_file, relative_path_from_vault_root,
     with_markdown_extension_candidates,
 };
-use crate::shared::vault_contracts::{
-    BacklinkItem, VaultMarkdownGraphEdge, VaultMarkdownGraphNode, VaultMarkdownGraphResponse,
-};
 use crate::infra::query::wikilink::{
     extract_markdown_inline_link_targets, extract_wikilink_targets, path_tree_distance,
     resolve_wikilink_target_path_in_vault_without_index,
+};
+use crate::shared::vault_contracts::{
+    BacklinkItem, VaultMarkdownGraphEdge, VaultMarkdownGraphNode, VaultMarkdownGraphResponse,
 };
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use std::collections::{BTreeMap, HashMap};
@@ -1339,4 +1339,3 @@ pub fn remove_directory_from_index(vault_root: &Path, dir_prefix: &str) -> Resul
 
     Ok(())
 }
-

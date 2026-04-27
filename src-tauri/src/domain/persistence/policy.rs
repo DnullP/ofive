@@ -86,8 +86,7 @@ pub(crate) fn build_persistence_audit_record(
 mod tests {
     use super::{build_persistence_audit_record, evaluate_persistence_access};
     use crate::shared::persistence_contracts::{
-        PersistenceAction, PersistenceRequest, PersistenceScope,
-        PERSISTENCE_CONTRACT_API_VERSION,
+        PersistenceAction, PersistenceRequest, PersistenceScope, PERSISTENCE_CONTRACT_API_VERSION,
     };
 
     fn build_request(action: PersistenceAction) -> PersistenceRequest {

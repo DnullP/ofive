@@ -600,6 +600,7 @@ class ConfigStore {
     private listeners = new Set<() => void>();
     private activeVaultUnlisten: (() => void) | null = null;
     private latestHandledEventId: string | null = null;
+    private backendConfigWriteQueue: Promise<unknown> = Promise.resolve();
 
     subscribe(listener: () => void): () => void {
         this.listeners.add(listener);
@@ -936,6 +937,18 @@ class ConfigStore {
      * @sideEffects 更新 backendConfig + featureSettings，并调用后端保存接口。
      */
     async updateBackendConfig(
+        recipe: (currentConfig: VaultConfig) => VaultConfig,
+        options: UpdateBackendConfigOptions = {},
+    ): Promise<VaultConfig> {
+        const runUpdate = (): Promise<VaultConfig> => this.updateBackendConfigNow(recipe, options);
+        const nextWrite = this.backendConfigWriteQueue.then(runUpdate, runUpdate);
+        this.backendConfigWriteQueue = nextWrite.catch(() => {
+            /* keep later writes from being blocked by a failed save */
+        });
+        return nextWrite;
+    }
+
+    private async updateBackendConfigNow(
         recipe: (currentConfig: VaultConfig) => VaultConfig,
         options: UpdateBackendConfigOptions = {},
     ): Promise<VaultConfig> {

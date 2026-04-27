@@ -31,9 +31,7 @@ use std::path::Path;
 
 use crate::app::vault::vault_app_service;
 use crate::infra::query::query_index;
-use crate::shared::vault_contracts::{
-    ReadMarkdownResponse, VaultIndexedMarkdownFile,
-};
+use crate::shared::vault_contracts::{ReadMarkdownResponse, VaultIndexedMarkdownFile};
 
 /// 确保指定仓库根目录的查询索引已构建完成，供语义索引等读侧流程使用。
 ///
@@ -43,9 +41,7 @@ use crate::shared::vault_contracts::{
 /// # 返回
 /// - `Ok(())`：查询索引已准备就绪。
 /// - `Err(String)`：索引初始化或校验失败。
-pub fn ensure_query_index_ready_for_semantic_index(
-    vault_root: &Path,
-) -> Result<(), String> {
+pub fn ensure_query_index_ready_for_semantic_index(vault_root: &Path) -> Result<(), String> {
     query_index::ensure_query_index_current(vault_root)
 }
 
@@ -91,8 +87,7 @@ pub fn load_markdown_file_for_semantic_index(
 mod tests {
     use super::{
         ensure_query_index_ready_for_semantic_index,
-        list_indexed_markdown_files_for_semantic_index,
-        load_markdown_file_for_semantic_index,
+        list_indexed_markdown_files_for_semantic_index, load_markdown_file_for_semantic_index,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -119,8 +114,7 @@ mod tests {
     fn query_facade_should_list_indexed_markdown_files() {
         let root = create_test_root();
         fs::create_dir_all(root.join("Notes")).expect("应成功创建测试目录");
-        fs::write(root.join("Notes/Alpha.md"), "# Alpha\n\nhello")
-            .expect("应成功写入测试文件");
+        fs::write(root.join("Notes/Alpha.md"), "# Alpha\n\nhello").expect("应成功写入测试文件");
 
         ensure_query_index_ready_for_semantic_index(&root)
             .expect("query facade 应成功准备查询索引");
@@ -138,14 +132,10 @@ mod tests {
     fn query_facade_should_load_markdown_file() {
         let root = create_test_root();
         fs::create_dir_all(root.join("Notes")).expect("应成功创建测试目录");
-        fs::write(root.join("Notes/Beta.md"), "# Beta\n\ncontent")
-            .expect("应成功写入测试文件");
+        fs::write(root.join("Notes/Beta.md"), "# Beta\n\ncontent").expect("应成功写入测试文件");
 
-        let loaded = load_markdown_file_for_semantic_index(
-            "Notes/Beta.md".to_string(),
-            &root,
-        )
-        .expect("query facade 应成功读取 markdown 文件");
+        let loaded = load_markdown_file_for_semantic_index("Notes/Beta.md".to_string(), &root)
+            .expect("query facade 应成功读取 markdown 文件");
 
         assert_eq!(loaded.relative_path, "Notes/Beta.md");
         assert_eq!(loaded.content, "# Beta\n\ncontent");

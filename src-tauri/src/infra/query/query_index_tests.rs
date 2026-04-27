@@ -4,9 +4,8 @@
 //! 增量更新、目录重命名与目录删除等核心索引维护路径。
 
 use super::{
-    ensure_query_index_current, list_markdown_files, load_markdown_graph,
-    reindex_markdown_file, relocate_directory_in_index, remove_directory_from_index,
-    remove_markdown_file,
+    ensure_query_index_current, list_markdown_files, load_markdown_graph, reindex_markdown_file,
+    relocate_directory_in_index, remove_directory_from_index, remove_markdown_file,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -278,8 +277,7 @@ fn relocate_directory_should_be_noop_for_nonexistent_prefix() {
     write_markdown_file(&root, "A.md", "# A");
     ensure_query_index_current(&root).expect("初始构建应成功");
 
-    relocate_directory_in_index(&root, "nonexistent", "somewhere")
-        .expect("不存在的前缀应安全返回");
+    relocate_directory_in_index(&root, "nonexistent", "somewhere").expect("不存在的前缀应安全返回");
 
     let files = list_markdown_files(&root).expect("读取索引应成功");
     assert_eq!(files.len(), 1);

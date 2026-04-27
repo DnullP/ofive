@@ -1,7 +1,7 @@
 /**
  * @module plugins/vault-fs-sync/vaultFsSyncPlugin
  * @description Vault 文件系统同步插件：负责将后端 fs 事件转换为前端持久态更新语义，
- *   并在当前聚焦 Markdown 文件被外部修改时刷新编辑器内容。
+ *   并在已缓存 Markdown 文件被外部修改时刷新编辑器内容。
  *
  * @dependencies
  *   - ../../api/vaultApi
@@ -28,7 +28,7 @@ import {
     subscribeVaultFsBusEvent,
 } from "../../host/events/appEventBus";
 import {
-    getFocusedArticleSnapshot,
+    hasArticleSnapshotByPath,
     reportArticleContentByPath,
 } from "../../host/editor/editorContextStore";
 
@@ -39,7 +39,7 @@ import {
  * @field readVaultMarkdownFile 读取最新 Markdown 文件内容。
  * @field subscribeVaultFsBusEvent 订阅统一 fs 事件总线。
  * @field emitPersistedContentUpdatedEvent 发布持久态内容已更新事件。
- * @field getFocusedArticleSnapshot 获取当前聚焦文章快照。
+ * @field hasArticleSnapshotByPath 判断目标路径是否已有前端文章缓存。
  * @field reportArticleContentByPath 按路径刷新前端文章缓存。
  */
 export interface VaultFsSyncPluginDependencies {
@@ -52,7 +52,7 @@ export interface VaultFsSyncPluginDependencies {
         relativePath: string;
         source: "external";
     }) => void;
-    getFocusedArticleSnapshot: () => { path: string } | null;
+    hasArticleSnapshotByPath: (path: string) => boolean;
     reportArticleContentByPath: (path: string, content: string) => void;
 }
 
@@ -61,9 +61,11 @@ const defaultDependencies: VaultFsSyncPluginDependencies = {
     readVaultMarkdownFile,
     subscribeVaultFsBusEvent,
     emitPersistedContentUpdatedEvent,
-    getFocusedArticleSnapshot,
+    hasArticleSnapshotByPath,
     reportArticleContentByPath,
 };
+
+const CONTENT_REFRESH_EVENT_TYPES = new Set(["modified", "created", "moved"]);
 
 /**
  * @function isMarkdownPath
@@ -97,7 +99,7 @@ export function activateVaultFsSyncPluginRuntime(
 
         if (
             payload.relativePath &&
-            ["modified", "created"].includes(payload.eventType)
+            CONTENT_REFRESH_EVENT_TYPES.has(payload.eventType)
         ) {
             dependencies.emitPersistedContentUpdatedEvent({
                 relativePath: payload.relativePath,
@@ -105,23 +107,22 @@ export function activateVaultFsSyncPluginRuntime(
             });
         }
 
-        const focusedArticle = dependencies.getFocusedArticleSnapshot();
-        if (!focusedArticle || !isMarkdownPath(focusedArticle.path)) {
+        if (!payload.relativePath || !isMarkdownPath(payload.relativePath)) {
             return;
         }
 
-        if (!payload.relativePath || payload.relativePath !== focusedArticle.path) {
+        if (!CONTENT_REFRESH_EVENT_TYPES.has(payload.eventType)) {
             return;
         }
 
-        if (!["modified", "created", "moved"].includes(payload.eventType)) {
+        if (!dependencies.hasArticleSnapshotByPath(payload.relativePath)) {
             return;
         }
 
         void dependencies.readVaultMarkdownFile(payload.relativePath)
             .then((latest) => {
                 dependencies.reportArticleContentByPath(payload.relativePath as string, latest.content);
-                console.info("[vaultFsSyncPlugin] synced focused article by fs event", {
+                console.info("[vaultFsSyncPlugin] synced cached article by fs event", {
                     eventId: payload.eventId,
                     eventType: payload.eventType,
                     path: payload.relativePath,

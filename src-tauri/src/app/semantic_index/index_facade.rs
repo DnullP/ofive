@@ -9,11 +9,9 @@ use std::path::Path;
 
 use crate::app::semantic_index::index_app_service;
 use crate::shared::semantic_index_contracts::{
-    SemanticIndexBackendCatalog, SemanticIndexedDocumentRecord,
-    SemanticIndexModelCatalog, SemanticIndexModelCatalogItem,
+    SemanticIndexBackendCatalog, SemanticIndexModelCatalog, SemanticIndexModelCatalogItem,
     SemanticIndexQueueStatus, SemanticIndexSettings, SemanticIndexStatus,
-    SemanticSearchRequest,
-    SemanticSearchResponse,
+    SemanticIndexedDocumentRecord, SemanticSearchRequest, SemanticSearchResponse,
 };
 
 /// 读取当前宿主支持的语义索引后端目录。
@@ -178,12 +176,12 @@ pub fn search_markdown_chunks_for_consumer(
 #[cfg(test)]
 mod tests {
     use super::{
-        delete_indexed_markdown_document,
-        enqueue_directory_move, enqueue_directory_remove, enqueue_markdown_move,
-        enqueue_markdown_remove, enqueue_markdown_upsert, ensure_semantic_index_current,
-        load_indexed_markdown_document, load_semantic_index_backend_catalog,
-        load_semantic_index_settings, save_semantic_index_settings,
-        search_markdown_chunks_for_consumer, upsert_indexed_markdown_document,
+        delete_indexed_markdown_document, enqueue_directory_move, enqueue_directory_remove,
+        enqueue_markdown_move, enqueue_markdown_remove, enqueue_markdown_upsert,
+        ensure_semantic_index_current, load_indexed_markdown_document,
+        load_semantic_index_backend_catalog, load_semantic_index_settings,
+        save_semantic_index_settings, search_markdown_chunks_for_consumer,
+        upsert_indexed_markdown_document,
     };
     use crate::shared::semantic_index_contracts::SemanticSearchRequest;
     use crate::shared::semantic_index_contracts::{
@@ -235,8 +233,7 @@ mod tests {
             &root,
         )
         .expect("settings facade should save");
-        let loaded = load_semantic_index_settings(&root)
-            .expect("settings facade should load");
+        let loaded = load_semantic_index_settings(&root).expect("settings facade should load");
 
         assert_eq!(saved, loaded);
 

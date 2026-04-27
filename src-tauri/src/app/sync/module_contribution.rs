@@ -16,11 +16,12 @@ const SYNC_PERSISTENCE_OWNERS: &[&str] = &["sync"];
 const SYNC_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[];
 
 #[cfg(test)]
-const SYNC_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[ModulePrivateNamespaceTemplate {
-    namespace: "crate::app::sync::",
-    allowed_paths: &["src/app/sync/"],
-    rationale: "sync app service 属于 Sync 模块私有实现边界",
-}];
+const SYNC_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] =
+    &[ModulePrivateNamespaceTemplate {
+        namespace: "crate::app::sync::",
+        allowed_paths: &["src/app/sync/"],
+        rationale: "sync app service 属于 Sync 模块私有实现边界",
+    }];
 
 /// 返回 Sync 模块 contribution。
 pub(crate) fn sync_backend_module_contribution() -> BackendModuleContribution {

@@ -16,18 +16,15 @@ mod support;
 use std::fs;
 
 use ofive_lib::test_support::{
-    create_vault_canvas_file_in_root,
-    create_vault_directory_in_root, create_vault_markdown_file_in_root,
-    delete_vault_binary_file_in_root, delete_vault_directory_in_root,
-    delete_vault_canvas_file_in_root,
+    create_vault_canvas_file_in_root, create_vault_directory_in_root,
+    create_vault_markdown_file_in_root, delete_vault_binary_file_in_root,
+    delete_vault_canvas_file_in_root, delete_vault_directory_in_root,
     delete_vault_markdown_file_in_root, get_current_vault_tree_in_root,
-    move_vault_directory_to_directory_in_root, move_vault_markdown_file_to_directory_in_root,
-    move_vault_canvas_file_to_directory_in_root,
-    read_vault_binary_file_in_root, read_vault_markdown_file_in_root,
-    read_vault_canvas_file_in_root,
-    rename_vault_directory_in_root, rename_vault_markdown_file_in_root,
-    rename_vault_canvas_file_in_root,
-    save_vault_canvas_file_in_root,
+    move_vault_canvas_file_to_directory_in_root, move_vault_directory_to_directory_in_root,
+    move_vault_markdown_file_to_directory_in_root, read_vault_binary_file_in_root,
+    read_vault_canvas_file_in_root, read_vault_markdown_file_in_root,
+    rename_vault_canvas_file_in_root, rename_vault_directory_in_root,
+    rename_vault_markdown_file_in_root, save_vault_canvas_file_in_root,
     save_vault_markdown_file_in_root,
 };
 use serde_json::Value;

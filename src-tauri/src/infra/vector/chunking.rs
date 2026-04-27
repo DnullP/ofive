@@ -5,9 +5,7 @@
 
 #![cfg_attr(not(test), allow(dead_code))]
 
-use crate::shared::semantic_index_contracts::{
-    ChunkingStrategyDescriptor, ChunkingStrategyKind,
-};
+use crate::shared::semantic_index_contracts::{ChunkingStrategyDescriptor, ChunkingStrategyKind};
 
 /// 单个待建立 embedding 的 chunk 草稿。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -228,7 +226,10 @@ impl ChunkingStrategy for WholeDocumentChunkingStrategy {
 
 /// 尝试解析 Markdown 标题。
 fn parse_markdown_heading(line: &str) -> Option<(usize, &str)> {
-    let hashes = line.chars().take_while(|character| *character == '#').count();
+    let hashes = line
+        .chars()
+        .take_while(|character| *character == '#')
+        .count();
     if hashes == 0 || hashes > 6 {
         return None;
     }

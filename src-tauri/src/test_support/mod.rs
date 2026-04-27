@@ -18,6 +18,9 @@ pub use crate::app::semantic_index::index_facade::load_semantic_index_settings;
 pub use crate::app::semantic_index::index_facade::save_semantic_index_settings;
 pub use crate::app::semantic_index::index_facade::search_markdown_chunks_for_consumer;
 pub use crate::app::semantic_index::index_facade::upsert_indexed_markdown_document;
+pub use crate::app::vault::canvas_app_service::get_vault_canvas_document_in_root;
+pub use crate::app::vault::canvas_app_service::save_vault_canvas_document_in_root;
+pub use crate::app::vault::markdown_patch_app_service::apply_unified_markdown_diff_in_root;
 pub use crate::app::vault::query_app_service::get_backlinks_for_file_in_root;
 pub use crate::app::vault::query_app_service::get_current_vault_markdown_graph_in_root;
 pub use crate::app::vault::query_app_service::get_vault_markdown_ast_in_root;
@@ -31,9 +34,6 @@ pub use crate::app::vault::query_app_service::search_vault_canvas_files_in_root;
 pub use crate::app::vault::query_app_service::search_vault_markdown_files_in_root;
 pub use crate::app::vault::query_app_service::search_vault_markdown_in_root;
 pub use crate::app::vault::query_app_service::suggest_wikilink_targets_in_root;
-pub use crate::app::vault::canvas_app_service::get_vault_canvas_document_in_root;
-pub use crate::app::vault::canvas_app_service::save_vault_canvas_document_in_root;
-pub use crate::app::vault::markdown_patch_app_service::apply_unified_markdown_diff_in_root;
 pub use crate::app::vault::vault_app_service::copy_vault_entry_in_root;
 pub use crate::app::vault::vault_app_service::create_vault_binary_file_in_root;
 pub use crate::app::vault::vault_app_service::create_vault_canvas_file_in_root;
@@ -45,14 +45,14 @@ pub use crate::app::vault::vault_app_service::delete_vault_directory_in_root;
 pub use crate::app::vault::vault_app_service::delete_vault_markdown_file_in_root;
 pub use crate::app::vault::vault_app_service::get_current_vault_config_in_root;
 pub use crate::app::vault::vault_app_service::get_current_vault_tree_in_root;
-pub use crate::app::vault::vault_app_service::move_vault_directory_to_directory_in_root;
 pub use crate::app::vault::vault_app_service::move_vault_canvas_file_to_directory_in_root;
+pub use crate::app::vault::vault_app_service::move_vault_directory_to_directory_in_root;
 pub use crate::app::vault::vault_app_service::move_vault_markdown_file_to_directory_in_root;
 pub use crate::app::vault::vault_app_service::read_vault_binary_file_in_root;
 pub use crate::app::vault::vault_app_service::read_vault_canvas_file_in_root;
 pub use crate::app::vault::vault_app_service::read_vault_markdown_file_in_root;
-pub use crate::app::vault::vault_app_service::rename_vault_directory_in_root;
 pub use crate::app::vault::vault_app_service::rename_vault_canvas_file_in_root;
+pub use crate::app::vault::vault_app_service::rename_vault_directory_in_root;
 pub use crate::app::vault::vault_app_service::rename_vault_markdown_file_in_root;
 pub use crate::app::vault::vault_app_service::save_current_vault_config_in_root;
 pub use crate::app::vault::vault_app_service::save_vault_canvas_file_in_root;
@@ -61,9 +61,9 @@ pub use crate::app::vault::vault_app_service::set_current_vault_precheck;
 pub use crate::host::commands::frontend_log_commands::forward_frontend_log;
 pub use crate::host::commands::vault_commands::segment_chinese_text;
 pub use crate::infra::logging::build_log_notification_payload;
+pub use crate::infra::logging::init as init_logging;
 pub use crate::infra::logging::set_log_notification_capture;
 pub use crate::infra::logging::BackendLogNotificationEventPayload;
-pub use crate::infra::logging::init as init_logging;
 pub use crate::infra::query::query_index::ensure_query_index_current;
 pub use crate::infra::query::query_index::list_markdown_files;
 pub use crate::infra::query::query_index::load_markdown_graph;
@@ -87,19 +87,19 @@ pub use crate::shared::vault_contracts::VaultTaskItem;
 
 /// 返回当前测试环境下 sqlite-vec 运行时版本。
 pub fn semantic_index_sqlite_vec_runtime_version() -> Result<String, String> {
-	crate::infra::vector::ensure_sqlite_vec_runtime()
+    crate::infra::vector::ensure_sqlite_vec_runtime()
 }
 
 /// 返回指定 Vault 下 semantic-index 的 sqlite 文件路径。
 pub fn semantic_index_vector_store_path_in_root(
-	vault_root: &std::path::Path,
+    vault_root: &std::path::Path,
 ) -> Result<std::path::PathBuf, String> {
-	crate::infra::vector::semantic_index_vector_store_path(vault_root, "semantic-index")
+    crate::infra::vector::semantic_index_vector_store_path(vault_root, "semantic-index")
 }
 
 /// 返回 semantic-index 的应用级 fastembed 模型缓存目录。
 pub fn semantic_index_embedding_cache_dir_in_root(
-	_vault_root: &std::path::Path,
+    _vault_root: &std::path::Path,
 ) -> Result<std::path::PathBuf, String> {
-	crate::infra::vector::semantic_index_embedding_cache_dir()
+    crate::infra::vector::semantic_index_embedding_cache_dir()
 }

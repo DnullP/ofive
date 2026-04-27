@@ -4,12 +4,12 @@
 
 use tauri::{AppHandle, State};
 
+use crate::app::ai::{chat_app_service, settings_app_service, tool_app_service};
+use crate::domain::ai::tool::AiToolDescriptor;
 use crate::shared::ai_service::{
     AiChatHistoryMessage, AiChatHistoryState, AiChatSettings, AiChatStreamStartResponse,
     AiSidecarHealthResponse, AiVendorDefinition, AiVendorModelDefinition,
 };
-use crate::app::ai::{chat_app_service, settings_app_service, tool_app_service};
-use crate::domain::ai::tool::AiToolDescriptor;
 use crate::shared::backend_plugin_contracts::BackendPluginConfig;
 use crate::state::AppState;
 
@@ -121,10 +121,7 @@ pub async fn start_ai_chat_stream(
 
 /// 终止一条当前仍在运行的 AI 流式对话。
 #[tauri::command]
-pub fn stop_ai_chat_stream(
-    stream_id: String,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
+pub fn stop_ai_chat_stream(stream_id: String, state: State<'_, AppState>) -> Result<bool, String> {
     chat_app_service::stop_ai_chat_stream(stream_id, &state)
 }
 

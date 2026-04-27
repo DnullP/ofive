@@ -60,3 +60,15 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+/// 运行 ofive 内置 AI 工具箱 CLI。
+///
+/// 该入口供 `ofive-toolbox` sidecar 二进制调用。Tauri 主进程只负责治理、
+/// 鉴权与调度；具体内置工具以 CLI 进程边界执行，便于后续扩展外部 CLI 注册。
+pub fn run_toolbox_cli() {
+    if let Err(error) = app::ai::toolbox_cli::run_from_env() {
+        infra::logging::init();
+        log::error!(target: "ofive-toolbox", "{error}");
+        std::process::exit(1);
+    }
+}

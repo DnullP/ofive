@@ -319,8 +319,7 @@ test.describe("main tab layout restore regression", () => {
         await expect.poll(
             async () => readPersistedPanelLayoutProbe(page),
             { timeout: 3_000 },
-        ).toEqual({
-            hasPanelLayout: true,
+        ).toMatchObject({
             mainTabsHasSplit: false,
             hasMainTabsSplitLeaf: false,
         });

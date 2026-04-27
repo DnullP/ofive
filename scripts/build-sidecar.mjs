@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -46,6 +46,19 @@ const SIDECAR_TARGETS = [
         entry: "./cmd/ofive-ai-sidecar",
         protoFiles: [path.join(protoDir, "ai_sidecar.proto")],
         generatedDir: path.join(projectRoot, "sidecars", "go", "ofive-ai-agent", "gen", "ofive", "aiv1"),
+    },
+];
+
+/**
+ * @constant RUST_TOOL_TARGETS
+ * @description 由 Tauri 宿主管理的内置 CLI 工具 sidecar 清单。
+ */
+const RUST_TOOL_TARGETS = [
+    {
+        id: "ofive-toolbox",
+        manifestPath: path.join(projectRoot, "src-tauri", "Cargo.toml"),
+        bin: "ofive-toolbox",
+        targetDir: path.join(projectRoot, "src-tauri", "target"),
     },
 ];
 
@@ -156,6 +169,18 @@ async function buildSidecars() {
         mkdirSync(outputDir, { recursive: true });
     }
 
+    for (const target of RUST_TOOL_TARGETS) {
+        const binaryName = `${target.id}-${hostTuple}${extension}`;
+        const outputPath = path.join(outputDir, binaryName);
+        if (!existsSync(outputPath)) {
+            writeFileSync(
+                outputPath,
+                "placeholder sidecar for bootstrap cargo build\n",
+                "utf8",
+            );
+        }
+    }
+
     console.info("[sidecar-build] using protoc", {
         version: protocVersion,
         pinnedVersion: PINNED_PROTOC_VERSION,
@@ -197,6 +222,53 @@ async function buildSidecars() {
         );
 
         console.info("[sidecar-build] success", {
+            id: target.id,
+            binaryName,
+        });
+    }
+
+    if (generateOnly) {
+        return;
+    }
+
+    for (const target of RUST_TOOL_TARGETS) {
+        const binaryName = `${target.id}-${hostTuple}${extension}`;
+        const outputPath = path.join(outputDir, binaryName);
+        const builtBinaryPath = path.join(
+            target.targetDir,
+            "debug",
+            `${target.bin}${extension}`,
+        );
+
+        console.info("[sidecar-build] start rust tool", {
+            id: target.id,
+            hostTuple,
+            outputPath,
+        });
+
+        execFileSync(
+            "cargo",
+            [
+                "build",
+                "--manifest-path",
+                target.manifestPath,
+                "--bin",
+                target.bin,
+            ],
+            {
+                cwd: projectRoot,
+                stdio: "inherit",
+                env: {
+                    ...process.env,
+                    CARGO_TARGET_DIR: target.targetDir,
+                    PROTOC: protocPath,
+                },
+            },
+        );
+
+        copyFileSync(builtBinaryPath, outputPath);
+
+        console.info("[sidecar-build] rust tool success", {
             id: target.id,
             binaryName,
         });

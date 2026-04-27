@@ -27,13 +27,12 @@ use axum::response::Response;
 use axum::Router;
 use rmcp::handler::server::router::tool::{ToolRoute, ToolRouter};
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, JsonObject, ListToolsResult,
-    PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
+    CallToolRequestParams, CallToolResult, JsonObject, ListToolsResult, PaginatedRequestParams,
+    ServerCapabilities, ServerInfo, Tool,
 };
 use rmcp::service::RequestContext;
 use rmcp::transport::streamable_http_server::{
-    session::local::LocalSessionManager, StreamableHttpServerConfig,
-    StreamableHttpService,
+    session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
 };
 use rmcp::{ErrorData, ServerHandler};
 use tauri::AppHandle;
@@ -100,12 +99,13 @@ pub(crate) async fn start_ofive_mcp_server(
             },
         );
 
-    let router = Router::new()
-        .nest_service("/mcp", service)
-        .route_layer(middleware::from_fn_with_state(
-            auth_state,
-            authorize_mcp_request,
-        ));
+    let router =
+        Router::new()
+            .nest_service("/mcp", service)
+            .route_layer(middleware::from_fn_with_state(
+                auth_state,
+                authorize_mcp_request,
+            ));
 
     tauri::async_runtime::spawn(async move {
         let server = axum::serve(listener, router).with_graceful_shutdown(async move {
@@ -174,7 +174,8 @@ impl ServerHandler for OfiveCapabilityMcpServer {
         &self,
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<rmcp::RoleServer>,
-    ) -> impl std::future::Future<Output = Result<ListToolsResult, rmcp::ErrorData>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, rmcp::ErrorData>> + Send + '_
+    {
         std::future::ready(Ok(ListToolsResult::with_all_items(
             self.tool_router.list_all(),
         )))
@@ -185,10 +186,16 @@ impl ServerHandler for OfiveCapabilityMcpServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<rmcp::RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, rmcp::ErrorData>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResult, rmcp::ErrorData>> + Send + '_
+    {
         let tool_call_context =
             rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
-        async move { self.tool_router.call(tool_call_context).await.map_err(Into::into) }
+        async move {
+            self.tool_router
+                .call(tool_call_context)
+                .await
+                .map_err(Into::into)
+        }
     }
 
     /// 查询指定 tool 定义。

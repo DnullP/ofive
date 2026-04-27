@@ -1,10 +1,12 @@
 //! # AI Tool Callback 应用服务
 //!
 //! 负责在 Rust 侧暴露本地 callback 端点，供 Go sidecar 在对话期间
-//! 回调执行平台注册能力。
+//! 回调执行内置 CLI 工具。该 callback 只负责鉴权与协议桥接，
+//! 实际工具执行由 `ofive-toolbox` 受控 CLI sidecar 完成。
 
 #![allow(dead_code)]
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -16,7 +18,7 @@ use tauri::AppHandle;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-use crate::app::capability::execution_app_service;
+use crate::app::ai::tool_cli_app_service;
 use crate::domain::ai::sidecar_contract::{
     SidecarCapabilityCallRequest, SidecarCapabilityCallResult,
 };
@@ -26,6 +28,7 @@ static CALLBACK_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone)]
 struct ToolCallbackServerState {
     app_handle: AppHandle,
+    vault_root: PathBuf,
     callback_token: String,
 }
 
@@ -50,6 +53,7 @@ impl SidecarCapabilityCallbackHandle {
 /// 启动 sidecar capability callback server。
 pub(crate) async fn start_sidecar_capability_callback_server(
     app_handle: AppHandle,
+    vault_root: PathBuf,
 ) -> Result<SidecarCapabilityCallbackHandle, String> {
     let callback_token = next_callback_token();
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -65,6 +69,7 @@ pub(crate) async fn start_sidecar_capability_callback_server(
         .route("/capabilities/call", post(handle_capability_call))
         .with_state(ToolCallbackServerState {
             app_handle,
+            vault_root,
             callback_token: callback_token.clone(),
         });
 
@@ -99,8 +104,14 @@ async fn handle_capability_call(
         return Err((StatusCode::UNAUTHORIZED, "unauthorized".to_string()));
     }
 
+    let vault_root = state.vault_root.clone();
     Ok(Json(
-        execution_app_service::execute_sidecar_capability_call(&state.app_handle, request),
+        tool_cli_app_service::execute_sidecar_capability_call_via_cli(
+            &state.app_handle,
+            vault_root,
+            request,
+        )
+        .await,
     ))
 }
 

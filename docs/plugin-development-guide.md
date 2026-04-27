@@ -1,6 +1,25 @@
+---
+title: "ofive 插件开发教程"
+kind: "workflow"
+status: "active"
+updated: "2026-04-26"
+owners:
+  - "frontend"
+tags:
+  - "ofive"
+  - "plugin"
+  - "frontend"
+  - "registry"
+related:
+  - "ofive-plugin-system"
+  - "ofive-feature-owner-map"
+---
+
 # ofive 插件开发教程
 
 > 如果你在做的是完整功能扩展，而不是单纯的前端插件实现，请先看总流程文档：`docs/feature-extension-workflow.md`。
+>
+> 项目 wiki 入口：[[ofive-plugin-system|插件系统]]、[[ofive-feature-owner-map|功能 Owner 地图]]。
 
 本文面向当前仓库的前端插件系统，目标是回答三个问题：
 
@@ -226,7 +245,7 @@ src/
 
 推荐优先读取：
 
-1. [src/host/store/activeEditorStore.ts](../src/host/store/activeEditorStore.ts)
+1. [src/host/editor/activeEditorStore.ts](../src/host/editor/activeEditorStore.ts)
 
 典型用法：
 

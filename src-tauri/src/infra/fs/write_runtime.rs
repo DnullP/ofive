@@ -230,7 +230,8 @@ pub(crate) fn create_vault_canvas_file_in_root(
             .map_err(|error| format!("创建父目录失败 {}: {error}", parent.display()))?;
     }
 
-    let initial_content = content.unwrap_or_else(|| "{\n  \"nodes\": [],\n  \"edges\": []\n}\n".to_string());
+    let initial_content =
+        content.unwrap_or_else(|| "{\n  \"nodes\": [],\n  \"edges\": []\n}\n".to_string());
 
     fs::write(&target_path, initial_content.as_bytes())
         .map_err(|error| format!("创建 Canvas 文件失败 {}: {error}", target_path.display()))?;

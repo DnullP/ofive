@@ -56,10 +56,7 @@ pub(crate) struct AppPrivateStateRecord {
 }
 
 /// 读取应用级私有状态。
-pub(crate) fn load_app_private_state<T>(
-    owner: &str,
-    state_key: &str,
-) -> Result<Option<T>, String>
+pub(crate) fn load_app_private_state<T>(owner: &str, state_key: &str) -> Result<Option<T>, String>
 where
     T: DeserializeOwned,
 {
@@ -92,12 +89,7 @@ where
             owner, state_key
         )
     })?;
-    save_app_private_state_value(
-        owner,
-        state_key,
-        APP_PRIVATE_STORE_SCHEMA_VERSION,
-        &data,
-    )?;
+    save_app_private_state_value(owner, state_key, APP_PRIVATE_STORE_SCHEMA_VERSION, &data)?;
     Ok(())
 }
 
@@ -384,8 +376,8 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::{Mutex, OnceLock};
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(1);

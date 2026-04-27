@@ -185,7 +185,9 @@ pub(crate) fn query_vault_markdown_frontmatter_in_root(
         }
 
         if let Some(expected_value) = &normalized_field_value {
-            let matched_expected = matched_field_values.iter().any(|value| value == expected_value);
+            let matched_expected = matched_field_values
+                .iter()
+                .any(|value| value == expected_value);
             if !matched_expected {
                 continue;
             }

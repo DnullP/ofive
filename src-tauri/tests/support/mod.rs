@@ -14,8 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use ofive_lib::test_support::{
     save_semantic_index_settings, semantic_index_embedding_cache_dir_in_root,
     semantic_index_sqlite_vec_runtime_version, semantic_index_vector_store_path_in_root,
-    ChunkingStrategyKind, EmbeddingProviderKind, SemanticIndexSettings,
-    VectorStoreKind,
+    ChunkingStrategyKind, EmbeddingProviderKind, SemanticIndexSettings, VectorStoreKind,
 };
 
 static TEST_VAULT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -120,12 +119,8 @@ impl SemanticIndexTestHarness {
 
     /// 在测试开始前检查 sqlite-vec 环境与目录初始状态。
     pub fn assert_preflight(&self) {
-        let version = semantic_index_sqlite_vec_runtime_version()
-            .expect("sqlite-vec 运行时应可用");
-        assert!(
-            !version.trim().is_empty(),
-            "sqlite-vec 版本信息不应为空"
-        );
+        let version = semantic_index_sqlite_vec_runtime_version().expect("sqlite-vec 运行时应可用");
+        assert!(!version.trim().is_empty(), "sqlite-vec 版本信息不应为空");
         assert!(
             !self.store_path.exists(),
             "测试前不应存在旧的 sqlite 向量库: {}",

@@ -11,3 +11,5 @@ pub(crate) mod plugin_app_service;
 pub(crate) mod settings_app_service;
 pub(crate) mod tool_app_service;
 pub(crate) mod tool_callback_app_service;
+pub(crate) mod tool_cli_app_service;
+pub(crate) mod toolbox_cli;

@@ -24,11 +24,7 @@ pub(crate) fn load_app_storage_state<T>(
 where
     T: DeserializeOwned,
 {
-    storage_registry_app_service::load_app_storage_state(
-        consumer_module_id,
-        owner,
-        state_key,
-    )
+    storage_registry_app_service::load_app_storage_state(consumer_module_id, owner, state_key)
 }
 
 /// 保存指定 owner 的应用级状态。

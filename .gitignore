@@ -36,3 +36,5 @@ sidecars/go/**/.bin/
 src-tauri/binaries/
 .skills/
 skills/
+
+.ofive/

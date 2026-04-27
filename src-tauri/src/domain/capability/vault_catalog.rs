@@ -40,13 +40,16 @@ fn search_canvas_capability() -> CapabilityDescriptor {
         id: "vault.search_canvas_files".to_string(),
         api_version: CAPABILITY_API_VERSION.to_string(),
         display_name: "Search Canvas Files".to_string(),
-        description: "Search Obsidian canvas files in the current vault by fuzzy query.".to_string(),
+        description: "Search Obsidian canvas files in the current vault by fuzzy query."
+            .to_string(),
         kind: CapabilityKind::Read,
         input_schema: json!({
             "type": "object",
-            "required": ["query"],
             "properties": {
-                "query": {"type": "string"},
+                "query": {
+                    "type": "string",
+                    "description": "Optional fuzzy query. Omit or send an empty string to list canvas files."
+                },
                 "limit": {"type": "integer", "minimum": 1}
             }
         }),
@@ -116,9 +119,11 @@ fn search_markdown_capability() -> CapabilityDescriptor {
         kind: CapabilityKind::Read,
         input_schema: json!({
             "type": "object",
-            "required": ["query"],
             "properties": {
-                "query": {"type": "string"},
+                "query": {
+                    "type": "string",
+                    "description": "Optional fuzzy query. Omit or send an empty string to list markdown files."
+                },
                 "limit": {"type": "integer", "minimum": 1}
             }
         }),
@@ -190,9 +195,11 @@ fn suggest_wikilink_targets_capability() -> CapabilityDescriptor {
         kind: CapabilityKind::Read,
         input_schema: json!({
             "type": "object",
-            "required": ["query"],
             "properties": {
-                "query": {"type": "string"},
+                "query": {
+                    "type": "string",
+                    "description": "Optional fuzzy query. Omit or send an empty string to list hot markdown notes."
+                },
                 "limit": {"type": "integer", "minimum": 1}
             }
         }),
@@ -368,10 +375,7 @@ fn create_markdown_file_capability() -> CapabilityDescriptor {
         risk_level: CapabilityRiskLevel::Medium,
         requires_confirmation: true,
         required_permissions: vec!["vault.write".to_string()],
-        supported_consumers: vec![
-            CapabilityConsumer::Frontend,
-            CapabilityConsumer::Sidecar,
-        ],
+        supported_consumers: vec![CapabilityConsumer::Frontend, CapabilityConsumer::Sidecar],
     }
 }
 

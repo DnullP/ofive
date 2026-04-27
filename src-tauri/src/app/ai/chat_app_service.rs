@@ -2,22 +2,22 @@
 //!
 //! 负责 sidecar 健康检查、聊天流启动、前端终止控制与流事件编排。
 
-use tokio::sync::oneshot;
-use tauri::{AppHandle, Manager, State};
-use tonic::Request;
 use serde_json;
+use tauri::{AppHandle, Manager, State};
+use tokio::sync::oneshot;
+use tonic::Request;
 
-use crate::shared::ai_service::{
-    pb, AiChatHistoryMessage, AiChatStreamEventPayload, AiChatStreamStartResponse,
-    AiSidecarHealthResponse,
-};
 use crate::app::ai::{
-    mcp_server_app_service, persistence_callback_app_service, plugin_app_service, tool_app_service,
+    persistence_callback_app_service, plugin_app_service, tool_app_service,
     tool_callback_app_service,
 };
 use crate::host::events::ai_events;
 use crate::infra::ai::{grpc_client, sidecar_manager};
 use crate::infra::persistence::ai_chat_store;
+use crate::shared::ai_service::{
+    pb, AiChatHistoryMessage, AiChatStreamEventPayload, AiChatStreamStartResponse,
+    AiSidecarHealthResponse,
+};
 use crate::state::{get_vault_root, AiChatStreamControl, AppState};
 
 enum StreamTaskOutcome {
@@ -163,11 +163,12 @@ pub(crate) async fn start_ai_chat_stream(
     )?;
     let vault_root = get_vault_root(&state)?;
     let sidecar_tools = tool_app_service::get_ai_sidecar_tool_catalog()?;
-    let mcp_server_handle =
-        mcp_server_app_service::start_ofive_mcp_server(app_handle.clone()).await?;
     let capability_callback_handle =
-        tool_callback_app_service::start_sidecar_capability_callback_server(app_handle.clone())
-            .await?;
+        tool_callback_app_service::start_sidecar_capability_callback_server(
+            app_handle.clone(),
+            vault_root.clone(),
+        )
+        .await?;
     let persistence_callback_handle =
         persistence_callback_app_service::start_sidecar_persistence_callback_server(vault_root)
             .await?;
@@ -213,8 +214,8 @@ pub(crate) async fn start_ai_chat_stream(
             tools: sidecar_tools,
             capability_callback_url: capability_callback_handle.callback_url.clone(),
             capability_callback_token: capability_callback_handle.callback_token.clone(),
-            mcp_server_url: mcp_server_handle.server_url.clone(),
-            mcp_auth_token: mcp_server_handle.auth_token.clone(),
+            mcp_server_url: String::new(),
+            mcp_auth_token: String::new(),
             persistence_callback_url: persistence_callback_handle.callback_url.clone(),
             persistence_callback_token: persistence_callback_handle.callback_token.clone(),
             history: history
@@ -272,7 +273,8 @@ pub(crate) async fn start_ai_chat_stream(
                         } else {
                             Some(chunk.reasoning_accumulated_text)
                         },
-                        history_content_blocks_json: if chunk.history_content_blocks_json.is_empty() {
+                        history_content_blocks_json: if chunk.history_content_blocks_json.is_empty()
+                        {
                             None
                         } else {
                             Some(chunk.history_content_blocks_json)
@@ -334,7 +336,6 @@ pub(crate) async fn start_ai_chat_stream(
             },
         };
 
-        mcp_server_handle.shutdown();
         capability_callback_handle.shutdown();
         persistence_callback_handle.shutdown();
 
@@ -427,18 +428,16 @@ mod tests {
         register_ai_chat_stream_control(&app_state, "stream-1", "session-1", stop_tx)
             .expect("应成功注册流控制句柄");
 
-        let stopped = stop_ai_chat_stream_in_state("stream-1", &app_state)
-            .expect("停止流时不应返回错误");
+        let stopped =
+            stop_ai_chat_stream_in_state("stream-1", &app_state).expect("停止流时不应返回错误");
 
         assert!(stopped);
         assert!(stop_rx.blocking_recv().is_ok());
-        assert!(
-            app_state
-                .ai_chat_stream_controls
-                .lock()
-                .expect("应成功读取流控制表")
-                .is_empty()
-        );
+        assert!(app_state
+            .ai_chat_stream_controls
+            .lock()
+            .expect("应成功读取流控制表")
+            .is_empty());
     }
 
     #[test]
@@ -450,7 +449,6 @@ mod tests {
 
         assert!(!stopped);
     }
-
 }
 
 /// 提交一次 AI tool 确认结果，并继续同一会话的流式对话。
@@ -482,11 +480,12 @@ pub(crate) async fn submit_ai_chat_confirmation(
     )?;
     let vault_root = get_vault_root(&state)?;
     let sidecar_tools = tool_app_service::get_ai_sidecar_tool_catalog()?;
-    let mcp_server_handle =
-        mcp_server_app_service::start_ofive_mcp_server(app_handle.clone()).await?;
     let capability_callback_handle =
-        tool_callback_app_service::start_sidecar_capability_callback_server(app_handle.clone())
-            .await?;
+        tool_callback_app_service::start_sidecar_capability_callback_server(
+            app_handle.clone(),
+            vault_root.clone(),
+        )
+        .await?;
     let persistence_callback_handle =
         persistence_callback_app_service::start_sidecar_persistence_callback_server(vault_root)
             .await?;
@@ -531,8 +530,8 @@ pub(crate) async fn submit_ai_chat_confirmation(
             vendor_id: ai_settings.vendor_id.clone(),
             model: ai_settings.model.clone(),
             tools: sidecar_tools,
-            mcp_server_url: mcp_server_handle.server_url.clone(),
-            mcp_auth_token: mcp_server_handle.auth_token.clone(),
+            mcp_server_url: String::new(),
+            mcp_auth_token: String::new(),
             capability_callback_url: capability_callback_handle.callback_url.clone(),
             capability_callback_token: capability_callback_handle.callback_token.clone(),
             persistence_callback_url: persistence_callback_handle.callback_url.clone(),
@@ -574,13 +573,13 @@ pub(crate) async fn submit_ai_chat_confirmation(
                         } else {
                             Some(chunk.reasoning_delta_text)
                         },
-                        reasoning_accumulated_text: if chunk.reasoning_accumulated_text.is_empty()
-                        {
+                        reasoning_accumulated_text: if chunk.reasoning_accumulated_text.is_empty() {
                             None
                         } else {
                             Some(chunk.reasoning_accumulated_text)
                         },
-                        history_content_blocks_json: if chunk.history_content_blocks_json.is_empty() {
+                        history_content_blocks_json: if chunk.history_content_blocks_json.is_empty()
+                        {
                             None
                         } else {
                             Some(chunk.history_content_blocks_json)
@@ -642,7 +641,6 @@ pub(crate) async fn submit_ai_chat_confirmation(
             },
         };
 
-        mcp_server_handle.shutdown();
         capability_callback_handle.shutdown();
         persistence_callback_handle.shutdown();
 
