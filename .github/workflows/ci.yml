@@ -26,6 +26,9 @@ jobs:
         with:
           bun-version: 1.2.22
 
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -55,6 +58,9 @@ jobs:
         with:
           bun-version: 1.2.22
 
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
+
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
@@ -72,6 +78,9 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.2.22
+
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -114,6 +123,9 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.2.22
+
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -165,6 +177,9 @@ jobs:
         with:
           bun-version: 1.2.22
 
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
+
       - name: Install Linux system dependencies
         run: |
           sudo apt-get update
@@ -200,6 +215,9 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.2.22
+
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile

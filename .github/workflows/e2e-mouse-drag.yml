@@ -23,6 +23,9 @@ jobs:
         with:
           bun-version: 1.2.22
 
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
+
       - name: Install Linux system dependencies
         run: |
           sudo apt-get update

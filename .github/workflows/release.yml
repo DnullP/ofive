@@ -26,6 +26,9 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -123,6 +126,9 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
 
       - name: Setup Go
         uses: actions/setup-go@v5

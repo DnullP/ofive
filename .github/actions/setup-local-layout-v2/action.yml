@@ -1,0 +1,29 @@
+name: Setup local layout-v2 dependency
+description: Checkout and build layout-v2 as ../layout-v2 for the ofive file dependency.
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout and build layout-v2
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        layout_root="${GITHUB_WORKSPACE}/../layout-v2"
+        layout_ref="${LAYOUT_V2_REF:-${GITHUB_REF_NAME:-}}"
+        clone_args=(--depth=1)
+
+        if [[ -n "${layout_ref}" ]] && git ls-remote --exit-code --heads https://github.com/DnullP/layout-v2.git "${layout_ref}" >/dev/null 2>&1; then
+          clone_args+=(--branch "${layout_ref}")
+          echo "[layout-v2] using branch ${layout_ref}"
+        else
+          echo "[layout-v2] using repository default branch"
+        fi
+
+        rm -rf "${layout_root}"
+        git clone "${clone_args[@]}" https://github.com/DnullP/layout-v2.git "${layout_root}"
+
+        test -f "${GITHUB_WORKSPACE}/../layout-v2/package.json"
+        npm ci --prefix "${layout_root}" --ignore-scripts
+        bun run --cwd "${layout_root}" build
+        test -f "${GITHUB_WORKSPACE}/../layout-v2/dist/index.js"
