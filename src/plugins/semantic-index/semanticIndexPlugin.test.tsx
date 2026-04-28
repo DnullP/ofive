@@ -5,8 +5,10 @@
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type {
+    NotificationCenterEvent,
     NotificationProgressOptions,
     NotificationPublishOptions,
+    NotificationRecord,
 } from "../../host/notifications/notificationCenter";
 
 const startSemanticIndexFullSyncMock = mock(async () => ({
@@ -47,6 +49,7 @@ const publishNotificationMock = mock((payload: NotificationPublishOptions) => pa
 const publishProgressNotificationMock = mock((payload: NotificationProgressOptions) => payload.notificationId ?? "notification-progress-test");
 
 const actualSemanticIndexApi = await import("../../api/semanticIndexApi");
+const { getConfigSnapshot } = await import("../../host/config/configStore");
 
 mock.module("../../api/semanticIndexApi", () => ({
     ...actualSemanticIndexApi,
@@ -73,10 +76,87 @@ mock.module("../../api/semanticIndexApi", () => ({
     startSemanticIndexFullSync: (...args: []) => startSemanticIndexFullSyncMock(...args),
 }));
 
-mock.module("../../host/notifications/notificationCenter", () => ({
-    publishNotification: (payload: NotificationPublishOptions) => publishNotificationMock(payload),
-    publishProgressNotification: (payload: NotificationProgressOptions) => publishProgressNotificationMock(payload),
-}));
+let notificationSequence = 1;
+const notificationListeners = new Set<(event: NotificationCenterEvent) => void>();
+
+function nextNotificationId(): string {
+    const notificationId = `notification-${notificationSequence}`;
+    notificationSequence += 1;
+    return notificationId;
+}
+
+function normalizeProgress(progress: number | null | undefined): number | null {
+    if (typeof progress !== "number" || !Number.isFinite(progress)) {
+        return null;
+    }
+
+    return Math.max(0, Math.min(100, Math.round(progress)));
+}
+
+function dispatchNotificationEvent(event: NotificationCenterEvent): void {
+    notificationListeners.forEach((listener) => {
+        listener(event);
+    });
+}
+
+mock.module("../../host/notifications/notificationCenter", () => {
+    const publishNotification = (payload: NotificationPublishOptions): string => {
+        publishNotificationMock(payload);
+
+        const updatedAt = payload.updatedAt ?? Date.now();
+        const notificationId = payload.notificationId ?? nextNotificationId();
+        const notification: NotificationRecord = {
+            notificationId,
+            level: payload.level,
+            title: payload.title ?? null,
+            message: payload.message,
+            source: payload.source ?? "module",
+            progress: normalizeProgress(payload.progress),
+            autoCloseMs: payload.autoCloseMs ?? null,
+            createdAt: payload.createdAt ?? updatedAt,
+            updatedAt,
+        };
+
+        if (getConfigSnapshot().featureSettings.notificationsEnabled) {
+            dispatchNotificationEvent({
+                type: "upsert",
+                notification,
+            });
+        }
+
+        return notificationId;
+    };
+
+    return {
+        publishNotification,
+        publishProgressNotification: (payload: NotificationProgressOptions): string => {
+            publishProgressNotificationMock(payload);
+            return publishNotification({
+                notificationId: payload.notificationId,
+                level: payload.level ?? "info",
+                title: payload.title ?? null,
+                message: payload.message,
+                source: payload.source ?? "module",
+                progress: payload.progress,
+                autoCloseMs: payload.autoCloseMs,
+            });
+        },
+        dismissNotification: (notificationId: string): void => {
+            dispatchNotificationEvent({
+                type: "dismiss",
+                notificationId,
+            });
+        },
+        subscribeNotificationCenter: (
+            listener: (event: NotificationCenterEvent) => void,
+        ): (() => void) => {
+            notificationListeners.add(listener);
+            return () => {
+                notificationListeners.delete(listener);
+            };
+        },
+    };
+});
 
 let resetSettingsRegistryForTests = () => {
     /* noop */
@@ -84,6 +164,7 @@ let resetSettingsRegistryForTests = () => {
 
 afterEach(() => {
     resetSettingsRegistryForTests();
+    notificationListeners.clear();
     mock.restore();
 });
 
