@@ -10,6 +10,7 @@
     "tauri:web:dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
     "tauri:nostrict": "VITE_DISABLE_STRICT_MODE=true bun run tauri dev",
     "build:sidecar": "node scripts/build-sidecar.mjs",
+    "build:go-sidecar": "node scripts/build-sidecar.mjs --go-only",
     "build:layout-v2": "node scripts/build-local-layout-v2.mjs",
     "proto:generate": "node scripts/build-sidecar.mjs --generate-only",
     "proto:check": "node scripts/build-sidecar.mjs --generate-only && git diff --exit-code -- sidecars/go/ofive-ai-agent/gen/ofive/aiv1",

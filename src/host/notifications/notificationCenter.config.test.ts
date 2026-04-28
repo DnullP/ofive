@@ -4,6 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { createMockVaultApi } from "../../test-support/mockVaultApi";
 
 interface MockVaultConfig {
     schemaVersion: number;
@@ -15,23 +16,12 @@ let currentVaultConfig: MockVaultConfig = {
     entries: {},
 };
 
-mock.module("../../api/vaultApi", () => ({
+mock.module("../../api/vaultApi", () => createMockVaultApi({
     getCurrentVaultConfig: async () => structuredClone(currentVaultConfig),
     saveCurrentVaultConfig: async (nextConfig: MockVaultConfig) => {
         currentVaultConfig = structuredClone(nextConfig);
         return structuredClone(nextConfig);
     },
-    subscribeVaultFsEvents: async () => {
-        return () => {
-            /* noop */
-        };
-    },
-    subscribeVaultConfigEvents: async () => {
-        return () => {
-            /* noop */
-        };
-    },
-    isSelfTriggeredVaultConfigEvent: () => false,
 }));
 
 const { syncConfigStateForVault } = await import("../config/configStore");

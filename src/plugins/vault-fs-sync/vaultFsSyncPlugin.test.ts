@@ -12,24 +12,21 @@
 
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import type { VaultFsEventPayload } from "../../api/vaultApi";
+import { createMockVaultApi } from "../../test-support/mockVaultApi";
 
-mock.module("../../api/vaultApi", () => ({
+mock.module("../../api/vaultApi", () => createMockVaultApi({
     isSelfTriggeredVaultFsEvent: () => false,
     readVaultMarkdownFile: async () => ({ content: "# latest" }),
     searchVaultMarkdown: async () => [],
     suggestWikiLinkTargets: async () => [],
     resolveWikiLinkTarget: async () => null,
     saveVaultMarkdownFile: async () => ({ relativePath: "notes/demo.md", created: false }),
-    isTauriRuntime: () => false,
     getCurrentVaultConfig: async () => ({
         feature_settings: {},
     }),
     saveCurrentVaultConfig: async () => ({
         feature_settings: {},
     }),
-    isSelfTriggeredVaultConfigEvent: () => false,
-    subscribeVaultFsEvents: async () => () => undefined,
-    subscribeVaultConfigEvents: async () => () => undefined,
 }));
 
 const {

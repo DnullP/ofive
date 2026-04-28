@@ -11,6 +11,7 @@
  */
 
 import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { createMockVaultApi } from "../../test-support/mockVaultApi";
 
 let deletedMarkdownPath = "";
 let deletedCanvasPath = "";
@@ -28,7 +29,7 @@ function flushAsyncCommandExecution(): Promise<void> {
     });
 }
 
-mock.module("../../api/vaultApi", () => ({
+mock.module("../../api/vaultApi", () => createMockVaultApi({
     createVaultCanvasFile: async () => ({ relativePath: "", created: false }),
     createVaultDirectory: async () => ({ relativePath: "", created: false }),
     createVaultMarkdownFile: async () => ({ relativePath: "", created: false }),
@@ -44,26 +45,13 @@ mock.module("../../api/vaultApi", () => ({
     searchVaultMarkdown: async () => [],
     suggestWikiLinkTargets: async () => [],
     resolveWikiLinkTarget: async () => null,
-    isSelfTriggeredVaultFsEvent: () => false,
     readVaultMarkdownFile: async () => ({ content: "# latest" }),
-    isTauriRuntime: () => false,
     getCurrentVaultConfig: async () => ({
         feature_settings: {},
     }),
     saveCurrentVaultConfig: async () => ({
         feature_settings: {},
     }),
-    isSelfTriggeredVaultConfigEvent: () => false,
-    subscribeVaultFsEvents: async () => {
-        return () => {
-            /* noop */
-        };
-    },
-    subscribeVaultConfigEvents: async () => {
-        return () => {
-            /* noop */
-        };
-    },
 }));
 
 const { executeCommand } = await import("./commandSystem");

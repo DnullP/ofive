@@ -65,7 +65,7 @@ jobs:
         run: bun run test:go
 
       - name: Build Go sidecar binary
-        run: bun run build:sidecar
+        run: bun run build:go-sidecar
 
       - name: Verify generated Go stubs are up to date
         run: git diff --exit-code -- sidecars/go/ofive-ai-agent/gen/ofive/aiv1

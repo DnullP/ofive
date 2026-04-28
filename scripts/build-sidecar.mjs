@@ -63,15 +63,49 @@ const RUST_TOOL_TARGETS = [
 ];
 
 /**
+ * @function resolveHostTupleFallback
+ * @description 在只构建 Go sidecar 且 CI 未安装 Rust 时，用 Node 主机信息推导常见 Rust host tuple。
+ * @returns {string} 当前主机 triple。
+ */
+function resolveHostTupleFallback() {
+    const platformArch = `${process.platform}:${process.arch}`;
+    const knownTuples = new Map([
+        ["darwin:arm64", "aarch64-apple-darwin"],
+        ["darwin:x64", "x86_64-apple-darwin"],
+        ["linux:arm64", "aarch64-unknown-linux-gnu"],
+        ["linux:x64", "x86_64-unknown-linux-gnu"],
+        ["win32:arm64", "aarch64-pc-windows-msvc"],
+        ["win32:x64", "x86_64-pc-windows-msvc"],
+    ]);
+    const hostTuple = knownTuples.get(platformArch);
+
+    if (!hostTuple) {
+        throw new Error(`无法推导当前平台的 Rust host tuple: ${platformArch}`);
+    }
+
+    return hostTuple;
+}
+
+/**
  * @function getHostTuple
  * @description 读取当前 Rust 主机 target triple，用于生成符合 Tauri 约定的 sidecar 文件名。
  * @returns {string} 当前主机 triple。
  */
 function getHostTuple() {
-    return execFileSync("rustc", ["--print", "host-tuple"], {
-        cwd: projectRoot,
-        encoding: "utf8",
-    }).trim();
+    try {
+        return execFileSync("rustc", ["--print", "host-tuple"], {
+            cwd: projectRoot,
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+        }).trim();
+    } catch (error) {
+        const fallbackTuple = resolveHostTupleFallback();
+        console.warn("[sidecar-build] rustc unavailable, using host tuple fallback", {
+            hostTuple: fallbackTuple,
+            reason: error instanceof Error ? error.message : String(error),
+        });
+        return fallbackTuple;
+    }
 }
 
 /**
@@ -160,7 +194,8 @@ function generateGoStubs(target, protocPath) {
  */
 async function buildSidecars() {
     const generateOnly = process.argv.includes("--generate-only");
-    const hostTuple = getHostTuple();
+    const goOnly = process.argv.includes("--go-only");
+    const hostTuple = generateOnly ? "" : getHostTuple();
     const extension = process.platform === "win32" ? ".exe" : "";
     const protocPath = await ensurePinnedProtoc();
     const protocVersion = readPinnedProtocVersion(protocPath);
@@ -169,15 +204,17 @@ async function buildSidecars() {
         mkdirSync(outputDir, { recursive: true });
     }
 
-    for (const target of RUST_TOOL_TARGETS) {
-        const binaryName = `${target.id}-${hostTuple}${extension}`;
-        const outputPath = path.join(outputDir, binaryName);
-        if (!existsSync(outputPath)) {
-            writeFileSync(
-                outputPath,
-                "placeholder sidecar for bootstrap cargo build\n",
-                "utf8",
-            );
+    if (!generateOnly && !goOnly) {
+        for (const target of RUST_TOOL_TARGETS) {
+            const binaryName = `${target.id}-${hostTuple}${extension}`;
+            const outputPath = path.join(outputDir, binaryName);
+            if (!existsSync(outputPath)) {
+                writeFileSync(
+                    outputPath,
+                    "placeholder sidecar for bootstrap cargo build\n",
+                    "utf8",
+                );
+            }
         }
     }
 
@@ -227,7 +264,7 @@ async function buildSidecars() {
         });
     }
 
-    if (generateOnly) {
+    if (generateOnly || goOnly) {
         return;
     }
 

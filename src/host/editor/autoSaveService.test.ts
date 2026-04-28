@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
+import { createMockVaultApi } from "../../test-support/mockVaultApi";
 
 /**
  * 模拟 vaultApi 的 saveVaultMarkdownFile。
@@ -20,16 +21,14 @@ import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
  */
 let savedCalls: Array<{ path: string; content: string }> = [];
 
-mock.module("../../api/vaultApi", () => ({
+mock.module("../../api/vaultApi", () => createMockVaultApi({
     saveVaultMarkdownFile: async (path: string, content: string) => {
         savedCalls.push({ path, content });
         return { relativePath: path, created: false };
     },
-    isTauriRuntime: () => false,
     searchVaultMarkdown: async () => [],
     suggestWikiLinkTargets: async () => [],
     resolveWikiLinkTarget: async () => null,
-    isSelfTriggeredVaultFsEvent: () => false,
     readVaultMarkdownFile: async () => ({ content: "# latest" }),
     getCurrentVaultConfig: async () => ({
         feature_settings: {},
@@ -37,7 +36,6 @@ mock.module("../../api/vaultApi", () => ({
     saveCurrentVaultConfig: async () => ({
         feature_settings: {},
     }),
-    isSelfTriggeredVaultConfigEvent: () => false,
 }));
 
 const { emitEditorContentChangedEvent } = await import("../events/appEventBus");

@@ -44,12 +44,6 @@ mock.module("../settings/registerBuiltinSettings", () => ({
     },
 }));
 
-mock.module("../settings/SettingsRegisteredSection", () => ({
-    SettingsRegisteredSection: ({ section }: { section: { id: string } }) => (
-        <div>{`rendered-section:${section.id}`}</div>
-    ),
-}));
-
 afterEach(() => {
     __resetSettingsRegistryForTests();
     mock.restore();
@@ -81,7 +75,8 @@ describe("SettingsTab", () => {
 
         expect(markup).toContain("settings.generalSection");
         expect(markup).toContain("settings.generalSectionDesc");
-        expect(markup).toContain("rendered-section:general-global");
+        expect(markup).toContain("settings.enableSearch");
+        expect(markup).toContain("settings.enableSearchDesc");
         expect(markup).toContain("settings.searchResultsSummary:1/1");
     });
 });

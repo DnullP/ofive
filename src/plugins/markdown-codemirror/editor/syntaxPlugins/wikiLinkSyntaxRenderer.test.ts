@@ -11,8 +11,9 @@
 
 import { describe, expect, it, mock } from "bun:test";
 import { EditorState } from "@codemirror/state";
+import { createMockVaultApi } from "../../../../test-support/mockVaultApi";
 
-mock.module("../../../../api/vaultApi", () => ({
+mock.module("../../../../api/vaultApi", () => createMockVaultApi({
     resolveWikiLinkTarget: async () => null,
 }));
 
