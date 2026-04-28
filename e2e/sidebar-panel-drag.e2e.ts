@@ -228,8 +228,8 @@ function buildPanelLayoutWithUnreachableRightSatelliteSection(): Record<string, 
             },
             {
                 id: "right-panel-section",
-                panelIds: ["ai-chat-mock", "backlinks", "calendar-panel"],
-                focusedPanelId: "ai-chat-mock",
+                panelIds: ["ai-chat", "backlinks", "calendar-panel"],
+                focusedPanelId: "ai-chat",
                 isCollapsed: false,
             },
             {
@@ -257,8 +257,8 @@ function buildPersistedRightIconSplitPanelLayout(): Record<string, unknown> {
             },
             {
                 id: "right-panel-section",
-                panelIds: ["ai-chat-mock", "calendar-panel"],
-                focusedPanelId: "ai-chat-mock",
+                panelIds: ["ai-chat", "calendar-panel"],
+                focusedPanelId: "ai-chat",
                 isCollapsed: false,
             },
             {
@@ -334,8 +334,8 @@ function buildPersistedLeftIconSplitPanelLayout(): Record<string, unknown> {
             },
             {
                 id: "right-panel-section",
-                panelIds: ["ai-chat-mock", "calendar-panel", "outline"],
-                focusedPanelId: "ai-chat-mock",
+                panelIds: ["ai-chat", "calendar-panel", "outline"],
+                focusedPanelId: "ai-chat",
                 isCollapsed: false,
             },
             {
@@ -505,7 +505,7 @@ test.describe("layout-v2 panel icon split 持久化恢复", () => {
                     sidebarLayout: {
                         version: 1,
                         left: { width: 280, visible: true, activeActivityId: "files", activePanelId: "files" },
-                        right: { width: 260, visible: true, activeActivityId: null, activePanelId: "ai-chat-mock" },
+                        right: { width: 260, visible: true, activeActivityId: null, activePanelId: "ai-chat" },
                         panelStates: [],
                         paneStates: [],
                         convertiblePanelStates: [],
@@ -636,7 +636,7 @@ test.describe("layout-v2 panel icon split 持久化恢复", () => {
                     sidebarLayout: {
                         version: 1,
                         left: { width: 280, visible: true, activeActivityId: "files", activePanelId: "files" },
-                        right: { width: 260, visible: true, activeActivityId: null, activePanelId: "ai-chat-mock" },
+                        right: { width: 260, visible: true, activeActivityId: null, activePanelId: "ai-chat" },
                         panelStates: [],
                         paneStates: [],
                         convertiblePanelStates: [],

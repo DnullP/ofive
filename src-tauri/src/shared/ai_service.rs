@@ -81,6 +81,12 @@ pub struct AiChatHistoryMessage {
     pub text: String,
     pub created_at_unix_ms: i64,
     #[serde(default)]
+    pub started_at_unix_ms: Option<i64>,
+    #[serde(default)]
+    pub completed_at_unix_ms: Option<i64>,
+    #[serde(default)]
+    pub duration_ms: Option<i64>,
+    #[serde(default)]
     pub reasoning_text: Option<String>,
     #[serde(default)]
     pub content_blocks: Vec<AiChatHistoryContentBlock>,

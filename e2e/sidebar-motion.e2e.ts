@@ -40,7 +40,7 @@ test.describe("sidebar toggle regression", () => {
 
     test("right sidebar can switch active item and hide via shortcut", async ({ page }) => {
         const outlineTab = page.locator("[data-layout-panel-id='outline'][data-layout-role='panel']");
-        const aiChatTab = page.locator("[data-layout-panel-id='ai-chat-mock'][data-layout-role='panel']");
+        const aiChatTab = page.locator("[data-layout-panel-id='ai-chat'][data-layout-role='panel']");
         const sidebarRight = page.locator("[data-testid='sidebar-right']");
 
         await expect(sidebarRight).toBeVisible();

@@ -102,6 +102,9 @@ export interface AiChatHistoryMessage {
     role: "assistant" | "user";
     text: string;
     createdAtUnixMs: number;
+    startedAtUnixMs?: number;
+    completedAtUnixMs?: number;
+    durationMs?: number;
     reasoningText?: string;
     contentBlocks?: AiChatHistoryContentBlock[];
     interruptedByUser?: boolean;
@@ -189,6 +192,20 @@ export interface StartAiChatStreamOptions {
     sessionId?: string;
     userId?: string;
     history?: AiChatHistoryMessage[];
+    contextSnapshotJson?: string;
+}
+
+export interface BrowserMockAiRuntime {
+    getAiVendorCatalog?: () => Promise<AiVendorDefinition[]> | AiVendorDefinition[];
+    getAiChatSettings?: () => Promise<AiChatSettings> | AiChatSettings;
+    getAiChatHistory?: () => Promise<AiChatHistoryState> | AiChatHistoryState;
+    getAiVendorModels?: (settings: AiChatSettings) => Promise<AiVendorModelDefinition[]> | AiVendorModelDefinition[];
+    saveAiChatSettings?: (settings: AiChatSettings) => Promise<AiChatSettings> | AiChatSettings;
+    saveAiChatHistory?: (history: AiChatHistoryState) => Promise<AiChatHistoryState> | AiChatHistoryState;
+    startAiChatStream?: (options: StartAiChatStreamOptions) => Promise<AiChatStreamStartResponse> | AiChatStreamStartResponse;
+    stopAiChatStream?: (streamId: string) => Promise<boolean> | boolean;
+    submitAiChatConfirmation?: (options: SubmitAiChatConfirmationOptions) => Promise<AiChatStreamStartResponse> | AiChatStreamStartResponse;
+    subscribeAiChatStreamEvents?: (handler: (payload: AiChatStreamEventPayload) => void) => UnlistenFn;
 }
 
 /**
@@ -209,12 +226,34 @@ function isTauriRuntime(): boolean {
     return Boolean(runtimeWindow.__TAURI_INTERNALS__ || runtimeWindow.__TAURI__);
 }
 
+function getBrowserMockAiRuntime(): BrowserMockAiRuntime | null {
+    if (typeof window === "undefined" || isTauriRuntime()) {
+        return null;
+    }
+
+    const runtimeWindow = window as Window & {
+        __OFIVE_BROWSER_MOCK_AI__?: BrowserMockAiRuntime;
+    };
+
+    return runtimeWindow.__OFIVE_BROWSER_MOCK_AI__ ?? null;
+}
+
 /**
  * @function getAiSidecarHealth
  * @description 查询当前 Rust 后端维护的 AI sidecar 健康状态。
  * @returns 健康检查响应。
  */
 export async function getAiSidecarHealth(): Promise<AiSidecarHealthResponse> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime) {
+        return {
+            status: "ok",
+            agentName: "browser-mock-ai",
+            version: "mock",
+            pid: 0,
+        };
+    }
+
     if (!isTauriRuntime()) {
         throw new Error("AI sidecar health is only available in Tauri runtime");
     }
@@ -228,6 +267,11 @@ export async function getAiSidecarHealth(): Promise<AiSidecarHealthResponse> {
  * @returns vendor 描述数组。
  */
 export async function getAiVendorCatalog(): Promise<AiVendorDefinition[]> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime?.getAiVendorCatalog) {
+        return mockRuntime.getAiVendorCatalog();
+    }
+
     if (!isTauriRuntime()) {
         throw new Error("AI vendor catalog is only available in Tauri runtime");
     }
@@ -241,6 +285,11 @@ export async function getAiVendorCatalog(): Promise<AiVendorDefinition[]> {
  * @returns AI 设置。
  */
 export async function getAiChatSettings(): Promise<AiChatSettings> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime?.getAiChatSettings) {
+        return mockRuntime.getAiChatSettings();
+    }
+
     if (!isTauriRuntime()) {
         throw new Error("AI settings are only available in Tauri runtime");
     }
@@ -254,6 +303,11 @@ export async function getAiChatSettings(): Promise<AiChatSettings> {
  * @returns 对话历史状态。
  */
 export async function getAiChatHistory(): Promise<AiChatHistoryState> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime?.getAiChatHistory) {
+        return mockRuntime.getAiChatHistory();
+    }
+
     if (!isTauriRuntime()) {
         throw new Error("AI chat history is only available in Tauri runtime");
     }
@@ -268,6 +322,11 @@ export async function getAiChatHistory(): Promise<AiChatHistoryState> {
  * @returns 模型列表。
  */
 export async function getAiVendorModels(settings: AiChatSettings): Promise<AiVendorModelDefinition[]> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime?.getAiVendorModels) {
+        return mockRuntime.getAiVendorModels(settings);
+    }
+
     if (!isTauriRuntime()) {
         throw new Error("AI vendor models are only available in Tauri runtime");
     }
@@ -282,6 +341,11 @@ export async function getAiVendorModels(settings: AiChatSettings): Promise<AiVen
  * @returns 保存后的设置。
  */
 export async function saveAiChatSettings(settings: AiChatSettings): Promise<AiChatSettings> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime?.saveAiChatSettings) {
+        return mockRuntime.saveAiChatSettings(settings);
+    }
+
     if (!isTauriRuntime()) {
         throw new Error("AI settings are only available in Tauri runtime");
     }
@@ -296,6 +360,11 @@ export async function saveAiChatSettings(settings: AiChatSettings): Promise<AiCh
  * @returns 保存后的历史。
  */
 export async function saveAiChatHistory(history: AiChatHistoryState): Promise<AiChatHistoryState> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime?.saveAiChatHistory) {
+        return mockRuntime.saveAiChatHistory(history);
+    }
+
     if (!isTauriRuntime()) {
         throw new Error("AI chat history is only available in Tauri runtime");
     }
@@ -312,6 +381,11 @@ export async function saveAiChatHistory(history: AiChatHistoryState): Promise<Ai
 export async function startAiChatStream(
     options: StartAiChatStreamOptions,
 ): Promise<AiChatStreamStartResponse> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime?.startAiChatStream) {
+        return mockRuntime.startAiChatStream(options);
+    }
+
     if (!isTauriRuntime()) {
         throw new Error("AI streaming is only available in Tauri runtime");
     }
@@ -320,6 +394,7 @@ export async function startAiChatStream(
         sessionId: options.sessionId ?? null,
         userId: options.userId ?? null,
         messageLength: options.message.length,
+        hasContextSnapshot: Boolean(options.contextSnapshotJson?.trim()),
     });
 
     const response = await invoke<AiChatStreamStartResponse>("start_ai_chat_stream", {
@@ -327,6 +402,7 @@ export async function startAiChatStream(
         sessionId: options.sessionId ?? null,
         userId: options.userId ?? null,
         history: options.history ?? null,
+        contextSnapshotJson: options.contextSnapshotJson ?? null,
     });
 
     console.info("[ai-api] startAiChatStream invoke success", {
@@ -343,6 +419,11 @@ export async function startAiChatStream(
  * @returns 若成功向后端发送停止信号则返回 true。
  */
 export async function stopAiChatStream(streamId: string): Promise<boolean> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime?.stopAiChatStream) {
+        return mockRuntime.stopAiChatStream(streamId);
+    }
+
     if (!isTauriRuntime()) {
         throw new Error("AI streaming stop is only available in Tauri runtime");
     }
@@ -372,6 +453,11 @@ export async function stopAiChatStream(streamId: string): Promise<boolean> {
 export async function submitAiChatConfirmation(
     options: SubmitAiChatConfirmationOptions,
 ): Promise<AiChatStreamStartResponse> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime?.submitAiChatConfirmation) {
+        return mockRuntime.submitAiChatConfirmation(options);
+    }
+
     if (!isTauriRuntime()) {
         throw new Error("AI confirmation is only available in Tauri runtime");
     }
@@ -406,6 +492,11 @@ export async function submitAiChatConfirmation(
 export async function subscribeAiChatStreamEvents(
     handler: (payload: AiChatStreamEventPayload) => void,
 ): Promise<UnlistenFn> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime?.subscribeAiChatStreamEvents) {
+        return mockRuntime.subscribeAiChatStreamEvents(handler);
+    }
+
     if (!isTauriRuntime()) {
         return () => {
             // 浏览器回退模式下无后端 AI 事件。

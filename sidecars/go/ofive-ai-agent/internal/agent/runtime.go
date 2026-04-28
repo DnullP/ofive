@@ -115,8 +115,10 @@ type pendingToolConfirmation struct {
 type streamADKState struct {
 	responseText         string
 	emittedText          string
+	latestResponseText   string
 	reasoningText        string
 	emittedReasoningText string
+	latestReasoningText  string
 	historyContentBlocks []HistoryContentBlock
 	confirmation         *pendingToolConfirmation
 }
@@ -174,6 +176,7 @@ func (r *Runtime) Chat(
 	history []HistoryEntry,
 	vendorConfig VendorConfig,
 	bridgeConfig CapabilityBridgeConfig,
+	contextSnapshotJSON string,
 	trace func(DebugTraceEvent) error,
 ) (string, string, error) {
 	if err := r.EnsureSession(ctx, userID, sessionID); err != nil {
@@ -234,7 +237,7 @@ func (r *Runtime) Chat(
 		ctx,
 		vendorConfig,
 		bridgeConfig,
-		buildConversationStateInstruction(history),
+		buildRuntimeExtraInstruction(history, contextSnapshotJSON),
 		trace,
 	)
 	if err != nil {
@@ -281,6 +284,7 @@ func (r *Runtime) StreamChat(
 	history []HistoryEntry,
 	vendorConfig VendorConfig,
 	bridgeConfig CapabilityBridgeConfig,
+	contextSnapshotJSON string,
 	emit func(StreamChunk) error,
 ) error {
 	trace := func(event DebugTraceEvent) error {
@@ -353,6 +357,7 @@ func (r *Runtime) StreamChat(
 			history,
 			vendorConfig,
 			bridgeConfig,
+			contextSnapshotJSON,
 			trace,
 		)
 		if err != nil {
@@ -365,7 +370,7 @@ func (r *Runtime) StreamChat(
 		ctx,
 		vendorConfig,
 		bridgeConfig,
-		buildConversationStateInstruction(history),
+		buildRuntimeExtraInstruction(history, contextSnapshotJSON),
 		trace,
 	)
 	if err != nil {
@@ -882,8 +887,9 @@ func processADKEventContent(
 	state.historyContentBlocks = buildHistoryContentBlocksFromParts(content.Parts)
 
 	if len(reasoningParts) > 0 {
-		state.reasoningText = mergeStreamEventText(
+		state.reasoningText, state.latestReasoningText = mergeStreamEventText(
 			state.reasoningText,
+			state.latestReasoningText,
 			strings.Join(reasoningParts, "\n"),
 		)
 		if err := emitStreamTextDelta(
@@ -901,8 +907,9 @@ func processADKEventContent(
 		return nil
 	}
 
-	state.responseText = mergeStreamEventText(
+	state.responseText, state.latestResponseText = mergeStreamEventText(
 		state.responseText,
+		state.latestResponseText,
 		strings.Join(textParts, "\n"),
 	)
 	return emitStreamTextDelta(
@@ -914,20 +921,31 @@ func processADKEventContent(
 	)
 }
 
-func mergeStreamEventText(current string, next string) string {
+func mergeStreamEventText(current string, latestSegment string, next string) (string, string) {
 	if strings.TrimSpace(next) == "" {
-		return current
+		return current, latestSegment
 	}
 	if current == "" {
-		return next
+		return next, next
 	}
 	if next == current || strings.HasPrefix(next, current) {
-		return next
+		return next, next
 	}
 	if strings.HasPrefix(current, next) {
-		return current
+		return current, latestSegment
 	}
-	return current + "\n" + next
+	if latestSegment != "" {
+		if next == latestSegment {
+			return current, latestSegment
+		}
+		if strings.HasPrefix(next, latestSegment) {
+			return current + strings.TrimPrefix(next, latestSegment), next
+		}
+		if strings.HasPrefix(latestSegment, next) {
+			return current, latestSegment
+		}
+	}
+	return current + "\n" + next, next
 }
 
 func extractPendingToolConfirmation(content *genai.Content) *pendingToolConfirmation {
@@ -1239,6 +1257,21 @@ func buildConversationStateInstruction(history []HistoryEntry) string {
 	}
 
 	return ""
+}
+
+func buildRuntimeExtraInstruction(history []HistoryEntry, contextSnapshotJSON string) string {
+	parts := make([]string, 0, 2)
+	if conversationStateInstruction := buildConversationStateInstruction(history); strings.TrimSpace(conversationStateInstruction) != "" {
+		parts = append(parts, conversationStateInstruction)
+	}
+
+	if trimmedContext := strings.TrimSpace(contextSnapshotJSON); trimmedContext != "" {
+		parts = append(parts,
+			"Current ofive runtime context snapshot (JSON). Treat this as UI context only; use tools for authoritative file contents before answering about vault data:\n"+trimmedContext,
+		)
+	}
+
+	return strings.Join(parts, "\n\n")
 }
 
 func mockToolPlanningResponse(prompt string, bridgeConfig CapabilityBridgeConfig) string {

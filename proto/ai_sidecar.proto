@@ -59,6 +59,7 @@ message ChatRequest {
   repeated ChatHistoryEntry history = 12;
   string persistence_callback_url = 13;
   string persistence_callback_token = 14;
+  string context_snapshot_json = 15;
 }
 
 message ConfirmationRequest {

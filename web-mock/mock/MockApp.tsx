@@ -30,8 +30,10 @@ import { ImageViewerTab } from "../../src/plugins/image-viewer/tab/ImageViewerTa
 import { CalendarPanel } from "../../src/plugins/calendar/CalendarPanel";
 import { CalendarTab } from "../../src/plugins/calendar/CalendarTab";
 import { activatePlugin as activateCommandPalettePlugin } from "../../src/plugins/command-palette/commandPalettePlugin";
+import { activatePlugin as activateAiChatPlugin } from "../../src/plugins/ai-chat/aiChatPlugin";
 import { SettingsTab } from "../../src/host/layout/SettingsTab";
 import { useConfigSync } from "../../src/host/config/configStore";
+import { useVaultTreeSync } from "../../src/host/vault/vaultStore";
 import { registerCommands } from "../../src/host/commands/commandSystem";
 import { registerActivity } from "../../src/host/registry/activityRegistry";
 import { registerFileOpener } from "../../src/host/registry/fileOpenerRegistry";
@@ -39,7 +41,15 @@ import { registerPanel } from "../../src/host/registry/panelRegistry";
 import { registerTabComponent } from "../../src/host/registry/tabComponentRegistry";
 import { buildFileTabId, joinVaultAbsolutePath, normalizeRelativePath } from "../../src/host/layout/openFileService";
 import { publishNotification } from "../../src/host/notifications/notificationCenter";
-import { readVaultCanvasFile, readVaultMarkdownFile, setCurrentVault } from "../../src/api/vaultApi";
+import { readVaultCanvasFile, readVaultMarkdownFile, setCurrentVault, type VaultConfig } from "../../src/api/vaultApi";
+import type {
+    AiChatHistoryState,
+    AiChatSettings,
+    AiChatStreamEventPayload,
+    AiVendorDefinition,
+    BrowserMockAiRuntime,
+    StartAiChatStreamOptions,
+} from "../../src/api/aiApi";
 import { MockVaultPanel } from "./MockVaultPanel";
 import "../../src/plugins/ai-chat/aiChatPlugin.css";
 import "../../src/plugins/backlinks/backlinksPlugin.css";
@@ -109,6 +119,7 @@ interface MockDockviewWindowApi {
 declare global {
     interface Window {
         __OFIVE_MOCK_DOCKVIEW__?: MockDockviewWindowApi;
+        __OFIVE_BROWSER_MOCK_AI__?: BrowserMockAiRuntime;
     }
 }
 
@@ -488,6 +499,203 @@ function emitMockGreetingNotification(): void {
     });
 }
 
+const MOCK_AI_VENDOR: AiVendorDefinition = {
+    id: "browser-mock",
+    title: "Browser Mock",
+    description: "Mock AI vendor for web interaction tests.",
+    defaultModel: "mock-fast",
+    fields: [
+        {
+            key: "token",
+            label: "Token",
+            description: "Mock token.",
+            fieldType: "password",
+            required: false,
+            placeholder: null,
+            defaultValue: "mock-token",
+        },
+    ],
+};
+
+function createMockAiRuntime(): BrowserMockAiRuntime {
+    let settings: AiChatSettings = {
+        vendorId: MOCK_AI_VENDOR.id,
+        model: MOCK_AI_VENDOR.defaultModel,
+        fieldValues: {
+            token: "mock-token",
+        },
+    };
+    let history: AiChatHistoryState = {
+        activeConversationId: null,
+        conversations: [],
+    };
+    const listeners = new Set<(payload: AiChatStreamEventPayload) => void>();
+    const timersByStreamId = new Map<string, number[]>();
+    let streamSequence = 1;
+
+    const emit = (payload: AiChatStreamEventPayload): void => {
+        listeners.forEach((listener) => {
+            listener(payload);
+        });
+    };
+
+    const schedule = (streamId: string, callback: () => void, delayMs: number): void => {
+        const timer = window.setTimeout(callback, delayMs);
+        timersByStreamId.set(streamId, [...(timersByStreamId.get(streamId) ?? []), timer]);
+    };
+
+    return {
+        getAiVendorCatalog: () => [MOCK_AI_VENDOR],
+        getAiChatSettings: () => settings,
+        getAiChatHistory: () => history,
+        getAiVendorModels: () => [
+            { id: "mock-fast", object: "model", ownedBy: "ofive", created: null },
+            { id: "mock-deep", object: "model", ownedBy: "ofive", created: null },
+        ],
+        saveAiChatSettings: (nextSettings) => {
+            settings = nextSettings;
+            return settings;
+        },
+        saveAiChatHistory: (nextHistory) => {
+            history = nextHistory;
+            return history;
+        },
+        startAiChatStream: async (options: StartAiChatStreamOptions) => {
+            const streamId = `mock-ai-stream-${streamSequence++}`;
+            const sessionId = options.sessionId ?? "mock-session";
+            const reply = `Mock response for: ${options.message}`;
+            const context = options.contextSnapshotJson
+                ? JSON.parse(options.contextSnapshotJson) as { openTabs?: unknown[]; activeFile?: { path?: string } | null }
+                : null;
+            const contextText = context
+                ? `\nContext active: ${context.activeFile?.path ?? "none"} tabs=${context.openTabs?.length ?? 0}`
+                : "";
+            const accumulatedText = `${reply}${contextText}`;
+
+            await new Promise((resolve) => window.setTimeout(resolve, 40));
+
+            schedule(streamId, () => {
+                emit({
+                    streamId,
+                    eventType: "delta",
+                    sessionId,
+                    agentName: "browser-mock-ai",
+                    deltaText: reply,
+                    accumulatedText: reply,
+                    reasoningDeltaText: "Inspecting mock context.",
+                    reasoningAccumulatedText: "Inspecting mock context.",
+                    historyContentBlocksJson: null,
+                    debugTitle: null,
+                    debugLevel: null,
+                    debugText: null,
+                    confirmationId: null,
+                    confirmationHint: null,
+                    confirmationToolName: null,
+                    confirmationToolArgsJson: null,
+                    error: null,
+                    done: false,
+                });
+            }, 160);
+
+            schedule(streamId, () => {
+                emit({
+                    streamId,
+                    eventType: "done",
+                    sessionId,
+                    agentName: "browser-mock-ai",
+                    deltaText: null,
+                    accumulatedText,
+                    reasoningDeltaText: null,
+                    reasoningAccumulatedText: "Inspecting mock context.",
+                    historyContentBlocksJson: JSON.stringify([
+                        { kind: "thinking", text: "Inspecting mock context." },
+                        { kind: "text", text: accumulatedText },
+                    ]),
+                    debugTitle: null,
+                    debugLevel: null,
+                    debugText: null,
+                    confirmationId: null,
+                    confirmationHint: null,
+                    confirmationToolName: null,
+                    confirmationToolArgsJson: null,
+                    error: null,
+                    done: true,
+                });
+                timersByStreamId.delete(streamId);
+            }, 640);
+
+            return { streamId };
+        },
+        stopAiChatStream: (streamId) => {
+            for (const timer of timersByStreamId.get(streamId) ?? []) {
+                window.clearTimeout(timer);
+            }
+            timersByStreamId.delete(streamId);
+            emit({
+                streamId,
+                eventType: "stopped",
+                sessionId: "mock-session",
+                agentName: "browser-mock-ai",
+                deltaText: null,
+                accumulatedText: null,
+                reasoningDeltaText: null,
+                reasoningAccumulatedText: null,
+                historyContentBlocksJson: null,
+                debugTitle: null,
+                debugLevel: null,
+                debugText: null,
+                confirmationId: null,
+                confirmationHint: null,
+                confirmationToolName: null,
+                confirmationToolArgsJson: null,
+                error: null,
+                done: true,
+            });
+            return true;
+        },
+        submitAiChatConfirmation: () => ({ streamId: `mock-ai-stream-${streamSequence++}` }),
+        subscribeAiChatStreamEvents: (handler) => {
+            listeners.add(handler);
+            return () => {
+                listeners.delete(handler);
+            };
+        },
+    };
+}
+
+function seedMockVaultConfig(mockVaultPath: string): void {
+    const storageKey = `ofive:browser-fallback:vault-config:${mockVaultPath}`;
+    const existing = window.localStorage.getItem(storageKey);
+    if (existing) {
+        return;
+    }
+
+    const config: VaultConfig = {
+        schemaVersion: 1,
+        entries: {
+            sidebarLayout: {
+                version: 1,
+                left: {
+                    width: 260,
+                    visible: true,
+                    activeActivityId: "files",
+                    activePanelId: "files",
+                },
+                right: {
+                    width: 320,
+                    visible: true,
+                    activeActivityId: "ai-chat",
+                    activePanelId: "ai-chat",
+                },
+            },
+            featureSettings: {
+                restoreWorkspaceLayout: false,
+            },
+        },
+    };
+    window.localStorage.setItem(storageKey, JSON.stringify(config));
+}
+
 let mockRegistered = false;
 const MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID = "knowledgegraph";
 const MOCK_KNOWLEDGE_GRAPH_ACTIVITY_ID = "knowledge-graph";
@@ -497,6 +705,7 @@ function ensureMockComponentsRegistered(): void {
     mockRegistered = true;
 
     activateCommandPalettePlugin();
+    activateAiChatPlugin();
     registerCommands([
         {
             id: "fileTree.deleteSelected",
@@ -530,7 +739,6 @@ function ensureMockComponentsRegistered(): void {
     const filesIcon = React.createElement(FolderOpen, { size: 18, strokeWidth: 1.8 });
     const searchIcon = React.createElement(Search, { size: 18, strokeWidth: 1.8 });
     const outlineIcon = React.createElement(Compass, { size: 18, strokeWidth: 1.8 });
-    const aiChatIcon = React.createElement(Bot, { size: 18, strokeWidth: 1.8 });
     const knowledgeGraphIcon = React.createElement(Orbit, { size: 18, strokeWidth: 1.8 });
     const calendarIcon = React.createElement(CalendarDays, { size: 18, strokeWidth: 1.8 });
     const architectureIcon = React.createElement(Workflow, { size: 18, strokeWidth: 1.8 });
@@ -563,15 +771,6 @@ function ensureMockComponentsRegistered(): void {
         defaultSection: "top",
         defaultBar: "right",
         defaultOrder: 2,
-    });
-    registerActivity({
-        type: "panel-container",
-        id: "ai-chat-mock",
-        title: () => "AI 对话",
-        icon: aiChatIcon,
-        defaultSection: "top",
-        defaultBar: "right",
-        defaultOrder: 3,
     });
     registerActivity({
         type: "callback",
@@ -690,15 +889,6 @@ function ensureMockComponentsRegistered(): void {
         defaultOrder: 2,
         render: (context) => React.createElement(CalendarPanel, context),
     });
-    registerPanel({
-        id: "ai-chat-mock",
-        title: () => "AI 对话",
-        activityId: "ai-chat-mock",
-        defaultPosition: "right",
-        defaultOrder: 1,
-        render: () => React.createElement(MockAiChatPanel),
-    });
-
     registerTabComponent({ id: "home", component: MockHomeTab as never });
     registerTabComponent({ id: MOCK_SPLIT_DEMO_COMPONENT_ID, component: MockSplitDemoTab as never });
     registerTabComponent({
@@ -784,6 +974,7 @@ function ensureMockComponentsRegistered(): void {
 
 export function MockApp(): ReactNode {
     const mockVaultPath = useMemo(() => resolveMockVaultPath(), []);
+    const mockAiRuntime = useMemo(() => createMockAiRuntime(), []);
     const showControls = useMemo(() => resolveShouldShowControls(), []);
     const workbenchLayoutMode = useMemo(() => readWorkbenchLayoutMode(), []);
     const dockviewDebugApiRef = useRef<DockviewLayoutDebugApi | null>(null);
@@ -796,6 +987,10 @@ export function MockApp(): ReactNode {
     const [glassInactiveSurfaceOpacity, setGlassInactiveSurfaceOpacity] = useState<number>(() => resolveInitialNumberFlag("inactiveSurface", 0.12));
     const [glassBlurRadius, setGlassBlurRadius] = useState<number>(() => resolveInitialNumberFlag("blur", 16));
     const [isSplitReplayRunning, setIsSplitReplayRunning] = useState(false);
+
+    seedMockVaultConfig(mockVaultPath);
+    window.__OFIVE_BROWSER_MOCK_AI__ = mockAiRuntime;
+    useVaultTreeSync();
 
     useEffect(() => {
         let cancelled = false;

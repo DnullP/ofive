@@ -77,7 +77,7 @@ func (s *AIService) Chat(req *aiv1.ChatRequest, stream aiv1.AiAgentService_ChatS
 		MCPServerURL:             strings.TrimSpace(req.GetMcpServerUrl()),
 		MCPAuthToken:             strings.TrimSpace(req.GetMcpAuthToken()),
 		Tools:                    mapToolDescriptors(req.GetTools()),
-	}, func(chunk agentruntime.StreamChunk) error {
+	}, strings.TrimSpace(req.GetContextSnapshotJson()), func(chunk agentruntime.StreamChunk) error {
 		return stream.Send(&aiv1.ChatChunk{
 			SessionId:                sessionID,
 			DeltaText:                chunk.DeltaText,

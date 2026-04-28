@@ -17,6 +17,28 @@
 
 import { defineConfig, devices } from "@playwright/test";
 
+const loopbackNoProxyEntries = ["127.0.0.1", "localhost", "::1"];
+
+function ensureLoopbackBypassesProxy(): void {
+    const currentNoProxy = process.env.NO_PROXY ?? process.env.no_proxy ?? "";
+    const mergedEntries = new Set(
+        currentNoProxy
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter(Boolean),
+    );
+
+    for (const entry of loopbackNoProxyEntries) {
+        mergedEntries.add(entry);
+    }
+
+    const nextNoProxy = Array.from(mergedEntries).join(",");
+    process.env.NO_PROXY = nextNoProxy;
+    process.env.no_proxy = nextNoProxy;
+}
+
+ensureLoopbackBypassesProxy();
+
 export default defineConfig({
     /** 测试文件目录 */
     testDir: "./e2e",

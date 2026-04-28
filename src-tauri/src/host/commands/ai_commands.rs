@@ -112,11 +112,20 @@ pub async fn start_ai_chat_stream(
     session_id: Option<String>,
     user_id: Option<String>,
     history: Option<Vec<AiChatHistoryMessage>>,
+    context_snapshot_json: Option<String>,
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AiChatStreamStartResponse, String> {
-    chat_app_service::start_ai_chat_stream(message, session_id, user_id, history, app_handle, state)
-        .await
+    chat_app_service::start_ai_chat_stream(
+        message,
+        session_id,
+        user_id,
+        history,
+        context_snapshot_json,
+        app_handle,
+        state,
+    )
+    .await
 }
 
 /// 终止一条当前仍在运行的 AI 流式对话。

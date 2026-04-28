@@ -319,6 +319,7 @@ type ChatRequest struct {
 	History                  []*ChatHistoryEntry    `protobuf:"bytes,12,rep,name=history,proto3" json:"history,omitempty"`
 	PersistenceCallbackUrl   string                 `protobuf:"bytes,13,opt,name=persistence_callback_url,json=persistenceCallbackUrl,proto3" json:"persistence_callback_url,omitempty"`
 	PersistenceCallbackToken string                 `protobuf:"bytes,14,opt,name=persistence_callback_token,json=persistenceCallbackToken,proto3" json:"persistence_callback_token,omitempty"`
+	ContextSnapshotJson      string                 `protobuf:"bytes,15,opt,name=context_snapshot_json,json=contextSnapshotJson,proto3" json:"context_snapshot_json,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -447,6 +448,13 @@ func (x *ChatRequest) GetPersistenceCallbackUrl() string {
 func (x *ChatRequest) GetPersistenceCallbackToken() string {
 	if x != nil {
 		return x.PersistenceCallbackToken
+	}
+	return ""
+}
+
+func (x *ChatRequest) GetContextSnapshotJson() string {
+	if x != nil {
+		return x.ContextSnapshotJson
 	}
 	return ""
 }
@@ -799,7 +807,7 @@ const file_ai_sidecar_proto_rawDesc = "" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12.\n" +
 	"\x13interrupted_by_user\x18\x03 \x01(\bR\x11interruptedByUser\x12%\n" +
 	"\x0ereasoning_text\x18\x04 \x01(\tR\rreasoningText\x12.\n" +
-	"\x13content_blocks_json\x18\x05 \x01(\tR\x11contentBlocksJson\"\xc8\x05\n" +
+	"\x13content_blocks_json\x18\x05 \x01(\tR\x11contentBlocksJson\"\xfc\x05\n" +
 	"\vChatRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
@@ -816,7 +824,8 @@ const file_ai_sidecar_proto_rawDesc = "" +
 	"\x0emcp_auth_token\x18\v \x01(\tR\fmcpAuthToken\x127\n" +
 	"\ahistory\x18\f \x03(\v2\x1d.ofive.ai.v1.ChatHistoryEntryR\ahistory\x128\n" +
 	"\x18persistence_callback_url\x18\r \x01(\tR\x16persistenceCallbackUrl\x12<\n" +
-	"\x1apersistence_callback_token\x18\x0e \x01(\tR\x18persistenceCallbackToken\x1a?\n" +
+	"\x1apersistence_callback_token\x18\x0e \x01(\tR\x18persistenceCallbackToken\x122\n" +
+	"\x15context_snapshot_json\x18\x0f \x01(\tR\x13contextSnapshotJson\x1a?\n" +
 	"\x11VendorConfigEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xcc\x05\n" +

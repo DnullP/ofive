@@ -30,9 +30,11 @@ mock.module("lucide-react", () => ({
     ArrowUp: () => null,
     Bot: () => null,
     Check: () => null,
+    ChevronDown: () => null,
     Copy: () => null,
     Plus: () => null,
     Sparkles: () => null,
+    Timer: () => null,
     X: () => null,
 }));
 

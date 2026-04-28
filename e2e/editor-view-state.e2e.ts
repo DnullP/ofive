@@ -191,6 +191,20 @@ async function stopFrontmatterPresentationMonitor(page: Page): Promise<Array<{
     });
 }
 
+async function waitForFrontmatterPresentationSample(page: Page, title: string): Promise<void> {
+    await expect.poll(async () => page.evaluate((expectedTitle) => {
+        const monitorKey = "__OFIVE_FRONTMATTER_PRESENTATION_MONITOR__";
+        const monitor = (window as any)[monitorKey];
+        if (!monitor?.samples) {
+            return 0;
+        }
+
+        return monitor.samples.filter((sample: { title: string | null }) => {
+            return sample.title === expectedTitle;
+        }).length;
+    }, title)).toBeGreaterThan(0);
+}
+
 async function updateEditorTabRestoreMode(page: Page, nextMode: "viewport" | "cursor"): Promise<void> {
     await page.evaluate(async (mode) => {
         const configStoreModule = await import("/src/host/config/configStore.ts");
@@ -236,6 +250,7 @@ test.describe("editor view state regression", () => {
         expect(frontmatterState.hiddenLineCount).toBeGreaterThan(0);
         expect(frontmatterState.hiddenAnchorCount).toBe(1);
 
+        await waitForFrontmatterPresentationSample(page, "network-segment");
         const samples = await stopFrontmatterPresentationMonitor(page);
         const editorSamples = samples.filter((sample) => sample.title === "network-segment");
         expect(editorSamples.length).toBeGreaterThan(0);
@@ -324,7 +339,7 @@ test.describe("editor view state regression", () => {
         await setVisibleEditorScrollTop(page, 2800);
 
         const beforeSidebarSwitch = await readVisibleEditorState(page);
-        await page.locator("[data-testid='sidebar-right'] [data-layout-panel-id='ai-chat-mock'][data-layout-role='panel']").click();
+        await page.locator("[data-testid='sidebar-right'] [data-layout-panel-id='ai-chat'][data-layout-role='panel']").click();
         await page.locator("[data-testid='sidebar-right'] [data-layout-panel-id='outline'][data-layout-role='panel']").click();
         await clickVisibleEditor(page, 320, 360);
 

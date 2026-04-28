@@ -62,19 +62,88 @@ func TestEmitStreamTextDeltaReturnsReasoningSuffix(t *testing.T) {
 func TestMergeStreamEventTextPreservesPreviousTurnReasoning(t *testing.T) {
 	t.Parallel()
 
-	first := mergeStreamEventText("", "先读取目标笔记")
+	first, latest := mergeStreamEventText("", "", "先读取目标笔记")
 	if first != "先读取目标笔记" {
 		t.Fatalf("unexpected first text: %q", first)
 	}
+	if latest != "先读取目标笔记" {
+		t.Fatalf("unexpected latest segment: %q", latest)
+	}
 
-	accumulated := mergeStreamEventText(first, "已经拿到笔记内容")
+	accumulated, latest := mergeStreamEventText(first, latest, "已经拿到笔记内容")
 	if accumulated != "先读取目标笔记\n已经拿到笔记内容" {
 		t.Fatalf("expected separate non-prefix reasoning events to be preserved, got %q", accumulated)
 	}
+	if latest != "已经拿到笔记内容" {
+		t.Fatalf("unexpected latest segment: %q", latest)
+	}
 
-	prefixUpdate := mergeStreamEventText("标题", "标题是 A")
+	prefixUpdate, latest := mergeStreamEventText("标题", "标题", "标题是 A")
 	if prefixUpdate != "标题是 A" {
 		t.Fatalf("expected prefix update to replace current text, got %q", prefixUpdate)
+	}
+	if latest != "标题是 A" {
+		t.Fatalf("unexpected latest segment: %q", latest)
+	}
+}
+
+func TestMergeStreamEventTextAppendsOnlyLatestSegmentDelta(t *testing.T) {
+	t.Parallel()
+
+	current, latest := mergeStreamEventText("", "", "测试结果如下：\n\n| 工具 | 状态 |")
+	current, latest = mergeStreamEventText(current, latest, "测试结果如下：\n\n| 工具 | 状态 | 测试结果 |")
+	current, latest = mergeStreamEventText(current, latest, "测试结果如下：\n\n| 工具 | 状态 | 测试结果 |\n| vault_get_markdown_graph | 正常 |")
+
+	expected := "测试结果如下：\n\n| 工具 | 状态 | 测试结果 |\n| vault_get_markdown_graph | 正常 |"
+	if current != expected {
+		t.Fatalf("expected streaming snapshot updates to extend one answer, got %q", current)
+	}
+	if latest != expected {
+		t.Fatalf("unexpected latest segment: %q", latest)
+	}
+}
+
+func TestProcessADKEventContentDoesNotDuplicateStreamingSnapshots(t *testing.T) {
+	t.Parallel()
+
+	state := &streamADKState{}
+	chunks := make([]StreamChunk, 0)
+	emit := func(chunk StreamChunk) error {
+		chunks = append(chunks, chunk)
+		return nil
+	}
+
+	for _, text := range []string{
+		"测试结果如下：\n\n| 工具 | 状态 |",
+		"测试结果如下：\n\n| 工具 | 状态 | 测试结果 |",
+		"测试结果如下：\n\n| 工具 | 状态 | 测试结果 |\n| vault_get_markdown_graph | 正常 |",
+	} {
+		err := processADKEventContent(
+			"ofive_helper_agent",
+			&genai.Content{
+				Role:  genai.RoleModel,
+				Parts: []*genai.Part{{Text: text}},
+			},
+			state,
+			emit,
+		)
+		if err != nil {
+			t.Fatalf("processADKEventContent returned error: %v", err)
+		}
+	}
+
+	expected := "测试结果如下：\n\n| 工具 | 状态 | 测试结果 |\n| vault_get_markdown_graph | 正常 |"
+	if state.responseText != expected {
+		t.Fatalf("expected response text to avoid duplicate snapshots, got %q", state.responseText)
+	}
+	if len(chunks) != 3 {
+		t.Fatalf("expected three incremental chunks, got %d", len(chunks))
+	}
+	if chunks[1].DeltaText != " 测试结果 |" {
+		t.Fatalf("unexpected second delta: %q", chunks[1].DeltaText)
+	}
+	if chunks[2].DeltaText != "\n| vault_get_markdown_graph | 正常 |" {
+		t.Fatalf("unexpected third delta: %q", chunks[2].DeltaText)
 	}
 }
 
@@ -431,6 +500,31 @@ func TestBuildConversationStateInstructionIncludesUserInterruptionNote(t *testin
 	}
 	if !strings.Contains(instruction, "manually interrupted by the user") {
 		t.Fatalf("expected cause explanation guidance in instruction, got %q", instruction)
+	}
+}
+
+func TestBuildRuntimeExtraInstructionIncludesContextSnapshot(t *testing.T) {
+	t.Parallel()
+
+	instruction := buildRuntimeExtraInstruction([]HistoryEntry{
+		{
+			Role:              "assistant",
+			Text:              "partial answer",
+			InterruptedByUser: true,
+		},
+	}, `{"schemaVersion":"ofive.ai.runtime-context.v1","activeFile":{"path":"notes/a.md"}}`)
+
+	if !strings.Contains(instruction, "explicitly interrupted by the user") {
+		t.Fatalf("expected conversation state note in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "Current ofive runtime context snapshot") {
+		t.Fatalf("expected runtime context heading in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, `"path":"notes/a.md"`) {
+		t.Fatalf("expected context snapshot JSON in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "use tools for authoritative file contents") {
+		t.Fatalf("expected tool-authority guidance in instruction, got %q", instruction)
 	}
 }
 

@@ -12,8 +12,8 @@ import React, {
     type KeyboardEvent,
     type ReactNode,
 } from "react";
-import type { WorkbenchTabProps } from "../../host/layout/workbenchContracts";
-import { ArrowUp, Bot, Check, Copy, Plus, Sparkles, X } from "lucide-react";
+import type { PanelRenderContext, WorkbenchTabProps } from "../../host/layout/workbenchContracts";
+import { ArrowUp, Bot, Check, ChevronDown, Copy, Plus, Sparkles, Timer, X } from "lucide-react";
 import {
     getAiChatHistory,
     getAiVendorCatalog,
@@ -39,17 +39,21 @@ import {
     subscribeAiChatSettingsSnapshot,
 } from "./aiChatSettingsStore";
 import {
+    buildAiChatRuntimeContextSnapshot,
     buildPersistableHistory,
     createConversationSessionId,
     createConversationRecord,
     deriveConversationTitle,
     ensureHistoryState,
     filterConversations,
+    formatAiChatDuration,
     formatAiPanelError,
     formatConversationTime,
     mergeSettingsForVendor,
     resolveVendor,
+    serializeAiChatRuntimeContextSnapshot,
     sortConversations,
+    type AiChatRuntimeOpenTabSnapshot,
 } from "./aiChatShared";
 import {
     createEmptyPendingStreamBinding,
@@ -84,6 +88,7 @@ import {
 import { registerSettingsItem, registerSettingsSection } from "../../host/settings/settingsRegistry";
 import { registerPluginOwnedStore } from "../../host/store/storeRegistry";
 import { useVaultState } from "../../host/vault/vaultStore";
+import { useActiveEditor } from "../../host/editor/activeEditorStore";
 import i18n from "../../i18n";
 import "./aiChatPlugin.css";
 
@@ -107,6 +112,10 @@ const QUICK_PROMPTS: QuickPromptDefinition[] = [
     { id: "refine", translationKey: "aiChatPlugin.quickPromptRefine" },
     { id: "plan", translationKey: "aiChatPlugin.quickPromptPlan" },
 ];
+
+interface AiChatViewProps {
+    panelContext?: Pick<PanelRenderContext, "activeTabId" | "workbenchApi"> | null;
+}
 
 /**
  * @function nextChatMessageId
@@ -251,6 +260,70 @@ function createProtocolConfirmationResultMessage(
 }
 
 /**
+ * @function isVendorSettingsComplete
+ * @description 判断指定 vendor 的必填字段是否已经完成。
+ * @param settings AI 设置。
+ * @param vendor vendor schema。
+ * @returns 是否可用于请求模型或聊天。
+ */
+function isVendorSettingsComplete(
+    settings: AiChatSettings | null,
+    vendor: AiVendorDefinition | null,
+): boolean {
+    if (!settings || !vendor) {
+        return false;
+    }
+
+    return vendor.fields
+        .filter((field) => field.required)
+        .every((field) => (settings.fieldValues[field.key] ?? "").trim().length > 0);
+}
+
+/**
+ * @function resolvePanelParamString
+ * @description 从 dockview panel params 中读取字符串字段。
+ * @param params panel 参数。
+ * @param keys 候选字段名。
+ * @returns 字符串或 null。
+ */
+function resolvePanelParamString(
+    params: Record<string, unknown> | undefined,
+    keys: string[],
+): string | null {
+    if (!params) {
+        return null;
+    }
+
+    for (const key of keys) {
+        const value = params[key];
+        if (typeof value === "string" && value.trim().length > 0) {
+            return value;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * @function buildOpenTabsSnapshot
+ * @description 从 workbench API 中提取打开 tab 的最小上下文。
+ * @param context 面板渲染上下文。
+ * @returns 打开 tab 快照。
+ */
+function buildOpenTabsSnapshot(
+    context: Pick<PanelRenderContext, "activeTabId" | "workbenchApi"> | null | undefined,
+): AiChatRuntimeOpenTabSnapshot[] {
+    const panels = context?.workbenchApi?.panels ?? [];
+    return panels.map((panel) => ({
+        id: panel.id,
+        path: resolvePanelParamString(panel.params, ["path", "relativePath", "absolutePath"]),
+        title: resolvePanelParamString(panel.params, ["title", "name"]) ?? panel.id,
+        component: resolvePanelParamString(panel.params, ["component", "openerId", "type"]),
+        active: panel.id === context?.activeTabId,
+    }));
+}
+
+/**
  * @function parseHistoryContentBlocksJson
  * @description 解析流事件中的协议历史块 JSON。
  * @param rawJson 原始 JSON。
@@ -306,8 +379,9 @@ function hasPendingSmoothedMessages(
  * @description 渲染可在 pane 和 tab 之间复用的 AI 聊天视图。
  * @returns React 节点。
  */
-function AiChatView(): ReactNode {
-    const { currentVaultPath, backendReady } = useVaultState();
+function AiChatView(props: AiChatViewProps = {}): ReactNode {
+    const { currentVaultPath, backendReady, files } = useVaultState();
+    const activeEditor = useActiveEditor();
     const [historyState, setHistoryState] = useState<AiChatHistoryState | null>(null);
     const [bindingsByConversation, setBindingsByConversation] = useState<Record<string, PendingStreamBinding>>({});
     const [smoothedMessagesById, setSmoothedMessagesById] = useState<Record<string, AiChatSmoothedMessageState>>({});
@@ -321,6 +395,12 @@ function AiChatView(): ReactNode {
     const [error, setError] = useState<string | null>(null);
     const [settings, setSettings] = useState<AiChatSettings | null>(null);
     const [vendorCatalog, setVendorCatalog] = useState<AiVendorDefinition[]>([]);
+    const [modelSwitcherOpen, setModelSwitcherOpen] = useState(false);
+    const [modelSwitcherModels, setModelSwitcherModels] = useState<AiVendorModelDefinition[]>([]);
+    const [isModelSwitcherLoading, setIsModelSwitcherLoading] = useState(false);
+    const [isModelSwitcherSaving, setIsModelSwitcherSaving] = useState(false);
+    const [modelSwitcherFeedback, setModelSwitcherFeedback] = useState<string | null>(null);
+    const [modelSwitcherFeedbackIsError, setModelSwitcherFeedbackIsError] = useState(false);
     const bindingsRef = useRef<Record<string, PendingStreamBinding>>({});
     const smoothedMessagesRef = useRef<Record<string, AiChatSmoothedMessageState>>({});
     const historyLoadedRef = useRef(false);
@@ -329,6 +409,9 @@ function AiChatView(): ReactNode {
     const debugViewportRef = useRef<HTMLDivElement | null>(null);
     const smoothingFrameRef = useRef<number | null>(null);
     const smoothingLastFrameAtRef = useRef<number | null>(null);
+    const modelSwitcherRef = useRef<HTMLDivElement | null>(null);
+    const modelSwitcherLoadKeyRef = useRef<string | null>(null);
+    const modelSwitcherLoadRequestRef = useRef(0);
 
     /**
      * @function commitBindings
@@ -340,11 +423,9 @@ function AiChatView(): ReactNode {
             currentBindings: Record<string, PendingStreamBinding>,
         ) => Record<string, PendingStreamBinding>,
     ): void => {
-        setBindingsByConversation((currentBindings) => {
-            const nextBindings = updater(currentBindings);
-            bindingsRef.current = nextBindings;
-            return nextBindings;
-        });
+        const nextBindings = updater(bindingsRef.current);
+        bindingsRef.current = nextBindings;
+        setBindingsByConversation(nextBindings);
     };
 
     /**
@@ -472,11 +553,9 @@ function AiChatView(): ReactNode {
             currentMessages: Record<string, AiChatSmoothedMessageState>,
         ) => Record<string, AiChatSmoothedMessageState>,
     ): void => {
-        setSmoothedMessagesById((currentMessages) => {
-            const nextMessages = updater(currentMessages);
-            smoothedMessagesRef.current = nextMessages;
-            return nextMessages;
-        });
+        const nextMessages = updater(smoothedMessagesRef.current);
+        smoothedMessagesRef.current = nextMessages;
+        setSmoothedMessagesById(nextMessages);
     };
 
     /**
@@ -586,13 +665,11 @@ function AiChatView(): ReactNode {
     }, [settings, vendorCatalog]);
 
     const isVendorConfigured = useMemo(() => {
-        if (!settings || !selectedVendor) {
-            return false;
-        }
+        return isVendorSettingsComplete(settings, selectedVendor);
+    }, [selectedVendor, settings]);
 
-        return selectedVendor.fields
-            .filter((field) => field.required)
-            .every((field) => (settings.fieldValues[field.key] ?? "").trim().length > 0);
+    const canLoadModelSwitcherModels = useMemo(() => {
+        return isVendorSettingsComplete(settings, selectedVendor);
     }, [selectedVendor, settings]);
 
     const activeConversation = useMemo(() => {
@@ -655,6 +732,15 @@ function AiChatView(): ReactNode {
         }
         return "-";
     }, [currentVaultPath, isVendorConfigured, settings?.model]);
+
+    const composerHint = useMemo(() => {
+        if (isActiveConversationStreaming) {
+            return draft.trim()
+                ? i18n.t("aiChatPlugin.queuedDraftHint")
+                : i18n.t("aiChatPlugin.generatingHint");
+        }
+        return "";
+    }, [draft, isActiveConversationStreaming]);
 
     const canSend = Boolean(
         currentVaultPath
@@ -782,6 +868,11 @@ function AiChatView(): ReactNode {
                 return;
             }
 
+            const wasBindingStreamless = !binding.streamId;
+            bindingsRef.current = {
+                ...bindingsRef.current,
+                [binding.conversationId!]: transition.nextBinding,
+            };
             if (!binding.streamId && transition.nextBinding.streamId === payload.streamId) {
                 console.info("[aiChatPlugin] stream bound", {
                     streamId: payload.streamId,
@@ -791,6 +882,19 @@ function AiChatView(): ReactNode {
             }
 
             setConversationBinding(binding.conversationId!, transition.nextBinding);
+            if (
+                wasBindingStreamless
+                && transition.nextBinding.streamId === payload.streamId
+                && transition.nextBinding.stopRequested
+            ) {
+                void stopAiChatStream(payload.streamId).catch((stopError) => {
+                    setError(stopError instanceof Error ? stopError.message : String(stopError));
+                    updateConversationBinding(binding.conversationId!, (currentBinding) => ({
+                        ...currentBinding,
+                        stopRequested: false,
+                    }));
+                });
+            }
 
             if (transition.nextDebugEntry) {
                 console.debug("[aiChatPlugin] stream debug chunk", {
@@ -885,9 +989,10 @@ function AiChatView(): ReactNode {
             }
 
             if (transition.wasStopped) {
+                const completedAt = Date.now();
                 updateConversation(binding.conversationId!, (conversation) => ({
                     ...conversation,
-                    updatedAtUnixMs: Date.now(),
+                    updatedAtUnixMs: completedAt,
                     messages: conversation.messages.map((message) => {
                         if (message.id !== binding.assistantMessageId) {
                             return message;
@@ -896,6 +1001,8 @@ function AiChatView(): ReactNode {
                         return {
                             ...message,
                             interruptedByUser: true,
+                            completedAtUnixMs: completedAt,
+                            durationMs: Math.max(0, completedAt - (message.startedAtUnixMs ?? message.createdAtUnixMs)),
                         };
                     }),
                     sessionId: createConversationSessionId(conversation.id),
@@ -915,21 +1022,38 @@ function AiChatView(): ReactNode {
             }
 
             if (transition.isDone) {
+                const completedAt = Date.now();
                 updateConversation(binding.conversationId!, (conversation) => {
-                    const assistantMessage = conversation.messages.find((message) => {
-                        return message.id === binding.assistantMessageId;
+                    let completedAssistantMessage: AiChatHistoryMessage | null = null;
+                    const messages = conversation.messages.map((message) => {
+                        if (message.id !== binding.assistantMessageId) {
+                            return message;
+                        }
+
+                        completedAssistantMessage = {
+                            ...message,
+                            completedAtUnixMs: completedAt,
+                            durationMs: Math.max(0, completedAt - (message.startedAtUnixMs ?? message.createdAtUnixMs)),
+                        };
+                        return completedAssistantMessage;
                     });
-                    const protocolMessage = assistantMessage
-                        ? createProtocolAssistantMessage(assistantMessage, payload)
+                    const protocolMessage = completedAssistantMessage
+                        ? createProtocolAssistantMessage(completedAssistantMessage, payload)
                         : null;
 
                     return protocolMessage ? {
                         ...conversation,
+                        updatedAtUnixMs: completedAt,
+                        messages,
                         protocolMessages: [
                             ...(conversation.protocolMessages ?? []),
                             protocolMessage,
                         ],
-                    } : conversation;
+                    } : {
+                        ...conversation,
+                        updatedAtUnixMs: completedAt,
+                        messages,
+                    };
                 });
                 console.info("[aiChatPlugin] stream completed", {
                     streamId: payload.streamId,
@@ -937,6 +1061,10 @@ function AiChatView(): ReactNode {
                 });
             }
         }).then((unlisten) => {
+            if (disposed) {
+                unlisten();
+                return;
+            }
             cleanup = unlisten;
         });
 
@@ -1007,6 +1135,56 @@ function AiChatView(): ReactNode {
             window.clearTimeout(timer);
         };
     }, [debugCopyState]);
+
+    useEffect(() => {
+        if (!modelSwitcherOpen) {
+            return;
+        }
+
+        const handlePointerDown = (event: PointerEvent): void => {
+            const target = event.target as Node | null;
+            if (!target || modelSwitcherRef.current?.contains(target)) {
+                return;
+            }
+            setModelSwitcherOpen(false);
+        };
+
+        window.addEventListener("pointerdown", handlePointerDown, { capture: true });
+        return () => {
+            window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+        };
+    }, [modelSwitcherOpen]);
+
+    useEffect(() => {
+        if (modelSwitcherOpen) {
+            return;
+        }
+
+        setModelSwitcherFeedback(null);
+        setModelSwitcherFeedbackIsError(false);
+    }, [modelSwitcherOpen]);
+
+    useEffect(() => {
+        if (!settings || !canLoadModelSwitcherModels) {
+            modelSwitcherLoadKeyRef.current = null;
+            modelSwitcherLoadRequestRef.current += 1;
+            setModelSwitcherModels([]);
+            setModelSwitcherFeedback(null);
+            setModelSwitcherFeedbackIsError(false);
+            return;
+        }
+
+        const loadKey = JSON.stringify({
+            vendorId: settings.vendorId,
+            fieldValues: settings.fieldValues,
+        });
+        if (modelSwitcherLoadKeyRef.current === loadKey) {
+            return;
+        }
+
+        modelSwitcherLoadKeyRef.current = loadKey;
+        void loadModelSwitcherModels(settings);
+    }, [canLoadModelSwitcherModels, settings]);
 
     /**
      * @function handleCreateConversation
@@ -1113,6 +1291,85 @@ function AiChatView(): ReactNode {
     };
 
     /**
+     * @function loadModelSwitcherModels
+     * @description 在 composer 模型切换菜单中加载当前 provider 的可用模型。
+     * @param targetSettings 当前设置。
+     */
+    const loadModelSwitcherModels = async (targetSettings: AiChatSettings): Promise<void> => {
+        const requestId = modelSwitcherLoadRequestRef.current + 1;
+        modelSwitcherLoadRequestRef.current = requestId;
+        setIsModelSwitcherLoading(true);
+        setModelSwitcherFeedback(null);
+        setModelSwitcherFeedbackIsError(false);
+
+        try {
+            const models = await getAiVendorModels(targetSettings);
+            if (modelSwitcherLoadRequestRef.current !== requestId) {
+                return;
+            }
+            setModelSwitcherModels(models);
+            setModelSwitcherFeedback(models.length === 0 ? i18n.t("aiChatPlugin.modelSwitcherEmpty") : null);
+        } catch (loadError) {
+            if (modelSwitcherLoadRequestRef.current !== requestId) {
+                return;
+            }
+            setModelSwitcherModels([]);
+            setModelSwitcherFeedback(loadError instanceof Error ? loadError.message : String(loadError));
+            setModelSwitcherFeedbackIsError(true);
+        } finally {
+            if (modelSwitcherLoadRequestRef.current === requestId) {
+                setIsModelSwitcherLoading(false);
+            }
+        }
+    };
+
+    /**
+     * @function handleModelSwitcherToggle
+     * @description 打开或关闭 composer 模型切换菜单。
+     */
+    const handleModelSwitcherToggle = (): void => {
+        const nextOpen = !modelSwitcherOpen;
+        setModelSwitcherOpen(nextOpen);
+        setModelSwitcherFeedback(null);
+        setModelSwitcherFeedbackIsError(false);
+    };
+
+    /**
+     * @function handleModelSwitcherSelectModel
+     * @description 选择 composer 菜单中的模型并立即保存。
+     * @param modelId 模型 ID。
+     */
+    const handleModelSwitcherSelectModel = async (modelId: string): Promise<void> => {
+        if (!settings || !currentVaultPath || isModelSwitcherSaving) {
+            return;
+        }
+
+        if (modelId === settings.model) {
+            setModelSwitcherOpen(false);
+            return;
+        }
+
+        setIsModelSwitcherSaving(true);
+        setModelSwitcherFeedback(null);
+        setModelSwitcherFeedbackIsError(false);
+        try {
+            const savedSettings = await saveAiChatSettingsToStore(currentVaultPath, {
+                ...settings,
+                model: modelId,
+            });
+            const vendor = resolveVendor(vendorCatalog, savedSettings.vendorId);
+            const nextSettings = vendor ? mergeSettingsForVendor(savedSettings, vendor) : savedSettings;
+            setSettings(nextSettings);
+            setModelSwitcherOpen(false);
+        } catch (saveError) {
+            setModelSwitcherFeedback(saveError instanceof Error ? saveError.message : String(saveError));
+            setModelSwitcherFeedbackIsError(true);
+        } finally {
+            setIsModelSwitcherSaving(false);
+        }
+    };
+
+    /**
      * @function handleStopConversation
      * @description 终止当前活动会话中仍在运行的后台流。
      * @returns Promise<void>
@@ -1158,27 +1415,42 @@ function AiChatView(): ReactNode {
         }
 
         const trimmed = draft.trim();
-        if (!trimmed || isActiveConversationStreaming) {
+        if (!trimmed || isActiveConversationStreaming || !currentVaultPath || !isVendorConfigured) {
             return;
         }
+
+        const openTabs = buildOpenTabsSnapshot(props.panelContext);
+        const contextSnapshotJson = serializeAiChatRuntimeContextSnapshot(
+            buildAiChatRuntimeContextSnapshot({
+                vaultPath: currentVaultPath,
+                activeFile: activeEditor,
+                openTabs,
+                files,
+                settings,
+            }),
+        );
+        const startedAt = Date.now();
 
         console.info("[aiChatPlugin] submit message", {
             conversationId: activeConversation.id,
             sessionId: activeConversation.sessionId,
             messageLength: trimmed.length,
+            openTabCount: openTabs.length,
+            activeFilePath: activeEditor?.path ?? null,
         });
 
         const userMessage: AiChatHistoryMessage = {
             id: nextChatMessageId(),
             role: "user",
             text: trimmed,
-            createdAtUnixMs: Date.now(),
+            createdAtUnixMs: startedAt,
         };
         const assistantMessage: AiChatHistoryMessage = {
             id: nextChatMessageId(),
             role: "assistant",
             text: "",
-            createdAtUnixMs: Date.now(),
+            createdAtUnixMs: startedAt,
+            startedAtUnixMs: startedAt,
         };
         const history = activeConversation.protocolMessages?.length
             ? activeConversation.protocolMessages
@@ -1208,9 +1480,10 @@ function AiChatView(): ReactNode {
                 message: trimmed,
                 sessionId: activeConversation.sessionId,
                 history,
+                contextSnapshotJson,
             });
             const currentBinding = bindingsRef.current[activeConversation.id];
-            if (currentBinding) {
+            if (currentBinding && !currentBinding.streamId) {
                 const nextBinding = {
                     ...currentBinding,
                     streamId: response.streamId,
@@ -1252,6 +1525,10 @@ function AiChatView(): ReactNode {
             shiftKey: event.shiftKey,
             nativeEvent: event.nativeEvent,
         })) {
+            return;
+        }
+
+        if (isActiveConversationStreaming) {
             return;
         }
 
@@ -1448,6 +1725,9 @@ function AiChatView(): ReactNode {
                                     smoothedMessage
                                     && (smoothedMessage.active || !isAiChatSmoothedMessageSettled(smoothedMessage)),
                                 );
+                            const durationLabel = message.role === "assistant"
+                                ? formatAiChatDuration(message.durationMs)
+                                : null;
 
                             return (
                                 <div key={message.id} className={`ai-chat-message ${message.role}`}>
@@ -1470,6 +1750,14 @@ function AiChatView(): ReactNode {
                                                 streaming={isStreamingMessage}
                                             />
                                         </div>
+                                        {durationLabel ? (
+                                            <div className="ai-chat-message-meta">
+                                                <span className="ai-chat-message-duration">
+                                                    <Timer size={11} strokeWidth={1.8} />
+                                                    <span>{durationLabel}</span>
+                                                </span>
+                                            </div>
+                                        ) : null}
                                         {confirmation ? (
                                             <div className="ai-chat-confirmation-card">
                                                 <div className="ai-chat-confirmation-meta">
@@ -1597,15 +1885,65 @@ function AiChatView(): ReactNode {
                     className="ai-chat-input"
                     value={draft}
                     placeholder={i18n.t("aiChatPlugin.draftPlaceholder")}
-                    disabled={!currentVaultPath || isActiveConversationStreaming || !activeConversation || activeTab === "history"}
+                    disabled={!currentVaultPath || !activeConversation || activeTab === "history"}
                     onKeyDown={handleInputKeyDown}
                     onChange={(event) => {
                         setDraft(event.target.value);
                     }}
                 />
                 <div className="ai-chat-composer-row">
-                    <div className="ai-chat-composer-hint">
-                        {composerModelLabel}
+                    <div className="ai-chat-composer-meta">
+                        <div ref={modelSwitcherRef} className="ai-chat-model-switcher">
+                            <button
+                                type="button"
+                                className="ai-chat-model-button"
+                                aria-expanded={modelSwitcherOpen}
+                                disabled={!currentVaultPath || !settings || !isVendorConfigured}
+                                onClick={handleModelSwitcherToggle}
+                                title={composerModelLabel}
+                            >
+                                <span>{composerModelLabel}</span>
+                                <ChevronDown size={13} strokeWidth={1.9} />
+                            </button>
+                            {modelSwitcherOpen ? (
+                                <div className="ai-chat-model-menu" role="listbox" aria-label={i18n.t("aiChatPlugin.modelSwitcherTitle")}>
+                                    {isModelSwitcherLoading ? (
+                                        <div className="ai-chat-model-menu-status">{i18n.t("aiChatPlugin.refreshingModels")}</div>
+                                    ) : modelSwitcherModels.map((model) => {
+                                        const selected = model.id === settings?.model;
+                                        return (
+                                            <button
+                                                key={model.id}
+                                                type="button"
+                                                className={`ai-chat-model-option ${selected ? "selected" : ""}`}
+                                                role="option"
+                                                aria-selected={selected}
+                                                disabled={isModelSwitcherSaving}
+                                                onClick={() => {
+                                                    void handleModelSwitcherSelectModel(model.id);
+                                                }}
+                                            >
+                                                <span>{model.id}</span>
+                                                {selected ? <Check size={14} strokeWidth={2} /> : null}
+                                            </button>
+                                        );
+                                    })}
+                                    {isModelSwitcherSaving ? (
+                                        <div className="ai-chat-model-menu-status">{i18n.t("aiChatPlugin.modelSwitcherSaving")}</div>
+                                    ) : null}
+                                    {modelSwitcherFeedback ? (
+                                        <div className={`ai-chat-model-feedback ${modelSwitcherFeedbackIsError ? "error" : ""}`}>
+                                            {modelSwitcherFeedback}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            ) : null}
+                        </div>
+                        {composerHint ? (
+                            <div className="ai-chat-composer-hint">
+                                {composerHint}
+                            </div>
+                        ) : null}
                     </div>
                     <button
                         type="button"
@@ -1669,13 +2007,7 @@ function AiChatSettingsSection(): ReactNode {
     }, [settings, vendorCatalog]);
 
     const canLoadVendorModels = useMemo(() => {
-        if (!settings || !selectedVendor) {
-            return false;
-        }
-
-        return selectedVendor.fields
-            .filter((field) => field.required)
-            .every((field) => (settings.fieldValues[field.key] ?? "").trim().length > 0);
+        return isVendorSettingsComplete(settings, selectedVendor);
     }, [selectedVendor, settings]);
 
     useEffect(() => {
@@ -2046,7 +2378,7 @@ export function activatePlugin(): () => void {
         activityId: AI_CHAT_PANEL_ID,
         defaultPosition: "right",
         defaultOrder: 1,
-        render: () => <AiChatView />,
+        render: (context) => <AiChatView panelContext={context} />,
     });
 
     const unregisterConvertibleView = registerConvertibleView({

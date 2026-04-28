@@ -27,6 +27,8 @@ describe("registerCodeMirrorSettingsSection", () => {
         expect(section?.items.map((item) => item.id)).toEqual([
             "vim-mode",
             "line-wrapping",
+            "tab-restore-mode",
+            "tab-out",
             "line-numbers",
             "font-family",
             "font-size",

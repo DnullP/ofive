@@ -425,6 +425,22 @@
     background: color-mix(in srgb, var(--accent-primary) 15%, var(--bg-primary));
 }
 
+/* ai-chat-message-meta：消息辅助信息 */
+.ai-chat-message-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ai-chat-message-duration：助手生成耗时 */
+.ai-chat-message-duration {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-tertiary);
+}
+
 /* ai-chat-message-placeholder：空消息占位文本 */
 .ai-chat-message-placeholder {
     color: var(--text-secondary);
@@ -1002,6 +1018,15 @@
     gap: 10px;
 }
 
+/* ai-chat-composer-meta：输入区模型和状态区域 */
+.ai-chat-composer-meta {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 /* ai-chat-composer-hint：输入区提示 */
 .ai-chat-composer-hint {
     flex: 1 1 auto;
@@ -1010,6 +1035,116 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* ai-chat-model-switcher：composer 内模型切换入口 */
+.ai-chat-model-switcher {
+    position: relative;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+/* ai-chat-model-button：模型切换按钮 */
+.ai-chat-model-button {
+    max-width: 160px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 6px 9px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+    cursor: pointer;
+}
+
+.ai-chat-model-button span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ai-chat-model-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* ai-chat-model-menu：模型切换浮层 */
+.ai-chat-model-menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 8px);
+    z-index: 20;
+    width: min(260px, calc(100vw - 28px));
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: rgb(var(--window-glass-elevated-rgb));
+    box-shadow: var(--floating-surface-shadow);
+}
+
+/* ai-chat-model-option：模型菜单项 */
+.ai-chat-model-option {
+    width: 100%;
+    min-height: 28px;
+    border: 0;
+    border-radius: 5px;
+    padding: 5px 7px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--text-primary);
+    text-align: left;
+    background: transparent;
+    cursor: pointer;
+}
+
+.ai-chat-model-option span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ai-chat-model-option:hover,
+.ai-chat-model-option.selected {
+    background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+    color: var(--accent-primary);
+}
+
+.ai-chat-model-option:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
+/* ai-chat-model-menu-status：模型菜单状态 */
+.ai-chat-model-menu-status {
+    padding: 7px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* ai-chat-model-feedback：模型浮层反馈 */
+.ai-chat-model-feedback {
+    padding: 7px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.ai-chat-model-feedback.error {
+    color: var(--error-color);
 }
 
 /* ai-chat-send-button：发送按钮 */

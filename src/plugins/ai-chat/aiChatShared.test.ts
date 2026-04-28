@@ -15,13 +15,16 @@ import type {
     AiVendorDefinition,
 } from "../../api/aiApi";
 import {
+    buildAiChatRuntimeContextSnapshot,
     buildPersistableHistory,
     deriveConversationTitle,
     ensureHistoryState,
     filterConversations,
+    formatAiChatDuration,
     formatAiPanelError,
     mergeSettingsForVendor,
     resolveVendor,
+    serializeAiChatRuntimeContextSnapshot,
 } from "./aiChatShared";
 
 const VENDORS: AiVendorDefinition[] = [
@@ -333,5 +336,62 @@ describe("aiChatShared", () => {
         expect(filterConversations(conversations, "roadmap").map((conversation) => conversation.id)).toEqual(["c1"]);
         expect(filterConversations(conversations, "vendor token").map((conversation) => conversation.id)).toEqual(["c2"]);
         expect(filterConversations(conversations, "").map((conversation) => conversation.id)).toEqual(["c1", "c2"]);
+    });
+
+    it("应构建 AI 请求运行上下文快照", () => {
+        const snapshot = buildAiChatRuntimeContextSnapshot({
+            vaultPath: "/vault",
+            activeFile: {
+                articleId: "file:notes/a.md",
+                path: "notes\\a.md",
+                title: "a.md",
+                kind: "markdown",
+            },
+            openTabs: [
+                {
+                    id: "file:notes/a.md",
+                    path: "notes/a.md",
+                    title: "a.md",
+                    component: "markdown.codemirror",
+                    active: true,
+                },
+                {
+                    id: "graph",
+                    path: null,
+                    title: "Graph",
+                    component: "knowledge-graph",
+                    active: false,
+                },
+            ],
+            files: [
+                { path: "notes/a.md", isDir: false },
+                { path: "notes", isDir: true },
+                { path: "canvas/board.canvas", isDir: false },
+            ],
+            settings: {
+                vendorId: "anthropic",
+                model: "claude-sonnet",
+                fieldValues: {},
+            },
+        });
+
+        expect(snapshot.schemaVersion).toBe("ofive.ai.runtime-context.v1");
+        expect(snapshot.activeFile?.path).toBe("notes/a.md");
+        expect(snapshot.openTabs.map((tab) => tab.id)).toEqual(["file:notes/a.md", "graph"]);
+        expect(snapshot.fileTree).toEqual({
+            totalEntries: 3,
+            fileCount: 2,
+            directoryCount: 1,
+            samplePaths: ["canvas/board.canvas", "notes/a.md"],
+        });
+        expect(JSON.parse(serializeAiChatRuntimeContextSnapshot(snapshot)).ai.model).toBe("claude-sonnet");
+    });
+
+    it("应格式化 AI 生成耗时", () => {
+        expect(formatAiChatDuration(null)).toBeNull();
+        expect(formatAiChatDuration(321)).toBe("321ms");
+        expect(formatAiChatDuration(1250)).toBe("1.3s");
+        expect(formatAiChatDuration(12_100)).toBe("12s");
+        expect(formatAiChatDuration(65_000)).toBe("1m 05s");
     });
 });

@@ -45,7 +45,64 @@ export interface AiPanelErrorDisplay {
     detail: string | null;
 }
 
+/**
+ * @interface AiChatRuntimeContextSnapshot
+ * @description 单次 AI 请求携带的 ofive 前端运行上下文。
+ */
+export interface AiChatRuntimeContextSnapshot {
+    schemaVersion: "ofive.ai.runtime-context.v1";
+    vaultPath: string | null;
+    activeFile: {
+        articleId: string;
+        path: string;
+        title: string;
+        kind: string;
+    } | null;
+    openTabs: AiChatRuntimeOpenTabSnapshot[];
+    fileTree: {
+        totalEntries: number;
+        fileCount: number;
+        directoryCount: number;
+        samplePaths: string[];
+    };
+    ai: {
+        vendorId: string | null;
+        model: string | null;
+    };
+}
+
+/**
+ * @interface AiChatRuntimeOpenTabSnapshot
+ * @description 工作区打开 tab 的最小上下文。
+ */
+export interface AiChatRuntimeOpenTabSnapshot {
+    id: string;
+    path: string | null;
+    title: string | null;
+    component: string | null;
+    active: boolean;
+}
+
+export interface BuildAiChatRuntimeContextSnapshotInput {
+    vaultPath: string | null;
+    activeFile: {
+        articleId: string;
+        path: string;
+        title: string;
+        kind: string;
+    } | null;
+    openTabs: AiChatRuntimeOpenTabSnapshot[];
+    files: Array<{
+        path: string;
+        isDir: boolean;
+    }>;
+    settings: AiChatSettings | null;
+}
+
 let chatConversationSequence = 1;
+
+const AI_CHAT_CONTEXT_MAX_OPEN_TABS = 30;
+const AI_CHAT_CONTEXT_MAX_SAMPLE_PATHS = 80;
 
 /**
  * @function createConversationSessionId
@@ -120,6 +177,98 @@ export function mergeSettingsForVendor(
             : vendor.defaultModel,
         fieldValues: nextFieldValues,
     };
+}
+
+/**
+ * @function buildAiChatRuntimeContextSnapshot
+ * @description 为一次 AI 请求构建稳定、轻量的 ofive 运行上下文快照。
+ * @param input 快照输入。
+ * @returns 运行上下文快照。
+ */
+export function buildAiChatRuntimeContextSnapshot(
+    input: BuildAiChatRuntimeContextSnapshotInput,
+): AiChatRuntimeContextSnapshot {
+    const normalizedFiles = input.files
+        .map((entry) => ({
+            path: entry.path.replace(/\\/g, "/"),
+            isDir: entry.isDir,
+        }))
+        .filter((entry) => entry.path.trim().length > 0)
+        .sort((left, right) => left.path.localeCompare(right.path));
+
+    return {
+        schemaVersion: "ofive.ai.runtime-context.v1",
+        vaultPath: input.vaultPath,
+        activeFile: input.activeFile
+            ? {
+                articleId: input.activeFile.articleId,
+                path: input.activeFile.path.replace(/\\/g, "/"),
+                title: input.activeFile.title,
+                kind: input.activeFile.kind,
+            }
+            : null,
+        openTabs: input.openTabs.slice(0, AI_CHAT_CONTEXT_MAX_OPEN_TABS).map((tab) => ({
+            id: tab.id,
+            path: tab.path ? tab.path.replace(/\\/g, "/") : null,
+            title: tab.title,
+            component: tab.component,
+            active: tab.active,
+        })),
+        fileTree: {
+            totalEntries: normalizedFiles.length,
+            fileCount: normalizedFiles.filter((entry) => !entry.isDir).length,
+            directoryCount: normalizedFiles.filter((entry) => entry.isDir).length,
+            samplePaths: normalizedFiles
+                .filter((entry) => !entry.isDir)
+                .slice(0, AI_CHAT_CONTEXT_MAX_SAMPLE_PATHS)
+                .map((entry) => entry.path),
+        },
+        ai: {
+            vendorId: input.settings?.vendorId?.trim() || null,
+            model: input.settings?.model?.trim() || null,
+        },
+    };
+}
+
+/**
+ * @function serializeAiChatRuntimeContextSnapshot
+ * @description 序列化 AI 请求上下文快照。
+ * @param snapshot 运行上下文快照。
+ * @returns JSON 字符串。
+ */
+export function serializeAiChatRuntimeContextSnapshot(
+    snapshot: AiChatRuntimeContextSnapshot,
+): string {
+    return JSON.stringify(snapshot);
+}
+
+/**
+ * @function formatAiChatDuration
+ * @description 将生成耗时格式化为紧凑展示文本。
+ * @param durationMs 毫秒耗时。
+ * @returns 展示文本。
+ */
+export function formatAiChatDuration(durationMs: number | null | undefined): string | null {
+    if (typeof durationMs !== "number" || !Number.isFinite(durationMs) || durationMs < 0) {
+        return null;
+    }
+
+    if (durationMs < 1000) {
+        return `${Math.round(durationMs)}ms`;
+    }
+
+    const seconds = durationMs / 1000;
+    if (seconds < 10) {
+        return `${seconds.toFixed(1)}s`;
+    }
+
+    if (seconds < 60) {
+        return `${Math.round(seconds)}s`;
+    }
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.round(seconds % 60);
+    return `${minutes}m ${String(remainingSeconds).padStart(2, "0")}s`;
 }
 
 /**

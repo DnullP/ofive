@@ -140,6 +140,7 @@ pub(crate) async fn start_ai_chat_stream(
     session_id: Option<String>,
     user_id: Option<String>,
     history: Option<Vec<AiChatHistoryMessage>>,
+    context_snapshot_json: Option<String>,
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AiChatStreamStartResponse, String> {
@@ -158,6 +159,10 @@ pub(crate) async fn start_ai_chat_stream(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "desktop-user".to_string());
+    let resolved_context_snapshot_json = context_snapshot_json
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_default();
     let ai_settings = ai_chat_store::validate_ai_chat_settings_for_chat(
         ai_chat_store::load_ai_chat_settings(&state)?,
     )?;
@@ -218,6 +223,7 @@ pub(crate) async fn start_ai_chat_stream(
             mcp_auth_token: String::new(),
             persistence_callback_url: persistence_callback_handle.callback_url.clone(),
             persistence_callback_token: persistence_callback_handle.callback_token.clone(),
+            context_snapshot_json: resolved_context_snapshot_json,
             history: history
                 .clone()
                 .unwrap_or_default()
