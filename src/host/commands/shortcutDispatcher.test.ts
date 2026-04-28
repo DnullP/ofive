@@ -3,13 +3,20 @@
  * @description shortcutDispatcher 模块的单元测试，覆盖系统保留键、全局调度和编辑器调度行为。
  */
 
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
     createConditionContext,
     type ShortcutCondition,
 } from "../conditions/conditionEvaluator";
-
-const actualCommandSystem = await import("./commandSystem");
+import {
+    registerCommand,
+    unregisterCommand,
+    type CommandDefinition,
+    type CommandId,
+    type CommandScope,
+} from "./commandSystem";
+import type { ShortcutBindingPolicy } from "./shortcutPolicies";
+import { dispatchShortcut } from "./shortcutDispatcher";
 
 /**
  * @function createKeyboardEventLike
@@ -41,77 +48,20 @@ function createKeyboardEventLike(shortcut: string): KeyboardEvent {
     } as KeyboardEvent;
 }
 
-interface MockCommandMeta {
+interface TestCommandMeta {
     scope?: "global" | "editor";
     condition?: ShortcutCondition;
     conditions?: ShortcutCondition[];
+    bindingPolicy?: ShortcutBindingPolicy;
 }
 
-const mockCommandRegistry = new Map<string, MockCommandMeta>();
-let resolveSystemShortcutMock = (
-    _event: KeyboardEvent,
-    _bindings: Record<string, string>,
-): { commandId: string; source: "binding" | "reserved" } | null => null;
-
-/**
- * @function matchesShortcut
- * @description 测试用快捷键匹配函数，仅覆盖当前测试所需组合。
- * @param event 键盘事件替身。
- * @param shortcut 快捷键字符串。
- * @returns 是否命中。
- */
-function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {
-    const expectedEvent = createKeyboardEventLike(shortcut);
-    return (
-        event.key === expectedEvent.key &&
-        event.code === expectedEvent.code &&
-        event.metaKey === expectedEvent.metaKey &&
-        event.ctrlKey === expectedEvent.ctrlKey &&
-        event.altKey === expectedEvent.altKey &&
-        event.shiftKey === expectedEvent.shiftKey
-    );
-}
-
-mock.module("./commandSystem", () => ({
-    ...actualCommandSystem,
-    getCommandConditions(commandId: string): ShortcutCondition[] {
-        const meta = mockCommandRegistry.get(commandId);
-        if (!meta) {
-            return [];
-        }
-
-        const conditions = [...(meta.conditions ?? [])];
-        if (meta.condition) {
-            conditions.unshift(meta.condition);
-        }
-
-        return [...new Set(conditions)];
-    },
-    isEditorScopedCommand(commandId: string): boolean {
-        return (mockCommandRegistry.get(commandId)?.scope ?? "global") === "editor";
-    },
-}));
-
-mock.module("./systemShortcutSubsystem", () => ({
-    resolveSystemShortcutCommand(
-        event: KeyboardEvent,
-        bindings: Record<string, string>,
-    ): { commandId: string; source: "binding" | "reserved" } | null {
-        return resolveSystemShortcutMock(event, bindings);
-    },
-}));
-
-mock.module("./shortcutStore", () => ({
-    matchShortcut(event: KeyboardEvent, shortcut: string): boolean {
-        return matchesShortcut(event, shortcut);
-    },
-}));
-
-const { dispatchShortcut } = await import("./shortcutDispatcher");
+const registeredCommandIds = new Set<CommandId>();
 
 afterEach(() => {
-    mockCommandRegistry.clear();
-    resolveSystemShortcutMock = () => null;
+    registeredCommandIds.forEach((commandId) => {
+        unregisterCommand(commandId);
+    });
+    registeredCommandIds.clear();
 });
 
 /**
@@ -120,18 +70,28 @@ afterEach(() => {
  * @param commandId 命令 ID。
  * @param meta 命令元信息。
  */
-function defineCommand(commandId: string, meta: MockCommandMeta): void {
-    mockCommandRegistry.set(commandId, meta);
+function defineCommand(commandId: string, meta: TestCommandMeta): void {
+    const definition: CommandDefinition = {
+        id: commandId,
+        title: commandId,
+        scope: meta.scope as CommandScope | undefined,
+        condition: meta.condition,
+        conditions: meta.conditions,
+        shortcut: meta.bindingPolicy
+            ? {
+                defaultBinding: "",
+                editableInSettings: true,
+                bindingPolicy: meta.bindingPolicy,
+            }
+            : undefined,
+        execute: () => undefined,
+    };
+    registerCommand(definition);
+    registeredCommandIds.add(commandId);
 }
 
 describe("dispatchShortcut", () => {
     test("should fallback to reserved app.quit for Cmd+Q in global source", () => {
-        resolveSystemShortcutMock = (event) => {
-            return matchesShortcut(event, "Cmd+Q")
-                ? { commandId: "app.quit", source: "reserved" }
-                : null;
-        };
-
         const result = dispatchShortcut({
             event: createKeyboardEventLike("Cmd+Q"),
             bindings: {},
@@ -145,23 +105,21 @@ describe("dispatchShortcut", () => {
     });
 
     test("should prefer system binding over reserved fallback", () => {
-        resolveSystemShortcutMock = (event, bindings) => {
-            return matchesShortcut(event, "Cmd+W") && bindings["sidebar.left.toggle"] === "Cmd+W"
-                ? { commandId: "sidebar.left.toggle", source: "binding" }
-                : null;
-        };
+        defineCommand("test.system.close", {
+            bindingPolicy: "prefer-system-reserved",
+        });
 
         const result = dispatchShortcut({
             event: createKeyboardEventLike("Cmd+W"),
             bindings: {
-                "sidebar.left.toggle": "Cmd+W",
+                "test.system.close": "Cmd+W",
             },
             source: "global",
             conditionContext: createConditionContext({ focusedComponent: "other" }),
         });
 
         expect(result.kind).toBe("execute");
-        expect(result.commandId).toBe("sidebar.left.toggle");
+        expect(result.commandId).toBe("test.system.close");
         expect(result.reason).toBe("system-binding");
     });
 
