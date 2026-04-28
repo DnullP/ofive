@@ -11,6 +11,8 @@ import {
     registerSettingsItem,
     registerSettingsSection,
 } from "../settings/settingsRegistry";
+import { __resetManagedStoreRegistryForTests } from "../store/storeRegistry";
+import { __resetBuiltinManagedStoresRegistrationForTests } from "../store/registerBuiltinManagedStores";
 
 const SETTINGS_TAB_TEST_SEARCH_ICON = "search-icon";
 
@@ -38,19 +40,23 @@ mock.module("lucide-react", () => ({
     X: () => null,
 }));
 
-mock.module("../settings/registerBuiltinSettings", () => ({
-    ensureBuiltinSettingsRegistered: () => {
-        /* noop */
-    },
-}));
-
 afterEach(() => {
     __resetSettingsRegistryForTests();
+    __resetManagedStoreRegistryForTests();
+    __resetBuiltinManagedStoresRegistrationForTests();
     mock.restore();
 });
 
 describe("SettingsTab", () => {
     test("应渲染 settings registry 的 section 列表和当前内容", async () => {
+        const { __resetBuiltinSettingsRegistrationForTests } = await import("../settings/registerBuiltinSettings");
+        const { SettingsTab } = await import("./SettingsTab");
+
+        __resetBuiltinSettingsRegistrationForTests();
+        __resetSettingsRegistryForTests();
+        __resetManagedStoreRegistryForTests();
+        __resetBuiltinManagedStoresRegistrationForTests();
+
         registerSettingsSection({
             id: "general-global",
             title: "settings.generalSection",
@@ -68,8 +74,6 @@ describe("SettingsTab", () => {
             useValue: () => true,
             updateValue: () => undefined,
         });
-
-        const { SettingsTab } = await import("./SettingsTab");
 
         const markup = renderToStaticMarkup(<SettingsTab />);
 
