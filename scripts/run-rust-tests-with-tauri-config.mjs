@@ -226,7 +226,9 @@ function buildCargoTestArgs(profile, extraArgs) {
 }
 
 const baseConfig = readJsonFile(baseConfigPath);
-const macosConfig = fs.existsSync(macosConfigPath) ? readJsonFile(macosConfigPath) : {};
+const macosConfig = process.platform === "darwin" && fs.existsSync(macosConfigPath)
+    ? readJsonFile(macosConfigPath)
+    : {};
 const mergedTauriConfig = mergeJsonConfig(baseConfig, macosConfig);
 const protocPath = await ensurePinnedProtoc();
 const { profile, cargoArgs } = parseCliOptions(process.argv.slice(2));
