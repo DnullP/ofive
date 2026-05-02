@@ -16,7 +16,7 @@ concurrency:
 jobs:
   test-gate:
     name: Release Test Gate
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -113,7 +113,7 @@ jobs:
           - name: Windows
             runner: windows-latest
           - name: Linux
-            runner: ubuntu-22.04
+            runner: ubuntu-24.04
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
