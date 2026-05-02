@@ -69,6 +69,7 @@ function readJsonFile(filePath) {
 function parseCliOptions(argv) {
     let profile = "all";
     const cargoArgs = [];
+    const testHarnessArgs = [];
 
     for (let index = 0; index < argv.length; index += 1) {
         const argument = argv[index];
@@ -87,8 +88,13 @@ function parseCliOptions(argv) {
         }
 
         if (argument === "--") {
-            cargoArgs.push(...argv.slice(index + 1));
+            testHarnessArgs.push(...argv.slice(index + 1));
             break;
+        }
+
+        if (argument.startsWith("--test-threads")) {
+            testHarnessArgs.push(argument);
+            continue;
         }
 
         cargoArgs.push(argument);
@@ -96,7 +102,9 @@ function parseCliOptions(argv) {
 
     return {
         profile,
-        cargoArgs,
+        cargoArgs: testHarnessArgs.length > 0
+            ? [...cargoArgs, "--", ...testHarnessArgs]
+            : cargoArgs,
     };
 }
 
@@ -226,7 +234,7 @@ function buildCargoTestArgs(profile, extraArgs) {
 }
 
 const baseConfig = readJsonFile(baseConfigPath);
-const macosConfig = process.platform === "darwin" && fs.existsSync(macosConfigPath)
+const macosConfig = fs.existsSync(macosConfigPath)
     ? readJsonFile(macosConfigPath)
     : {};
 const mergedTauriConfig = mergeJsonConfig(baseConfig, macosConfig);
