@@ -49,8 +49,11 @@ export default defineConfig({
     /** 单个测试超时 30s */
     timeout: 30_000,
 
-    /** 失败时不自动重试（本地开发体验优先） */
-    retries: 0,
+    /** 本地保持快速反馈；CI 避免 file: sibling dependency reload 竞态造成误报。 */
+    retries: process.env.CI ? 1 : 0,
+
+    /** CI 中共享一个 Vite dev server，串行运行可避免多 worker reload 干扰本地 file: 依赖 transform。 */
+    workers: process.env.CI ? 1 : undefined,
 
     /** 测试报告输出 */
     reporter: "html",
