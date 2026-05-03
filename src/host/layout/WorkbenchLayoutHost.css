@@ -257,7 +257,7 @@
 
 .app-titlebar--mac ~ .app-content .workbench-layout-v2 [data-section-id='left-sidebar'] > .layout-v2__leaf-content > [data-testid='sidebar-left'] > .layout-v2-panel-section__bar,
 .app-titlebar--mac ~ .app-content .workbench-layout-v2 [data-section-id='left-sidebar'] > .layout-v2__child-slot:first-child [data-testid='sidebar-left'] > .layout-v2-panel-section__bar {
-    padding-left: var(--shell-window-control-width);
+    padding-left: var(--shell-left-sidebar-panel-safe-padding);
 }
 
 .workbench-layout-v2 .layout-v2-panel-section__pane {

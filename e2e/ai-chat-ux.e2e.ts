@@ -21,8 +21,13 @@ test.describe("ai chat ux", () => {
     test("composer should switch model and keep next draft while streaming", async ({ page }) => {
         await waitForAiChatReady(page);
 
+        await expect(page.locator(".ai-chat-header-actions")).toHaveCount(0);
+        await expect(page.locator(".ai-chat-tab-strip")).toHaveCount(0);
+        await expect(page.locator(".ai-chat-new-button")).toBeVisible();
+
         const modelButton = page.locator(".ai-chat-model-button");
         await expect(modelButton).toContainText("mock-fast");
+        await expect(modelButton).toHaveCSS("border-top-width", "0px");
         await expect(page.locator(".ai-chat-composer-hint")).toHaveCount(0);
         await modelButton.click();
 
@@ -38,6 +43,10 @@ test.describe("ai chat ux", () => {
         await expect(modelButton).toContainText("mock-deep");
 
         const input = page.locator(".ai-chat-input");
+        const initialInputHeight = await input.evaluate((element) => element.getBoundingClientRect().height);
+        await input.fill(["line one", "line two", "line three", "line four"].join("\n"));
+        const grownInputHeight = await input.evaluate((element) => element.getBoundingClientRect().height);
+        expect(grownInputHeight).toBeGreaterThan(initialInputHeight);
         await input.fill("first prompt");
         await page.locator(".ai-chat-send-button").click();
         await expect(page.locator(".ai-chat-send-button")).toContainText(/Stop|终止/);

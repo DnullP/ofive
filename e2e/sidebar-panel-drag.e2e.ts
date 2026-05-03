@@ -98,6 +98,24 @@ async function dragSidebarDivider(page: Page, dividerIndex: number, deltaX: numb
     await page.mouse.up();
 }
 
+async function waitForNextFrame(page: Page): Promise<void> {
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+}
+
+async function readRightSidebarPanelPreviewPlacement(page: Page): Promise<"top" | "bottom" | "missing"> {
+    return page.evaluate(() => {
+        const newLeaf = document.querySelector<HTMLElement>("[data-section-id='preview-panel-leaf-right-sidebar-new']");
+        const originalLeaf = document.querySelector<HTMLElement>("[data-section-id='preview-panel-leaf-right-sidebar-original']");
+        if (!newLeaf || !originalLeaf) {
+            return "missing";
+        }
+
+        const newRect = newLeaf.getBoundingClientRect();
+        const originalRect = originalLeaf.getBoundingClientRect();
+        return newRect.top < originalRect.top ? "top" : "bottom";
+    });
+}
+
 function buildLegacyWorkspaceLayoutWithRightPanelSplit(): Record<string, unknown> {
     return {
         version: 1,
@@ -856,5 +874,71 @@ test.describe("layout-v2 panel icon split 持久化恢复", () => {
         expect(contextMenuLifecycleLogs).toBeLessThan(10);
 
         await page.mouse.up();
+    });
+
+    test("panel icon split preview 应随连续拖动在上下区域之间切换", async ({ page }) => {
+        const consoleProblems: string[] = [];
+        const vaultPath = `/mock/right-sidebar-preview-retarget-${Date.now()}`;
+        const storageKey = `${BROWSER_FALLBACK_CONFIG_PREFIX}${vaultPath}`;
+
+        page.on("pageerror", (error) => {
+            consoleProblems.push(error.message);
+        });
+        page.on("console", (message) => {
+            const text = message.text();
+            if (
+                text.includes("Maximum update depth exceeded") ||
+                text.includes("Minified React error") ||
+                text.includes("An error occurred in the <")
+            ) {
+                consoleProblems.push(text);
+            }
+        });
+
+        await page.goto(`${MOCK_PAGE}?showControls=0&mockVaultPath=${encodeURIComponent(vaultPath)}`);
+        await page.evaluate((key) => window.localStorage.removeItem(key), storageKey);
+        await page.reload();
+        await page.locator("[data-testid='sidebar-right']").waitFor({ state: "visible" });
+
+        const rightSidebar = page.locator("[data-testid='sidebar-right']").first();
+        const calendarTab = rightSidebar.locator(
+            ".layout-v2-panel-section__panel-tab[data-layout-panel-id='calendar-panel']",
+        ).first();
+        const rightContent = rightSidebar.locator(".layout-v2-panel-section__content").first();
+
+        await expect(calendarTab).toBeVisible();
+        await expect(rightContent).toBeVisible();
+
+        const sourceBox = await calendarTab.boundingBox();
+        const contentBox = await rightContent.boundingBox();
+        expect(sourceBox).not.toBeNull();
+        expect(contentBox).not.toBeNull();
+
+        const startX = sourceBox!.x + sourceBox!.width / 2;
+        const startY = sourceBox!.y + sourceBox!.height / 2;
+        const targetX = contentBox!.x + contentBox!.width / 2;
+        const topY = contentBox!.y + Math.max(24, contentBox!.height * 0.18);
+        const bottomY = contentBox!.y + contentBox!.height - Math.max(24, contentBox!.height * 0.18);
+
+        await page.mouse.move(startX, startY);
+        await page.mouse.down();
+        await page.mouse.move(targetX, topY, { steps: 10 });
+        await waitForNextFrame(page);
+
+        await expect.poll(
+            async () => readRightSidebarPanelPreviewPlacement(page),
+            { timeout: 2_000 },
+        ).toBe("top");
+
+        await page.mouse.move(targetX, bottomY, { steps: 12 });
+        await waitForNextFrame(page);
+
+        await expect.poll(
+            async () => readRightSidebarPanelPreviewPlacement(page),
+            { timeout: 2_000 },
+        ).toBe("bottom");
+
+        await page.mouse.up();
+        expect(consoleProblems).toEqual([]);
     });
 });

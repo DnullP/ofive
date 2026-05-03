@@ -39,6 +39,7 @@
   --shell-titlebar-height: 38px;
   --shell-window-control-width: 104px;
   --shell-window-control-right-width: 44px;
+  --shell-left-sidebar-panel-safe-padding: 40px;
   --bg-primary: #1f1f1f;
   --bg-secondary: #252526;
   --bg-hover: #2a2d2e;
@@ -148,6 +149,11 @@
   --floating-surface-border: var(--border-color);
   --floating-surface-shadow: var(--overlay-shadow-strong);
   --floating-backdrop-bg: rgba(0, 0, 0, 0.22);
+  --modal-panel-radius: 0;
+  --modal-control-radius: 0;
+  --modal-list-item-bg: transparent;
+  --modal-list-item-bg-hover: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --modal-list-item-bg-active: color-mix(in srgb, var(--accent-primary) 12%, transparent);
   --notification-surface-border: color-mix(in srgb, var(--text-primary) 18%, transparent);
   --notification-surface-background:
     linear-gradient(
@@ -855,6 +861,8 @@
   --surface-overlay-backdrop: rgba(var(--window-glass-bg-rgb), 0.22);
   --surface-overlay-panel-bg: rgba(var(--window-glass-elevated-rgb), 0.3);
   --surface-overlay-panel-border: rgba(var(--window-glass-border-rgb), 0.28);
+  --modal-list-item-bg-hover: rgba(var(--window-glass-border-rgb), 0.07);
+  --modal-list-item-bg-active: rgba(var(--window-glass-border-rgb), 0.11);
   --shell-surface-muted: rgba(var(--window-glass-elevated-rgb), 0.16);
   --shell-surface-raised: rgba(var(--window-glass-elevated-rgb), 0.24);
   --shell-stroke-soft: rgba(var(--window-glass-border-rgb), 0.18);
@@ -873,9 +881,9 @@
   --chrome-activity-bar-bg:
     linear-gradient(180deg, rgba(var(--window-glass-border-rgb), 0.08), rgba(var(--window-glass-border-rgb), 0.015)),
     rgba(var(--window-glass-elevated-rgb), 0.12);
-  --chrome-tabstrip-bg: rgba(var(--window-glass-elevated-rgb), 0.11);
-  --chrome-tab-active-bg: rgba(var(--window-glass-elevated-rgb), 0.16);
-  --chrome-tab-inactive-bg: rgba(var(--window-glass-elevated-rgb), 0.06);
+  --chrome-tabstrip-bg: rgba(var(--window-glass-elevated-rgb), 0.18);
+  --chrome-tab-active-bg: rgba(var(--window-glass-elevated-rgb), 0.28);
+  --chrome-tab-inactive-bg: rgba(var(--window-glass-elevated-rgb), 0.1);
   --chrome-border-soft: rgba(var(--window-glass-border-rgb), 0.16);
   --chrome-border-strong: rgba(var(--window-glass-border-rgb), 0.26);
   --chrome-inline-highlight: rgba(var(--window-glass-border-rgb), 0.03);
@@ -933,9 +941,9 @@
   --chrome-activity-bar-bg:
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.008)),
     rgba(16, 19, 23, 0.27);
-  --chrome-tabstrip-bg: rgba(21, 24, 29, 0.17);
-  --chrome-tab-active-bg: rgba(30, 34, 40, 0.24);
-  --chrome-tab-inactive-bg: rgba(21, 24, 29, 0.1);
+  --chrome-tabstrip-bg: rgba(21, 24, 29, 0.24);
+  --chrome-tab-active-bg: rgba(30, 34, 40, 0.34);
+  --chrome-tab-inactive-bg: rgba(21, 24, 29, 0.14);
   --chrome-border-soft: rgba(255, 255, 255, 0.13);
   --chrome-border-strong: rgba(255, 255, 255, 0.2);
   --chrome-inline-highlight: rgba(255, 255, 255, 0.02);
@@ -982,9 +990,9 @@
   --chrome-activity-bar-bg:
     linear-gradient(180deg, rgba(255, 244, 224, 0.045), rgba(255, 244, 224, 0.01)),
     rgba(84, 65, 44, 0.28);
-  --chrome-tabstrip-bg: rgba(102, 79, 55, 0.18);
-  --chrome-tab-active-bg: rgba(126, 98, 68, 0.24);
-  --chrome-tab-inactive-bg: rgba(96, 74, 51, 0.11);
+  --chrome-tabstrip-bg: rgba(102, 79, 55, 0.25);
+  --chrome-tab-active-bg: rgba(126, 98, 68, 0.34);
+  --chrome-tab-inactive-bg: rgba(96, 74, 51, 0.15);
   --chrome-border-soft: rgba(255, 244, 224, 0.12);
   --chrome-border-strong: rgba(255, 244, 224, 0.18);
   --chrome-inline-highlight: rgba(255, 244, 224, 0.02);
@@ -1250,6 +1258,17 @@ textarea,
   backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.95)) saturate(1.08);
   -webkit-backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.95)) saturate(1.08);
   background-clip: padding-box;
+}
+
+[data-floating-surface="true"] {
+  border-radius: var(--modal-panel-radius);
+}
+
+[data-floating-surface="true"] button,
+[data-floating-surface="true"] input,
+[data-floating-surface="true"] select,
+[data-floating-surface="true"] textarea {
+  border-radius: var(--modal-control-radius);
 }
 
 /* 拖拽窗口时关闭浮层补充模糊，避免连续拖拽期间的额外 GPU 压力。 */

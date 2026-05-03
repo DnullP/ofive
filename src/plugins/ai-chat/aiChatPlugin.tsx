@@ -5,6 +5,7 @@
 
 import React, {
     useEffect,
+    useLayoutEffect,
     useMemo,
     useRef,
     useState,
@@ -410,6 +411,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     const smoothingFrameRef = useRef<number | null>(null);
     const smoothingLastFrameAtRef = useRef<number | null>(null);
     const modelSwitcherRef = useRef<HTMLDivElement | null>(null);
+    const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
     const modelSwitcherLoadKeyRef = useRef<string | null>(null);
     const modelSwitcherLoadRequestRef = useRef(0);
 
@@ -1164,6 +1166,16 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         setModelSwitcherFeedbackIsError(false);
     }, [modelSwitcherOpen]);
 
+    useLayoutEffect(() => {
+        const input = composerInputRef.current;
+        if (!input) {
+            return;
+        }
+
+        input.style.height = "auto";
+        input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
+    }, [draft]);
+
     useEffect(() => {
         if (!settings || !canLoadModelSwitcherModels) {
             modelSwitcherLoadKeyRef.current = null;
@@ -1561,72 +1573,16 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
 
     return (
         <div className="ai-chat-panel">
-            <div className="ai-chat-header">
-                <div className="ai-chat-header-actions">
-                    <button
-                        type="button"
-                        className="ai-chat-conversation-manage"
-                        onClick={() => {
-                            setActiveTab("history");
-                        }}
-                    >
-                        <span>{i18n.t("aiChatPlugin.conversationManager")}</span>
-                    </button>
-                    <button
-                        type="button"
-                        className="ai-chat-conversation-create"
-                        onClick={handleCreateConversation}
-                    >
-                        <Plus size={13} strokeWidth={2} />
-                        <span>{i18n.t("aiChatPlugin.newConversation")}</span>
-                    </button>
-                </div>
-
-                {formattedError ? (
+            {formattedError ? (
+                <div className="ai-chat-header">
                     <div className="ai-chat-status error" title={error ?? undefined}>
                         <div className="ai-chat-status-title">{formattedError.summary}</div>
                         {formattedError.detail ? (
                             <div className="ai-chat-status-detail">{formattedError.detail}</div>
                         ) : null}
                     </div>
-                ) : null}
-            </div>
-
-            <div className="ai-chat-tab-strip" role="tablist" aria-label={i18n.t("aiChatPlugin.title")}>
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === "history"}
-                    className={`ai-chat-tab-button ${activeTab === "history" ? "active" : ""}`}
-                    onClick={() => {
-                        setActiveTab("history");
-                    }}
-                >
-                    {i18n.t("aiChatPlugin.tabHistory")}
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === "chat"}
-                    className={`ai-chat-tab-button ${activeTab === "chat" ? "active" : ""}`}
-                    onClick={() => {
-                        setActiveTab("chat");
-                    }}
-                >
-                    {i18n.t("aiChatPlugin.tabChat")}
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === "debug"}
-                    className={`ai-chat-tab-button ${activeTab === "debug" ? "active" : ""}`}
-                    onClick={() => {
-                        setActiveTab("debug");
-                    }}
-                >
-                    {i18n.t("aiChatPlugin.tabDebug")}
-                </button>
-            </div>
+                </div>
+            ) : null}
 
             {activeTab === "history" ? (
                 <div className="ai-chat-history-shell" role="tabpanel">
@@ -1731,16 +1687,26 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
 
                             return (
                                 <div key={message.id} className={`ai-chat-message ${message.role}`}>
-                                    <div className="ai-chat-message-avatar">
-                                        {message.role === "assistant"
-                                            ? <Bot size={14} strokeWidth={1.8} />
-                                            : <ArrowUp size={14} strokeWidth={1.8} />}
-                                    </div>
                                     <div className="ai-chat-message-content">
-                                        <div className="ai-chat-message-role">
-                                            {message.role === "assistant"
-                                                ? i18n.t("aiChatPlugin.assistant")
-                                                : i18n.t("aiChatPlugin.user")}
+                                        <div className="ai-chat-message-heading-row">
+                                            <div className="ai-chat-message-avatar">
+                                                {message.role === "assistant"
+                                                    ? <Bot size={13} strokeWidth={1.9} />
+                                                    : <ArrowUp size={13} strokeWidth={1.9} />}
+                                            </div>
+                                            <div className="ai-chat-message-role">
+                                                {message.role === "assistant"
+                                                    ? i18n.t("aiChatPlugin.assistant")
+                                                    : i18n.t("aiChatPlugin.user")}
+                                            </div>
+                                            {durationLabel ? (
+                                                <div className="ai-chat-message-meta">
+                                                    <span className="ai-chat-message-duration">
+                                                        <Timer size={11} strokeWidth={1.8} />
+                                                        <span>{durationLabel}</span>
+                                                    </span>
+                                                </div>
+                                            ) : null}
                                         </div>
                                         <div className="ai-chat-message-bubble">
                                             <AiChatMessageMarkdown
@@ -1750,14 +1716,6 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                                                 streaming={isStreamingMessage}
                                             />
                                         </div>
-                                        {durationLabel ? (
-                                            <div className="ai-chat-message-meta">
-                                                <span className="ai-chat-message-duration">
-                                                    <Timer size={11} strokeWidth={1.8} />
-                                                    <span>{durationLabel}</span>
-                                                </span>
-                                            </div>
-                                        ) : null}
                                         {confirmation ? (
                                             <div className="ai-chat-confirmation-card">
                                                 <div className="ai-chat-confirmation-meta">
@@ -1882,10 +1840,11 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                 ) : null}
 
                 <textarea
+                    ref={composerInputRef}
                     className="ai-chat-input"
                     value={draft}
                     placeholder={i18n.t("aiChatPlugin.draftPlaceholder")}
-                    disabled={!currentVaultPath || !activeConversation || activeTab === "history"}
+                    disabled={!currentVaultPath || !activeConversation}
                     onKeyDown={handleInputKeyDown}
                     onChange={(event) => {
                         setDraft(event.target.value);
@@ -1945,28 +1904,40 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                             </div>
                         ) : null}
                     </div>
-                    <button
-                        type="button"
-                        className="ai-chat-send-button"
-                        aria-busy={isActiveConversationStopping}
-                        disabled={isActiveConversationStreaming ? isActiveConversationStopping : !canSend}
-                        onClick={() => {
-                            if (isActiveConversationStreaming) {
-                                void handleStopConversation();
-                                return;
-                            }
-                            void handleSubmit();
-                        }}
-                    >
-                        <span>{isActiveConversationStreaming
-                            ? isActiveConversationStopping
-                                ? i18n.t("aiChatPlugin.stopping")
-                                : i18n.t("aiChatPlugin.stop")
-                            : i18n.t("aiChatPlugin.send")}</span>
-                        {isActiveConversationStreaming
-                            ? <X size={14} strokeWidth={2} />
-                            : <ArrowUp size={14} strokeWidth={2} />}
-                    </button>
+                    <div className="ai-chat-composer-actions">
+                        <button
+                            type="button"
+                            className="ai-chat-new-button"
+                            aria-label={i18n.t("aiChatPlugin.newConversation")}
+                            title={i18n.t("aiChatPlugin.newConversation")}
+                            disabled={!currentVaultPath}
+                            onClick={handleCreateConversation}
+                        >
+                            <Plus size={15} strokeWidth={2.1} />
+                        </button>
+                        <button
+                            type="button"
+                            className="ai-chat-send-button"
+                            aria-busy={isActiveConversationStopping}
+                            disabled={isActiveConversationStreaming ? isActiveConversationStopping : !canSend}
+                            onClick={() => {
+                                if (isActiveConversationStreaming) {
+                                    void handleStopConversation();
+                                    return;
+                                }
+                                void handleSubmit();
+                            }}
+                        >
+                            <span>{isActiveConversationStreaming
+                                ? isActiveConversationStopping
+                                    ? i18n.t("aiChatPlugin.stopping")
+                                    : i18n.t("aiChatPlugin.stop")
+                                : i18n.t("aiChatPlugin.send")}</span>
+                            {isActiveConversationStreaming
+                                ? <X size={14} strokeWidth={2} />
+                                : <ArrowUp size={14} strokeWidth={2} />}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

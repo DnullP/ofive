@@ -663,12 +663,10 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         getExistingMarkdownPaths: () => [],
         activatePanel: (panelId: string) => workbenchApiRef.current?.activatePanel(panelId),
         toggleLeftSidebarVisibility: () => {
-            leftSidebarVisibleRef.current = !leftSidebarVisibleRef.current;
-            workbenchApiRef.current?.setLeftSidebarVisible(leftSidebarVisibleRef.current);
+            workbenchApiRef.current?.toggleLeftSidebarVisible();
         },
         toggleRightSidebarVisibility: () => {
-            rightSidebarVisibleRef.current = !rightSidebarVisibleRef.current;
-            workbenchApiRef.current?.setRightSidebarVisible(rightSidebarVisibleRef.current);
+            workbenchApiRef.current?.toggleRightSidebarVisible();
         },
         executeEditorNativeCommand: (commandId) => {
             const activeEditor = getActiveEditorSnapshot();
@@ -776,8 +774,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
     useEffect(() => {
         return subscribeRightSidebarToggleRequest(() => {
-            rightSidebarVisibleRef.current = !rightSidebarVisibleRef.current;
-            workbenchApiRef.current?.setRightSidebarVisible(rightSidebarVisibleRef.current);
+            workbenchApiRef.current?.toggleRightSidebarVisible();
         });
     }, []);
 

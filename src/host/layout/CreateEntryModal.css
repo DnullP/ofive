@@ -18,7 +18,7 @@
     flex-direction: column;
     gap: 12px;
     border: 1px solid var(--border-color);
-    border-radius: 10px;
+    border-radius: var(--modal-panel-radius);
     background: var(--bg-secondary);
     padding: 16px;
     box-shadow: var(--overlay-shadow-strong);
@@ -44,7 +44,7 @@
 .create-entry-input {
     width: 100%;
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: var(--modal-control-radius);
     background: var(--bg-primary);
     color: var(--text-primary);
     font-size: 14px;
@@ -74,7 +74,7 @@
 /* 通用按钮：提供统一的浮窗操作按钮外观。 */
 .create-entry-button {
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: var(--modal-control-radius);
     background: var(--bg-primary);
     color: var(--text-primary);
     cursor: pointer;

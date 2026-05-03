@@ -4,7 +4,7 @@
     height: 100%;
     min-height: 0;
     display: grid;
-    grid-template-rows: auto auto 1fr auto;
+    grid-template-rows: auto 1fr auto;
     background:
         radial-gradient(circle at top right, color-mix(in srgb, var(--accent-primary) 10%, transparent), transparent 34%),
         linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 95%, var(--bg-hover) 5%), var(--bg-primary));
@@ -12,10 +12,9 @@
 
 /* ai-chat-header：头部信息区 */
 .ai-chat-header {
-    padding: 10px;
+    padding: 8px 10px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
     border-bottom: 1px solid var(--border-color);
     background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
 }
@@ -97,8 +96,8 @@
 /* ai-chat-status：状态提示卡片 */
 .ai-chat-status {
     border: 1px solid color-mix(in srgb, var(--border-color) 82%, var(--accent-primary) 18%);
-    border-radius: 10px;
-    padding: 8px 10px;
+    border-radius: 0;
+    padding: 7px 9px;
     font-size: 12px;
     line-height: 1.55;
     color: var(--text-secondary);
@@ -128,7 +127,7 @@
 
 /* ai-chat-tab-strip：chat/debug tab 容器 */
 .ai-chat-tab-strip {
-    display: grid;
+    display: none;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
     padding: 8px 10px;
@@ -286,19 +285,20 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 10px;
+    gap: 0;
+    padding: 0;
     overflow: hidden;
 }
 
 /* ai-chat-welcome-card：空会话欢迎卡片 */
 .ai-chat-welcome-card {
-    border: 1px solid color-mix(in srgb, var(--accent-primary) 18%, var(--border-color));
-    border-radius: 16px;
-    padding: 12px;
+    border: 0;
+    border-bottom: 1px solid var(--border-color);
+    border-radius: 0;
+    padding: 10px 12px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     background:
         radial-gradient(circle at top right, color-mix(in srgb, var(--accent-primary) 16%, transparent), transparent 42%),
         linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 94%, var(--bg-hover) 6%), var(--bg-primary));
@@ -306,14 +306,14 @@
 
 /* ai-chat-welcome-title：欢迎标题 */
 .ai-chat-welcome-title {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--text-primary);
 }
 
 /* ai-chat-welcome-body：欢迎说明 */
 .ai-chat-welcome-body {
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1.55;
     color: var(--text-secondary);
 }
@@ -328,14 +328,14 @@
 /* ai-chat-quick-prompts-grid：快捷提示列表 */
 .ai-chat-quick-prompts-grid {
     display: grid;
-    gap: 8px;
+    gap: 4px;
 }
 
 /* ai-chat-quick-prompt：快捷提示按钮 */
 .ai-chat-quick-prompt {
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 9px 10px;
+    border: 0;
+    border-radius: 0;
+    padding: 7px 0;
     display: flex;
     align-items: flex-start;
     gap: 8px;
@@ -343,7 +343,7 @@
     font-size: 12px;
     line-height: 1.5;
     color: var(--text-primary);
-    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+    background: transparent;
     cursor: pointer;
 }
 
@@ -354,79 +354,97 @@
     overflow: auto;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 2px 2px 6px;
+    gap: 0;
+    padding: 0;
 }
 
 /* ai-chat-message：单条消息容器 */
 .ai-chat-message {
     display: flex;
     align-items: flex-start;
-    gap: 9px;
+    gap: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+    background: color-mix(in srgb, var(--bg-primary) 94%, var(--bg-secondary));
 }
 
 /* ai-chat-message.user：用户消息右对齐 */
 .ai-chat-message.user {
-    flex-direction: row-reverse;
+    flex-direction: row;
+    background: color-mix(in srgb, var(--accent-primary) 7%, var(--bg-primary));
+}
+
+/* ai-chat-message-heading-row：头像、角色和状态单行展开。 */
+.ai-chat-message-heading-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
 }
 
 /* ai-chat-message-avatar：头像 */
 .ai-chat-message-avatar {
-    width: 26px;
-    height: 26px;
-    flex: 0 0 26px;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 9px;
-    border: 1px solid var(--border-color);
+    border-radius: 0;
+    border: 0;
     color: var(--text-secondary);
-    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+    background: transparent;
 }
 
 /* ai-chat-message.user .ai-chat-message-avatar：用户头像强调色 */
 .ai-chat-message.user .ai-chat-message-avatar {
     color: var(--accent-primary);
-    border-color: color-mix(in srgb, var(--accent-primary) 28%, var(--border-color));
-    background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-primary));
+    border-color: transparent;
+    background: transparent;
 }
 
 /* ai-chat-message-content：消息正文 */
 .ai-chat-message-content {
-    max-width: calc(100% - 36px);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 6px;
+    padding: 10px 12px;
 }
 
 /* ai-chat-message-role：角色标签 */
 .ai-chat-message-role {
-    font-size: 10px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ai-chat-message-bubble：消息气泡 */
 .ai-chat-message-bubble {
-    border: 1px solid var(--border-color);
-    border-radius: 14px;
-    padding: 9px 11px;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
     font-size: 13px;
     line-height: 1.6;
     color: var(--text-primary);
-    background: color-mix(in srgb, var(--bg-primary) 90%, var(--bg-secondary));
+    background: transparent;
     word-break: break-word;
 }
 
 /* ai-chat-message.user .ai-chat-message-bubble：用户气泡 */
 .ai-chat-message.user .ai-chat-message-bubble {
-    border-color: color-mix(in srgb, var(--accent-primary) 28%, var(--border-color));
-    background: color-mix(in srgb, var(--accent-primary) 15%, var(--bg-primary));
+    border-color: transparent;
+    background: transparent;
 }
 
 /* ai-chat-message-meta：消息辅助信息 */
 .ai-chat-message-meta {
+    margin-left: auto;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -467,7 +485,7 @@
 .ai-chat-message-reasoning-panel {
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
-    border-radius: 10px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-primary));
 }
 
@@ -607,7 +625,7 @@
 /* ai-chat-message-inline-code：行内代码 */
 .ai-chat-message-inline-code {
     padding: 1px 5px;
-    border-radius: 6px;
+    border-radius: 0;
     font: 0.92em/1.4 "SFMono-Regular", "Consolas", "Menlo", monospace;
     color: var(--text-primary);
     background: color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-primary));
@@ -618,7 +636,7 @@
     margin: 0;
     padding: 10px;
     overflow: auto;
-    border-radius: 10px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--bg-secondary) 92%, var(--bg-primary));
 }
 
@@ -640,7 +658,7 @@
 /* ai-chat-confirmation-card：消息内确认卡片 */
 .ai-chat-confirmation-card {
     border: 1px solid color-mix(in srgb, var(--accent-primary) 20%, var(--border-color));
-    border-radius: 12px;
+    border-radius: 0;
     padding: 10px;
     display: flex;
     flex-direction: column;
@@ -676,7 +694,7 @@
 .ai-chat-confirmation-args {
     margin: 0;
     padding: 10px;
-    border-radius: 10px;
+    border-radius: 0;
     overflow: auto;
     font: 11px/1.55 "SFMono-Regular", "Consolas", "Menlo", monospace;
     color: var(--text-primary);
@@ -689,7 +707,7 @@
 .ai-chat-confirmation-diff {
     margin: 0;
     padding: 10px;
-    border-radius: 10px;
+    border-radius: 0;
     overflow: auto;
     font: 11px/1.55 "SFMono-Regular", "Consolas", "Menlo", monospace;
     color: var(--text-primary);
@@ -709,7 +727,7 @@
 /* ai-chat-confirm-button：确认按钮 */
 .ai-chat-confirm-button {
     border: 1px solid var(--border-color);
-    border-radius: 999px;
+    border-radius: 0;
     padding: 7px 10px;
     display: inline-flex;
     align-items: center;
@@ -980,34 +998,33 @@
 
 /* ai-chat-composer：输入区容器 */
 .ai-chat-composer {
-    padding: 10px;
+    padding: 8px 10px 10px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 7px;
     border-top: 1px solid var(--border-color);
     background: color-mix(in srgb, var(--bg-secondary) 96%, var(--bg-hover) 4%);
 }
 
 /* ai-chat-input：输入框 */
 .ai-chat-input {
-    min-height: 78px;
+    min-height: 38px;
     max-height: 150px;
     resize: none;
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    padding: 11px 12px;
+    border: 0;
+    border-radius: 0;
+    padding: 7px 2px;
     font-family: inherit;
     font-size: var(--ai-chat-control-font-size);
     line-height: 1.5;
     color: var(--text-primary);
-    background: color-mix(in srgb, var(--bg-primary) 90%, var(--bg-secondary));
+    background: transparent;
 }
 
 /* ai-chat-input:focus：输入框聚焦态 */
 .ai-chat-input:focus {
     outline: none;
-    border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 12%, transparent);
+    box-shadow: none;
 }
 
 /* ai-chat-composer-row：输入区底部行 */
@@ -1015,7 +1032,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
 }
 
 /* ai-chat-composer-meta：输入区模型和状态区域 */
@@ -1024,7 +1041,7 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
 }
 
 /* ai-chat-composer-hint：输入区提示 */
@@ -1047,16 +1064,16 @@
 /* ai-chat-model-button：模型切换按钮 */
 .ai-chat-model-button {
     max-width: 160px;
-    border: 1px solid var(--border-color);
-    border-radius: 999px;
-    padding: 6px 9px;
+    border: 0;
+    border-radius: 0;
+    padding: 4px 0;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     font-size: 11px;
     font-weight: 700;
     color: var(--text-primary);
-    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+    background: transparent;
     cursor: pointer;
 }
 
@@ -1082,7 +1099,7 @@
     max-height: 240px;
     overflow-y: auto;
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 4px;
     display: flex;
     flex-direction: column;
@@ -1096,7 +1113,7 @@
     width: 100%;
     min-height: 28px;
     border: 0;
-    border-radius: 5px;
+    border-radius: 0;
     padding: 5px 7px;
     display: flex;
     align-items: center;
@@ -1128,6 +1145,34 @@
     cursor: wait;
 }
 
+/* ai-chat-composer-actions：新建与发送按钮紧凑排列。 */
+.ai-chat-composer-actions {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ai-chat-new-button：composer 内的新建会话入口。 */
+.ai-chat-new-button {
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+    cursor: pointer;
+}
+
+.ai-chat-new-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
 /* ai-chat-model-menu-status：模型菜单状态 */
 .ai-chat-model-menu-status {
     padding: 7px;
@@ -1150,8 +1195,9 @@
 /* ai-chat-send-button：发送按钮 */
 .ai-chat-send-button {
     border: 0;
-    border-radius: 999px;
-    padding: 8px 12px;
+    border-radius: 0;
+    min-height: 30px;
+    padding: 6px 10px;
     display: inline-flex;
     align-items: center;
     gap: 7px;
@@ -1309,6 +1355,15 @@
     backdrop-filter: none;
 }
 
+.app-runtime--tauri.app-effect--glass .ai-chat-composer {
+    background: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-soft));
+    backdrop-filter: blur(var(--glass-blur-radius)) saturate(1.04);
+}
+
+.app-runtime--tauri.app-effect--glass.app-window--dragging .ai-chat-composer {
+    backdrop-filter: none;
+}
+
 /* 桌面毛玻璃 AI 面板卡片：保持轻量半透明表面。 */
 .app-runtime--tauri.app-effect--glass .ai-chat-welcome-card,
 .app-runtime--tauri.app-effect--glass .ai-chat-status,
@@ -1326,8 +1381,7 @@
 .app-runtime--tauri.app-effect--glass .ai-chat-conversation-create,
 .app-runtime--tauri.app-effect--glass .ai-chat-conversation-manage,
 .app-runtime--tauri.app-effect--glass .ai-chat-tab-button,
-.app-runtime--tauri.app-effect--glass .ai-chat-input,
-.app-runtime--tauri.app-effect--glass .ai-chat-message-bubble {
+.app-runtime--tauri.app-effect--glass .ai-chat-new-button {
     background: rgba(var(--window-glass-bg-rgb), 0.12);
 }
 

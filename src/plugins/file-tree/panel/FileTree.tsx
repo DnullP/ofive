@@ -273,24 +273,6 @@ function createDragPreviewElement(label: string): HTMLDivElement {
   return element;
 }
 
-/**
- * @function buildTreeHeaderSummary
- * @description 根据当前选择状态构建文件树头部摘要。
- * @param selectionCount 当前选中数量。
- * @param t 国际化函数。
- * @returns 摘要文本。
- */
-function buildTreeHeaderSummary(
-  selectionCount: number,
-  t: ReturnType<typeof useTranslation>["t"],
-): string {
-  if (selectionCount > 0) {
-    return t("fileTree.selectionSummary", { count: selectionCount });
-  }
-
-  return "";
-}
-
 function TreeItem({
   node,
   level,
@@ -646,8 +628,6 @@ export function FileTree({
     () => flattenVisibleNodes(tree, expandedFolders),
     [tree, expandedFolders],
   );
-  const headerSummary = buildTreeHeaderSummary(selectedPaths.size, t);
-
   const handleInputCompositionStart = (): void => {
     isInputComposingRef.current = true;
   };
@@ -1296,13 +1276,6 @@ export function FileTree({
       ref={containerRef}
       tabIndex={-1}
     >
-      <div className="file-tree-header">
-        <div className="file-tree-header-main">
-          <span className="file-tree-header-title">{t("fileTree.files")}</span>
-          <span className="file-tree-header-count">{t("fileTree.itemCount", { count: items.length })}</span>
-        </div>
-        {headerSummary ? <div className="file-tree-header-subtitle">{headerSummary}</div> : null}
-      </div>
       <ul
         className={`tree-root ${dropTargetDirectoryPath === "" ? "drop-target-root" : ""}`}
         onContextMenu={handleRootContextMenu}

@@ -170,7 +170,7 @@
 /* architecture-mini-item: 简短条目标签 */
 .architecture-mini-item {
     padding: 5px 10px;
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--architecture-surface-chip);
     color: var(--architecture-text-muted);
     font-size: 12px;
@@ -184,7 +184,7 @@
     align-items: center;
     padding: 14px 16px;
     border: 1px solid var(--architecture-border-color);
-    border-radius: 20px;
+    border-radius: 0;
     background: var(--architecture-surface-card);
 }
 
@@ -194,7 +194,7 @@
     min-width: 0;
     padding: 10px 12px;
     border: 1px solid var(--architecture-border-color);
-    border-radius: 12px;
+    border-radius: 0;
     background: var(--architecture-surface-input);
     color: var(--architecture-text-primary);
     outline: none;
@@ -238,7 +238,7 @@
 .architecture-filter-chip {
     padding: 7px 10px;
     border: 1px solid var(--architecture-border-color);
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--architecture-surface-chip);
     color: var(--architecture-text-muted);
     font-size: 12px;
@@ -274,7 +274,7 @@
     gap: 14px;
     padding: 16px;
     border: 1px solid var(--architecture-border-color);
-    border-radius: 22px;
+    border-radius: 0;
     background: var(--architecture-surface-card);
     box-shadow: var(--architecture-shadow);
 }
@@ -299,7 +299,7 @@
 .architecture-dag-copy-action {
     padding: 8px 12px;
     border: 1px solid color-mix(in srgb, var(--error-color) 28%, var(--architecture-border-color));
-    border-radius: 999px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--error-color) 10%, var(--architecture-surface-card));
     color: var(--architecture-text-strong);
     cursor: pointer;
@@ -338,7 +338,7 @@
 .architecture-dag-scroll {
     overflow: auto;
     min-height: 420px;
-    border-radius: 18px;
+    border-radius: 0;
     border: 1px solid var(--architecture-border-color-weak);
     overscroll-behavior-x: contain;
     overscroll-behavior-y: auto;
@@ -618,7 +618,7 @@
 .architecture-inspector-tree-action {
     padding: 8px 12px;
     border: 1px solid var(--architecture-accent-border);
-    border-radius: 999px;
+    border-radius: var(--modal-control-radius);
     background: var(--architecture-accent-surface);
     color: var(--architecture-text-strong);
     cursor: pointer;
@@ -633,7 +633,7 @@
 .architecture-inspector-close {
     padding: 8px 12px;
     border: 1px solid var(--architecture-border-color);
-    border-radius: 999px;
+    border-radius: var(--modal-control-radius);
     background: var(--architecture-surface-chip);
     color: var(--architecture-text-primary);
     cursor: pointer;
@@ -648,7 +648,7 @@
 .architecture-inspector-kind {
     align-self: flex-start;
     padding: 5px 10px;
-    border-radius: 999px;
+    border-radius: var(--modal-control-radius);
     background: var(--architecture-surface-chip-soft);
     color: var(--architecture-text-muted);
     font-size: 12px;
@@ -673,7 +673,7 @@
 .architecture-location-chip {
     align-self: flex-start;
     padding: 8px 10px;
-    border-radius: 12px;
+    border-radius: var(--modal-control-radius);
     background: var(--architecture-surface-chip-strong);
     color: var(--architecture-accent-text);
     font-size: 12px;
@@ -697,7 +697,7 @@
 /* architecture-inspector-item: 检查器单条信息 */
 .architecture-inspector-item {
     padding: 10px 12px;
-    border-radius: 14px;
+    border-radius: var(--modal-control-radius);
     background: var(--architecture-surface-item);
     color: var(--architecture-text-muted);
     line-height: 1.5;
@@ -748,7 +748,7 @@
     gap: 12px;
     padding: 16px;
     border: 1px solid var(--architecture-border-color);
-    border-radius: 20px;
+    border-radius: var(--modal-control-radius);
     background: var(--architecture-surface-card);
 }
 
@@ -766,7 +766,7 @@
     gap: 8px;
     padding: 12px;
     border: 1px solid var(--architecture-border-color-soft);
-    border-radius: 16px;
+    border-radius: var(--modal-control-radius);
     background: var(--architecture-surface-item);
     text-align: left;
     color: inherit;
@@ -795,7 +795,7 @@
 /* architecture-inventory-kind-chip: 清单类别标签 */
 .architecture-inventory-kind-chip {
     padding: 4px 8px;
-    border-radius: 999px;
+    border-radius: var(--modal-control-radius);
     background: var(--architecture-surface-item-strong);
     color: var(--architecture-text-muted);
     font-size: 11px;
@@ -833,7 +833,7 @@
 /* architecture-detail-chip: 细项标签 */
 .architecture-detail-chip {
     padding: 4px 8px;
-    border-radius: 999px;
+    border-radius: var(--modal-control-radius);
     background: var(--architecture-surface-item-soft);
     color: var(--architecture-text-secondary);
     font-size: 11px;
@@ -847,7 +847,7 @@
     min-height: 120px;
     padding: 16px;
     border: 1px dashed var(--architecture-border-color);
-    border-radius: 16px;
+    border-radius: 0;
     color: var(--architecture-text-secondary);
     text-align: center;
 }

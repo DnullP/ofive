@@ -14,7 +14,7 @@ import { expect, test } from "@playwright/test";
  */
 async function ensureAiChatPanelVisible(page: Parameters<typeof test>[0]["page"]): Promise<void> {
     const aiChatPanel = page.locator(".ai-chat-panel");
-    const aiChatHeader = page.locator(".ai-chat-header");
+    const aiChatComposer = page.locator(".ai-chat-composer");
     const aiChatCard = page.locator(
         ".ai-chat-welcome-card, .ai-chat-conversation-summary, .ai-chat-status",
     ).first();
@@ -24,7 +24,7 @@ async function ensureAiChatPanelVisible(page: Parameters<typeof test>[0]["page"]
     }
 
     await aiChatPanel.waitFor({ state: "visible" });
-    await aiChatHeader.waitFor({ state: "visible" });
+    await aiChatComposer.waitFor({ state: "visible" });
     await aiChatCard.waitFor({ state: "visible" });
 }
 
@@ -55,12 +55,12 @@ test.describe("glass visual reference", () => {
             const leftSidebar = document.querySelector<HTMLElement>("[data-testid='sidebar-left']");
             const fileTree = document.querySelector<HTMLElement>(".file-tree");
             const aiChatPanel = document.querySelector<HTMLElement>(".ai-chat-panel");
-            const aiChatHeader = document.querySelector<HTMLElement>(".ai-chat-header");
+            const aiChatComposer = document.querySelector<HTMLElement>(".ai-chat-composer");
             const aiChatCard = document.querySelector<HTMLElement>(
                 ".ai-chat-welcome-card, .ai-chat-conversation-summary, .ai-chat-status",
             );
 
-            if (!mainArea || !leftSidebar || !fileTree || !aiChatPanel || !aiChatHeader || !aiChatCard) {
+            if (!mainArea || !leftSidebar || !fileTree || !aiChatPanel || !aiChatComposer || !aiChatCard) {
                 throw new Error("glass visual selectors missing");
             }
 
@@ -70,7 +70,7 @@ test.describe("glass visual reference", () => {
                 sidebarBackground: window.getComputedStyle(leftSidebar).backgroundColor,
                 fileTreeBackground: window.getComputedStyle(fileTree).backgroundColor,
                 aiChatPanelBackground: window.getComputedStyle(aiChatPanel).backgroundColor,
-                aiChatHeaderBackground: window.getComputedStyle(aiChatHeader).backgroundColor,
+                aiChatComposerBackground: window.getComputedStyle(aiChatComposer).backgroundColor,
                 aiChatCardBackground: window.getComputedStyle(aiChatCard).backgroundColor,
             };
         });
@@ -82,8 +82,8 @@ test.describe("glass visual reference", () => {
         expect(parseAlpha(styleSnapshot.sidebarBackground)).toBeLessThan(0.35);
         expect(parseAlpha(styleSnapshot.fileTreeBackground)).toBe(0);
         expect(parseAlpha(styleSnapshot.aiChatPanelBackground)).toBeLessThan(0.2);
-        expect(parseAlpha(styleSnapshot.aiChatHeaderBackground)).toBeGreaterThan(0.05);
-        expect(parseAlpha(styleSnapshot.aiChatHeaderBackground)).toBeLessThan(0.35);
+        expect(parseAlpha(styleSnapshot.aiChatComposerBackground)).toBeGreaterThan(0.05);
+        expect(parseAlpha(styleSnapshot.aiChatComposerBackground)).toBeLessThan(0.55);
         expect(parseAlpha(styleSnapshot.aiChatCardBackground)).toBeGreaterThan(0.05);
         expect(parseAlpha(styleSnapshot.aiChatCardBackground)).toBeLessThan(0.35);
     });

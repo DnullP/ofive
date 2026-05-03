@@ -5,6 +5,27 @@ const SCROLL_NOTE_PATH = "test-resources/notes/scroll-regression.md";
 const ALT_SCROLL_NOTE_PATH = "test-resources/notes/scroll-regression-alt.md";
 const FRONTMATTER_NOTE_PATH = "test-resources/notes/network-segment.md";
 
+interface CodeMirrorContentElement extends HTMLElement {
+    cmTile?: {
+        view?: {
+            focus(): void;
+            state: {
+                doc: {
+                    length: number;
+                    toString(): string;
+                };
+                selection: {
+                    main: {
+                        anchor: number;
+                        head: number;
+                    };
+                };
+            };
+            dispatch(spec: unknown): void;
+        };
+    };
+}
+
 async function waitForMockWorkbench(page: Page): Promise<void> {
     await page.goto(MOCK_PAGE);
     await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
@@ -47,6 +68,57 @@ async function setVisibleEditorScrollTop(page: Page, scrollTop: number): Promise
             scroller.scrollTop = nextScrollTop;
         }
     }, scrollTop);
+}
+
+async function findVisibleEditorOffset(page: Page, text: string): Promise<number> {
+    return page.evaluate((needle) => {
+        const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as CodeMirrorContentElement | null;
+        const view = content?.cmTile?.view;
+        if (!view) {
+            throw new Error("EditorView not found on .cm-content");
+        }
+
+        const offset = view.state.doc.toString().indexOf(needle);
+        if (offset < 0) {
+            throw new Error(`Could not find editor text: ${needle}`);
+        }
+
+        return offset;
+    }, text);
+}
+
+async function setVisibleEditorSelection(page: Page, offset: number): Promise<void> {
+    await page.evaluate((targetOffset) => {
+        const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as CodeMirrorContentElement | null;
+        const view = content?.cmTile?.view;
+        if (!view) {
+            throw new Error("EditorView not found on .cm-content");
+        }
+
+        const clampedOffset = Math.max(0, Math.min(targetOffset, view.state.doc.length));
+        view.dispatch({
+            selection: {
+                anchor: clampedOffset,
+            },
+            scrollIntoView: true,
+        });
+        view.focus();
+    }, offset);
+}
+
+async function readVisibleEditorSelection(page: Page): Promise<{ anchor: number; head: number }> {
+    return page.evaluate(() => {
+        const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as CodeMirrorContentElement | null;
+        const view = content?.cmTile?.view;
+        if (!view) {
+            throw new Error("EditorView not found on .cm-content");
+        }
+
+        return {
+            anchor: view.state.selection.main.anchor,
+            head: view.state.selection.main.head,
+        };
+    });
 }
 
 async function readVisibleEditorState(page: Page): Promise<{
@@ -331,6 +403,29 @@ test.describe("editor view state regression", () => {
         const afterSwitch = await readVisibleEditorState(page);
         expect(afterSwitch.title).toBe("scroll-regression");
         expect(Math.abs(afterSwitch.scrollTop - beforeSwitch.scrollTop)).toBeLessThan(96);
+    });
+
+    test("closing settings tab returns to the editor without resetting the caret", async ({ page }) => {
+        await openMockNote(page, SCROLL_NOTE_PATH);
+        await waitForVisibleEditorTitle(page, "scroll-regression");
+
+        const caretOffset = await findVisibleEditorOffset(page, "120. Scroll regression checkpoint line 120.");
+        await setVisibleEditorSelection(page, caretOffset);
+        expect(await readVisibleEditorSelection(page)).toEqual({
+            anchor: caretOffset,
+            head: caretOffset,
+        });
+
+        await page.getByTestId("activity-bar-item-__settings__").click();
+        await expect(page.locator(".layout-v2-tab-section__tab--focused").filter({ hasText: /设置|Settings/ })).toBeVisible();
+        await page.locator(".layout-v2-tab-section__tab--focused .layout-v2-tab-section__tab-close").click();
+        await waitForVisibleEditorTitle(page, "scroll-regression");
+        await waitForEditorActivationFrame(page);
+
+        expect(await readVisibleEditorSelection(page)).toEqual({
+            anchor: caretOffset,
+            head: caretOffset,
+        });
     });
 
     test("sidebar activity switch does not yank editor scroll or create a range selection", async ({ page }) => {

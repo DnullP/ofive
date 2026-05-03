@@ -11,46 +11,6 @@
   overflow: hidden;
 }
 
-.file-tree-header {
-  padding: 12px 14px;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--surface-card-border);
-  background: var(--surface-card-bg-muted);
-  user-select: none;
-}
-
-/* 文件树头部主行：标题和数量标签左右布局。 */
-.file-tree-header-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-/* 文件树头部标题：强调当前导航区域名称。 */
-.file-tree-header-title {
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-/* 文件树头部数量标签：弱化显示当前项目数量。 */
-.file-tree-header-count {
-  color: var(--surface-chip-text);
-  font-size: 11px;
-  padding: 3px 8px;
-  border: 0;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-chip-bg) 74%, transparent);
-}
-
-/* 文件树头部副标题：展示当前选择摘要。 */
-.file-tree-header-subtitle {
-  margin-top: 6px;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
 .tree-root,
 .tree-children {
   list-style: none;
@@ -74,37 +34,34 @@
 
 .tree-item {
   width: 100%;
-  border: 1px solid transparent;
+  border: 0;
   background: transparent;
   color: var(--text-primary);
   text-align: left;
-  padding: 7px 8px;
+  padding: 8px 9px;
   display: flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
   user-select: none;
-  border-radius: 12px;
-  transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+  border-radius: 0;
+  transition: background-color 0.16s ease, color 0.16s ease;
 }
 
 .tree-item:hover,
 .tree-item.active {
-  background: var(--surface-list-hover-bg);
-  border-color: var(--nav-item-hover-border);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 /* 多选态：强调当前被纳入批量操作的树节点。 */
 .tree-item.selected {
-  background: var(--tree-selection-bg);
-  border-color: var(--surface-list-active-border);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 
 /* 多选 + hover/active：保持选中反馈同时叠加更强状态。 */
 .tree-item.selected:hover,
 .tree-item.selected.active {
-  background: var(--tree-selection-bg-strong);
-  box-shadow: var(--surface-list-active-shadow);
+  background: color-mix(in srgb, var(--text-primary) 13%, transparent);
 }
 
 /* 重命名编辑态：输入框行保持与普通树节点一致的布局。 */
@@ -182,11 +139,6 @@
 /* 桌面毛玻璃文件树：根容器保持透明，避免把侧栏玻璃盖成实底。 */
 .app-runtime--tauri.app-effect--glass .file-tree {
   background: transparent;
-}
-
-/* 桌面毛玻璃文件树头部：保留轻度表面层次。 */
-.app-runtime--tauri.app-effect--glass .file-tree-header {
-  background: rgba(var(--window-glass-elevated-rgb), 0.08);
 }
 
 /* 桌面毛玻璃文件树编辑输入：保持轻度透明输入底。 */

@@ -19,6 +19,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
     createVaultMarkdownFile,
@@ -76,9 +77,9 @@ interface CalendarLoadState {
 
 /** Panel 模式浮动笔记窗定位信息。 */
 interface CalendarPanelPopoverPosition {
-    /** 浮窗左偏移。 */
+    /** 浮窗窗口级左偏移。 */
     left: number;
-    /** 浮窗上偏移。 */
+    /** 浮窗窗口级上偏移。 */
     top: number;
     /** 浮窗相对选中日期的朝向。 */
     placement: "above" | "below";
@@ -391,32 +392,32 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
             return;
         }
 
-        const calendarSurface = calendarSurfaceRef.current;
         const selectedDayButton = dayButtonRefs.current.get(selectedDayKey);
         const popover = panelNotesPopoverRef.current;
-        if (!calendarSurface || !selectedDayButton || !popover) {
+        if (!selectedDayButton || !popover) {
             return;
         }
 
-        const surfaceRect = calendarSurface.getBoundingClientRect();
         const dayRect = selectedDayButton.getBoundingClientRect();
         const popoverRect = popover.getBoundingClientRect();
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
         const horizontalPadding = 8;
         const verticalGap = 8;
 
-        let left = dayRect.left - surfaceRect.left;
-        const maxLeft = Math.max(horizontalPadding, surfaceRect.width - popoverRect.width - horizontalPadding);
+        let left = dayRect.left;
+        const maxLeft = Math.max(horizontalPadding, viewportWidth - popoverRect.width - horizontalPadding);
         left = Math.min(Math.max(horizontalPadding, left), maxLeft);
 
         let placement: "above" | "below" = "below";
-        let top = dayRect.bottom - surfaceRect.top + verticalGap;
-        if (top + popoverRect.height > surfaceRect.height && dayRect.top - surfaceRect.top > popoverRect.height + verticalGap) {
+        let top = dayRect.bottom + verticalGap;
+        if (top + popoverRect.height > viewportHeight - horizontalPadding && dayRect.top > popoverRect.height + verticalGap + horizontalPadding) {
             placement = "above";
-            top = dayRect.top - surfaceRect.top - popoverRect.height - verticalGap;
+            top = dayRect.top - popoverRect.height - verticalGap;
         }
 
         if (top < horizontalPadding) {
-            top = dayRect.bottom - surfaceRect.top + verticalGap;
+            top = dayRect.bottom + verticalGap;
             placement = "below";
         }
 
@@ -473,6 +474,44 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
             dailyNoteExists,
         });
     };
+
+    const panelNotesPopover = isPanelMode && isPanelNotesPopoverOpen ? createPortal(
+        <div
+            ref={panelNotesPopoverRef}
+            className={[
+                "calendar-tab__panel-popover",
+                panelPopoverPosition ? "is-positioned" : "",
+                isPanelNotesPopoverClosing ? "is-closing" : "",
+            ].filter(Boolean).join(" ")}
+            data-floating-surface="true"
+            style={panelPopoverPosition ? {
+                left: `${panelPopoverPosition.left}px`,
+                top: `${panelPopoverPosition.top}px`,
+            } : undefined}
+            data-placement={panelPopoverPosition?.placement ?? "below"}
+        >
+            {selectedNotes.length === 0 ? (
+                <div className="calendar-tab__panel-popover-empty">{t("calendar.notesForDayEmpty")}</div>
+            ) : (
+                <div className="calendar-tab__panel-popover-note-list">
+                    {selectedNotes.map((note) => (
+                        <button
+                            key={note.relativePath}
+                            type="button"
+                            className="calendar-tab__note-button calendar-tab__note-button--panel-popover"
+                            onClick={() => {
+                                void openNote(note.relativePath);
+                            }}
+                        >
+                            <span className="calendar-tab__note-title">{note.title}</span>
+                            <span className="calendar-tab__note-path">{note.relativePath}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>,
+        document.body,
+    ) : null;
 
     return (
         <section ref={rootRef} className={`calendar-tab calendar-tab--${mode}`}>
@@ -596,42 +635,7 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                             })}
                         </div>
 
-                        {isPanelMode && isPanelNotesPopoverOpen ? (
-                            <div
-                                ref={panelNotesPopoverRef}
-                                className={[
-                                    "calendar-tab__panel-popover",
-                                    panelPopoverPosition ? "is-positioned" : "",
-                                    isPanelNotesPopoverClosing ? "is-closing" : "",
-                                ].filter(Boolean).join(" ")}
-                                data-floating-surface="true"
-                                style={panelPopoverPosition ? {
-                                    left: `${panelPopoverPosition.left}px`,
-                                    top: `${panelPopoverPosition.top}px`,
-                                } : undefined}
-                                data-placement={panelPopoverPosition?.placement ?? "below"}
-                            >
-                                {selectedNotes.length === 0 ? (
-                                    <div className="calendar-tab__panel-popover-empty">{t("calendar.notesForDayEmpty")}</div>
-                                ) : (
-                                    <div className="calendar-tab__panel-popover-note-list">
-                                        {selectedNotes.map((note) => (
-                                            <button
-                                                key={note.relativePath}
-                                                type="button"
-                                                className="calendar-tab__note-button calendar-tab__note-button--panel-popover"
-                                                onClick={() => {
-                                                    void openNote(note.relativePath);
-                                                }}
-                                            >
-                                                <span className="calendar-tab__note-title">{note.title}</span>
-                                                <span className="calendar-tab__note-path">{note.relativePath}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        ) : null}
+                        {panelNotesPopover}
                     </section>
 
                     {isPanelMode ? null : (

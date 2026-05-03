@@ -506,19 +506,19 @@ export function resolveInitialEditorSelection(options: {
     editorTabRestoreMode: EditorTabRestoreMode;
     initialCursorOffset: number | null;
 }): RestoredEditorSelection | null {
-    if (options.restoredViewState && options.editorTabRestoreMode === "cursor") {
-        return {
-            anchor: options.restoredViewState.anchor,
-            head: options.restoredViewState.head,
-        };
-    }
-
     const docLength = options.initialDoc.length;
     if (typeof options.initialCursorOffset === "number") {
         const clampedOffset = clampEditorOffset(options.initialCursorOffset, docLength);
         return {
             anchor: clampedOffset,
             head: clampedOffset,
+        };
+    }
+
+    if (options.restoredViewState) {
+        return {
+            anchor: options.restoredViewState.anchor,
+            head: options.restoredViewState.head,
         };
     }
 
@@ -532,6 +532,18 @@ export function resolveInitialEditorSelection(options: {
     return {
         anchor: bodyAnchor,
         head: bodyAnchor,
+    };
+}
+
+function resolveSelectionForDocumentReplace(
+    view: EditorView,
+    nextDoc: string,
+): RestoredEditorSelection {
+    const currentSelection = view.state.selection.main;
+    const nextDocLength = nextDoc.length;
+    return {
+        anchor: clampEditorOffset(currentSelection.anchor, nextDocLength),
+        head: clampEditorOffset(currentSelection.head, nextDocLength),
     };
 }
 
@@ -1023,6 +1035,7 @@ export function useCodeMirrorEditorLifecycle(
                 to: view.state.doc.length,
                 insert: options.initialDoc,
             },
+            selection: resolveSelectionForDocumentReplace(view, options.initialDoc),
         });
         options.setReadContent(options.initialDoc);
     }, [options.initialDoc]);
@@ -1052,6 +1065,7 @@ export function useCodeMirrorEditorLifecycle(
                 to: view.state.doc.length,
                 insert: options.articleSnapshot.content,
             },
+            selection: resolveSelectionForDocumentReplace(view, options.articleSnapshot.content),
         });
         options.setReadContent(options.articleSnapshot.content);
 

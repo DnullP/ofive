@@ -340,9 +340,9 @@
 
 /* Panel 浮动笔记窗：锚定到选中日期附近显示，不再占用下半区布局。 */
 .calendar-tab__panel-popover {
-    position: absolute;
-    z-index: 3;
-    width: min(280px, calc(100% - 16px));
+    position: fixed;
+    z-index: 1200;
+    width: min(280px, calc(100vw - 16px));
     max-height: 240px;
     display: flex;
     flex-direction: column;

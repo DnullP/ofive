@@ -280,6 +280,25 @@ describe("resolveInitialEditorSelection", () => {
         });
     });
 
+    test("prefers an explicit initial cursor offset over restored runtime state", () => {
+        expect(resolveInitialEditorSelection({
+            initialDoc: "---\ntitle: Demo\n---\n# Body\n",
+            restoredViewState: {
+                articleId: "file:test.md",
+                anchor: 19,
+                head: 23,
+                scrollTop: 180,
+                scrollLeft: 0,
+                scrollSnapshot: null,
+            },
+            editorTabRestoreMode: "viewport",
+            initialCursorOffset: 7,
+        })).toEqual({
+            anchor: 7,
+            head: 7,
+        });
+    });
+
     test("prefers restored cursor selection in cursor restore mode", () => {
         expect(resolveInitialEditorSelection({
             initialDoc: "---\ntitle: Demo\n---\n# Body\n",
@@ -292,6 +311,25 @@ describe("resolveInitialEditorSelection", () => {
                 scrollSnapshot: null,
             },
             editorTabRestoreMode: "cursor",
+            initialCursorOffset: null,
+        })).toEqual({
+            anchor: 19,
+            head: 23,
+        });
+    });
+
+    test("seeds restored selection in viewport restore mode without requiring editor focus", () => {
+        expect(resolveInitialEditorSelection({
+            initialDoc: "---\ntitle: Demo\n---\n# Body\n",
+            restoredViewState: {
+                articleId: "file:test.md",
+                anchor: 19,
+                head: 23,
+                scrollTop: 180,
+                scrollLeft: 0,
+                scrollSnapshot: null,
+            },
+            editorTabRestoreMode: "viewport",
             initialCursorOffset: null,
         })).toEqual({
             anchor: 19,

@@ -16,10 +16,10 @@
     max-height: 72vh;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 14px;
+    gap: 8px;
+    padding: 12px;
     border: 1px solid var(--surface-overlay-panel-border);
-    border-radius: 18px;
+    border-radius: var(--modal-panel-radius);
     background: var(--surface-overlay-panel-bg);
     box-shadow: var(--surface-overlay-panel-shadow);
     overflow: hidden;
@@ -63,7 +63,7 @@
     gap: 6px;
     padding: 8px 10px;
     border: 1px solid var(--surface-chip-border);
-    border-radius: 999px;
+    border-radius: var(--modal-control-radius);
     background: var(--surface-chip-bg);
     color: var(--surface-chip-text);
     font-size: 12px;
@@ -81,7 +81,7 @@
     gap: 10px;
     padding: 0 14px;
     border: 1px solid var(--surface-input-border);
-    border-radius: 14px;
+    border-radius: var(--modal-control-radius);
     background: var(--surface-input-bg);
     box-shadow: var(--surface-input-shadow);
 }
@@ -125,25 +125,26 @@
     color: var(--text-secondary);
     font-size: 13px;
     border: 1px dashed var(--surface-card-border);
-    border-radius: 14px;
+    border-radius: var(--modal-control-radius);
     background: var(--surface-card-bg-muted);
 }
 
 /* 候选项按钮：每条匹配结果的可点击区域 */
 .quick-switcher-item {
     width: 100%;
-    border: 1px solid transparent;
-    background: var(--surface-card-bg-muted);
+    border: 0;
+    border-bottom: 1px solid var(--surface-card-border);
+    background: var(--modal-list-item-bg);
     color: var(--text-primary);
     text-align: left;
     cursor: pointer;
-    padding: 12px 14px;
+    padding: 8px 10px;
     display: flex;
     flex-direction: column;
     gap: 4px;
-    border-radius: 14px;
-    margin-bottom: 8px;
-    transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+    border-radius: 0;
+    margin-bottom: 0;
+    transition: background-color 0.16s ease, color 0.16s ease;
 }
 
 /* 候选项最后一项：移除底部边框避免视觉重叠 */
@@ -154,10 +155,7 @@
 /* 候选项悬浮和高亮态：突出当前选择目标 */
 .quick-switcher-item:hover,
 .quick-switcher-item.active {
-    background: var(--surface-list-active-bg);
-    border-color: var(--surface-list-active-border);
-    box-shadow: var(--surface-list-active-shadow);
-    transform: translateY(-1px);
+    background: var(--modal-list-item-bg-active);
 }
 
 /* 候选项首行：标题与分数左右分布。 */
@@ -185,7 +183,7 @@
     flex-shrink: 0;
     padding: 3px 8px;
     border: 1px solid var(--surface-chip-border);
-    border-radius: 999px;
+    border-radius: var(--modal-control-radius);
     background: var(--surface-chip-bg);
     color: var(--surface-chip-text);
     font-size: 11px;

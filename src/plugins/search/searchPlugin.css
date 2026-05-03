@@ -74,7 +74,7 @@
     align-items: center;
     gap: 8px;
     border: 1px solid var(--surface-input-border);
-    border-radius: 12px;
+    border-radius: 0;
     padding: 0 10px;
     background: var(--surface-input-bg);
     color: var(--text-secondary);
@@ -87,7 +87,7 @@
     align-items: center;
     gap: 8px;
     border: 1px solid var(--surface-input-border);
-    border-radius: 12px;
+    border-radius: 0;
     padding: 0 10px;
     background: var(--surface-input-bg);
     color: var(--text-secondary);
@@ -116,7 +116,7 @@
 /* 搜索范围按钮：未激活态为弱化描边按钮。 */
 .search-scope-button {
     border: 1px solid var(--surface-chip-border);
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--surface-chip-bg);
     color: var(--surface-chip-text);
     font-size: 12px;
@@ -148,7 +148,7 @@
     gap: 6px;
     padding: 5px 10px;
     border: 1px solid var(--surface-chip-border);
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--surface-chip-bg);
     color: var(--surface-chip-text);
     font-size: 11px;
@@ -174,7 +174,7 @@
     color: var(--text-secondary);
     font-size: 12px;
     border: 1px dashed var(--surface-card-border);
-    border-radius: 16px;
+    border-radius: 0;
     background: var(--surface-card-bg-muted);
     margin: 0 14px 12px;
 }
@@ -199,25 +199,24 @@
 /* 单条搜索结果按钮：纵向展示标题、路径、摘要和标签。 */
 .search-result {
     width: 100%;
-    border: 1px solid transparent;
-    background: var(--surface-card-bg-muted);
+    border: 0;
+    border-bottom: 1px solid var(--surface-card-border);
+    background: transparent;
     color: var(--text-primary);
     text-align: left;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 12px;
-    border-radius: 14px;
+    padding: 9px 10px;
+    border-radius: 0;
     cursor: pointer;
-    box-shadow: var(--surface-card-shadow);
-    transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+    box-shadow: none;
+    transition: background-color 0.16s ease, color 0.16s ease;
 }
 
 /* 搜索结果悬浮态：给予轻量背景反馈。 */
 .search-result:hover {
-    background: var(--surface-list-hover-bg);
-    border-color: var(--surface-list-active-border);
-    transform: translateY(-1px);
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 /* 搜索结果头部：左右布局标题与徽章。 */
@@ -256,7 +255,7 @@
 /* 匹配徽章：弱化显示匹配来源信息。 */
 .search-badge {
     padding: 2px 6px;
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--surface-chip-bg);
     color: var(--surface-chip-text);
     border: 1px solid var(--surface-chip-border);

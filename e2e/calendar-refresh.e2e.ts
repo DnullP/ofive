@@ -55,8 +55,10 @@ test.describe("日历刷新体验", () => {
         await expect(calendarPanel.locator(".calendar-tab__calendar-surface")).toBeVisible();
 
         await calendarPanel.locator(".calendar-tab__day").filter({ hasText: "9" }).first().click();
-        const popover = calendarPanel.locator(".calendar-tab__panel-popover");
+        const popover = page.locator(".calendar-tab__panel-popover");
         await expect(popover).toBeVisible();
+        await expect(calendarPanel.locator(".calendar-tab__panel-popover")).toHaveCount(0);
+        expect(await popover.evaluate((element) => element.parentElement === document.body)).toBe(true);
         await expect(popover.locator(".calendar-tab__panel-popover-title")).toHaveCount(0);
         await expect(popover.locator(".calendar-tab__panel-popover-subtitle")).toHaveCount(0);
         await expect(popover.locator(".calendar-tab__panel-popover-close")).toHaveCount(0);

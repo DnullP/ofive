@@ -18,7 +18,7 @@
     display: flex;
     flex-direction: column;
     border: 1px solid var(--border-color);
-    border-radius: 10px;
+    border-radius: var(--modal-panel-radius);
     background: var(--bg-secondary);
     box-shadow: var(--overlay-shadow-strong);
     overflow: hidden;
@@ -89,7 +89,7 @@
     color: var(--text-primary);
     text-align: left;
     cursor: pointer;
-    padding: 10px 14px;
+    padding: 8px 14px;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -103,7 +103,7 @@
 /* 候选项悬浮/高亮态：突出当前选择目标。 */
 .move-file-item:hover,
 .move-file-item.active {
-    background: var(--bg-hover);
+    background: var(--modal-list-item-bg-active);
 }
 
 /* 候选项标题：展示目录主文本。 */
