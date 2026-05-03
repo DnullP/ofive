@@ -8,7 +8,7 @@
  *
  * @dependencies
  *   - react
- *   - dockview
+ *   - ../../host/layout/workbenchContracts
  *   - @xyflow/react
  *   - ../../api/vaultApi
  *   - ../../host/events/appEventBus

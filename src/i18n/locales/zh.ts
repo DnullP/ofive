@@ -61,7 +61,7 @@ const zh = {
     /* ==================== App 入口 ==================== */
     app: {
         homeTitle: "ofive 工作区",
-        homeDescription: "主区域由 dockview 官方 React 适配驱动，支持可插拔的 tab 组件。",
+        homeDescription: "主区域由 layout-v2 工作区驱动，支持可插拔的 tab 组件。",
         homeTabTitle: "首页",
         explorer: "资源管理器",
         calendar: "日历",
@@ -472,6 +472,7 @@ const zh = {
     /* ==================== 标题栏 ==================== */
     titlebar: {
         appName: "ofive",
+        windowControls: "窗口控制",
         closeApp: "关闭应用",
         toggleFullscreen: "切换全屏",
         minimizeWindow: "最小化窗口",
@@ -803,8 +804,8 @@ const zh = {
         noMatch: "无匹配目录",
     },
 
-    /* ==================== DockviewLayout ==================== */
-    dockview: {
+    /* ==================== Workbench layout ==================== */
+    workbenchLayout: {
         settingsTooltip: "设置",
         welcomeTitle: "欢迎使用 ofive",
         welcomeDesc: "请从左侧 Panel 打开文件，或通过扩展注册新的 Tab 组件。",
@@ -816,7 +817,7 @@ const zh = {
         activityCreateCustom: "创建自定义 Activity",
         sidebarEmpty: "该区域暂无面板，可从其他区域拖入。",
         leftPanelArea: "左侧扩展面板区",
-        mainArea: "Dockview 主区域",
+        mainArea: "工作区主区域",
         rightPanelArea: "右侧扩展面板区",
         noRegisteredPanel: "未注册的面板渲染器。",
     },

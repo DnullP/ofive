@@ -355,7 +355,7 @@ export const storeConsumerCoverage = {
     "src/host/commands/systemShortcutSubsystem.ts": [
         "src/host/commands/shortcutDispatcher.test.ts",
     ],
-    "src/host/layout/DockviewLayout.tsx": [
+    "src/host/layout/WorkbenchLayoutHost.tsx": [
         "e2e/custom-activity.e2e.ts",
         "e2e/vault-switch-regression.e2e.ts",
     ],

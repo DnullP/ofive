@@ -13,7 +13,6 @@
  */
 
 import { expect, test, type Page } from "@playwright/test";
-import { dockviewDragPanel } from "./helpers/dockviewDrag";
 import { gotoMockVaultPage } from "./helpers/mockVault";
 
 /**
@@ -23,7 +22,8 @@ import { gotoMockVaultPage } from "./helpers/mockVault";
  * @returns Promise<void>
  */
 async function waitForLayoutReady(page: Page): Promise<void> {
-    await page.getByRole("main", { name: "Dockview Main Area" }).waitFor({ state: "visible" });
+    await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
+    await page.locator("[data-testid='main-dockview-host']").waitFor({ state: "visible" });
     await page.locator(".layout-v2-tab-section__tab").first().waitFor({ state: "visible" });
     await page.locator("[data-testid='sidebar-left']").first().waitFor({ state: "visible" });
 }
@@ -102,38 +102,6 @@ async function createCustomPanelContainer(page: Page, activityName: string): Pro
 }
 
 /**
- * 通过 HTML5 DragEvent 将 Activity icon 从一个栏拖到另一个栏。
- *
- * @param page - Playwright 页面对象
- * @param source - 拖拽源 icon locator
- * @param target - 放置目标 icon bar locator
- * @returns Promise<void>
- */
-async function dragActivityIcon(
-    page: Page,
-    source: ReturnType<Page["locator"]>,
-    target: ReturnType<Page["locator"]>,
-): Promise<void> {
-    await source.waitFor({ state: "visible" });
-    await target.waitFor({ state: "visible" });
-    await source.dragTo(target);
-    await page.waitForTimeout(300);
-}
-
-/**
- * 将左侧 ActivityBar 中的图标拖到右侧 SidebarIconBar。
- *
- * @param page - Playwright 页面对象
- * @param activityRegistrationId - 运行时 activity 注册 id
- * @returns Promise<void>
- */
-async function moveActivityIconToRightBar(page: Page, activityRegistrationId: string): Promise<void> {
-    const source = page.getByTestId(`activity-bar-item-${activityRegistrationId}`);
-    const target = page.locator("[aria-label='Right Extension Panel'] .sidebar-icon-bar").first();
-    await dragActivityIcon(page, source, target);
-}
-
-/**
  * 从当前可见的 activity 按钮 DOM 上解析运行时注册 id。
  *
  * @param page - Playwright 页面对象
@@ -156,57 +124,6 @@ async function resolveActivityRegistrationIdFromButton(page: Page, activityName:
     }
 
     throw new Error(`unexpected activity button testid: ${testId}`);
-}
-
-/**
- * @function waitForRightCustomCalendarPersistence
- * @description 等待自定义右侧容器及其承载的日历 panel 真实写入后端配置，避免在 debounce 保存完成前 reload。
- * @param page Playwright 页面对象。
- * @param activityRegistrationId 自定义 activity 的运行时注册 id。
- * @param activityConfigId 自定义 activity 的配置 id。
- * @returns Promise<void>
- */
-async function waitForRightCustomCalendarPersistence(
-    page: Page,
-    activityRegistrationId: string,
-    activityConfigId: string,
-): Promise<void> {
-    await expect.poll(async () => {
-        return page.evaluate(async ({ nextActivityRegistrationId, nextActivityConfigId }) => {
-            const vaultApi = await import("/src/api/vaultApi.ts");
-            const config = await vaultApi.getCurrentVaultConfig();
-
-            const activityBarItems = Array.isArray(config.entries.activityBar?.items)
-                ? config.entries.activityBar.items
-                : [];
-            const sidebarLayout = config.entries.sidebarLayout;
-            const rightRail = sidebarLayout && typeof sidebarLayout === "object"
-                ? (sidebarLayout as {
-                    right?: { activeActivityId?: string | null };
-                    panelStates?: Array<{ id?: string; position?: string; activityId?: string }>;
-                }).right
-                : undefined;
-            const panelStates = sidebarLayout && typeof sidebarLayout === "object" && Array.isArray((sidebarLayout as { panelStates?: unknown }).panelStates)
-                ? (sidebarLayout as { panelStates: Array<{ id?: string; position?: string; activityId?: string }> }).panelStates
-                : [];
-
-            const targetActivity = activityBarItems.find((item) => item?.id === nextActivityRegistrationId);
-            const calendarPanelState = panelStates.find((item) => item.id === "calendar-panel");
-            const customPanelState = panelStates.find((item) => item.id === `custom-panel:${nextActivityConfigId}`);
-
-            return Boolean(
-                targetActivity?.bar === "right" &&
-                rightRail?.activeActivityId === nextActivityRegistrationId &&
-                calendarPanelState?.position === "right" &&
-                calendarPanelState?.activityId === nextActivityRegistrationId &&
-                customPanelState?.position === "right" &&
-                customPanelState?.activityId === nextActivityRegistrationId,
-            );
-        }, {
-            nextActivityRegistrationId: activityRegistrationId,
-            nextActivityConfigId: activityConfigId,
-        });
-    }).toBe(true);
 }
 
 /**
@@ -339,7 +256,7 @@ test.describe("自定义 Activity", () => {
         await deleteCustomActivity(page, createdActivityId);
 
         await expect(createdActivityButton).toHaveCount(0);
-        await expect(page.getByRole("main", { name: "Dockview Main Area" })).toBeVisible();
+        await expect(page.locator("[data-workbench-layout-mode='layout-v2']")).toBeVisible();
         await expect(page.locator(".layout-v2-tab-section__tab").first()).toBeVisible();
         expect(pageErrors).toEqual([]);
     });
@@ -367,100 +284,4 @@ test.describe("自定义 Activity", () => {
         await expect(page.getByTestId("activity-bar-item-calendar")).toBeVisible();
     });
 
-    test.skip("右侧自定义容器中的日历 panel 在 reload 后应与 icon 位置一起恢复", async ({ page }) => {
-        const activityName = `右栏日历容器-${Date.now()}`;
-        await gotoMockVaultPage(page, "custom-activity-right-calendar-reload");
-        await waitForLayoutReady(page);
-
-        await createCustomPanelContainer(page, activityName);
-
-        const activityRegistrationId = await resolveActivityRegistrationIdFromButton(page, activityName);
-        const activityConfigId = activityRegistrationId.replace(/^custom-activity:/, "");
-        await moveActivityIconToRightBar(page, activityRegistrationId);
-
-        const leftActivityIcon = page.getByTestId(`activity-bar-item-${activityRegistrationId}`);
-        const rightActivityIcon = page.getByTestId(`right-activity-icon-${activityRegistrationId}`);
-        await expect(leftActivityIcon).toHaveCount(0);
-        await expect(rightActivityIcon).toBeVisible();
-
-        const rightSidebar = page.locator("[aria-label='Right Extension Panel']");
-        const rightEmptyContainer = rightSidebar.getByTestId("right-sidebar-empty");
-        await expect(rightEmptyContainer).toBeVisible();
-
-        await page.getByTestId("activity-bar-item-calendar").click();
-        const calendarTab = page.locator(".layout-v2-tab-section__tab", { hasText: "Calendar" });
-        await expect(calendarTab).toBeVisible();
-
-        await dockviewDragPanel(page, calendarTab, rightEmptyContainer);
-
-        const calendarPaneHeader = rightSidebar.locator(".layout-v2-panel-section__pane-header", { hasText: "Calendar" }).first();
-        await expect(calendarPaneHeader).toBeVisible();
-        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "Calendar" })).toHaveCount(0);
-
-        await page.waitForTimeout(450);
-        await page.reload();
-        await waitForLayoutReady(page);
-
-        await expect(page.getByTestId(`activity-bar-item-${activityRegistrationId}`)).toHaveCount(0);
-        await expect(page.getByTestId(`right-activity-icon-${activityRegistrationId}`)).toBeVisible();
-        await expect(rightSidebar.locator(".layout-v2-panel-section__pane-header", { hasText: activityName }).first()).toHaveCount(0);
-        await expect(rightSidebar.locator(".layout-v2-panel-section__pane-header", { hasText: "Calendar" }).first()).toBeVisible();
-        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "Calendar" })).toHaveCount(0);
-    });
-
-    test.skip("删除名称为日历的自定义容器后不应触发 Dockview 崩溃且 reload 仍可启动", async ({ page }) => {
-        const pageErrors: string[] = [];
-        page.on("pageerror", (error) => {
-            pageErrors.push(error.message);
-        });
-
-        const activityName = "日历";
-        await gotoMockVaultPage(page, "custom-activity-delete-calendar-named-container");
-        await waitForLayoutReady(page);
-
-        await page.keyboard.press("Meta+J");
-        const commandPalette = page.locator(".command-palette-panel");
-        await expect(commandPalette).toBeVisible();
-
-        const commandInput = commandPalette.locator(".command-palette-input");
-        await commandInput.fill("customActivity.create");
-        await page.keyboard.press("Enter");
-
-        const modal = page.locator(".custom-activity-modal");
-        await expect(modal).toBeVisible();
-        await modal.locator(".custom-activity-modal__input").fill(activityName);
-        await modal.getByRole("button", { name: "Calendar" }).click();
-        await modal.locator(".custom-activity-modal__button.primary").click();
-        await expect(modal).toHaveCount(0);
-
-        const activityRegistrationId = await resolveActivityRegistrationIdFromButton(page, activityName);
-        const activityConfigId = activityRegistrationId.replace(/^custom-activity:/, "");
-        await moveActivityIconToRightBar(page, activityRegistrationId);
-
-        const rightSidebar = page.locator("[aria-label='Right Extension Panel']");
-        const rightEmptyContainer = rightSidebar.getByTestId("right-sidebar-empty");
-        await expect(rightEmptyContainer).toBeVisible();
-
-        await page.getByTestId("activity-bar-item-calendar").click();
-        const calendarTab = page.locator(".layout-v2-tab-section__tab", { hasText: "Calendar" });
-        await expect(calendarTab).toBeVisible();
-        await dockviewDragPanel(page, calendarTab, rightEmptyContainer);
-
-        await expect(rightSidebar.locator(".layout-v2-panel-section__pane-header", { hasText: "Calendar" }).first()).toBeVisible();
-
-        await deleteCustomActivity(page, activityConfigId);
-
-        await page.waitForTimeout(450);
-        await expect(page.locator("main").first()).toBeVisible();
-        await expect(page.locator(".layout-v2-tab-section__tab").first()).toBeVisible();
-        expect(pageErrors).toEqual([]);
-
-        await page.reload();
-        await waitForLayoutReady(page);
-
-        await expect(page.getByTestId(`right-activity-icon-${activityRegistrationId}`)).toHaveCount(0);
-        await expect(page.getByTitle(activityName)).toHaveCount(0);
-        await expect(page.getByTestId("activity-bar-item-calendar")).toBeVisible();
-        expect(pageErrors).toEqual([]);
-    });
 });

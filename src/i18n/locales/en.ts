@@ -6,7 +6,7 @@
  * Grouped by module:
  *  - common, app, vault, fileTree, editor, outline, graph,
  *  - settings, commands, focusContext, titlebar, quickSwitcher,
- *  - commandPalette, moveFileModal, dockview, image, frontmatter,
+ *  - commandPalette, moveFileModal, workbenchLayout, image, frontmatter,
  *  - store, editorPlugins
  */
 
@@ -51,7 +51,7 @@ const en = {
     /* ==================== App entry ==================== */
     app: {
         homeTitle: "ofive Workspace",
-        homeDescription: "Main area powered by Dockview React adapter, supports pluggable tab components.",
+        homeDescription: "Main area powered by the layout-v2 workbench, supports pluggable tab components.",
         homeTabTitle: "Home",
         explorer: "Explorer",
         calendar: "Calendar",
@@ -462,6 +462,7 @@ const en = {
     /* ==================== Titlebar ==================== */
     titlebar: {
         appName: "ofive",
+        windowControls: "Window Controls",
         closeApp: "Close Application",
         toggleFullscreen: "Toggle Fullscreen",
         minimizeWindow: "Minimize Window",
@@ -793,8 +794,8 @@ const en = {
         noMatch: "No matching directories",
     },
 
-    /* ==================== DockviewLayout ==================== */
-    dockview: {
+    /* ==================== Workbench layout ==================== */
+    workbenchLayout: {
         settingsTooltip: "Settings",
         welcomeTitle: "Welcome to ofive",
         welcomeDesc: "Open files from the left panel, or register new Tab components via extensions.",
@@ -806,7 +807,7 @@ const en = {
         activityCreateCustom: "Create Custom Activity",
         sidebarEmpty: "No panels here. Drag panels from other areas.",
         leftPanelArea: "Left Extension Panel",
-        mainArea: "Dockview Main Area",
+        mainArea: "Workbench Main Area",
         rightPanelArea: "Right Extension Panel",
         noRegisteredPanel: "No registered panel renderer.",
     },

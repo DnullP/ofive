@@ -133,7 +133,7 @@ const INFRASTRUCTURE_MODULE_PREFIXES = [
 ] as const;
 
 const INFRASTRUCTURE_MODULE_PATHS = new Set([
-    "src/host/layout/DockviewLayout.tsx",
+    "src/host/layout/WorkbenchLayoutHost.tsx",
     "src/host/layout/MoveFileDirectoryModal.tsx",
     "src/host/layout/nativeContextMenu.ts",
     "src/host/layout/panelOrderUtils.ts",

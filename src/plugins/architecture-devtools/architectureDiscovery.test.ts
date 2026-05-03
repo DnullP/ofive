@@ -73,7 +73,7 @@ describe("architectureDiscovery", () => {
         expect(slice.nodes.some((node) => {
             return (
                 node.kind === "ui-module" &&
-                node.title === "DockviewLayout" &&
+                node.title === "WorkbenchLayoutHost" &&
                 node.moduleLayer === "infrastructure"
             );
         })).toBe(true);

@@ -1,6 +1,6 @@
 /**
  * @module layout/layoutStateReducers
- * @description 布局面板状态的纯函数状态转换逻辑，从 DockviewLayout 中提取以便单元测试。
+ * @description 布局面板状态的纯函数状态转换逻辑，从 workbench host 中提取以便单元测试。
  *
  * 包含以下核心转换：
  * - 面板跨容器拖拽（左↔右）时的状态更新

@@ -8,21 +8,15 @@
 
 import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Expand, Minus, PanelRightClose, PanelRightOpen, Square, X } from "lucide-react";
+import { Minus, Square, X } from "lucide-react";
 import { requestApplicationQuit } from "../commands/systemShortcutSubsystem";
-import { toggleMainWindowFullscreen } from "../window/mainWindowFullscreenController";
-import {
-    requestToggleRightSidebarVisibility,
-    useRightSidebarVisibility,
-} from "./rightSidebarVisibilityBridge";
 
 /**
  * @function CustomTitlebar
- * @description 渲染自定义标题栏并提供结束应用能力。
+ * @description 渲染覆盖在工作区上方的窗口控制按钮。
  */
 export function CustomTitlebar(): ReactNode {
     const { t } = useTranslation();
-    const isRightSidebarVisible = useRightSidebarVisibility();
     const isMacOS = useMemo(() => {
         if (typeof navigator === "undefined") {
             return false;
@@ -67,23 +61,6 @@ export function CustomTitlebar(): ReactNode {
         }
     };
 
-    const handleToggleFullscreen = async (): Promise<void> => {
-        const runtimeWindow = window as Window & {
-            __TAURI_INTERNALS__?: unknown;
-            __TAURI__?: unknown;
-        };
-        const isTauriRuntime = Boolean(runtimeWindow.__TAURI_INTERNALS__ || runtimeWindow.__TAURI__);
-        if (!isTauriRuntime) {
-            return;
-        }
-
-        try {
-            await toggleMainWindowFullscreen();
-        } catch (error) {
-            console.error("[window] toggle fullscreen failed", error);
-        }
-    };
-
     const handleClose = async (): Promise<void> => {
         try {
             await requestApplicationQuit();
@@ -92,42 +69,7 @@ export function CustomTitlebar(): ReactNode {
         }
     };
 
-    const controls = isMacOS ? (
-        <div className="app-titlebar__controls window-no-drag">
-            <button
-                type="button"
-                className="app-titlebar__control app-titlebar__control--close window-no-drag"
-                aria-label={t("titlebar.closeApp")}
-                onClick={() => {
-                    void handleClose();
-                }}
-            >
-                <X size={12} strokeWidth={2.2} />
-            </button>
-
-            <button
-                type="button"
-                className="app-titlebar__control app-titlebar__control--minimize window-no-drag"
-                aria-label={t("titlebar.minimizeWindow")}
-                onClick={() => {
-                    void handleMinimize();
-                }}
-            >
-                <Minus size={12} strokeWidth={2.2} />
-            </button>
-
-            <button
-                type="button"
-                className="app-titlebar__control app-titlebar__control--maximize window-no-drag"
-                aria-label={t("titlebar.toggleFullscreen")}
-                onClick={() => {
-                    void handleToggleFullscreen();
-                }}
-            >
-                <Expand size={10} strokeWidth={2.2} />
-            </button>
-        </div>
-    ) : (
+    const controls = (
         <div className="app-titlebar__controls window-no-drag">
             <button
                 type="button"
@@ -164,38 +106,24 @@ export function CustomTitlebar(): ReactNode {
         </div>
     );
 
+    if (isMacOS) {
+        return (
+            <header
+                className="app-titlebar app-titlebar--mac app-titlebar--native-controls"
+                aria-label={t("titlebar.windowControls")}
+                data-tauri-drag-region
+            />
+        );
+    }
+
     return (
         <header
-            className={`app-titlebar ${isMacOS ? "app-titlebar--mac" : "app-titlebar--windows"}`}
+            className="app-titlebar app-titlebar--windows"
+            aria-label={t("titlebar.windowControls")}
             data-tauri-drag-region
         >
-            {isMacOS ? controls : <div className="app-titlebar__controls-spacer" data-tauri-drag-region />}
-
-            <div className="app-titlebar__title" data-tauri-drag-region>
-                <div className="app-titlebar__brand" data-tauri-drag-region>
-                    <span className="app-titlebar__brand-mark" aria-hidden="true" />
-                    <span className="app-titlebar__brand-title">{t("titlebar.appName")}</span>
-                </div>
-            </div>
-
             <div className="app-titlebar__right-slot window-no-drag">
-                <div className="app-titlebar__actions window-no-drag">
-                    <button
-                        type="button"
-                        className="app-titlebar__control app-titlebar__control--sidebar window-no-drag"
-                        aria-label={t(
-                            isRightSidebarVisible
-                                ? "titlebar.hideRightSidebar"
-                                : "titlebar.showRightSidebar",
-                        )}
-                        onClick={() => {
-                            requestToggleRightSidebarVisibility();
-                        }}
-                    >
-                        {isRightSidebarVisible ? <PanelRightClose size={18} strokeWidth={2} /> : <PanelRightOpen size={18} strokeWidth={2} />}
-                    </button>
-                </div>
-                {!isMacOS ? controls : null}
+                {controls}
             </div>
         </header>
     );

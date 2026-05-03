@@ -3,7 +3,7 @@
  * @description CodeMirror 编辑器生命周期 Hook：负责 EditorView 创建、扩展装配、gutter 对齐、动态 compartment 重配置与销毁清理。
  * @dependencies
  *  - react
- *  - dockview
+ *  - ../../../host/layout/workbenchContracts
  *  - codemirror
  *  - @codemirror/state
  *  - @codemirror/lang-markdown

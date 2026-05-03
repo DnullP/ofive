@@ -34,7 +34,7 @@ import { useSyncExternalStore } from "react";
  * @description 当前活跃 Markdown 编辑器的状态快照。
  */
 export interface ActiveEditorState {
-    /** 对应文章 ID（通常等于 dockview tab id） */
+    /** 对应文章 ID（通常等于 workbench tab id） */
     articleId: string;
     /** 对应 Markdown 相对路径 */
     path: string;
@@ -55,7 +55,7 @@ export interface ActiveEditorState {
  *
  * @lifecycle
  *  - 初始化时机：模块首次导入时初始化
- *  - 数据来源：DockviewLayout 的主区标签激活变化
+ *  - 数据来源：WorkbenchLayoutHost 的主区标签激活变化
  *  - 更新触发：主区活跃标签切换到 Markdown 编辑器、或失活/切换到非 Markdown 标签
  *  - 清理时机：无活跃 Markdown 编辑器时置空
  *

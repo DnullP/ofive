@@ -4,13 +4,13 @@
  * @dependencies
  *  - react
  *  - ../../src/plugins/file-tree/panel/FileTree
- *  - ../../src/host/layout/DockviewLayout
+ *  - ../../src/host/layout/workbenchContracts
  *  - ../../src/plugins/file-tree/panel/VaultPanel.css
  */
 
 import { useEffect, useMemo, type ReactNode } from "react";
 import { FileTree, type FileTreeItem } from "../../src/plugins/file-tree/panel/FileTree";
-import type { TabInstanceDefinition } from "../../src/host/layout/DockviewLayout";
+import type { TabInstanceDefinition } from "../../src/host/layout/workbenchContracts";
 import { loadBrowserMockMarkdownContents } from "../../src/api/vaultBrowserMockFixtures";
 import "../../src/plugins/file-tree/panel/VaultPanel.css";
 

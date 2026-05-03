@@ -3,7 +3,7 @@
  * @description 横向图标栏组件，嵌入右侧栏 header 区域。
  *   显示被分配到右侧栏的活动图标，支持接收从左侧 ActivityBar 拖入的图标。
  *   点击面板容器类图标切换右侧栏活动分组，点击触发类图标执行自定义操作。
- *   纯展示组件，所有状态与事件由外部（DockviewLayout）管理。
+ *   纯展示组件，所有状态与事件由外部 workbench host 管理。
  *
  * @dependencies
  *   - react

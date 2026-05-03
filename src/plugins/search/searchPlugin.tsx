@@ -9,7 +9,7 @@
  *   - ../../host/config/configStore
  *   - ../../host/registry/activityRegistry
  *   - ../../host/registry/panelRegistry
- *   - ../../host/layout/DockviewLayout
+ *   - ../../host/layout
  *   - ../../i18n
  *   - lucide-react
  *

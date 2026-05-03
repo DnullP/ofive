@@ -80,10 +80,6 @@ function resolveManualChunk(id: string): string | undefined {
     return "knowledge-graph-vendor";
   }
 
-  if (packageName === "dockview" || packageName === "dockview-core") {
-    return "dockview-vendor";
-  }
-
   if (packageName === "katex") {
     return "katex-vendor";
   }

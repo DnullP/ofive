@@ -201,7 +201,7 @@ function mapActivitiesToDefinitions(
             if (item.id === SETTINGS_ACTIVITY_ID) {
                 return {
                     id: SETTINGS_ACTIVITY_ID,
-                    label: i18n.t("dockview.settingsTooltip"),
+                    label: i18n.t("workbenchLayout.settingsTooltip"),
                     bar: item.bar,
                     section: item.section,
                     activationMode: "action" as const,
@@ -1005,7 +1005,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             if (activityId === SETTINGS_ACTIVITY_ID) {
                 workbenchApiRef.current?.openTab({
                     id: "settings",
-                    title: i18n.t("dockview.settingsTooltip"),
+                    title: i18n.t("workbenchLayout.settingsTooltip"),
                     component: "settings",
                 });
                 return;
@@ -1026,7 +1026,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 return (
                     <div className="workbench-layout-v2__content-card">
                         <div className="workbench-layout-v2__content-eyebrow">{panelId}</div>
-                        <p>{i18n.t("dockview.noRegisteredPanel")}</p>
+                        <p>{i18n.t("workbenchLayout.noRegisteredPanel")}</p>
                     </div>
                 );
             }
@@ -1130,16 +1130,16 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
             const menuItems: NativeContextMenuItem[] = [];
             if (item.section !== "top") {
-                menuItems.push({ id: "align-top", text: i18n.t("dockview.activityAlignTop") });
+                menuItems.push({ id: "align-top", text: i18n.t("workbenchLayout.activityAlignTop") });
             }
             if (item.section !== "bottom") {
-                menuItems.push({ id: "align-bottom", text: i18n.t("dockview.activityAlignBottom") });
+                menuItems.push({ id: "align-bottom", text: i18n.t("workbenchLayout.activityAlignBottom") });
             }
-            menuItems.push({ id: "hide", text: i18n.t("dockview.activityHide") });
+            menuItems.push({ id: "hide", text: i18n.t("workbenchLayout.activityHide") });
             if (iconId.startsWith(CUSTOM_ACTIVITY_REGISTRATION_PREFIX)) {
-                menuItems.push({ id: "delete-custom-activity", text: i18n.t("dockview.activityDeleteCustom") });
+                menuItems.push({ id: "delete-custom-activity", text: i18n.t("workbenchLayout.activityDeleteCustom") });
             }
-            menuItems.push({ id: "create-custom-activity", text: i18n.t("dockview.activityCreateCustom") });
+            menuItems.push({ id: "create-custom-activity", text: i18n.t("workbenchLayout.activityCreateCustom") });
 
             await showRegisteredContextMenu(contextMenuIds.activityItem, _event, {
                 menuItems,
@@ -1186,7 +1186,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     const handleActivityBarBackgroundContextMenu = useCallback(
         async (_event: { clientX: number; clientY: number }) => {
             const menuItems: NativeContextMenuItem[] = [
-                { id: "create-custom-activity", text: i18n.t("dockview.activityCreateCustom") },
+                { id: "create-custom-activity", text: i18n.t("workbenchLayout.activityCreateCustom") },
             ];
             for (const item of mergedActivityItems) {
                 const activity = activitiesById.get(item.id);

@@ -16,8 +16,6 @@
  *
  * @dependencies
  *   - @playwright/test
- *   - ./helpers/dockviewDrag
- *
  * @example
  *   bun run test:e2e
  */

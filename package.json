@@ -55,7 +55,6 @@
     "@tauri-apps/plugin-opener": "^2.5.3",
     "@xyflow/react": "^12.10.2",
     "codemirror": "^6.0.2",
-    "dockview": "^4.13.1",
     "highlight.js": "^11.11.1",
     "i18next": "^25.10.10",
     "katex": "^0.16.45",

@@ -36,7 +36,9 @@
   --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
-  --shell-titlebar-height: 40px;
+  --shell-titlebar-height: 38px;
+  --shell-window-control-width: 104px;
+  --shell-window-control-right-width: 44px;
   --bg-primary: #1f1f1f;
   --bg-secondary: #252526;
   --bg-hover: #2a2d2e;
@@ -1195,28 +1197,32 @@ textarea,
 }
 
 .app-titlebar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 30;
   height: var(--shell-titlebar-height);
+  pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--chrome-titlebar-bg);
-  border-bottom: 1px solid var(--chrome-border-soft);
-  padding: 0 var(--space-3);
+  background: transparent;
+  border-bottom: 0;
+  padding: 0 8px;
   user-select: none;
   gap: var(--space-3);
-  box-shadow:
-    inset 0 1px 0 var(--chrome-inline-highlight),
-    0 1px 0 color-mix(in srgb, var(--bg-primary) 36%, transparent);
+  box-shadow: none;
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 
 .app-runtime--tauri.app-effect--glass .app-titlebar {
-  background: var(--chrome-titlebar-bg);
-  border-bottom: 1px solid var(--chrome-border-strong);
-  box-shadow: inset 0 1px 0 var(--chrome-inline-highlight);
+  background: transparent;
+  border-bottom: 0;
+  box-shadow: none;
 }
 
 .app-runtime--tauri.app-effect--glass.app-window--inactive .app-titlebar {
-  background: color-mix(in srgb, var(--chrome-titlebar-bg) 88%, rgba(0, 0, 0, 0.08));
+  opacity: 0.72;
 }
 
 .app-runtime--tauri.app-effect--glass.app-window--dragging .app-titlebar {
@@ -1273,6 +1279,11 @@ textarea,
   flex-direction: row;
 }
 
+/* macOS 原生 traffic lights：标题栏只提供透明拖拽层，不再绘制自定义窗口按钮。 */
+.app-titlebar--native-controls {
+  padding-left: var(--shell-window-control-width);
+}
+
 /* Windows 标题栏：窗口控制按钮在右侧。 */
 .app-titlebar--windows {
   flex-direction: row;
@@ -1280,79 +1291,16 @@ textarea,
 
 /* 标题栏控制组：容纳最小化/最大化/关闭三键。 */
 .app-titlebar__controls {
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: var(--space-1);
   min-width: 96px;
-}
-
-/* 标题栏控制组占位：保证标题居中，不受左右控件影响。 */
-.app-titlebar__controls-spacer {
-  min-width: 96px;
-  height: 28px;
-}
-
-.app-titlebar__title {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-}
-
-/* 标题栏品牌块：建立更稳定的视觉锚点而不引入额外导航复杂度。 */
-.app-titlebar__brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 0 12px;
-  height: 28px;
-  border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--chrome-border-soft) 88%, transparent);
-  background: color-mix(in srgb, var(--chrome-tab-active-bg) 78%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chrome-inline-highlight) 88%, transparent);
-}
-
-/* 品牌标记：使用一枚小型高光圆点增加识别感。 */
-.app-titlebar__brand-mark {
-  width: 10px;
-  height: 10px;
-  flex-shrink: 0;
-  border-radius: var(--radius-pill);
-  background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.92), transparent 38%),
-    linear-gradient(135deg, color-mix(in srgb, var(--accent-primary) 90%, white 10%), color-mix(in srgb, var(--accent-primary) 54%, black 46%));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent-primary) 18%, transparent),
-    0 8px 18px color-mix(in srgb, var(--accent-primary-soft) 56%, transparent);
-}
-
-/* 品牌标题：使用 display 字体与更紧的字重节奏表达桌面产品感。 */
-.app-titlebar__brand-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
-/* 标题栏动作区：容纳非窗口控制的辅助按钮，并保持右对齐。 */
-.app-titlebar__actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-1);
-  min-width: 40px;
 }
 
 /* 标题栏右侧插槽：保证辅助按钮贴近右边缘，Windows 下与系统按钮共存。 */
 .app-titlebar__right-slot {
+  pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1370,7 +1318,7 @@ textarea,
   justify-content: center;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: transparent;
+  background: color-mix(in srgb, var(--chrome-tabstrip-bg) 82%, transparent);
   color: var(--text-secondary);
   cursor: pointer;
   transition:
@@ -1394,21 +1342,6 @@ textarea,
 .app-titlebar__control--close:hover {
   background: color-mix(in srgb, var(--error-color) 84%, transparent);
   color: #ffffff;
-}
-
-/* 右侧栏切换按钮悬浮态：与普通辅助控制一致。 */
-.app-titlebar__control--sidebar:hover {
-  background: var(--surface-hover-accent);
-  border-color: var(--nav-item-hover-border);
-  color: var(--text-primary);
-  transform: translateY(-1px);
-}
-
-/* 右侧栏切换按钮：比普通窗口控制更大一档，便于点击。 */
-.app-titlebar__control--sidebar {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
 }
 
 /* 标题栏按钮焦点态：保证键盘导航时也有清晰状态提示。 */
@@ -1453,8 +1386,7 @@ textarea,
     scroll-behavior: auto !important;
   }
 
-  .app-titlebar__control:hover,
-  .app-titlebar__control--sidebar:hover {
+  .app-titlebar__control:hover {
     transform: none;
   }
 }

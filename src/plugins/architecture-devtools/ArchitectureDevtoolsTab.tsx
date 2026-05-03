@@ -9,7 +9,7 @@
  *
  * @dependencies
  *   - react
- *   - dockview
+ *   - ../../host/layout/workbenchContracts
  *   - ../../host/registry
  *   - ./architectureRegistry
  *   - ./architectureDevtools.css

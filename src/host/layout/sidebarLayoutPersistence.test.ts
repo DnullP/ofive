@@ -185,6 +185,132 @@ describe("parseSidebarLayoutConfig", () => {
 
         expect(result?.panelLayout).toBeUndefined();
     });
+
+    it("应在解析 panelLayout 时清理 collapsed panel section 的旧 fixed size", () => {
+        const result = parseSidebarLayoutConfig({
+            [SIDEBAR_LAYOUT_CONFIG_KEY]: {
+                left: { width: 280, visible: true },
+                right: { width: 260, visible: true },
+                panelLayout: {
+                    root: {
+                        id: "root",
+                        title: "Root",
+                        data: {
+                            role: "root",
+                            component: { type: "empty", props: {} },
+                        },
+                        resizableEdges: { top: true, right: true, bottom: true, left: true },
+                        split: {
+                            direction: "horizontal",
+                            ratio: 0.15,
+                            children: [
+                                {
+                                    id: "left-sidebar",
+                                    title: "Left Sidebar",
+                                    data: {
+                                        role: "sidebar",
+                                        component: { type: "panel-section", props: { panelSectionId: "left-panel-section" } },
+                                    },
+                                    meta: { "layout-v2:fixedSize": 86 },
+                                    resizableEdges: { top: true, right: true, bottom: true, left: true },
+                                    split: null,
+                                },
+                                {
+                                    id: "main-tabs",
+                                    title: "Main Tabs",
+                                    data: {
+                                        role: "main",
+                                        component: { type: "tab-section", props: { tabSectionId: "main-tabs" } },
+                                    },
+                                    resizableEdges: { top: true, right: true, bottom: true, left: true },
+                                    split: null,
+                                },
+                            ],
+                        },
+                    },
+                    sections: [
+                        {
+                            id: "left-panel-section",
+                            panelIds: ["files"],
+                            focusedPanelId: "files",
+                            isCollapsed: true,
+                            isRoot: true,
+                        },
+                    ],
+                },
+            },
+        });
+
+        expect(result?.panelLayout?.root.split?.children[0].meta?.["layout-v2:fixedSize"]).toBeUndefined();
+        expect(result?.panelLayout?.sections[0].isCollapsed).toBe(true);
+    });
+
+    it("应在解析纵向 split panelLayout 时把 collapsed section 固定为 strip 高度", () => {
+        const result = parseSidebarLayoutConfig({
+            [SIDEBAR_LAYOUT_CONFIG_KEY]: {
+                left: { width: 280, visible: true },
+                right: { width: 260, visible: true },
+                panelLayout: {
+                    root: {
+                        id: "left-sidebar",
+                        title: "Left Sidebar",
+                        data: {
+                            role: "sidebar",
+                            component: { type: "empty", props: {} },
+                        },
+                        resizableEdges: { top: true, right: true, bottom: true, left: true },
+                        split: {
+                            direction: "vertical",
+                            ratio: 0.5,
+                            children: [
+                                {
+                                    id: "left-sidebar-section",
+                                    title: "Files",
+                                    data: {
+                                        role: "sidebar",
+                                        component: { type: "panel-section", props: { panelSectionId: "left-panel-section" } },
+                                    },
+                                    meta: { "layout-v2:fixedSize": 240 },
+                                    resizableEdges: { top: true, right: true, bottom: true, left: true },
+                                    split: null,
+                                },
+                                {
+                                    id: "left-sidebar-split",
+                                    title: "Search",
+                                    data: {
+                                        role: "sidebar",
+                                        component: { type: "panel-section", props: { panelSectionId: "left-sidebar-panels" } },
+                                    },
+                                    resizableEdges: { top: true, right: true, bottom: true, left: true },
+                                    split: null,
+                                },
+                            ],
+                        },
+                    },
+                    sections: [
+                        {
+                            id: "left-panel-section",
+                            panelIds: ["files"],
+                            focusedPanelId: "files",
+                            isCollapsed: true,
+                            isRoot: true,
+                        },
+                        {
+                            id: "left-sidebar-panels",
+                            panelIds: ["search"],
+                            focusedPanelId: "search",
+                            isCollapsed: false,
+                        },
+                    ],
+                },
+            },
+        });
+
+        const collapsedSection = result?.panelLayout?.root.split?.children[0];
+        const expandedSection = result?.panelLayout?.root.split?.children[1];
+        expect(collapsedSection?.meta?.["layout-v2:fixedSize"]).toBe(38);
+        expect(expandedSection?.meta?.["layout-v2:fixedSize"]).toBeUndefined();
+    });
 });
 
 describe("restorePanelStatesFromSidebarLayout", () => {

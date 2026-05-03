@@ -3,7 +3,7 @@
  * @description 图片查看器 Tab：用于浏览资源管理器中打开的图片文件。
  * @dependencies
  *  - react
- *  - dockview
+ *  - ../../../host/layout/workbenchContracts
  *  - @tauri-apps/api/core
  */
 

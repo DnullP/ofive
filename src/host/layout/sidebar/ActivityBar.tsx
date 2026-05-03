@@ -2,7 +2,7 @@
  * @module host/layout/sidebar/ActivityBar
  * @description 竖向活动栏组件（左侧），用于切换面板分组、打开设置等。
  *   支持拖拽排序、右键上下文菜单、向右侧 SidebarIconBar 跨栏拖拽。
- *   纯展示组件，所有状态与事件由外部（DockviewLayout）管理。
+ *   纯展示组件，所有状态与事件由外部 workbench host 管理。
  *
  * @dependencies
  *   - react

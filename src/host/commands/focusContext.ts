@@ -1,10 +1,10 @@
 /**
  * @module host/commands/focusContext
- * @description 焦点上下文模块：基于 dockview 布局层级提供通用的组件焦点检测与快捷键条件匹配。
+ * @description 焦点上下文模块：基于 workbench 布局层级提供通用的组件焦点检测与快捷键条件匹配。
  *
- *   系统中存在两类 dockview 容器：
- *     - **侧栏面板（Panel）**：由 PaneviewReact 管理，容器标记 `data-panel-id`
- *     - **主区标签（Tab）**：由 DockviewReact 管理，容器标记 `data-tab-component`
+ *   系统中存在两类 workbench 容器：
+ *     - **侧栏面板（Panel）**：容器标记 `data-panel-id`
+ *     - **主区标签（Tab）**：容器标记 `data-tab-component`
  *
  *   焦点检测通过 DOM `closest()` 查找最近的标记容器，生成结构化标识字符串：
  *     - `"panel:<panelId>"` — 侧栏面板聚焦（如 `"panel:files"`）
@@ -20,10 +20,10 @@
  *   - currentFocusedComponent (string) ["other"] — 当前聚焦组件标识
  *
  * @lifecycle
- *   - 初始化时机：DockviewLayout 挂载时调用 initFocusTracking()
+ *   - 初始化时机：WorkbenchLayoutHost 挂载时调用 initFocusTracking()
  *   - 数据来源：全局 focusin 事件驱动，DOM 属性检测
  *   - 更新触发：任何元素获得焦点
- *   - 清理时机：DockviewLayout 卸载时调用返回的清理函数
+ *   - 清理时机：WorkbenchLayoutHost 卸载时调用返回的清理函数
  *
  * 导出：
  *  - ShortcutCondition 类型 — 快捷键触发条件标识（由条件子系统定义）
@@ -79,7 +79,7 @@ const TAB_COMPONENT_SELECTOR = `[${TAB_COMPONENT_DATA_ATTR}]`;
  * @function detectFocusedComponentFromElement
  * @description 根据 DOM 元素，通过向上查找最近的标记容器确定其所属组件。
  *   优先级：tab:* > panel:* > other。
- *   检测逻辑完全基于 dockview 布局的 data 属性，不依赖具体组件 CSS 类名。
+ *   检测逻辑完全基于 workbench 布局的 data 属性，不依赖具体组件 CSS 类名。
  * @param element DOM 元素。
  * @returns 聚焦组件标识字符串。
  */

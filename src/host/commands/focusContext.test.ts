@@ -2,10 +2,10 @@
  * @module host/commands/focusContext.test
  * @description focusContext 模块的单元测试，含条件匹配回归测试。
  *
- * FocusedComponent 采用 dockview 层级模式：
+ * FocusedComponent 采用 workbench 层级模式：
  *   - "tab:<component>"  — 主区域选项卡（如 "tab:codemirror"）
  *   - "panel:<id>"       — 侧边栏面板（如 "panel:files"）
- *   - "other"            — 未匹配到任何 dockview 组件
+ *   - "other"            — 未匹配到任何 workbench 组件
  */
 
 import { describe, expect, test } from "bun:test";
@@ -57,7 +57,7 @@ describe("SHORTCUT_CONDITION_LABELS", () => {
  * 测试不直接导入 commandSystem（其依赖链含 import.meta.glob），
  * 而是用等价的数据结构模拟命令注册表和调度算法。
  *
- * FocusedComponent 使用 dockview 命名模式：
+ * FocusedComponent 使用 workbench 命名模式：
  *   - "tab:codemirror" 代表编辑器
  *   - "panel:files" 代表文件树
  */

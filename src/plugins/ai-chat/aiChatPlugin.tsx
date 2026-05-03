@@ -281,7 +281,7 @@ function isVendorSettingsComplete(
 
 /**
  * @function resolvePanelParamString
- * @description 从 dockview panel params 中读取字符串字段。
+ * @description 从 workbench panel params 中读取字符串字段。
  * @param params panel 参数。
  * @param keys 候选字段名。
  * @returns 字符串或 null。

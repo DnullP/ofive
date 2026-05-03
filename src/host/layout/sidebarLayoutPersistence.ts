@@ -26,6 +26,8 @@ import type {
 
 /** 侧边栏布局配置键。 */
 export const SIDEBAR_LAYOUT_CONFIG_KEY = "sidebarLayout";
+const SECTION_FIXED_SIZE_META_KEY = "layout-v2:fixedSize";
+const PANEL_SECTION_COLLAPSED_BAR_SIZE = 38;
 
 /**
  * @interface SidebarRailLayoutSnapshot
@@ -367,7 +369,77 @@ function normalizePanelLayoutSnapshot(value: unknown): WorkbenchPanelLayoutSnaps
         return undefined;
     }
 
-    return { root, sections };
+    return { root: sanitizeCollapsedPanelLayoutFixedSizes(root, sections), sections };
+}
+
+function getPanelSectionIdFromNode(node: SectionNode<WorkbenchSectionData>): string | null {
+    const component = node.data.component;
+    if (component.type !== "panel-section") {
+        return null;
+    }
+
+    const panelSectionId = (component.props as { panelSectionId?: unknown }).panelSectionId;
+    return typeof panelSectionId === "string" && panelSectionId.trim() ? panelSectionId : null;
+}
+
+function sanitizeCollapsedPanelLayoutFixedSizes(
+    root: SectionNode<WorkbenchSectionData>,
+    sections: WorkbenchPanelSectionLayoutSnapshot[],
+): SectionNode<WorkbenchSectionData> {
+    const panelSectionCollapsedById = new Map(
+        sections.map((section) => [section.id, section.isCollapsed]),
+    );
+
+    if (panelSectionCollapsedById.size === 0) {
+        return root;
+    }
+
+    const visit = (
+        node: SectionNode<WorkbenchSectionData>,
+        parentSplitDirection: "horizontal" | "vertical" | null,
+    ): SectionNode<WorkbenchSectionData> => {
+        const panelSectionId = getPanelSectionIdFromNode(node);
+        const isKnownPanelSection = panelSectionId !== null && panelSectionCollapsedById.has(panelSectionId);
+        const isCollapsed = panelSectionId !== null
+            ? panelSectionCollapsedById.get(panelSectionId) === true
+            : false;
+        let nextMeta = node.meta;
+
+        if (isKnownPanelSection) {
+            if (isCollapsed && parentSplitDirection === "vertical") {
+                nextMeta = {
+                    ...(node.meta ?? {}),
+                    [SECTION_FIXED_SIZE_META_KEY]: PANEL_SECTION_COLLAPSED_BAR_SIZE,
+                };
+            } else if (node.meta && SECTION_FIXED_SIZE_META_KEY in node.meta) {
+                nextMeta = Object.fromEntries(
+                    Object.entries(node.meta).filter(([key]) => key !== SECTION_FIXED_SIZE_META_KEY),
+                );
+            }
+        }
+
+        const nextSplit = node.split
+            ? {
+                ...node.split,
+                children: [
+                    visit(node.split.children[0], node.split.direction),
+                    visit(node.split.children[1], node.split.direction),
+                ] as [SectionNode<WorkbenchSectionData>, SectionNode<WorkbenchSectionData>],
+            }
+            : null;
+
+        if (nextMeta === node.meta && nextSplit === node.split) {
+            return node;
+        }
+
+        return {
+            ...node,
+            meta: nextMeta && Object.keys(nextMeta).length > 0 ? nextMeta : undefined,
+            split: nextSplit,
+        };
+    };
+
+    return visit(root, null);
 }
 
 /**

@@ -3,7 +3,7 @@
  * @description 任务看板 Tab：查询整个仓库中的任务，并支持基于气泡框编辑 due 和 priority。
  * @dependencies
  *  - react
- *  - dockview
+ *  - ../../../host/layout/workbenchContracts
  *  - lucide-react
  *  - ../../../api/vaultApi
  *  - ../../../host/events/appEventBus
