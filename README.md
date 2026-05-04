@@ -286,7 +286,13 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-工作流只会构建并发布 macOS ARM64 安装包。安装包构建成功后，工作流会创建 GitHub Release 并上传资产。
+工作流只会构建并发布 macOS ARM64 安装包。这个开源发布版使用 `--no-sign`，不做 Apple Developer ID 签名和 notarization。
+
+首次打开时，如果 macOS 提示“App 已被修改或者已损坏”或“无法验证开发者”，请先把应用拖到 `/Applications`，然后执行：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/ofive.app
+```
 
 ## CI
 

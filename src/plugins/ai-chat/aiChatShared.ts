@@ -372,6 +372,41 @@ function buildContentBlocksFromVisibleMessage(
 }
 
 /**
+ * @function isVisibleConversationMessage
+ * @description 判断消息是否应出现在可见聊天记录中，排除仅用于模型协议恢复的工具消息。
+ * @param message 历史消息。
+ * @returns 可见消息返回 true。
+ */
+function isVisibleConversationMessage(message: AiChatHistoryMessage): boolean {
+    if (isLegacyVisibleToolTranscript(message.text)) {
+        return false;
+    }
+
+    if (
+        message.text.trim().length > 0 ||
+        (message.reasoningText ?? "").trim().length > 0
+    ) {
+        return true;
+    }
+
+    const contentBlocks = message.contentBlocks ?? [];
+    if (contentBlocks.length === 0) {
+        return false;
+    }
+
+    return contentBlocks.some((block) => {
+        return block.kind === "text" || block.kind === "thinking";
+    });
+}
+
+function isLegacyVisibleToolTranscript(text: string): boolean {
+    const trimmed = text.trimStart();
+    return trimmed.startsWith("[tool:")
+        || trimmed.startsWith("[tool_")
+        || trimmed.startsWith("[confirmation:");
+}
+
+/**
  * @function sortConversations
  * @description 按更新时间倒序排列会话。
  * @param conversations 会话列表。
@@ -439,8 +474,9 @@ export function ensureHistoryState(
         activeConversationId,
         conversations: sortConversations(history.conversations.map((conversation) => ({
             ...conversation,
+            messages: conversation.messages.filter(isVisibleConversationMessage),
             protocolMessages: conversation.protocolMessages?.length
-                ? conversation.protocolMessages
+                ? conversation.protocolMessages.filter(isVisibleConversationMessage)
                 : buildFallbackProtocolMessages(conversation.messages),
         }))),
     };
@@ -461,10 +497,7 @@ export function buildPersistableHistory(
             (conversation) => ({
                 ...conversation,
                 title: deriveConversationTitle(conversation.messages),
-                messages: conversation.messages.filter((message) => {
-                    return message.text.trim().length > 0 ||
-                        (message.reasoningText ?? "").trim().length > 0;
-                }),
+                messages: conversation.messages.filter(isVisibleConversationMessage),
                 protocolMessages: (conversation.protocolMessages?.length
                     ? conversation.protocolMessages
                     : buildFallbackProtocolMessages(conversation.messages)

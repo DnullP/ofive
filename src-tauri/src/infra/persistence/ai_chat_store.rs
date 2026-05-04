@@ -629,6 +629,10 @@ fn sanitize_ai_chat_message(message: AiChatHistoryMessage) -> Option<AiChatHisto
         return None;
     }
 
+    if is_legacy_visible_tool_transcript(&text) {
+        return None;
+    }
+
     if role == "user" && text.is_empty() {
         return None;
     }
@@ -653,6 +657,13 @@ fn sanitize_ai_chat_message(message: AiChatHistoryMessage) -> Option<AiChatHisto
             .collect(),
         interrupted_by_user: message.interrupted_by_user,
     })
+}
+
+fn is_legacy_visible_tool_transcript(text: &str) -> bool {
+    let trimmed = text.trim_start();
+    trimmed.starts_with("[tool:")
+        || trimmed.starts_with("[tool_")
+        || trimmed.starts_with("[confirmation:")
 }
 
 /// 清洗单条协议历史内容块。
@@ -826,6 +837,71 @@ mod tests {
                 .contains_key(AI_CHAT_HISTORY_CONFIG_KEY),
             "保存后不应再保留旧字段"
         );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn save_ai_chat_history_should_drop_legacy_visible_tool_transcripts() {
+        let root = create_test_root();
+
+        let history = AiChatHistoryState {
+            active_conversation_id: Some("conversation-1".to_string()),
+            conversations: vec![AiChatConversationRecord {
+                id: "conversation-1".to_string(),
+                session_id: "session-1".to_string(),
+                title: "Test".to_string(),
+                created_at_unix_ms: 10,
+                updated_at_unix_ms: 20,
+                messages: vec![
+                    AiChatHistoryMessage {
+                        id: "message-1".to_string(),
+                        role: "user".to_string(),
+                        text: "围绕核心概念举几个例子".to_string(),
+                        created_at_unix_ms: 10,
+                        started_at_unix_ms: None,
+                        completed_at_unix_ms: None,
+                        duration_ms: None,
+                        reasoning_text: None,
+                        content_blocks: vec![],
+                        interrupted_by_user: false,
+                    },
+                    AiChatHistoryMessage {
+                        id: "message-2".to_string(),
+                        role: "assistant".to_string(),
+                        text: "[tool:vault.apply_markdown_patch]\n{\n  \"appliedBlockCount\": 1,\n  \"relativePath\": \"Ontology/Ontology.md\"\n}".to_string(),
+                        created_at_unix_ms: 11,
+                        started_at_unix_ms: None,
+                        completed_at_unix_ms: None,
+                        duration_ms: None,
+                        reasoning_text: None,
+                        content_blocks: vec![],
+                        interrupted_by_user: false,
+                    },
+                ],
+                protocol_messages: vec![AiChatHistoryMessage {
+                    id: "protocol-1".to_string(),
+                    role: "assistant".to_string(),
+                    text: "[tool:vault_read_markdown_file]\n{ \"relativePath\": \"Ontology/Ontology.md\" }\n[/tool]".to_string(),
+                    created_at_unix_ms: 12,
+                    started_at_unix_ms: None,
+                    completed_at_unix_ms: None,
+                    duration_ms: None,
+                    reasoning_text: None,
+                    content_blocks: vec![],
+                    interrupted_by_user: false,
+                }],
+            }],
+        };
+
+        let loaded = save_ai_chat_history_in_root(history, &root).expect("保存历史应成功");
+
+        assert_eq!(loaded.conversations[0].messages.len(), 1);
+        assert_eq!(
+            loaded.conversations[0].messages[0].text,
+            "围绕核心概念举几个例子"
+        );
+        assert!(loaded.conversations[0].protocol_messages.is_empty());
 
         let _ = fs::remove_dir_all(root);
     }

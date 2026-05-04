@@ -59,6 +59,48 @@ func TestEmitStreamTextDeltaReturnsReasoningSuffix(t *testing.T) {
 	}
 }
 
+func TestProcessADKEventContentIgnoresToolOnlyContentAsVisibleText(t *testing.T) {
+	t.Parallel()
+
+	state := &streamADKState{}
+	var chunks []StreamChunk
+	err := processADKEventContent(
+		"agent",
+		&genai.Content{
+			Role: genai.RoleModel,
+			Parts: []*genai.Part{{
+				FunctionResponse: &genai.FunctionResponse{
+					ID:   "confirm-1",
+					Name: "vault.apply_markdown_patch",
+					Response: map[string]any{
+						"appliedBlockCount": 1,
+						"relativePath":      "Ontology/Ontology.md",
+					},
+				},
+			}},
+		},
+		state,
+		func(chunk StreamChunk) error {
+			chunks = append(chunks, chunk)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("processADKEventContent returned error: %v", err)
+	}
+	for _, chunk := range chunks {
+		if chunk.EventType == "delta" || chunk.EventType == "done" {
+			t.Fatalf("expected no visible stream chunks for tool-only content, got %+v", chunks)
+		}
+	}
+	if strings.TrimSpace(state.responseText) != "" {
+		t.Fatalf("expected empty visible response text, got %q", state.responseText)
+	}
+	if len(state.historyContentBlocks) != 1 || state.historyContentBlocks[0].Kind != "tool-result" {
+		t.Fatalf("expected protocol tool-result history block, got %+v", state.historyContentBlocks)
+	}
+}
+
 func TestMergeStreamEventTextPreservesPreviousTurnReasoning(t *testing.T) {
 	t.Parallel()
 

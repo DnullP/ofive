@@ -885,6 +885,9 @@ func processADKEventContent(
 	}
 
 	state.historyContentBlocks = buildHistoryContentBlocksFromParts(content.Parts)
+	if isToolOnlyHistoryContentBlocks(state.historyContentBlocks) {
+		return nil
+	}
 
 	if len(reasoningParts) > 0 {
 		state.reasoningText, state.latestReasoningText = mergeStreamEventText(
@@ -919,6 +922,21 @@ func processADKEventContent(
 		false,
 		emit,
 	)
+}
+
+func isToolOnlyHistoryContentBlocks(blocks []HistoryContentBlock) bool {
+	if len(blocks) == 0 {
+		return false
+	}
+	for _, block := range blocks {
+		switch strings.TrimSpace(block.Kind) {
+		case "tool-use", "tool-result":
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func mergeStreamEventText(current string, latestSegment string, next string) (string, string) {

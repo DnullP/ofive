@@ -170,6 +170,46 @@ describe("aiChatShared", () => {
         expect(next.activeConversationId).toBe(next.conversations[0]?.id);
     });
 
+    it("应在加载历史时排除旧版可见工具转录消息", () => {
+        const next = ensureHistoryState({
+            activeConversationId: "c1",
+            conversations: [
+                {
+                    id: "c1",
+                    sessionId: "s1",
+                    title: "stale",
+                    createdAtUnixMs: 1,
+                    updatedAtUnixMs: 2,
+                    messages: [
+                        {
+                            id: "m1",
+                            role: "user",
+                            text: "围绕核心概念举几个例子",
+                            createdAtUnixMs: 1,
+                        },
+                        {
+                            id: "m2",
+                            role: "assistant",
+                            text: "[tool:vault.apply_markdown_patch]\n{\n  \"appliedBlockCount\": 1,\n  \"relativePath\": \"Ontology/Ontology.md\"\n}",
+                            createdAtUnixMs: 2,
+                        },
+                    ],
+                    protocolMessages: [
+                        {
+                            id: "p1",
+                            role: "assistant",
+                            text: "[tool:vault_read_markdown_file]\n{ \"relativePath\": \"Ontology/Ontology.md\" }\n[/tool]",
+                            createdAtUnixMs: 2,
+                        },
+                    ],
+                },
+            ],
+        });
+
+        expect(next.conversations[0]?.messages.map((message) => message.id)).toEqual(["m1"]);
+        expect(next.conversations[0]?.protocolMessages).toHaveLength(0);
+    });
+
     it("应在持久化历史时过滤空消息并重算标题", () => {
         const history: AiChatHistoryState = {
             activeConversationId: "c1",
@@ -202,6 +242,61 @@ describe("aiChatShared", () => {
 
         expect(persistable.conversations[0]?.title).toBe("Hello note");
         expect(persistable.conversations[0]?.messages).toHaveLength(1);
+    });
+
+    it("应在持久化可见历史时排除仅包含工具结果的协议消息", () => {
+        const history: AiChatHistoryState = {
+            activeConversationId: "c1",
+            conversations: [
+                {
+                    id: "c1",
+                    sessionId: "s1",
+                    title: "stale",
+                    createdAtUnixMs: 1,
+                    updatedAtUnixMs: 2,
+                    messages: [
+                        {
+                            id: "m1",
+                            role: "user",
+                            text: "更新本体笔记",
+                            createdAtUnixMs: 1,
+                        },
+                        {
+                            id: "tool-result",
+                            role: "user",
+                            text: "",
+                            createdAtUnixMs: 2,
+                            contentBlocks: [{
+                                kind: "tool-result",
+                                toolUseId: "confirm-1",
+                                toolName: "adk_request_confirmation",
+                                resultJson: "{\"confirmed\":true}",
+                            }],
+                        },
+                    ],
+                    protocolMessages: [
+                        {
+                            id: "tool-result",
+                            role: "user",
+                            text: "",
+                            createdAtUnixMs: 2,
+                            contentBlocks: [{
+                                kind: "tool-result",
+                                toolUseId: "confirm-1",
+                                toolName: "adk_request_confirmation",
+                                resultJson: "{\"confirmed\":true}",
+                            }],
+                        },
+                    ],
+                },
+            ],
+        };
+
+        const persistable = buildPersistableHistory(history);
+        const firstConversation = persistable.conversations[0]!;
+
+        expect(firstConversation.messages.map((message) => message.id)).toEqual(["m1"]);
+        expect(firstConversation.protocolMessages).toHaveLength(1);
     });
 
     it("应在持久化历史时保留被用户中断的消息标记", () => {
