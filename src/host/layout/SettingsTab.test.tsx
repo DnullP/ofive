@@ -82,5 +82,8 @@ describe("SettingsTab", () => {
         expect(markup).toContain("settings.enableSearch");
         expect(markup).toContain("settings.enableSearchDesc");
         expect(markup).toContain("settings.searchResultsSummary:1/1");
+        expect(markup).toContain("settings-tab-sidebar-item active");
+        expect(markup).not.toContain("settings-tab-sidebar-active-line");
+        expect(markup).not.toContain("settings-tab-sidebar-item--separator-hidden");
     });
 });

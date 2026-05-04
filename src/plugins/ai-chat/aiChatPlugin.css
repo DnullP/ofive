@@ -622,6 +622,12 @@
     word-break: break-all;
 }
 
+/* ai-chat-message-wikilink：AI 对话中的 WikiLink 继承阅读态链接风格。 */
+.ai-chat-message-wikilink {
+    cursor: pointer;
+    word-break: normal;
+}
+
 /* ai-chat-message-inline-code：行内代码 */
 .ai-chat-message-inline-code {
     padding: 1px 5px;

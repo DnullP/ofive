@@ -19,6 +19,71 @@ import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
+import { decodeReadModeWikiLinkHref } from "../markdown-codemirror/editor/markdownReadTransform";
+import { parseWikiLinkParts } from "../markdown-codemirror/editor/syntaxPlugins/wikiLinkParser";
+
+const WIKILINK_PATTERN = /(!)?\[\[([^\]\n]+?)\]\]/g;
+const INLINE_CODE_PATTERN = /`[^`\n]+`/g;
+
+function escapeMarkdownLinkText(text: string): string {
+    return text
+        .replace(/\\/g, "\\\\")
+        .replace(/\[/g, "\\[")
+        .replace(/\]/g, "\\]");
+}
+
+function transformWikiLinksInMarkdown(markdown: string): string {
+    const lines = markdown.split("\n");
+    let insideFence = false;
+    let fenceMarker: string | null = null;
+
+    return lines.map((line) => {
+        const fenceMatch = line.match(/^(\s*)(`{3,}|~{3,})/);
+        if (fenceMatch) {
+            const marker = fenceMatch[2] ?? "";
+            if (!insideFence) {
+                insideFence = true;
+                fenceMarker = marker[0] ?? null;
+            } else if ((fenceMarker && marker[0] === fenceMarker) || marker.startsWith(fenceMarker ?? "")) {
+                insideFence = false;
+                fenceMarker = null;
+            }
+            return line;
+        }
+
+        if (insideFence) {
+            return line;
+        }
+
+        const placeholders: string[] = [];
+        const protectedLine = line.replace(INLINE_CODE_PATTERN, (segment) => {
+            const token = `@@AI_CHAT_WIKILINK_CODE_${String(placeholders.length)}@@`;
+            placeholders.push(segment);
+            return token;
+        });
+
+        const transformedLine = protectedLine.replace(
+            WIKILINK_PATTERN,
+            (fullMatch, imagePrefix: string | undefined, rawTarget: string) => {
+                if (imagePrefix === "!") {
+                    return fullMatch;
+                }
+
+                const parsed = parseWikiLinkParts((rawTarget ?? "").trim());
+                if (!parsed) {
+                    return fullMatch;
+                }
+
+                return `[${escapeMarkdownLinkText(parsed.displayText)}](/__ofive_wikilink__/${encodeURIComponent(parsed.target)})`;
+            },
+        );
+
+        return placeholders.reduce(
+            (currentLine, segment, index) => currentLine.replace(`@@AI_CHAT_WIKILINK_CODE_${String(index)}@@`, segment),
+            transformedLine,
+        );
+    }).join("\n");
+}
 
 interface AiChatMessageMarkdownProps {
     /** 原始 Markdown 文本。 */
@@ -29,6 +94,8 @@ interface AiChatMessageMarkdownProps {
     streaming?: boolean;
     /** 消息角色，用于辅助样式区分。 */
     role: "assistant" | "user";
+    /** 点击 WikiLink 时由宿主执行打开逻辑。 */
+    onOpenWikiLinkTarget?: (target: string) => void;
 }
 
 /**
@@ -44,6 +111,7 @@ export function AiChatMessageMarkdown(
     const normalizedContent = props.content.trim();
     const normalizedReasoningContent = (props.reasoningContent ?? "").trim();
     const shouldKeepReasoningExpanded = !normalizedContent;
+    const renderedContent = transformWikiLinksInMarkdown(normalizedContent);
 
     const renderInlineCode = (
         componentProps: ComponentPropsWithoutRef<"code">,
@@ -135,12 +203,33 @@ export function AiChatMessageMarkdown(
                         <blockquote className="ai-chat-message-blockquote" {...componentProps} />
                     ),
                     a: ({ node: _node, ...componentProps }) => (
-                        <a
-                            className="ai-chat-message-link"
-                            target="_blank"
-                            rel="noreferrer"
-                            {...componentProps}
-                        />
+                        (() => {
+                            const href = typeof componentProps.href === "string" ? componentProps.href : undefined;
+                            const wikiLinkTarget = decodeReadModeWikiLinkHref(href);
+                            if (wikiLinkTarget) {
+                                return (
+                                    <a
+                                        {...componentProps}
+                                        className="ai-chat-message-link ai-chat-message-wikilink cm-rendered-wikilink"
+                                        title={wikiLinkTarget}
+                                        href={href}
+                                        onClick={(event) => {
+                                            event.preventDefault();
+                                            props.onOpenWikiLinkTarget?.(wikiLinkTarget);
+                                        }}
+                                    />
+                                );
+                            }
+
+                            return (
+                                <a
+                                    {...componentProps}
+                                    className="ai-chat-message-link"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                />
+                            );
+                        })()
                     ),
                     code: ({
                         node: _node,
@@ -177,7 +266,7 @@ export function AiChatMessageMarkdown(
                     ),
                 }}
             >
-                {normalizedContent}
+                {renderedContent}
             </ReactMarkdown>
             )}
         </div>

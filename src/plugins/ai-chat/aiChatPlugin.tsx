@@ -13,7 +13,11 @@ import React, {
     type KeyboardEvent,
     type ReactNode,
 } from "react";
-import type { PanelRenderContext, WorkbenchTabProps } from "../../host/layout/workbenchContracts";
+import type {
+    PanelRenderContext,
+    WorkbenchContainerApi,
+    WorkbenchTabProps,
+} from "../../host/layout/workbenchContracts";
 import { ArrowUp, Bot, Check, ChevronDown, Copy, Plus, Sparkles, Timer, X } from "lucide-react";
 import {
     getAiChatHistory,
@@ -59,6 +63,9 @@ import {
     sortConversations,
     type AiChatRuntimeOpenTabSnapshot,
 } from "./aiChatShared";
+import { resolveParentDirectory } from "../markdown-codemirror/editor/pathUtils";
+import { resolveWikiLinkTarget } from "../../api/vaultApi";
+import { openWikiLinkTarget } from "../markdown-codemirror/editor/syntaxPlugins/wikiLinkSyntaxRenderer";
 import {
     createEmptyPendingStreamBinding,
     createPendingStreamBinding,
@@ -123,7 +130,8 @@ const QUICK_PROMPTS: QuickPromptDefinition[] = [
 ];
 
 interface AiChatViewProps {
-    panelContext?: Pick<PanelRenderContext, "activeTabId" | "workbenchApi"> | null;
+    panelContext?: PanelRenderContext | null;
+    tabContainerApi?: WorkbenchContainerApi | null;
 }
 
 /**
@@ -859,6 +867,33 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         && !isActiveConversationStreaming
         && isVendorConfigured,
     );
+
+    const handleOpenWikiLinkTarget = async (target: string): Promise<void> => {
+        const openFile = props.panelContext?.openFile;
+        const currentFilePath = activeEditor?.path;
+        if (!currentFilePath) {
+            return;
+        }
+
+        if (!openFile && props.tabContainerApi) {
+            await openWikiLinkTarget(props.tabContainerApi, () => currentFilePath, target);
+            return;
+        }
+
+        if (!openFile) {
+            return;
+        }
+
+        const currentDirectory = resolveParentDirectory(currentFilePath);
+        const resolved = await resolveWikiLinkTarget(currentDirectory, target);
+        if (!resolved) {
+            return;
+        }
+
+        await openFile({
+            relativePath: resolved.relativePath,
+        });
+    };
 
     useEffect(() => {
         let disposed = false;
@@ -1831,6 +1866,9 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                                                 reasoningContent={renderedReasoningText}
                                                 role={message.role}
                                                 streaming={isStreamingMessage}
+                                                onOpenWikiLinkTarget={(target) => {
+                                                    void handleOpenWikiLinkTarget(target);
+                                                }}
                                             />
                                         </div>
                                         {confirmation ? (
@@ -2070,8 +2108,8 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
  * @param _props Dockview 面板属性；当前实现不依赖额外参数。
  * @returns React 节点。
  */
-function AiChatTab(_props: WorkbenchTabProps<Record<string, unknown>>): ReactNode {
-    return <AiChatView />;
+function AiChatTab(props: WorkbenchTabProps<Record<string, unknown>>): ReactNode {
+    return <AiChatView tabContainerApi={props.containerApi} />;
 }
 
 /**

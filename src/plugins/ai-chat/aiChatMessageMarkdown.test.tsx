@@ -116,4 +116,39 @@ describe("AiChatMessageMarkdown", () => {
         // i18n-guard-ignore-next-line: 这里断言的是渲染后的 HTML 片段，不是 UI 文案。
         expect(html).not.toContain("<strong>pending</strong>");
     });
+
+    it("应将 WikiLink 渲染为可点击链接并保留别名", () => {
+        const html = renderToStaticMarkup(
+            <AiChatMessageMarkdown
+                role="assistant"
+                content="参考 [[Ontology/Ontology|本体论]] 和 [[实体]]。"
+            />,
+        );
+
+        expect(html).toContain("ai-chat-message-wikilink");
+        expect(html).toContain("cm-rendered-wikilink");
+        expect(html).toContain("href=\"/__ofive_wikilink__/Ontology%2FOntology\"");
+        expect(html).toContain(">本体论</a>");
+        expect(html).toContain("href=\"/__ofive_wikilink__/%E5%AE%9E%E4%BD%93\"");
+        expect(html).toContain(">实体</a>");
+    });
+
+    it("不应转换行内代码和代码块中的 WikiLink", () => {
+        const html = renderToStaticMarkup(
+            <AiChatMessageMarkdown
+                role="assistant"
+                content={[
+                    "`[[Inline Code]]`",
+                    "",
+                    "```md",
+                    "[[Code Block]]",
+                    "```",
+                ].join("\n")}
+            />,
+        );
+
+        expect(html).not.toContain("ai-chat-message-wikilink");
+        expect(html).toContain("[[Inline Code]]");
+        expect(html).toContain("[[Code Block]]");
+    });
 });

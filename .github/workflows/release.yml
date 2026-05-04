@@ -287,7 +287,7 @@ jobs:
         run: bun run test:playwright:install
 
       - name: Run Playwright end-to-end tests
-        run: bun run test:e2e --reporter=line
+        run: bun run test:e2e:ci --reporter=line
 
       - name: Upload Playwright artifacts
         if: failure()
