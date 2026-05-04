@@ -9,7 +9,7 @@ use crate::app::ai::plugin_app_service;
 use crate::domain::ai::tool::AiToolDescriptor;
 use crate::domain::ai::tool_registry::build_ai_tool_catalog;
 use crate::domain::capability::{build_builtin_capability_registry, CapabilityRiskLevel};
-use crate::shared::ai_service::pb;
+use crate::shared::ai_service::{pb, AiChatSettings};
 use crate::state::AppState;
 
 /// 获取当前 AI runtime 可见的 tool 目录。
@@ -27,10 +27,13 @@ pub(crate) fn get_enabled_ai_tool_catalog(
 }
 
 /// 获取提供给 Go sidecar 的 protobuf tool 目录。
-pub(crate) fn get_ai_sidecar_tool_catalog() -> Result<Vec<pb::ToolDescriptor>, String> {
+pub(crate) fn get_ai_sidecar_tool_catalog(
+    settings: &AiChatSettings,
+) -> Result<Vec<pb::ToolDescriptor>, String> {
     get_ai_tool_catalog()
         .into_iter()
         .map(|tool| {
+            let requires_confirmation = resolve_tool_requires_confirmation(&tool, settings);
             Ok(pb::ToolDescriptor {
                 capability_id: tool.capability_id,
                 name: tool.name,
@@ -40,11 +43,26 @@ pub(crate) fn get_ai_sidecar_tool_catalog() -> Result<Vec<pb::ToolDescriptor>, S
                 output_schema_json: serde_json::to_string(&tool.output_schema)
                     .map_err(|error| format!("序列化 tool output schema 失败: {error}"))?,
                 risk_level: risk_level_label(&tool.risk_level).to_string(),
-                requires_confirmation: tool.requires_confirmation,
+                requires_confirmation,
                 api_version: tool.api_version,
             })
         })
         .collect()
+}
+
+fn resolve_tool_requires_confirmation(
+    tool: &AiToolDescriptor,
+    settings: &AiChatSettings,
+) -> bool {
+    match settings
+        .tool_approval_policy
+        .get(&tool.capability_id)
+        .map(String::as_str)
+    {
+        Some("require") => true,
+        Some("auto") => false,
+        _ => tool.requires_confirmation,
+    }
 }
 
 fn risk_level_label(risk_level: &CapabilityRiskLevel) -> &'static str {
@@ -52,5 +70,43 @@ fn risk_level_label(risk_level: &CapabilityRiskLevel) -> &'static str {
         CapabilityRiskLevel::Low => "low",
         CapabilityRiskLevel::Medium => "medium",
         CapabilityRiskLevel::High => "high",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn create_test_settings(
+        tool_approval_policy: HashMap<String, String>,
+    ) -> AiChatSettings {
+        AiChatSettings {
+            vendor_id: "mock".to_string(),
+            model: "mock-model".to_string(),
+            field_values: HashMap::new(),
+            tool_approval_policy,
+        }
+    }
+
+    #[test]
+    fn sidecar_tool_catalog_should_apply_chat_tool_approval_policy() {
+        let catalog = get_ai_sidecar_tool_catalog(&create_test_settings(HashMap::from([
+            ("vault.apply_markdown_patch".to_string(), "auto".to_string()),
+            ("vault.read_markdown_file".to_string(), "require".to_string()),
+        ])))
+        .expect("tool catalog should serialize");
+
+        let apply_patch = catalog
+            .iter()
+            .find(|tool| tool.capability_id == "vault.apply_markdown_patch")
+            .expect("apply patch tool should exist");
+        let read_markdown = catalog
+            .iter()
+            .find(|tool| tool.capability_id == "vault.read_markdown_file")
+            .expect("read markdown tool should exist");
+
+        assert!(!apply_patch.requires_confirmation);
+        assert!(read_markdown.requires_confirmation);
     }
 }

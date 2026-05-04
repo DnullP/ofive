@@ -84,6 +84,27 @@ export interface AiVendorModelDefinition {
 }
 
 /**
+ * @type AiToolApprovalMode
+ * @description 单个 AI 工具的审批策略。default 表示使用后端内置风险策略。
+ */
+export type AiToolApprovalMode = "default" | "require" | "auto";
+
+/**
+ * @interface AiToolDescriptor
+ * @description Rust 后端提供给 AI runtime 的工具描述。
+ */
+export interface AiToolDescriptor {
+    capabilityId: string;
+    apiVersion: string;
+    name: string;
+    description: string;
+    inputSchema: unknown;
+    outputSchema: unknown;
+    riskLevel: "low" | "medium" | "high" | string;
+    requiresConfirmation: boolean;
+}
+
+/**
  * @interface AiChatSettings
  * @description 当前仓库的 AI 聊天配置。
  */
@@ -91,6 +112,7 @@ export interface AiChatSettings {
     vendorId: string;
     model: string;
     fieldValues: Record<string, string>;
+    toolApprovalPolicy?: Record<string, Exclude<AiToolApprovalMode, "default">>;
 }
 
 /**
@@ -197,6 +219,7 @@ export interface StartAiChatStreamOptions {
 
 export interface BrowserMockAiRuntime {
     getAiVendorCatalog?: () => Promise<AiVendorDefinition[]> | AiVendorDefinition[];
+    getAiToolCatalog?: () => Promise<AiToolDescriptor[]> | AiToolDescriptor[];
     getAiChatSettings?: () => Promise<AiChatSettings> | AiChatSettings;
     getAiChatHistory?: () => Promise<AiChatHistoryState> | AiChatHistoryState;
     getAiVendorModels?: (settings: AiChatSettings) => Promise<AiVendorModelDefinition[]> | AiVendorModelDefinition[];
@@ -277,6 +300,24 @@ export async function getAiVendorCatalog(): Promise<AiVendorDefinition[]> {
     }
 
     return invoke<AiVendorDefinition[]>("get_ai_vendor_catalog");
+}
+
+/**
+ * @function getAiToolCatalog
+ * @description 获取后端提供的 AI 工具目录。
+ * @returns 工具描述数组。
+ */
+export async function getAiToolCatalog(): Promise<AiToolDescriptor[]> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime?.getAiToolCatalog) {
+        return mockRuntime.getAiToolCatalog();
+    }
+
+    if (!isTauriRuntime()) {
+        throw new Error("AI tool catalog is only available in Tauri runtime");
+    }
+
+    return invoke<AiToolDescriptor[]>("get_ai_tool_catalog");
 }
 
 /**

@@ -176,6 +176,7 @@ export function mergeSettingsForVendor(
             ? currentSettings.model || vendor.defaultModel
             : vendor.defaultModel,
         fieldValues: nextFieldValues,
+        toolApprovalPolicy: currentSettings.toolApprovalPolicy,
     };
 }
 

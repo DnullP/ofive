@@ -89,6 +89,9 @@ function createSettings(): AiChatSettings {
         fieldValues: {
             token: "secret",
         },
+        toolApprovalPolicy: {
+            "vault.apply_markdown_patch": "auto",
+        },
     };
 }
 
@@ -115,6 +118,9 @@ describe("aiChatShared", () => {
         expect(merged.fieldValues).toEqual({
             token: "secret",
             endpoint: "https://example.test",
+        });
+        expect(merged.toolApprovalPolicy).toEqual({
+            "vault.apply_markdown_patch": "auto",
         });
     });
 

@@ -274,6 +274,7 @@ mod tests {
                     format!("http://{address}/anthropic"),
                 ),
             ]),
+            tool_approval_policy: HashMap::new(),
         })
         .await
         .expect("MiniMax 模型列表应从配置 base URL 拉取");

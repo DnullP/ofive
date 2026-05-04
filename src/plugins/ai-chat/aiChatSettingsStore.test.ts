@@ -17,6 +17,7 @@ function createSettings(model: string): AiChatSettings {
         fieldValues: {
             token: "secret",
         },
+        toolApprovalPolicy: {},
     };
 }
 

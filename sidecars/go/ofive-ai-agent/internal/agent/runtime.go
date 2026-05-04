@@ -1254,6 +1254,7 @@ func buildAgentInstruction(
 
 	return baseInstruction + "\n\n" +
 		managedToolCallGuidance +
+		"Confirmation requests are single-flight: request at most one confirmation-required tool call at a time. Do not claim that several other write calls are already waiting for approval unless ofive actually emitted those confirmations. Wait for the approved tool result before planning the next mutating tool call. " +
 		"When the user asks about local vault content, notes, outlines, backlinks, search results, or graph data, you must use the provided tools instead of guessing or claiming you cannot access local files. " +
 		"Never invent tools, parameters, or file contents. If the user's request would require writing, renaming, deleting, or any other modification but no such executable tool is listed, explicitly say that the current assistant session only has non-mutating tools available and do not claim success. " +
 		"After tool results are available, answer directly and stay grounded in those results. " +

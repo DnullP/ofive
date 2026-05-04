@@ -443,6 +443,7 @@ fn default_ai_chat_settings() -> AiChatSettings {
         vendor_id: default_vendor.id,
         model: default_vendor.default_model,
         field_values,
+        tool_approval_policy: HashMap::new(),
     }
 }
 
@@ -515,6 +516,19 @@ fn sanitize_ai_chat_settings(settings: AiChatSettings) -> AiChatSettings {
         }
     });
 
+    let mut next_tool_approval_policy = HashMap::new();
+    settings.tool_approval_policy.iter().for_each(|(tool_id, mode)| {
+        let normalized_tool_id = tool_id.trim();
+        let normalized_mode = mode.trim().to_lowercase();
+        if normalized_tool_id.is_empty() {
+            return;
+        }
+
+        if normalized_mode == "require" || normalized_mode == "auto" {
+            next_tool_approval_policy.insert(normalized_tool_id.to_string(), normalized_mode);
+        }
+    });
+
     AiChatSettings {
         vendor_id: vendor.id,
         model: {
@@ -526,6 +540,7 @@ fn sanitize_ai_chat_settings(settings: AiChatSettings) -> AiChatSettings {
             }
         },
         field_values: next_field_values,
+        tool_approval_policy: next_tool_approval_policy,
     }
 }
 
@@ -938,6 +953,7 @@ mod tests {
             vendor_id: "baidu-qianfan".to_string(),
             model: "extension-model".to_string(),
             field_values: HashMap::from([("authToken".to_string(), "extension-token".to_string())]),
+            tool_approval_policy: HashMap::new(),
         };
         crate::infra::persistence::extension_private_store::save_extension_private_state(
             &root, "ai-chat", "settings", &settings,
@@ -972,6 +988,7 @@ mod tests {
             vendor_id: "minimax-anthropic".to_string(),
             model: "  ".to_string(),
             field_values: HashMap::from([("apiKey".to_string(), " test-key ".to_string())]),
+            tool_approval_policy: HashMap::new(),
         });
 
         assert_eq!(settings.vendor_id, "minimax-anthropic");

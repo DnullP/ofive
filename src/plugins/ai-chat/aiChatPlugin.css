@@ -757,6 +757,105 @@
     cursor: not-allowed;
 }
 
+/* ai-chat-tool-call-list：助手消息下方的工具调用列表 */
+.ai-chat-tool-call-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* ai-chat-tool-call：单条可展开工具调用记录 */
+.ai-chat-tool-call {
+    border: 1px solid color-mix(in srgb, var(--border-color) 86%, transparent);
+    border-radius: 0;
+    background: color-mix(in srgb, var(--bg-secondary) 82%, var(--bg-primary));
+}
+
+/* ai-chat-tool-call.status-calling：调用中状态 */
+.ai-chat-tool-call.status-calling {
+    border-color: color-mix(in srgb, var(--accent-primary) 24%, var(--border-color));
+}
+
+/* ai-chat-tool-call.status-failed：失败状态 */
+.ai-chat-tool-call.status-failed {
+    border-color: color-mix(in srgb, var(--error-color) 34%, var(--border-color));
+}
+
+/* ai-chat-tool-call-summary：工具调用折叠标题 */
+.ai-chat-tool-call-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 8px;
+    cursor: pointer;
+    list-style: none;
+}
+
+/* ai-chat-tool-call-summary::-webkit-details-marker：移除原生 marker */
+.ai-chat-tool-call-summary::-webkit-details-marker {
+    display: none;
+}
+
+/* ai-chat-tool-call-name：工具名称 */
+.ai-chat-tool-call-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: 11px/1.4 "SFMono-Regular", "Consolas", "Menlo", monospace;
+    color: var(--text-secondary);
+}
+
+/* ai-chat-tool-call-status：工具调用状态标签 */
+.ai-chat-tool-call-status {
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-tertiary);
+}
+
+.ai-chat-tool-call-status.status-calling {
+    color: var(--accent-primary);
+}
+
+.ai-chat-tool-call-status.status-completed {
+    color: var(--success-color);
+}
+
+.ai-chat-tool-call-status.status-failed {
+    color: var(--error-color);
+}
+
+/* ai-chat-tool-call-details：工具调用详情 */
+.ai-chat-tool-call-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 8px 8px;
+}
+
+/* ai-chat-tool-call-detail-label：工具调用详情标签 */
+.ai-chat-tool-call-detail-label {
+    margin-bottom: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-tertiary);
+}
+
+/* ai-chat-tool-call-detail-block pre：工具调用详情正文 */
+.ai-chat-tool-call-detail-block pre {
+    margin: 0;
+    padding: 8px;
+    overflow: auto;
+    border-radius: 0;
+    font: 10px/1.55 "SFMono-Regular", "Consolas", "Menlo", monospace;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 /* ai-chat-debug-shell：调试区容器 */
 .ai-chat-debug-shell {
     min-height: 0;
@@ -1297,6 +1396,58 @@
 /* ai-chat-settings-model-select：模型下拉 */
 .ai-chat-settings-model-select {
     min-width: 0;
+}
+
+/* ai-chat-settings-tool-policy-header：工具审批设置说明行 */
+.ai-chat-settings-tool-policy-header {
+    background: color-mix(in srgb, var(--bg-primary) 86%, var(--bg-secondary));
+}
+
+/* ai-chat-settings-tool-policy-list：工具审批列表 */
+.ai-chat-settings-tool-policy-list {
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+/* ai-chat-settings-tool-policy-row：单个工具审批项 */
+.ai-chat-settings-tool-policy-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(112px, 140px);
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border-top: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
+}
+
+/* ai-chat-settings-tool-policy-meta：工具说明 */
+.ai-chat-settings-tool-policy-meta {
+    min-width: 0;
+}
+
+/* ai-chat-settings-tool-policy-name：工具 ID */
+.ai-chat-settings-tool-policy-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: 11px/1.4 "SFMono-Regular", "Consolas", "Menlo", monospace;
+    color: var(--text-primary);
+}
+
+/* ai-chat-settings-tool-policy-desc：工具描述 */
+.ai-chat-settings-tool-policy-desc {
+    margin-top: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* ai-chat-settings-tool-policy-select：工具审批选择 */
+.ai-chat-settings-tool-policy-select {
+    width: 100%;
 }
 
 /* ai-chat-settings-actions：设置底部操作区 */

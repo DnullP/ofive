@@ -39,6 +39,7 @@ import type {
     AiChatHistoryState,
     AiChatSettings,
     AiChatStreamEventPayload,
+    AiToolDescriptor,
     AiVendorDefinition,
     BrowserMockAiRuntime,
     StartAiChatStreamOptions,
@@ -438,6 +439,29 @@ const MOCK_AI_VENDOR: AiVendorDefinition = {
     ],
 };
 
+const MOCK_AI_TOOLS: AiToolDescriptor[] = [
+    {
+        capabilityId: "vault.read_markdown_file",
+        apiVersion: "v1",
+        name: "vault_read_markdown_file",
+        description: "Read a markdown file from the active vault.",
+        inputSchema: {},
+        outputSchema: {},
+        riskLevel: "low",
+        requiresConfirmation: false,
+    },
+    {
+        capabilityId: "vault.apply_markdown_patch",
+        apiVersion: "v1",
+        name: "vault_apply_markdown_patch",
+        description: "Apply a markdown patch to the active vault.",
+        inputSchema: {},
+        outputSchema: {},
+        riskLevel: "medium",
+        requiresConfirmation: true,
+    },
+];
+
 function createMockAiRuntime(): BrowserMockAiRuntime {
     let settings: AiChatSettings = {
         vendorId: MOCK_AI_VENDOR.id,
@@ -445,6 +469,7 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
         fieldValues: {
             token: "mock-token",
         },
+        toolApprovalPolicy: {},
     };
     let history: AiChatHistoryState = {
         activeConversationId: null,
@@ -467,6 +492,7 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
 
     return {
         getAiVendorCatalog: () => [MOCK_AI_VENDOR],
+        getAiToolCatalog: () => MOCK_AI_TOOLS,
         getAiChatSettings: () => settings,
         getAiChatHistory: () => history,
         getAiVendorModels: () => [
@@ -492,8 +518,57 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
                 ? `\nContext active: ${context.activeFile?.path ?? "none"} tabs=${context.openTabs?.length ?? 0}`
                 : "";
             const accumulatedText = `${reply}${contextText}`;
+            const shouldEmitToolRecord = options.message.toLowerCase().includes("tool record");
 
             await new Promise((resolve) => window.setTimeout(resolve, 40));
+
+            if (shouldEmitToolRecord) {
+                schedule(streamId, () => {
+                    emit({
+                        streamId,
+                        eventType: "debug",
+                        sessionId,
+                        agentName: "browser-mock-ai",
+                        deltaText: null,
+                        accumulatedText: null,
+                        reasoningDeltaText: null,
+                        reasoningAccumulatedText: null,
+                        historyContentBlocksJson: null,
+                        debugTitle: "Capability call started",
+                        debugLevel: "info",
+                        debugText: "capability=vault.read_markdown_file input={\"relativePath\":\"mock/article.md\"}",
+                        confirmationId: null,
+                        confirmationHint: null,
+                        confirmationToolName: null,
+                        confirmationToolArgsJson: null,
+                        error: null,
+                        done: false,
+                    });
+                }, 90);
+
+                schedule(streamId, () => {
+                    emit({
+                        streamId,
+                        eventType: "debug",
+                        sessionId,
+                        agentName: "browser-mock-ai",
+                        deltaText: null,
+                        accumulatedText: null,
+                        reasoningDeltaText: null,
+                        reasoningAccumulatedText: null,
+                        historyContentBlocksJson: null,
+                        debugTitle: "Capability call completed",
+                        debugLevel: "info",
+                        debugText: "capability=vault.read_markdown_file output={\"content\":\"mock content\"}",
+                        confirmationId: null,
+                        confirmationHint: null,
+                        confirmationToolName: null,
+                        confirmationToolArgsJson: null,
+                        error: null,
+                        done: false,
+                    });
+                }, 300);
+            }
 
             schedule(streamId, () => {
                 emit({

@@ -440,6 +440,9 @@ func TestBuildAgentInstructionIncludesPatchShapeGuidance(t *testing.T) {
 	if !strings.Contains(instruction, "ofive will ask the user before the managed CLI tool is executed") {
 		t.Fatalf("expected managed CLI confirmation guidance in instruction, got %q", instruction)
 	}
+	if !strings.Contains(instruction, "Confirmation requests are single-flight") {
+		t.Fatalf("expected single-flight confirmation guidance in instruction, got %q", instruction)
+	}
 	if !strings.Contains(instruction, "--- and +++ headers") {
 		t.Fatalf("expected unified diff header guidance in instruction, got %q", instruction)
 	}

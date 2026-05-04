@@ -17,6 +17,7 @@ import type { PanelRenderContext, WorkbenchTabProps } from "../../host/layout/wo
 import { ArrowUp, Bot, Check, ChevronDown, Copy, Plus, Sparkles, Timer, X } from "lucide-react";
 import {
     getAiChatHistory,
+    getAiToolCatalog,
     getAiVendorCatalog,
     getAiVendorModels,
     saveAiChatHistory,
@@ -29,6 +30,8 @@ import {
     type AiChatHistoryMessage,
     type AiChatHistoryState,
     type AiChatSettings,
+    type AiToolApprovalMode,
+    type AiToolDescriptor,
     type AiVendorDefinition,
     type AiVendorModelDefinition,
 } from "../../api/aiApi";
@@ -79,6 +82,10 @@ import {
     syncAiChatSmoothedMessageTargets,
     type AiChatSmoothedMessageState,
 } from "./aiChatStreamSmoothing";
+import {
+    reduceAiChatToolCallDebugEntry,
+    type AiChatToolCallRecord,
+} from "./aiChatToolCallRecords";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerPanel } from "../../host/registry/panelRegistry";
 import { registerTabComponent } from "../../host/registry/tabComponentRegistry";
@@ -106,6 +113,7 @@ interface QuickPromptDefinition {
 
 let chatMessageSequence = 1;
 let chatDebugSequence = 1;
+let chatToolCallSequence = 1;
 const AI_CHAT_CONFIRMATION_TOOL_NAME = "adk_request_confirmation";
 
 const QUICK_PROMPTS: QuickPromptDefinition[] = [
@@ -145,6 +153,21 @@ function nextChatDebugEntryId(): string {
 
     const nextId = `ai-chat-debug-${Date.now()}-${String(chatDebugSequence)}`;
     chatDebugSequence += 1;
+    return nextId;
+}
+
+/**
+ * @function nextChatToolCallRecordId
+ * @description 生成工具调用记录 ID。
+ * @returns 记录 ID。
+ */
+function nextChatToolCallRecordId(): string {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return `ai-chat-tool-call-${crypto.randomUUID()}`;
+    }
+
+    const nextId = `ai-chat-tool-call-${Date.now()}-${String(chatToolCallSequence)}`;
+    chatToolCallSequence += 1;
     return nextId;
 }
 
@@ -375,6 +398,60 @@ function hasPendingSmoothedMessages(
     });
 }
 
+interface AiChatToolCallRecordsViewProps {
+    records: AiChatToolCallRecord[];
+}
+
+/**
+ * @function AiChatToolCallRecordsView
+ * @description 渲染助手消息下方的工具调用状态与可展开详情。
+ * @param props 工具调用记录。
+ * @returns React 节点。
+ */
+function AiChatToolCallRecordsView(props: AiChatToolCallRecordsViewProps): ReactNode {
+    if (props.records.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="ai-chat-tool-call-list">
+            {props.records.map((record) => (
+                <details
+                    key={record.id}
+                    className={`ai-chat-tool-call status-${record.status}`}
+                >
+                    <summary className="ai-chat-tool-call-summary">
+                        <span className="ai-chat-tool-call-name">{record.capabilityId}</span>
+                        <span className={`ai-chat-tool-call-status status-${record.status}`}>
+                            {i18n.t(`aiChatPlugin.toolCall${record.status.charAt(0).toUpperCase()}${record.status.slice(1)}`)}
+                        </span>
+                    </summary>
+                    <div className="ai-chat-tool-call-details">
+                        {record.inputText ? (
+                            <div className="ai-chat-tool-call-detail-block">
+                                <div className="ai-chat-tool-call-detail-label">{i18n.t("aiChatPlugin.toolCallInput")}</div>
+                                <pre>{record.inputText}</pre>
+                            </div>
+                        ) : null}
+                        {record.outputText ? (
+                            <div className="ai-chat-tool-call-detail-block">
+                                <div className="ai-chat-tool-call-detail-label">{i18n.t("aiChatPlugin.toolCallOutput")}</div>
+                                <pre>{record.outputText}</pre>
+                            </div>
+                        ) : null}
+                        {record.errorText ? (
+                            <div className="ai-chat-tool-call-detail-block">
+                                <div className="ai-chat-tool-call-detail-label">{i18n.t("aiChatPlugin.toolCallError")}</div>
+                                <pre>{record.errorText}</pre>
+                            </div>
+                        ) : null}
+                    </div>
+                </details>
+            ))}
+        </div>
+    );
+}
+
 /**
  * @function AiChatView
  * @description 渲染可在 pane 和 tab 之间复用的 AI 聊天视图。
@@ -388,6 +465,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     const [smoothedMessagesById, setSmoothedMessagesById] = useState<Record<string, AiChatSmoothedMessageState>>({});
     const [debugEntriesByConversation, setDebugEntriesByConversation] = useState<Record<string, ChatDebugEntry[]>>({});
     const [pendingConfirmations, setPendingConfirmations] = useState<Record<string, PendingToolConfirmation>>({});
+    const [toolCallRecordsByMessageId, setToolCallRecordsByMessageId] = useState<Record<string, AiChatToolCallRecord[]>>({});
     const [activeTab, setActiveTab] = useState<"history" | "chat" | "debug">("chat");
     const [debugFilter, setDebugFilter] = useState<ChatDebugFilterValue>("all");
     const [debugCopyState, setDebugCopyState] = useState<"idle" | "copied" | "error">("idle");
@@ -543,6 +621,36 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             ...current,
             [conversationId]: [...(current[conversationId] ?? []), entry],
         }));
+    };
+
+    /**
+     * @function updateToolCallRecordsFromDebugEntry
+     * @description 从 capability debug 日志更新助手消息下方的可见工具调用记录。
+     * @param assistantMessageId 助手消息 ID。
+     * @param entry 调试日志。
+     */
+    const updateToolCallRecordsFromDebugEntry = (
+        assistantMessageId: string,
+        entry: ChatDebugEntry,
+    ): void => {
+        setToolCallRecordsByMessageId((current) => {
+            const transition = reduceAiChatToolCallDebugEntry({
+                assistantMessageId,
+                records: current[assistantMessageId] ?? [],
+                entry,
+                recordId: nextChatToolCallRecordId(),
+                nowUnixMs: Date.now(),
+            });
+
+            if (!transition.changed) {
+                return current;
+            }
+
+            return {
+                ...current,
+                [assistantMessageId]: transition.records,
+            };
+        });
     };
 
     /**
@@ -761,6 +869,9 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             bindingsRef.current = {};
             setSmoothedMessagesById({});
             smoothedMessagesRef.current = {};
+            setDebugEntriesByConversation({});
+            setPendingConfirmations({});
+            setToolCallRecordsByMessageId({});
             setSettings(null);
             historyLoadedRef.current = false;
             resetAiChatSettingsStore();
@@ -791,6 +902,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                 smoothedMessagesRef.current = {};
                 setDebugEntriesByConversation({});
                 setPendingConfirmations({});
+                setToolCallRecordsByMessageId({});
                 setDebugFilter("all");
                 setDebugCopyState("idle");
                 historyLoadedRef.current = true;
@@ -904,6 +1016,10 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                     title: transition.nextDebugEntry.title,
                 });
                 appendDebugEntry(binding.conversationId!, transition.nextDebugEntry);
+                updateToolCallRecordsFromDebugEntry(
+                    binding.assistantMessageId!,
+                    transition.nextDebugEntry,
+                );
                 return;
             }
 
@@ -1676,6 +1792,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                             const renderedReasoningText = smoothedMessage?.displayReasoningText
                                 ?? message.reasoningText
                                 ?? "";
+                            const toolCallRecords = toolCallRecordsByMessageId[message.id] ?? [];
                             const isStreamingMessage = message.role === "assistant"
                                 && Boolean(
                                     smoothedMessage
@@ -1769,6 +1886,9 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                                                     </button>
                                                 </div>
                                             </div>
+                                        ) : null}
+                                        {message.role === "assistant" ? (
+                                            <AiChatToolCallRecordsView records={toolCallRecords} />
                                         ) : null}
                                     </div>
                                 </div>
@@ -1962,6 +2082,7 @@ function AiChatTab(_props: WorkbenchTabProps<Record<string, unknown>>): ReactNod
 function AiChatSettingsSection(): ReactNode {
     const { currentVaultPath, backendReady } = useVaultState();
     const [vendorCatalog, setVendorCatalog] = useState<AiVendorDefinition[]>([]);
+    const [toolCatalog, setToolCatalog] = useState<AiToolDescriptor[]>([]);
     const [settings, setSettings] = useState<AiChatSettings | null>(null);
     const [availableModels, setAvailableModels] = useState<AiVendorModelDefinition[]>([]);
     const [isLoadingModels, setIsLoadingModels] = useState(false);
@@ -1987,6 +2108,7 @@ function AiChatSettingsSection(): ReactNode {
         if (!currentVaultPath) {
             setSettings(null);
             setVendorCatalog([]);
+            setToolCatalog([]);
             resetAiChatSettingsStore();
             return;
         }
@@ -2000,14 +2122,16 @@ function AiChatSettingsSection(): ReactNode {
         setIsLoading(true);
         Promise.all([
             getAiVendorCatalog(),
+            getAiToolCatalog(),
             ensureAiChatSettingsLoaded(currentVaultPath),
         ])
-            .then(([catalog, currentSettings]) => {
+            .then(([catalog, tools, currentSettings]) => {
                 if (disposed) {
                     return;
                 }
                 const initialVendor = resolveVendor(catalog, currentSettings.vendorId) ?? catalog[0] ?? null;
                 setVendorCatalog(catalog);
+                setToolCatalog(tools);
                 setSettings(initialVendor ? mergeSettingsForVendor(currentSettings, initialVendor) : currentSettings);
                 setFeedback(null);
                 setFeedbackIsError(false);
@@ -2124,6 +2248,34 @@ function AiChatSettingsSection(): ReactNode {
     };
 
     /**
+     * @function updateToolApprovalMode
+     * @description 更新单个工具的审批策略。
+     * @param capabilityId 工具 capability id。
+     * @param mode 审批模式。
+     */
+    const updateToolApprovalMode = (capabilityId: string, mode: AiToolApprovalMode): void => {
+        setSettings((currentSettings) => {
+            if (!currentSettings) {
+                return currentSettings;
+            }
+
+            const nextPolicy = {
+                ...(currentSettings.toolApprovalPolicy ?? {}),
+            };
+            if (mode === "default") {
+                delete nextPolicy[capabilityId];
+            } else {
+                nextPolicy[capabilityId] = mode;
+            }
+
+            return {
+                ...currentSettings,
+                toolApprovalPolicy: nextPolicy,
+            };
+        });
+    };
+
+    /**
      * @function handleVendorChange
      * @description 切换 vendor 并重建表单字段。
      * @param event 选择事件。
@@ -2180,6 +2332,10 @@ function AiChatSettingsSection(): ReactNode {
             setIsSaving(false);
         }
     };
+
+    const toolPolicyRows = toolCatalog.length > 0
+        ? toolCatalog
+        : [];
 
     if (!currentVaultPath) {
         return (
@@ -2256,6 +2412,46 @@ function AiChatSettingsSection(): ReactNode {
                         } : currentSettings);
                     }}
                 />
+            </div>
+
+            <div className="ai-chat-settings-row ai-chat-settings-tool-policy-header">
+                <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.toolApprovalTitle")}</div>
+                <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.toolApprovalDescription")}</div>
+            </div>
+
+            <div className="ai-chat-settings-tool-policy-list">
+                {toolPolicyRows.map((tool) => {
+                    const policy = settings.toolApprovalPolicy?.[tool.capabilityId];
+                    const selectedMode: AiToolApprovalMode = policy === "require"
+                        ? "require"
+                        : policy === "auto"
+                            ? "auto"
+                            : "default";
+
+                    return (
+                        <div key={tool.capabilityId} className="ai-chat-settings-tool-policy-row">
+                            <div className="ai-chat-settings-tool-policy-meta">
+                                <div className="ai-chat-settings-tool-policy-name">
+                                    {tool.capabilityId}
+                                </div>
+                                <div className="ai-chat-settings-tool-policy-desc">
+                                    {tool.description}
+                                </div>
+                            </div>
+                            <select
+                                className="settings-compact-select ai-chat-settings-tool-policy-select"
+                                value={selectedMode}
+                                onChange={(event) => {
+                                    updateToolApprovalMode(tool.capabilityId, event.target.value as AiToolApprovalMode);
+                                }}
+                            >
+                                <option value="default">{i18n.t("aiChatPlugin.toolApprovalDefault")}</option>
+                                <option value="require">{i18n.t("aiChatPlugin.toolApprovalRequire")}</option>
+                                <option value="auto">{i18n.t("aiChatPlugin.toolApprovalAuto")}</option>
+                            </select>
+                        </div>
+                    );
+                })}
             </div>
 
             {selectedVendor?.fields.map((field) => (

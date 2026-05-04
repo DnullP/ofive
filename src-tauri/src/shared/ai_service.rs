@@ -51,6 +51,8 @@ pub struct AiChatSettings {
     pub vendor_id: String,
     pub model: String,
     pub field_values: HashMap<String, String>,
+    #[serde(default)]
+    pub tool_approval_policy: HashMap<String, String>,
 }
 
 /// AI 对话消息记录。

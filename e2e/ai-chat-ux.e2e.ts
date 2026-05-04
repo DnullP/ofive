@@ -61,4 +61,20 @@ test.describe("ai chat ux", () => {
         await page.locator(".ai-chat-send-button").click();
         await expect(page.locator(".ai-chat-message.user", { hasText: "second prompt" })).toBeVisible();
     });
+
+    test("assistant tool calls should be visible and expandable", async ({ page }) => {
+        await waitForAiChatReady(page);
+
+        await page.locator(".ai-chat-input").fill("tool record");
+        await page.locator(".ai-chat-send-button").click();
+
+        const toolCall = page.locator(".ai-chat-tool-call", { hasText: "vault.read_markdown_file" }).first();
+        await expect(toolCall).toBeVisible();
+        await expect(toolCall.locator(".ai-chat-tool-call-status")).toContainText(/Calling|调用中/);
+        await expect(toolCall.locator(".ai-chat-tool-call-status")).toContainText(/Completed|调用完成/, { timeout: 3_000 });
+
+        await toolCall.locator(".ai-chat-tool-call-summary").click();
+        await expect(toolCall.locator(".ai-chat-tool-call-detail-block", { hasText: "mock/article.md" })).toBeVisible();
+        await expect(toolCall.locator(".ai-chat-tool-call-detail-block", { hasText: "mock content" })).toBeVisible();
+    });
 });

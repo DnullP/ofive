@@ -167,7 +167,7 @@ pub(crate) async fn start_ai_chat_stream(
         ai_chat_store::load_ai_chat_settings(&state)?,
     )?;
     let vault_root = get_vault_root(&state)?;
-    let sidecar_tools = tool_app_service::get_ai_sidecar_tool_catalog()?;
+    let sidecar_tools = tool_app_service::get_ai_sidecar_tool_catalog(&ai_settings)?;
     let capability_callback_handle =
         tool_callback_app_service::start_sidecar_capability_callback_server(
             app_handle.clone(),
@@ -485,7 +485,7 @@ pub(crate) async fn submit_ai_chat_confirmation(
         ai_chat_store::load_ai_chat_settings(&state)?,
     )?;
     let vault_root = get_vault_root(&state)?;
-    let sidecar_tools = tool_app_service::get_ai_sidecar_tool_catalog()?;
+    let sidecar_tools = tool_app_service::get_ai_sidecar_tool_catalog(&ai_settings)?;
     let capability_callback_handle =
         tool_callback_app_service::start_sidecar_capability_callback_server(
             app_handle.clone(),
