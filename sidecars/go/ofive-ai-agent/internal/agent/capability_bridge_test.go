@@ -120,6 +120,34 @@ func TestTryHandleExplicitCapabilityCommandRejectsConfirmationRequiredTool(t *te
 	}
 }
 
+func TestCallCapabilityThroughClientReturnsSemanticFailureAsToolResult(t *testing.T) {
+	t.Parallel()
+
+	result, err := callCapabilityThroughClient(
+		context.Background(),
+		&fakeCapabilityCaller{
+			result: &capabilities.CallResult{
+				Success: false,
+				Error:   "bad unified diff",
+			},
+		},
+		"vault.apply_markdown_patch",
+		map[string]any{"relativePath": "notes/guide.md"},
+	)
+	if err != nil {
+		t.Fatalf("expected semantic capability failure to return tool result, got error: %v", err)
+	}
+	if result["capabilityId"] != "vault.apply_markdown_patch" {
+		t.Fatalf("unexpected capabilityId: %#v", result["capabilityId"])
+	}
+	if result["success"] != false {
+		t.Fatalf("expected success=false, got %#v", result["success"])
+	}
+	if result["error"] != "bad unified diff" {
+		t.Fatalf("unexpected error text: %#v", result["error"])
+	}
+}
+
 func TestExecuteCapabilityPlanningLoopHandlesToolBlockAndReturnsFinalAnswer(t *testing.T) {
 	t.Parallel()
 

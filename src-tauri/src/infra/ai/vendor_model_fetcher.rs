@@ -101,8 +101,11 @@ async fn fetch_openai_style_models(
     headers: HeaderMap,
     vendor_label: &str,
 ) -> Result<Vec<AiVendorModelDefinition>, String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(20))
+    let mut client_builder = reqwest::Client::builder().timeout(Duration::from_secs(20));
+    if should_bypass_proxy_for_endpoint(&list_endpoint) {
+        client_builder = client_builder.no_proxy();
+    }
+    let client = client_builder
         .build()
         .map_err(|error| format!("创建模型列表 HTTP 客户端失败: {error}"))?;
 
@@ -139,6 +142,16 @@ async fn fetch_openai_style_models(
             created: item.created,
         })
         .collect())
+}
+
+fn should_bypass_proxy_for_endpoint(endpoint: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(endpoint) else {
+        return false;
+    };
+    matches!(
+        url.host_str(),
+        Some("127.0.0.1") | Some("localhost") | Some("::1")
+    )
 }
 
 fn resolve_models_endpoint(endpoint: &str) -> String {

@@ -199,17 +199,10 @@ fn parse_unified_diff_hunk(lines: &[String], hunk_index: usize) -> Result<Parsed
     let mut last_change_index: Option<usize> = None;
 
     for (index, line) in lines.iter().enumerate() {
-        if line == "\\ No newline at end of file" {
-            continue;
-        }
-
-        let prefix = line.chars().next().unwrap_or_default();
-        if !matches!(prefix, ' ' | '-' | '+') {
-            return Err(format!(
-                "unified diff hunk {} 包含非法行 {:?}，只支持以空格、+、- 开头的内容行",
-                hunk_index, line,
-            ));
-        }
+        let prefix = match parse_unified_diff_hunk_line(line, hunk_index)? {
+            Some((prefix, _)) => prefix,
+            None => continue,
+        };
 
         if matches!(prefix, '-' | '+') {
             first_change_index.get_or_insert(index);
@@ -227,24 +220,25 @@ fn parse_unified_diff_hunk(lines: &[String], hunk_index: usize) -> Result<Parsed
 
     let before_context = lines[..first_change_index]
         .iter()
-        .filter(|line| line.as_str() != "\\ No newline at end of file")
-        .map(|line| line[1..].to_string())
+        .filter_map(|line| parse_unified_diff_hunk_line(line, hunk_index).transpose())
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .map(|(_, content)| content)
         .collect::<Vec<_>>();
     let after_context = lines[last_change_index + 1..]
         .iter()
-        .filter(|line| line.as_str() != "\\ No newline at end of file")
-        .map(|line| line[1..].to_string())
+        .filter_map(|line| parse_unified_diff_hunk_line(line, hunk_index).transpose())
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .map(|(_, content)| content)
         .collect::<Vec<_>>();
 
     let mut old_lines = Vec::new();
     let mut new_lines = Vec::new();
     for line in &lines[first_change_index..=last_change_index] {
-        if line == "\\ No newline at end of file" {
+        let Some((prefix, content)) = parse_unified_diff_hunk_line(line, hunk_index)? else {
             continue;
-        }
-
-        let prefix = line.chars().next().unwrap_or_default();
-        let content = line[1..].to_string();
+        };
         match prefix {
             ' ' => {
                 old_lines.push(content.clone());
@@ -262,6 +256,28 @@ fn parse_unified_diff_hunk(lines: &[String], hunk_index: usize) -> Result<Parsed
         new_lines,
         after_context,
     })
+}
+
+fn parse_unified_diff_hunk_line(
+    line: &str,
+    hunk_index: usize,
+) -> Result<Option<(char, String)>, String> {
+    if line == "\\ No newline at end of file" {
+        return Ok(None);
+    }
+    if line.is_empty() {
+        return Ok(Some((' ', String::new())));
+    }
+
+    let prefix = line.chars().next().unwrap_or_default();
+    if !matches!(prefix, ' ' | '-' | '+') {
+        return Err(format!(
+            "unified diff hunk {} 包含非法行 {:?}，只支持以空格、+、- 开头的内容行",
+            hunk_index, line,
+        ));
+    }
+
+    Ok(Some((prefix, line[1..].to_string())))
 }
 
 fn apply_parsed_diff_blocks_to_content(
@@ -674,6 +690,24 @@ mod tests {
                 before_context: vec!["alpha".to_string()],
                 old_lines: vec!["beta".to_string()],
                 new_lines: vec!["beta patched".to_string()],
+                after_context: vec!["gamma".to_string()],
+            }
+        );
+    }
+
+    #[test]
+    fn parse_unified_diff_should_accept_bare_blank_context_line() {
+        let parsed = parse_unified_diff(
+            "--- a/notes/guide.md\n+++ b/notes/guide.md\n@@ -1,4 +1,5 @@\n alpha\n-beta\n\n+beta patched\n gamma",
+        )
+        .expect("应成功解析包含裸空行的 unified diff");
+
+        assert_eq!(
+            parsed.blocks[0],
+            ParsedDiffBlock {
+                before_context: vec!["alpha".to_string()],
+                old_lines: vec!["beta".to_string(), "".to_string()],
+                new_lines: vec!["".to_string(), "beta patched".to_string()],
                 after_context: vec!["gamma".to_string()],
             }
         );

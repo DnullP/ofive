@@ -404,8 +404,14 @@ func TestBuildAgentInstructionIncludesPatchShapeGuidance(t *testing.T) {
 	if !strings.Contains(instruction, "adjacent separator lines") {
 		t.Fatalf("expected blank-line guidance in instruction, got %q", instruction)
 	}
+	if !strings.Contains(instruction, "Do not emit bare empty hunk lines") {
+		t.Fatalf("expected bare-empty-line warning in instruction, got %q", instruction)
+	}
 	if !strings.Contains(instruction, "standard unified diff markers") {
 		t.Fatalf("expected diff marker guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "treat that tool result as recoverable") {
+		t.Fatalf("expected recoverable patch-failure guidance in instruction, got %q", instruction)
 	}
 	if !strings.Contains(instruction, "numberedContent") {
 		t.Fatalf("expected numberedContent guidance in instruction, got %q", instruction)

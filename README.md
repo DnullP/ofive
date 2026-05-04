@@ -272,7 +272,7 @@ bun run build:sidecar
 
 GitHub Actions 只会在你给某个 commit 打标准版本号 tag 并 push tag 之后触发打包，不会在普通 push 时执行 release 构建。tag 必须使用 `v0.0.1` 这类格式，并且要和 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 中的版本号一致。
 
-Release workflow 在真正开始多平台打包前，会先执行完整测试准入：
+Release workflow 在真正开始 macOS ARM64 打包前，会先执行完整测试准入：
 
 1. `bun run test`
 2. `bun run test:rust`
@@ -286,14 +286,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-工作流会构建并发布这些安装包：
-
-1. macOS ARM64
-2. macOS x64
-3. Windows x64
-4. Windows ARM64
-
-所有安装包构建成功后，工作流才会创建 GitHub Release 并上传资产。
+工作流只会构建并发布 macOS ARM64 安装包。安装包构建成功后，工作流会创建 GitHub Release 并上传资产。
 
 ## CI
 

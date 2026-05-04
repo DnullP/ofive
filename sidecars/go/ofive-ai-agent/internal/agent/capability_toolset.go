@@ -151,20 +151,41 @@ func (t *capabilityTool) call(ctx context.Context, args any) (map[string]any, er
 	}
 	defer client.Close()
 
-	result, err := client.Call(ctx, t.capabilityID, normalizeCapabilityToolInput(args))
+	return callCapabilityThroughClient(ctx, client, t.capabilityID, normalizeCapabilityToolInput(args))
+}
+
+func callCapabilityThroughClient(
+	ctx context.Context,
+	client capabilityCaller,
+	capabilityID string,
+	args any,
+) (map[string]any, error) {
+	result, err := client.Call(ctx, capabilityID, args)
 	if err != nil {
 		return nil, err
+	}
+	if result == nil {
+		return nil, fmt.Errorf("capability call returned empty result: %s", capabilityID)
 	}
 	if !result.Success {
 		failureText := strings.TrimSpace(result.Error)
 		if failureText == "" {
-			failureText = fmt.Sprintf("capability call failed: %s", t.capabilityID)
+			failureText = fmt.Sprintf("capability call failed: %s", capabilityID)
 		}
-		return nil, fmt.Errorf("%s", failureText)
+		response := map[string]any{
+			"capabilityId": capabilityID,
+			"success":      false,
+			"error":        failureText,
+		}
+		if result.Output != nil {
+			response["output"] = result.Output
+		}
+		return response, nil
 	}
 
 	return map[string]any{
-		"capabilityId": t.capabilityID,
+		"capabilityId": capabilityID,
+		"success":      true,
 		"output":       result.Output,
 	}, nil
 }

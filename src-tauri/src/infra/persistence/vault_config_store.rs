@@ -6,6 +6,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::infra::persistence::atomic_write::write_string_atomically;
 use crate::shared::vault_contracts::VaultConfig;
 
 fn vault_config_dir(vault_root: &Path) -> PathBuf {
@@ -26,7 +27,7 @@ pub(crate) fn ensure_vault_config_file(vault_root: &Path) -> Result<PathBuf, Str
     if !file.exists() {
         let initial = serde_json::to_string_pretty(&VaultConfig::default())
             .map_err(|error| format!("序列化默认仓库配置失败: {error}"))?;
-        fs::write(&file, initial)
+        write_string_atomically(&file, &initial)
             .map_err(|error| format!("写入默认仓库配置失败 {}: {error}", file.to_string_lossy()))?;
     }
 
@@ -49,6 +50,6 @@ pub(crate) fn save_vault_config(vault_root: &Path, config: &VaultConfig) -> Resu
     let serialized = serde_json::to_string_pretty(config)
         .map_err(|error| format!("序列化仓库配置失败: {error}"))?;
 
-    fs::write(&file, serialized)
+    write_string_atomically(&file, &serialized)
         .map_err(|error| format!("写入仓库配置失败 {}: {error}", file.to_string_lossy()))
 }

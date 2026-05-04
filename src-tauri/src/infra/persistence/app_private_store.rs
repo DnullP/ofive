@@ -16,6 +16,8 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::infra::persistence::atomic_write::write_string_atomically;
+
 const APP_PRIVATE_STORE_SCHEMA_VERSION: u32 = 1;
 const APP_PRIVATE_STORE_ENV_KEY: &str = "OFIVE_APP_STORAGE_ROOT";
 const APP_PRIVATE_STORE_ROOT_DIR: &str = "app-storage/extensions";
@@ -154,7 +156,7 @@ pub(crate) fn save_app_private_state_value(
         )
     })?;
 
-    fs::write(&file_path, serialized).map_err(|error| {
+    write_string_atomically(&file_path, &serialized).map_err(|error| {
         format!(
             "写入应用级私有状态失败 owner={} state_key={} path={}: {error}",
             owner,

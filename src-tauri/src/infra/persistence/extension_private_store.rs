@@ -15,6 +15,8 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::infra::persistence::atomic_write::write_string_atomically;
+
 const EXTENSION_PRIVATE_STORE_SCHEMA_VERSION: u32 = 1;
 const EXTENSION_PRIVATE_STORE_ROOT_DIR: &str = ".ofive/extensions";
 
@@ -178,7 +180,7 @@ pub(crate) fn save_extension_private_state_value(
         )
     })?;
 
-    fs::write(&file_path, serialized).map_err(|error| {
+    write_string_atomically(&file_path, &serialized).map_err(|error| {
         format!(
             "写入扩展私有状态失败 owner={} state_key={} path={}: {error}",
             owner,

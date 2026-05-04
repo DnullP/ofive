@@ -128,29 +128,9 @@ jobs:
         run: bun run build
 
   build-installers:
-    name: Build ${{ matrix.name }}
+    name: Build macOS ARM64
     needs: test-gate
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS ARM64
-            runner: macos-15
-            rust-target: aarch64-apple-darwin
-            asset-prefix: macos-arm64
-          - name: macOS x64
-            runner: macos-15-intel
-            rust-target: x86_64-apple-darwin
-            asset-prefix: macos-x64
-          - name: Windows x64
-            runner: windows-latest
-            rust-target: x86_64-pc-windows-msvc
-            asset-prefix: windows-x64
-          - name: Windows ARM64
-            runner: windows-11-arm
-            rust-target: aarch64-pc-windows-msvc
-            asset-prefix: windows-arm64
+    runs-on: macos-15
     env:
       OFIVE_SIDECAR_PROFILE: release
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -175,7 +155,7 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.rust-target }}
+          targets: aarch64-apple-darwin
 
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
@@ -188,33 +168,31 @@ jobs:
 
       - name: Build Tauri installer bundle
         shell: bash
-        run: bun run tauri build --target "${{ matrix.rust-target }}" --ci
+        run: bun run tauri build --target "aarch64-apple-darwin" --ci
 
       - name: Collect installer assets
         shell: bash
         run: |
           set -euo pipefail
 
-          bundle_root="src-tauri/target/${{ matrix.rust-target }}/release/bundle"
+          bundle_root="src-tauri/target/aarch64-apple-darwin/release/bundle"
           if [[ ! -d "${bundle_root}" ]]; then
             bundle_root="src-tauri/target/release/bundle"
           fi
 
           if [[ ! -d "${bundle_root}" ]]; then
-            echo "::error::Tauri bundle directory not found for target ${{ matrix.rust-target }}"
+            echo "::error::Tauri bundle directory not found for target aarch64-apple-darwin"
             exit 1
           fi
 
           mkdir -p release-assets
           while IFS= read -r -d '' artifact; do
             base="$(basename "${artifact}")"
-            cp "${artifact}" "release-assets/${{ matrix.asset-prefix }}-${base}"
+            cp "${artifact}" "release-assets/macos-arm64-${base}"
           done < <(
             find "${bundle_root}" -type f \
               \( \
                 -name "*.dmg" -o \
-                -name "*.msi" -o \
-                -name "*.exe" -o \
                 -name "*.zip" -o \
                 -name "*.tar.gz" -o \
                 -name "*.sig" \
@@ -232,7 +210,7 @@ jobs:
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ofive-${{ matrix.asset-prefix }}-${{ github.ref_name }}
+          name: ofive-macos-arm64-${{ github.ref_name }}
           path: release-assets/*
           if-no-files-found: error
 
@@ -250,25 +228,31 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: List release assets
+      - name: Prepare release assets
         shell: bash
         run: |
           set -euo pipefail
+
+          if [[ ! -d release-assets ]] || [[ -z "$(find release-assets -type f -print -quit)" ]]; then
+            echo "::error::No installer artifacts were produced by any platform build. Skipping release publication."
+            exit 1
+          fi
+
           find release-assets -maxdepth 2 -type f -print | sort
+
+          {
+            echo "Automated ofive desktop release for ${{ github.ref_name }}."
+            echo
+            echo "Included installer:"
+            echo "- macOS ARM64"
+          } > release-body.md
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ofive ${{ github.ref_name }}
-          body: |
-            Automated ofive desktop release for ${{ github.ref_name }}.
-
-            Included installers:
-            - macOS ARM64
-            - macOS x64
-            - Windows x64
-            - Windows ARM64
+          body_path: release-body.md
           generate_release_notes: true
           draft: false
           prerelease: false

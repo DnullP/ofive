@@ -499,7 +499,7 @@ func (r *Runtime) StreamConfirmation(
 		}
 	}
 
-	if canUseCapabilityPlanning(bridgeConfig) && persistedConfirmation != nil {
+	if shouldUseLegacyManagedConfirmationFlow(vendorConfig.VendorID, bridgeConfig) && persistedConfirmation != nil {
 		if err := streamManagedCapabilityConfirmationResponse(
 			ctx,
 			confirmed,
@@ -1150,6 +1150,17 @@ func canUseCapabilityPlanning(bridgeConfig CapabilityBridgeConfig) bool {
 	return ok && len(bridgeConfig.Tools) > 0
 }
 
+func shouldUseLegacyManagedConfirmationFlow(
+	vendorID string,
+	bridgeConfig CapabilityBridgeConfig,
+) bool {
+	trimmedVendorID := strings.TrimSpace(vendorID)
+	if trimmedVendorID != "" && trimmedVendorID != "mock-echo" {
+		return false
+	}
+	return canUseCapabilityPlanning(bridgeConfig)
+}
+
 func buildAgentToolsets(bridgeConfig CapabilityBridgeConfig) ([]tool.Toolset, error) {
 	if strings.TrimSpace(bridgeConfig.MCPServerURL) != "" {
 		return buildMCPToolsets(bridgeConfig)
@@ -1237,12 +1248,12 @@ func buildAgentInstruction(
 		"When using vault.apply_markdown_patch, send only relativePath plus a single-file unifiedDiff string. " +
 		"The unified diff must include --- and +++ headers that point to the same markdown file as relativePath, followed by one or more standard @@ hunks. " +
 		"When composing removed or context lines, copy them verbatim from the latest file read instead of rewriting them into your preferred formatting. " +
-		"Preserve blank lines as literal blank lines inside the diff body. For Markdown section edits, adjacent separator lines between a list or paragraph and the next heading or link often matter, so include those blank lines in the hunk when they are part of the edited block. " +
+		"Preserve blank separator lines in hunks, but they must still carry a diff marker: unchanged blank lines are represented by a single leading space line, added blank lines use +, and removed blank lines use -. Do not emit bare empty hunk lines. For Markdown section edits, adjacent separator lines between a list or paragraph and the next heading or link often matter, so include those blank lines in the hunk when they are part of the edited block. " +
 		"If you are replacing one contiguous block, send one @@ hunk for that block instead of rewriting the full file. " +
 		"Use standard unified diff markers: unchanged lines start with a space, removed lines start with -, and added lines start with +. " +
 		"Valid example: {\"relativePath\":\"notes/guide.md\",\"unifiedDiff\":\"--- a/notes/guide.md\\n+++ b/notes/guide.md\\n@@ -3,3 +3,3 @@\\n alpha\\n-beta\\n+beta patched\\n gamma\"}. " +
 		"Valid section-insertion example: {\"relativePath\":\"notes/guide.md\",\"unifiedDiff\":\"--- a/notes/guide.md\\n+++ b/notes/guide.md\\n@@ -5,4 +5,7 @@\\n ## 影响因素\\n - 价格变化\\n - 需求弹性\\n - 市场结构\\n+\\n+## 具体例子\\n+\\n+示例内容\\n \\n [[供需原理]]\"}. " +
-		"If a patch fails because the context did not match, read the file again and build a new patch from the latest exact lines instead of reusing the failed hunk. " +
+		"If a patch fails because of unified diff format or context mismatch, treat that tool result as recoverable: read the file again and build a corrected patch from the latest exact lines instead of reusing the failed hunk. " +
 		"Do not switch to vault.save_markdown_file as a fallback unless the user explicitly asked for a whole-file rewrite or explicitly approved replacing the full file content. Available tools:\n" + strings.Join(toolLines, "\n")
 }
 
