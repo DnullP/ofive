@@ -3,28 +3,70 @@ name: Release
 on:
   push:
     tags:
-      - "*"
+      - "v*.*.*"
 
 permissions:
   contents: write
-  packages: write
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  BUN_VERSION: 1.2.22
+
 jobs:
   test-gate:
     name: Release Test Gate
     runs-on: ubuntu-24.04
+    outputs:
+      release-version: ${{ steps.version.outputs.release-version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate release tag and project versions
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tags must use the standard semver form v0.0.1. Got: ${tag}"
+            exit 1
+          fi
+
+          version="${tag#v}"
+          node - "${version}" <<'NODE'
+          const fs = require("node:fs");
+
+          const expected = process.argv[2];
+          const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          const tauriConfig = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8"));
+          const cargoToml = fs.readFileSync("src-tauri/Cargo.toml", "utf8");
+          const cargoVersion = cargoToml.match(/^\[package\][\s\S]*?^version\s*=\s*"([^"]+)"/m)?.[1];
+
+          const versions = new Map([
+            ["package.json", packageJson.version],
+            ["src-tauri/tauri.conf.json", tauriConfig.version],
+            ["src-tauri/Cargo.toml", cargoVersion],
+          ]);
+
+          for (const [source, actual] of versions.entries()) {
+            if (actual !== expected) {
+              console.error(`${source} version ${actual ?? "<missing>"} does not match release tag ${expected}`);
+              process.exit(1);
+            }
+          }
+          NODE
+
+          echo "release-version=${version}" >> "${GITHUB_OUTPUT}"
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: ${{ env.BUN_VERSION }}
 
       - name: Setup local layout-v2 dependency
         uses: ./.github/actions/setup-local-layout-v2
@@ -85,37 +127,32 @@ jobs:
       - name: Verify production build
         run: bun run build
 
-  create-release:
-    name: Create GitHub Release
+  build-installers:
+    name: Build ${{ matrix.name }}
     needs: test-gate
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
-
-  build:
-    name: Build ${{ matrix.platform.name }}
-    needs:
-      - test-gate
-      - create-release
-    runs-on: ${{ matrix.platform.runner }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - name: macOS
-            runner: macos-latest
-          - name: Windows
+        include:
+          - name: macOS ARM64
+            runner: macos-15
+            rust-target: aarch64-apple-darwin
+            asset-prefix: macos-arm64
+          - name: macOS x64
+            runner: macos-15-intel
+            rust-target: x86_64-apple-darwin
+            asset-prefix: macos-x64
+          - name: Windows x64
             runner: windows-latest
-          - name: Linux
-            runner: ubuntu-24.04
+            rust-target: x86_64-pc-windows-msvc
+            asset-prefix: windows-x64
+          - name: Windows ARM64
+            runner: windows-11-arm
+            rust-target: aarch64-pc-windows-msvc
+            asset-prefix: windows-arm64
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      OFIVE_SIDECAR_PROFILE: release
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
@@ -125,7 +162,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: ${{ env.BUN_VERSION }}
 
       - name: Setup local layout-v2 dependency
         uses: ./.github/actions/setup-local-layout-v2
@@ -137,6 +174,8 @@ jobs:
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
 
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
@@ -144,59 +183,95 @@ jobs:
           workspaces: |
             src-tauri -> target
 
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            curl \
-            file \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            patchelf \
-            wget
-
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build Go sidecar binary
-        run: bun run build:sidecar
+      - name: Build Tauri installer bundle
+        shell: bash
+        run: bun run tauri build --target "${{ matrix.rust-target }}" --ci
 
-      - name: Build Tauri bundle
-        run: bun run tauri build
-
-      - name: Collect release artifacts
+      - name: Collect installer assets
         shell: bash
         run: |
           set -euo pipefail
+
+          bundle_root="src-tauri/target/${{ matrix.rust-target }}/release/bundle"
+          if [[ ! -d "${bundle_root}" ]]; then
+            bundle_root="src-tauri/target/release/bundle"
+          fi
+
+          if [[ ! -d "${bundle_root}" ]]; then
+            echo "::error::Tauri bundle directory not found for target ${{ matrix.rust-target }}"
+            exit 1
+          fi
+
           mkdir -p release-assets
-          find src-tauri/target/release/bundle -type f \
-            \( \
-              -name "*.dmg" -o \
-              -name "*.appimage" -o \
-              -name "*.deb" -o \
-              -name "*.rpm" -o \
-              -name "*.msi" -o \
-              -name "*.exe" -o \
-              -name "*.zip" \
-            \) -print -exec cp {} release-assets/ \;
+          while IFS= read -r -d '' artifact; do
+            base="$(basename "${artifact}")"
+            cp "${artifact}" "release-assets/${{ matrix.asset-prefix }}-${base}"
+          done < <(
+            find "${bundle_root}" -type f \
+              \( \
+                -name "*.dmg" -o \
+                -name "*.msi" -o \
+                -name "*.exe" -o \
+                -name "*.zip" -o \
+                -name "*.tar.gz" -o \
+                -name "*.sig" \
+              \) -print0
+          )
+
+          if [[ -z "$(find release-assets -type f -print -quit)" ]]; then
+            echo "::error::No installer assets found under ${bundle_root}"
+            find "${bundle_root}" -maxdepth 4 -type f -print
+            exit 1
+          fi
+
           ls -la release-assets
 
-      - name: Upload workflow artifacts
+      - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.platform.name }}-${{ github.ref_name }}
+          name: ofive-${{ matrix.asset-prefix }}-${{ github.ref_name }}
           path: release-assets/*
           if-no-files-found: error
 
-      - name: Upload assets to GitHub Release
+  publish-release:
+    name: Publish GitHub Release
+    needs:
+      - test-gate
+      - build-installers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ofive-*-${{ github.ref_name }}
+          path: release-assets
+          merge-multiple: true
+
+      - name: List release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          find release-assets -maxdepth 2 -type f -print | sort
+
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
+          name: ofive ${{ github.ref_name }}
+          body: |
+            Automated ofive desktop release for ${{ github.ref_name }}.
+
+            Included installers:
+            - macOS ARM64
+            - macOS x64
+            - Windows x64
+            - Windows ARM64
+          generate_release_notes: true
+          draft: false
+          prerelease: false
           files: release-assets/*
           fail_on_unmatched_files: true
           overwrite_files: true

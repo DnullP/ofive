@@ -195,6 +195,8 @@ function generateGoStubs(target, protocPath) {
 async function buildSidecars() {
     const generateOnly = process.argv.includes("--generate-only");
     const goOnly = process.argv.includes("--go-only");
+    const releaseProfile = process.argv.includes("--release") || process.env.OFIVE_SIDECAR_PROFILE === "release";
+    const rustToolProfile = releaseProfile ? "release" : "debug";
     const hostTuple = generateOnly ? "" : getHostTuple();
     const extension = process.platform === "win32" ? ".exe" : "";
     const protocPath = await ensurePinnedProtoc();
@@ -273,7 +275,7 @@ async function buildSidecars() {
         const outputPath = path.join(outputDir, binaryName);
         const builtBinaryPath = path.join(
             target.targetDir,
-            "debug",
+            rustToolProfile,
             `${target.bin}${extension}`,
         );
 
@@ -283,15 +285,20 @@ async function buildSidecars() {
             outputPath,
         });
 
+        const cargoArgs = [
+            "build",
+            "--manifest-path",
+            target.manifestPath,
+            "--bin",
+            target.bin,
+        ];
+        if (releaseProfile) {
+            cargoArgs.push("--release");
+        }
+
         execFileSync(
             "cargo",
-            [
-                "build",
-                "--manifest-path",
-                target.manifestPath,
-                "--bin",
-                target.bin,
-            ],
+            cargoArgs,
             {
                 cwd: projectRoot,
                 stdio: "inherit",

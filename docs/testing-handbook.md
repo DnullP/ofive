@@ -260,9 +260,11 @@ bun run build
 
 它与日常主线 CI 的一个关键差异是：
 
-1. Release `test-gate` 跑的是 `bun run test:e2e`，不是 `bun run test:e2e:ci`。
-2. 这意味着发版前会重新纳入全量功能 E2E，包括 `@mouse-drag` 真实鼠标拖拽审计。
-3. Release gate 还会串行执行 Go sidecar 测试、sidecar 构建、proto 漂移检查、前端单测、全量 Rust 测试和生产构建校验。
+1. Release 只接受 `v0.0.1` 形式的标准版本 tag，并校验 tag 与 `package.json`、`tauri.conf.json`、`Cargo.toml` 版本一致。
+2. Release `test-gate` 跑的是 `bun run test:e2e`，不是 `bun run test:e2e:ci`。
+3. 这意味着发版前会重新纳入全量功能 E2E，包括 `@mouse-drag` 真实鼠标拖拽审计。
+4. Release gate 还会串行执行 Go sidecar 测试、sidecar 构建、proto 漂移检查、前端单测、全量 Rust 测试和生产构建校验。
+5. 多平台打包只发布 macOS ARM64、macOS x64、Windows x64、Windows ARM64；所有安装包构建成功后才创建 GitHub Release。
 
 因此，主线 CI 通过并不等于发版测试门一定通过。对于涉及高保真拖拽、sidecar、proto 或全量 Rust 行为的改动，发版前应主动按 release 流程自检。
 
