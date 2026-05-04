@@ -1,7 +1,7 @@
 {
   "name": "ofive",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "push": "node scripts/push-with-local-layout-v2.mjs",
