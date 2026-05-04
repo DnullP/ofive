@@ -1385,7 +1385,7 @@
 .ai-chat-settings-input {
     width: 100%;
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 8px 10px;
     font-family: inherit;
     font-size: var(--ai-chat-control-font-size);
@@ -1469,7 +1469,7 @@
 /* ai-chat-settings-save：设置保存按钮 */
 .ai-chat-settings-save {
     border: 0;
-    border-radius: 999px;
+    border-radius: 0;
     padding: 8px 14px;
     font-size: 12px;
     font-weight: 700;

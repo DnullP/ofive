@@ -52,7 +52,7 @@
     gap: 10px;
     padding: 10px 12px;
     border: 1px solid var(--content-material-border);
-    border-radius: 12px;
+    border-radius: 0;
     background: var(--content-material-input-bg);
     box-shadow: var(--content-material-shadow);
 }
@@ -216,7 +216,7 @@
     font-size: 12px;
     padding: 8px 12px;
     border: 1px solid var(--content-material-border);
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--content-material-pill-bg);
 }
 
@@ -229,7 +229,7 @@
     min-height: 220px;
     padding: 24px;
     border: 1px dashed color-mix(in srgb, var(--content-material-border) 92%, transparent);
-    border-radius: 18px;
+    border-radius: 0;
     background: var(--content-material-bg);
     box-shadow: var(--content-material-shadow);
 }
@@ -254,7 +254,7 @@
     flex-direction: column;
     gap: 0;
     border: 1px solid var(--content-material-border);
-    border-radius: 8px;
+    border-radius: 0;
     overflow: hidden;
     background: var(--content-material-bg);
     box-shadow: var(--content-material-shadow);
@@ -356,7 +356,7 @@
 .settings-compact-number-input {
     width: 64px;
     border: 1px solid var(--content-material-border);
-    border-radius: 4px;
+    border-radius: 0;
     background: var(--content-material-input-bg);
     color: var(--text-primary);
     padding: 4px 6px;
@@ -396,7 +396,7 @@
     width: 100%;
     min-height: 120px;
     border: 1px solid var(--content-material-border);
-    border-radius: 4px;
+    border-radius: 0;
     background: var(--content-material-input-bg);
     color: var(--text-primary);
     padding: 8px 10px;
@@ -420,7 +420,7 @@
 .settings-compact-select {
     min-width: 80px;
     border: 1px solid var(--content-material-border);
-    border-radius: 4px;
+    border-radius: 0;
     background: var(--content-material-input-bg);
     color: var(--text-primary);
     padding: 4px 8px;
@@ -468,11 +468,11 @@
     margin-top: 4px;
 }
 
-/* 快捷键设置表格容器：统一圆角边框 */
+/* 快捷键设置表格容器：直角边框，保持列表式设置面板风格。 */
 .settings-shortcut-table-wrapper {
     width: 100%;
     border: 1px solid var(--content-material-border);
-    border-radius: 8px;
+    border-radius: 0;
     overflow: hidden;
     background: var(--content-material-bg-muted);
 }
@@ -539,7 +539,7 @@
     display: inline-block;
     background: var(--content-material-pill-bg);
     border: 1px solid var(--content-material-border);
-    border-radius: 4px;
+    border-radius: 0;
     padding: 2px 6px;
     font-family: inherit;
     font-size: 12px;
@@ -551,7 +551,7 @@
 .settings-shortcut-inline-input {
     width: 120px;
     border: 1px solid var(--accent-primary);
-    border-radius: 4px;
+    border-radius: 0;
     background: var(--content-material-input-bg);
     color: var(--text-primary);
     padding: 2px 6px;
@@ -575,7 +575,7 @@
 /* 快捷键操作按钮：紧凑文字按钮 */
 .settings-shortcut-action-btn {
     border: none;
-    border-radius: 4px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-secondary);
     padding: 2px 8px;
@@ -647,7 +647,7 @@
 .settings-graph-input {
     min-width: 140px;
     border: 1px solid var(--content-material-border);
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--content-material-input-bg);
     color: var(--text-primary);
     padding: 6px 8px;
@@ -658,7 +658,7 @@
     width: 38px;
     height: 30px;
     border: 1px solid var(--content-material-border);
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--content-material-input-bg);
     padding: 2px;
 }
@@ -681,7 +681,7 @@
 /* 风格模式按钮：展示主题名称与说明。 */
 .settings-theme-mode-button {
     border: 1px solid var(--content-material-border);
-    border-radius: 8px;
+    border-radius: 0;
     background: var(--content-material-input-bg);
     color: var(--text-primary);
     padding: 10px;
@@ -692,9 +692,7 @@
     cursor: pointer;
     transition:
         background-color var(--motion-duration-fast) var(--motion-ease-standard),
-        border-color var(--motion-duration-fast) var(--motion-ease-standard),
-        box-shadow var(--motion-duration-default) var(--motion-ease-standard),
-        transform var(--motion-duration-fast) var(--motion-ease-standard);
+        border-color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 /* 风格模式按钮标题：强调主题名称。 */
@@ -713,7 +711,6 @@
 /* 风格模式按钮悬浮态：增强可交互反馈。 */
 .settings-theme-mode-button:hover {
     background: var(--content-material-hover-bg);
-    transform: translateY(-1px);
 }
 
 /* 风格模式按钮激活态：标记当前生效主题。 */

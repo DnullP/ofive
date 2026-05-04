@@ -65,7 +65,7 @@ import {
 } from "./aiChatShared";
 import { resolveParentDirectory } from "../markdown-codemirror/editor/pathUtils";
 import { resolveWikiLinkTarget } from "../../api/vaultApi";
-import { openWikiLinkTarget } from "../markdown-codemirror/editor/syntaxPlugins/wikiLinkSyntaxRenderer";
+import { openFileInWorkbench } from "../../host/layout/openFileService";
 import {
     createEmptyPendingStreamBinding,
     createPendingStreamBinding,
@@ -869,30 +869,31 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     );
 
     const handleOpenWikiLinkTarget = async (target: string): Promise<void> => {
-        const openFile = props.panelContext?.openFile;
-        const currentFilePath = activeEditor?.path;
-        if (!currentFilePath) {
-            return;
-        }
-
-        if (!openFile && props.tabContainerApi) {
-            await openWikiLinkTarget(props.tabContainerApi, () => currentFilePath, target);
-            return;
-        }
-
-        if (!openFile) {
-            return;
-        }
-
-        const currentDirectory = resolveParentDirectory(currentFilePath);
+        const currentDirectory = resolveParentDirectory(activeEditor?.path ?? "");
         const resolved = await resolveWikiLinkTarget(currentDirectory, target);
         if (!resolved) {
+            console.warn("[aiChatPlugin] wikilink target not found", {
+                currentDirectory,
+                target,
+            });
             return;
         }
 
-        await openFile({
-            relativePath: resolved.relativePath,
-        });
+        const openFile = props.panelContext?.openFile;
+        if (openFile) {
+            await openFile({
+                relativePath: resolved.relativePath,
+            });
+            return;
+        }
+
+        if (props.tabContainerApi) {
+            await openFileInWorkbench({
+                containerApi: props.tabContainerApi,
+                relativePath: resolved.relativePath,
+                currentVaultPath: currentVaultPath ?? undefined,
+            });
+        }
     };
 
     useEffect(() => {

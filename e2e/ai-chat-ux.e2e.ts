@@ -18,6 +18,27 @@ async function waitForAiChatReady(page: Page): Promise<void> {
 }
 
 test.describe("ai chat ux", () => {
+    test("assistant wikilink should open the target file in a tab section", async ({ page }) => {
+        await waitForAiChatReady(page);
+
+        await page.locator(".ai-chat-input").fill("open [[guide]]");
+        await page.locator(".ai-chat-send-button").click();
+
+        const wikiLink = page.locator(".ai-chat-message.assistant .ai-chat-message-wikilink", { hasText: "guide" }).first();
+        await expect(wikiLink).toBeVisible({ timeout: 3_000 });
+        await wikiLink.click();
+
+        await expect(page.locator(".layout-v2-tab-section__tab--focused", { hasText: "guide.md" })).toBeVisible();
+        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "guide.md" })).toHaveCount(1);
+
+        await page.locator(".layout-v2-tab-section__tab-main", { hasText: "首页" }).click();
+        await expect(page.locator(".layout-v2-tab-section__tab--focused", { hasText: "首页" })).toBeVisible();
+
+        await wikiLink.click();
+        await expect(page.locator(".layout-v2-tab-section__tab--focused", { hasText: "guide.md" })).toBeVisible();
+        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "guide.md" })).toHaveCount(1);
+    });
+
     test("composer should switch model and keep next draft while streaming", async ({ page }) => {
         await waitForAiChatReady(page);
 
