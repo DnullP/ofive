@@ -16,8 +16,8 @@ env:
   BUN_VERSION: 1.2.22
 
 jobs:
-  test-gate:
-    name: Release Test Gate
+  release-version:
+    name: Validate Release Version
     runs-on: ubuntu-24.04
     outputs:
       release-version: ${{ steps.version.outputs.release-version }}
@@ -63,6 +63,125 @@ jobs:
 
           echo "release-version=${version}" >> "${GITHUB_OUTPUT}"
 
+  go-sidecar:
+    name: Go Sidecar
+    runs-on: ubuntu-22.04
+    needs: release-version
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sidecars/go/ofive-ai-agent/go.mod
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run Go sidecar tests
+        run: bun run test:go
+
+      - name: Build Go sidecar binary
+        run: bun run build:go-sidecar
+
+      - name: Verify generated Go stubs are up to date
+        run: git diff --exit-code -- sidecars/go/ofive-ai-agent/gen/ofive/aiv1
+
+  frontend-unit:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-22.04
+    needs: release-version
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run frontend unit tests
+        run: bun run test:ci:unit
+
+  rust-tests-core:
+    name: Rust Tests Core
+    runs-on: ubuntu-24.04
+    needs: release-version
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run Rust core tests
+        run: bun run test:rust:core -- --test-threads=1
+
+      - name: Upload Rust core test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-rust-core-test-artifacts
+          path: |
+            src-tauri/target/**/*.log
+            src-tauri/target/**/*.txt
+          if-no-files-found: ignore
+
+  rust-tests-sidecar:
+    name: Rust Tests Sidecar
+    runs-on: ubuntu-24.04
+    needs: release-version
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -103,41 +222,116 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      - name: Run Go sidecar tests
-        run: bun run test:go
-
       - name: Build Go sidecar binary
         run: bun run build:go-sidecar
 
-      - name: Verify generated Go stubs are up to date
-        run: git diff --exit-code -- sidecars/go/ofive-ai-agent/gen/ofive/aiv1
+      - name: Run Rust sidecar tests
+        run: bun run test:rust:sidecar -- --test-threads=1
+
+      - name: Upload Rust sidecar test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-rust-sidecar-test-artifacts
+          path: |
+            src-tauri/target/**/*.log
+            src-tauri/target/**/*.txt
+            /tmp/ofive-ai-sidecar-test-*.log
+          if-no-files-found: ignore
+
+  e2e-tests:
+    name: Playwright E2E
+    runs-on: ubuntu-22.04
+    needs: release-version
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
 
       - name: Install Playwright browser
         run: bun run test:playwright:install
 
-      - name: Run frontend unit tests
-        run: bun run test
-
-      - name: Run Rust tests
-        run: bun run test:rust
-
       - name: Run Playwright end-to-end tests
         run: bun run test:e2e --reporter=line
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-playwright-e2e-artifacts
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  production-build:
+    name: Production Build
+    runs-on: ubuntu-22.04
+    needs: release-version
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
 
       - name: Verify production build
         run: bun run build
 
   build-installers:
     name: Build macOS ARM64
-    needs: test-gate
+    needs:
+      - release-version
     runs-on: macos-15
     env:
       OFIVE_SIDECAR_PROFILE: release
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Verify macOS ARM64 runner
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$(uname -m)" != "arm64" ]]; then
+            echo "::error::Release packaging must run on an arm64 macOS runner."
+            uname -a
+            exit 1
+          fi
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -168,7 +362,21 @@ jobs:
 
       - name: Build Tauri installer bundle
         shell: bash
-        run: bun run tauri build --target "aarch64-apple-darwin" --ci --no-sign
+        run: bun run tauri build --target "aarch64-apple-darwin" --ci
+
+      - name: Verify app bundle signature
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_path="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/ofive.app"
+          if [[ ! -d "${app_path}" ]]; then
+            echo "::error::Built app bundle not found: ${app_path}"
+            exit 1
+          fi
+
+          codesign --verify --deep --strict --verbose=4 "${app_path}"
+          codesign -dv --verbose=4 "${app_path}"
 
       - name: Collect installer assets
         shell: bash
@@ -190,13 +398,7 @@ jobs:
             base="$(basename "${artifact}")"
             cp "${artifact}" "release-assets/macos-arm64-${base}"
           done < <(
-            find "${bundle_root}" -type f \
-              \( \
-                -name "*.dmg" -o \
-                -name "*.zip" -o \
-                -name "*.tar.gz" -o \
-                -name "*.sig" \
-              \) -print0
+            find "${bundle_root}" -type f -name "*.dmg" -print0
           )
 
           if [[ -z "$(find release-assets -type f -print -quit)" ]]; then
@@ -217,8 +419,13 @@ jobs:
   publish-release:
     name: Publish GitHub Release
     needs:
-      - test-gate
       - build-installers
+      - go-sidecar
+      - frontend-unit
+      - rust-tests-core
+      - rust-tests-sidecar
+      - e2e-tests
+      - production-build
     runs-on: ubuntu-latest
     steps:
       - name: Download installer artifacts
@@ -246,7 +453,7 @@ jobs:
             echo "Included installer:"
             echo "- macOS ARM64"
             echo
-            echo "This open-source build is intentionally unsigned and not Apple-notarized."
+            echo "This open-source build is ad-hoc signed and intentionally not Apple-notarized."
             echo "If macOS reports the app is damaged or cannot verify the developer, move it to Applications and run:"
             echo
             echo '```bash'

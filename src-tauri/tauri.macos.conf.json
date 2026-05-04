@@ -25,5 +25,10 @@
                 "dragDropEnabled": false
             }
         ]
+    },
+    "bundle": {
+        "macOS": {
+            "signingIdentity": "-"
+        }
     }
 }
