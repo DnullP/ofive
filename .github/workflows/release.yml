@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       release-version: ${{ steps.version.outputs.release-version }}
+      release-prerelease: ${{ steps.version.outputs.release-prerelease }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,16 +33,24 @@ jobs:
           set -euo pipefail
 
           tag="${GITHUB_REF_NAME}"
-          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Release tags must use the standard semver form v0.0.1. Got: ${tag}"
+          semver_re='^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z][0-9A-Za-z.-]*)?(\+[0-9A-Za-z][0-9A-Za-z.-]*)?$'
+          if [[ "${tag}" =~ ${semver_re} ]]; then
+            base_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+            prerelease="false"
+            if [[ -n "${BASH_REMATCH[4]}" ]]; then
+              prerelease="true"
+            fi
+          else
+            echo "::error::Release tags must use SemVer form v0.0.1 or v0.0.1-alpha. Got: ${tag}"
             exit 1
           fi
-
           version="${tag#v}"
-          node - "${version}" <<'NODE'
+
+          node - "${version}" "${base_version}" <<'NODE'
           const fs = require("node:fs");
 
-          const expected = process.argv[2];
+          const releaseVersion = process.argv[2];
+          const expectedBaseVersion = process.argv[3];
           const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
           const tauriConfig = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8"));
           const cargoToml = fs.readFileSync("src-tauri/Cargo.toml", "utf8");
@@ -54,14 +63,15 @@ jobs:
           ]);
 
           for (const [source, actual] of versions.entries()) {
-            if (actual !== expected) {
-              console.error(`${source} version ${actual ?? "<missing>"} does not match release tag ${expected}`);
+            if (actual !== expectedBaseVersion) {
+              console.error(`${source} version ${actual ?? "<missing>"} does not match release tag base version ${expectedBaseVersion} (${releaseVersion})`);
               process.exit(1);
             }
           }
           NODE
 
           echo "release-version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "release-prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
 
   go-sidecar:
     name: Go Sidecar
@@ -419,6 +429,7 @@ jobs:
   publish-release:
     name: Publish GitHub Release
     needs:
+      - release-version
       - build-installers
       - go-sidecar
       - frontend-unit
@@ -469,7 +480,7 @@ jobs:
           body_path: release-body.md
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: ${{ needs.release-version.outputs.release-prerelease }}
           files: release-assets/*
           fail_on_unmatched_files: true
           overwrite_files: true

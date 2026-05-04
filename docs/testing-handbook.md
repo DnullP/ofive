@@ -260,7 +260,7 @@ bun run build
 
 它与日常主线 CI 的一个关键差异是：
 
-1. Release 只接受 `v0.0.1` 形式的标准版本 tag，并校验 tag 与 `package.json`、`tauri.conf.json`、`Cargo.toml` 版本一致。
+1. Release 接受 `v0.0.1` 或 `v0.0.1-alpha` 形式的 SemVer tag；预发布 tag 会校验其 base version 与 `package.json`、`tauri.conf.json`、`Cargo.toml` 一致，并发布为 GitHub prerelease。
 2. Release 的 Playwright job 跑的是 `bun run test:e2e`，不是 `bun run test:e2e:ci`。
 3. 这意味着发版前会重新纳入全量功能 E2E，包括 `@mouse-drag` 真实鼠标拖拽审计。
 4. Release gate 会并行执行 Go sidecar、前端单测、Rust core、Rust sidecar、全量 E2E、生产构建校验和 macOS ARM64 打包。
