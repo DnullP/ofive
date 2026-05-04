@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="ofive">
+  <defs>
+    <linearGradient id="mark-gradient" x1="104" y1="832" x2="920" y2="192" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1989ff" />
+      <stop offset="0.42" stop-color="#3d66ff" />
+      <stop offset="0.72" stop-color="#7549e8" />
+      <stop offset="1" stop-color="#9b3ee9" />
+    </linearGradient>
+    <linearGradient id="stem-gradient" x1="374" y1="408" x2="568" y2="842" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5558f4" />
+      <stop offset="0.55" stop-color="#5c57ef" />
+      <stop offset="1" stop-color="#7059f2" />
+    </linearGradient>
+    <linearGradient id="tile-gradient" x1="512" y1="80" x2="512" y2="944" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="1" stop-color="#f8f9fc" />
+    </linearGradient>
+  </defs>
+
+  <rect x="80" y="80" width="864" height="864" rx="190" fill="url(#tile-gradient)" />
+  <g transform="translate(512 512) scale(0.86) translate(-512 -512)">
+    <g transform="matrix(1 0 0 0.912 0 58.5)">
+      <path
+        fill="none"
+        stroke="url(#mark-gradient)"
+        stroke-width="88"
+        stroke-linecap="round"
+        d="M282 736C195 680 146 589 146 483c0-154 124-275 274-275 151 0 274 121 274 275 0 139-98 256-230 280"
+      />
+      <path
+        fill="none"
+        stroke="url(#stem-gradient)"
+        stroke-width="88"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M420 466v322c0 4 4 7 8 7 45-10 88-30 124-60"
+      />
+      <circle cx="420" cy="466" r="70" fill="url(#stem-gradient)" />
+    </g>
+    <circle cx="784" cy="309" r="54" fill="url(#mark-gradient)" />
+    <circle cx="883" cy="228" r="36" fill="url(#mark-gradient)" />
+  </g>
+</svg>

@@ -1,6 +1,226 @@
-# ofive
+<p align="center">
+  <img src="./assets/logo.png" alt="ofive" width="560" />
+</p>
 
-ofive 是一个基于 Tauri + React + TypeScript + Rust 的桌面笔记应用，前端通过 Vite 构建，后端桌面容器由 Tauri 提供，AI sidecar 使用 Go 构建。
+<p align="center">
+  <a href="https://github.com/DnullP/ofive/actions/workflows/ci.yml">
+    <img alt="CI" src="https://github.com/DnullP/ofive/actions/workflows/ci.yml/badge.svg?branch=main" />
+  </a>
+  <a href="https://github.com/DnullP/ofive/actions/workflows/release.yml">
+    <img alt="Release" src="https://github.com/DnullP/ofive/actions/workflows/release.yml/badge.svg" />
+  </a>
+  <img alt="Version" src="https://img.shields.io/badge/version-0.0.1-6B5BFF" />
+  <img alt="Status" src="https://img.shields.io/badge/status-active_development-2F80ED" />
+  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-111827" />
+  <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2.x-24C8DB?logo=tauri&logoColor=white" />
+  <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111111" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white" />
+  <img alt="Rust" src="https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white" />
+  <img alt="Go" src="https://img.shields.io/badge/Go-sidecar-00ADD8?logo=go&logoColor=white" />
+</p>
+
+<h1 align="center">ofive</h1>
+
+<p align="center">
+  本地优先的桌面知识工作台，面向 Markdown 笔记、插件化工作流、语义检索和 AI 辅助写作。
+</p>
+
+<table>
+  <tr>
+    <td><strong>Project phase</strong><br />Active development</td>
+    <td><strong>Runtime</strong><br />Tauri 2 desktop host</td>
+    <td><strong>Knowledge model</strong><br />Local-first Markdown vault</td>
+    <td><strong>Quality gate</strong><br />Unit, Rust, Go sidecar, E2E, build</td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="#功能亮点">功能亮点</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#质量门禁">质量门禁</a> ·
+  <a href="#项目文档">项目文档</a>
+</p>
+
+![](./assets/dark.png)
+
+## 项目定位
+
+ofive 是一个基于 Tauri + React + TypeScript + Rust 的桌面笔记应用。它把本地 vault、Markdown 编辑器、工作台布局、插件系统和 AI sidecar 组织在同一个桌面体验里，目标是成为一个可扩展、可维护、可查询的个人知识工作台。
+
+项目不是单纯的 Markdown 编辑器：它更像一个桌面宿主。前端负责工作台、插件和交互表面；Rust 负责桌面能力、vault 与查询索引；Go sidecar 承接 AI agent 与工具能力。
+
+## 功能亮点
+
+- 本地优先 vault：围绕文件树、Markdown、wikilink、frontmatter、反链和查询索引组织知识内容。
+- 工作台式布局：基于本地 `layout-v2` 的 activity、panel、tab、拖拽和布局持久化能力。
+- Markdown 编辑与阅读：CodeMirror 编辑态、阅读态渲染、任务语法、代码块、高亮、数学公式和预览镜像。
+- 知识图谱与检索：反链、图谱、语义索引、语义搜索和可扩展查询模块。
+- 插件化宿主：插件注册命令、activity、tab、panel、设置项和运行时能力。
+- AI sidecar：Go sidecar 提供 AI agent、工具桥接和桌面宿主能力边界。
+- 跨平台桌面：Tauri 2 桌面容器，目标覆盖 macOS、Windows 和 Linux。
+
+## 架构概览
+
+```text
+ofive/
+├─ src/                  React + TypeScript frontend host
+│  ├─ host/              Workbench, registry, stores, settings, events
+│  ├─ plugins/           Built-in feature plugins
+│  └─ api/               Frontend runtime boundaries
+├─ src-tauri/            Rust desktop backend and Tauri commands
+├─ sidecars/go/          Go AI sidecar
+├─ docs/wiki/            Project knowledge base, readable as an ofive vault
+└─ ../layout-v2/         Local shared workbench layout dependency
+```
+
+## 快速开始
+
+### 前置要求
+
+需要安装：
+
+- Bun
+- Rust stable toolchain
+- Go
+
+说明：
+
+- 项目脚本会自动下载并缓存固定版本的 `protoc` 到 `.tools/protoc/`。
+- `bun run tauri dev` 会先构建 sidecar。
+- 如果直接运行 `cargo test` 或 `cargo build`，仍需要自行安装 `protoc` 或设置 `PROTOC`。
+
+### 安装依赖
+
+```bash
+bun install --frozen-lockfile
+```
+
+### 启动 Web 调试
+
+```bash
+bun run web:dev
+```
+
+访问：
+
+```text
+http://127.0.0.1:4173
+```
+
+### 启动桌面开发模式
+
+```bash
+bun run tauri dev
+```
+
+### 构建桌面应用
+
+```bash
+bun run tauri build
+```
+
+## 常用命令
+
+| 命令 | 用途 |
+| --- | --- |
+| `bun run web:dev` | 启动纯前端开发服务 |
+| `bun run tauri dev` | 启动 Tauri 桌面开发模式 |
+| `bun run build` | 运行前端守卫、构建 `layout-v2` 并生成 Web 产物 |
+| `bun run build:sidecar` | 构建 AI sidecar |
+| `bun run proto:generate` | 只生成 sidecar protobuf 代码 |
+| `bun run proto:check` | 检查生成的 Go stubs 是否最新 |
+| `bun run test` | 运行前端单元测试 |
+| `bun run test:rust` | 运行 Rust 测试 |
+| `bun run test:e2e` | 运行 Playwright E2E |
+| `bun run test:full` | 执行完整测试工作流 |
+
+## 质量门禁
+
+CI 将核心验证拆成多条独立链路：
+
+- Go sidecar 测试与构建
+- 前端单元测试
+- Rust core / sidecar 测试
+- Playwright E2E
+- 生产构建
+- 发布版本校验
+
+本地交付前建议至少运行：
+
+```bash
+bun run build
+bun run test
+bun run test:rust:core
+```
+
+涉及 sidecar、协议或 AI 工具能力时，再补充：
+
+```bash
+bun run test:go
+bun run build:sidecar
+bun run proto:check
+```
+
+## 发布
+
+Release workflow 只会在标准版本 tag 推送后触发。tag 必须使用 `v0.0.1` 或 `v0.0.1-alpha` 这类 SemVer 格式，并且要和 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 中的版本号一致。
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+当前公开发布包使用 `--no-sign` 构建，不做 Apple Developer ID 签名和 notarization。首次打开 macOS 包时，如果系统提示无法验证开发者，可以先拖入 `/Applications`，再按需移除 quarantine 标记：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/ofive.app
+```
+
+## 平台构建前提
+
+### macOS
+
+```bash
+xcode-select --install
+brew install oven-sh/bun/bun go
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup default stable
+```
+
+### Windows
+
+```powershell
+winget install --id Oven-sh.Bun -e
+winget install --id Rustlang.Rustup -e
+winget install --id GoLang.Go -e
+winget install --id Microsoft.EdgeWebView2Runtime -e
+rustup default stable
+```
+
+首次编译 Rust/Tauri 项目还需要 Visual Studio 2022 Build Tools，并勾选 `Desktop development with C++`。
+
+### Linux
+
+以下以 Ubuntu 22.04 为基准：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  build-essential \
+  curl \
+  file \
+  golang-go \
+  libayatana-appindicator3-dev \
+  librsvg2-dev \
+  libssl-dev \
+  libwebkit2gtk-4.1-dev \
+  libxdo-dev \
+  patchelf \
+  wget
+curl -fsSL https://bun.sh/install | bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup default stable
+```
 
 ## 项目文档
 
@@ -10,242 +230,30 @@ ofive 是一个基于 Tauri + React + TypeScript + Rust 的桌面笔记应用，
 - [docs/wiki/ofive-project-wiki.md](docs/wiki/ofive-project-wiki.md)
 - [docs/wiki/ofive-maintainer-dashboard.md](docs/wiki/ofive-maintainer-dashboard.md)
 - [docs/wiki/ofive-feature-owner-map.md](docs/wiki/ofive-feature-owner-map.md)
+- [docs/wiki/ofive-build-and-dev-workflow.md](docs/wiki/ofive-build-and-dev-workflow.md)
+- [docs/wiki/ofive-testing-and-ci.md](docs/wiki/ofive-testing-and-ci.md)
 
 `docs/wiki/` 使用 ofive 的笔记管理逻辑组织：Markdown + YAML frontmatter + wikilink。可以在 ofive 内作为项目 vault 阅读、搜索、查询 frontmatter、查看反链和知识图谱。
-
-## 构建前提
-
-无论在哪个平台，本项目都需要以下工具：
-
-1. Bun
-2. Rust stable toolchain
-3. Go
-
-说明：
-
-- `bun run tauri dev` 会先执行 `bun run build:sidecar`
-- 项目脚本会自动下载并缓存固定版本的 `protoc` 到 `.tools/protoc/`
-- `build:sidecar` 会调用 `go` 和仓库内固定版本的 `protoc`
-- 如果缺少 Bun / Rust / Go，桌面开发和桌面打包都会失败
-- 如果你直接运行 `cargo test` / `cargo build` 而不是通过仓库脚本，仍需要自行安装 `protoc` 或设置 `PROTOC`
-
-## Windows 构建说明
-
-### 1. 安装前置
-
-建议使用 `winget`：
-
-```powershell
-winget install --id Oven-sh.Bun -e
-winget install --id Rustlang.Rustup -e
-winget install --id GoLang.Go -e
-winget install --id Microsoft.EdgeWebView2Runtime -e
-```
-
-安装 Rust 后执行：
-
-```powershell
-rustup default stable
-```
-
-如果这是第一次在 Windows 上编译 Rust/Tauri 项目，还需要安装 Visual Studio 2022 Build Tools，并勾选 `Desktop development with C++`。
-
-安装完成后，重新打开终端，再检查：
-
-```powershell
-bun --version
-rustc --version
-cargo --version
-go version
-```
-
-### 2. 安装项目依赖
-
-```powershell
-bun install --frozen-lockfile
-```
-
-### 3. 启动桌面开发模式
-
-```powershell
-bun run tauri dev
-```
-
-### 4. 构建桌面安装包
-
-```powershell
-bun run tauri build
-```
-
-## macOS 构建说明
-
-### 1. 安装前置
-
-先安装 Xcode Command Line Tools：
-
-```bash
-xcode-select --install
-```
-
-如果使用 Homebrew，推荐安装：
-
-```bash
-brew install oven-sh/bun/bun go
-```
-
-安装 Rust：
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-rustup default stable
-```
-
-检查工具：
-
-```bash
-bun --version
-rustc --version
-cargo --version
-go version
-```
-
-### 2. 安装项目依赖
-
-```bash
-bun install --frozen-lockfile
-```
-
-### 3. 启动桌面开发模式
-
-```bash
-bun run tauri dev
-```
-
-### 4. 构建桌面安装包
-
-```bash
-bun run tauri build
-```
-
-## Linux 构建说明
-
-以下命令以 Ubuntu 22.04 为基准，与 CI 使用的系统依赖保持一致。
-
-### 1. 安装系统依赖
-
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-	build-essential \
-	curl \
-	file \
-	golang-go \
-	libayatana-appindicator3-dev \
-	librsvg2-dev \
-	libssl-dev \
-	libwebkit2gtk-4.1-dev \
-	libxdo-dev \
-	patchelf \
-	wget
-```
-
-### 2. 安装 Bun 和 Rust
-
-```bash
-curl -fsSL https://bun.sh/install | bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-rustup default stable
-```
-
-安装完成后，重新打开终端，再检查：
-
-```bash
-bun --version
-rustc --version
-cargo --version
-go version
-```
-
-### 3. 安装项目依赖
-
-```bash
-bun install --frozen-lockfile
-```
-
-### 4. 启动桌面开发模式
-
-```bash
-bun run tauri dev
-```
-
-### 5. 构建桌面安装包
-
-```bash
-bun run tauri build
-```
-
-## Web 测试启动（不通过 Tauri）
-
-用于纯前端联调和页面调试：
-
-1. 安装依赖
-
-```bash
-bun install --frozen-lockfile
-```
-
-2. 启动 Web 开发服务
-
-```bash
-bun run web:dev
-```
-
-3. 浏览器访问
-
-```text
-http://127.0.0.1:4173
-```
-
-4. 生产预览（可选）
-
-```bash
-bun run web:build
-bun run web:preview
-```
-
-说明：
-
-- `web:dev` 和 `web:preview` 不依赖 Tauri
-- `tauri dev` 适合桌面容器联调
-
-## 常用命令
-
-```bash
-bun run build:sidecar
-bun run proto:generate
-bun run proto:check
-bun run build
-bun run test
-bun run test:rust
-bun run test:e2e
-bun run tauri dev
-bun run tauri build
-```
 
 ## 常见问题
 
 ### `go: command not found`
 
-说明 Go 未安装，或当前终端尚未加载最新 PATH。
+Go 未安装，或当前终端尚未加载最新 PATH。重新打开终端后检查：
+
+```bash
+go version
+```
 
 ### `Executable not found in $PATH: protoc`
 
-如果你是通过 `bun run test:rust`、`bun run tauri dev`、`bun run tauri build` 或 `bun run build:sidecar` 执行，一般不会再看到这个错误，因为这些脚本会自动准备固定版本的 `protoc`。
+通过 `bun run test:rust`、`bun run tauri dev`、`bun run tauri build` 或 `bun run build:sidecar` 执行时，脚本会自动准备固定版本的 `protoc`。
 
-如果你是直接运行 `cargo test`、`cargo build` 或 IDE 内部直接调用 Cargo，这说明当前环境没有可用的 `protoc`。解决方式二选一：
+如果你直接运行 `cargo test`、`cargo build` 或 IDE 内部直接调用 Cargo，需要安装系统级 `protoc`，或显式设置：
 
-1. 安装系统级 `protoc`
-2. 改用仓库脚本，或显式设置 `PROTOC=.tools/protoc/<version>/<platform>/bin/protoc`
+```bash
+PROTOC=.tools/protoc/<version>/<platform>/bin/protoc
+```
 
 ### `protoc-gen-go: The system cannot find the file specified`
 
@@ -254,59 +262,3 @@ bun run tauri build
 ```bash
 bun run build:sidecar
 ```
-
-如果仍失败，优先检查 `go` 是否可用，以及当前网络环境是否允许下载仓库固定版本的 `protoc`。
-
-## Proto 协作约定
-
-- 修改 `proto/ai_sidecar.proto` 后，优先执行 `bun run proto:generate`
-- 提交前执行 `bun run proto:check`，确认生成代码没有漂移
-- 不要直接依赖本机系统 `protoc` 重新生成 Go stub；项目脚本会统一使用仓库固定版本
-
-## 文档
-
-- [插件开发教程](docs/plugin-development-guide.md)
-- [测试体系与测试手册](docs/testing-handbook.md)
-
-## Release 构建
-
-GitHub Actions 只会在你给某个 commit 打标准版本号 tag 并 push tag 之后触发打包，不会在普通 push 时执行 release 构建。tag 必须使用 `v0.0.1` 这类格式，并且要和 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 中的版本号一致。
-
-Release workflow 在真正开始 macOS ARM64 打包前，会先执行完整测试准入：
-
-1. `bun run test`
-2. `bun run test:rust`
-3. `bun run test:e2e`
-4. `bun run build`
-
-示例：
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-工作流只会构建并发布 macOS ARM64 安装包。这个开源发布版使用 `--no-sign`，不做 Apple Developer ID 签名和 notarization。
-
-首次打开时，如果 macOS 提示“App 已被修改或者已损坏”或“无法验证开发者”，请先把应用拖到 `/Applications`，然后执行：
-
-```bash
-xattr -dr com.apple.quarantine /Applications/ofive.app
-```
-
-## CI
-
-普通 push 和 pull request 会自动执行全量测试，不会自动执行 release 打包。
-
-CI 覆盖：
-
-1. `bun run test`
-2. `bun run test:rust`
-3. `bun run test:e2e`
-4. `bun run build`
-
-## Recommended IDE Setup
-
-- [VS Code](https://code.visualstudio.com/)
-- [Tauri VS Code Extension](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode)
-- [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
