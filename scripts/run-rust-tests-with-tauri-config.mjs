@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { ensurePinnedProtoc } from "./protoc-toolchain.mjs";
 
 /**
@@ -8,7 +9,7 @@ import { ensurePinnedProtoc } from "./protoc-toolchain.mjs";
  * @description 为 `cargo test` 显式注入合并后的 Tauri 配置，避免直接走 Cargo 时因平台配置推断差异触发 feature/config 不一致校验。
  */
 
-const workspaceRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const srcTauriRoot = path.join(workspaceRoot, "src-tauri");
 const baseConfigPath = path.join(srcTauriRoot, "tauri.conf.json");
 const macosConfigPath = path.join(srcTauriRoot, "tauri.macos.conf.json");
@@ -234,7 +235,7 @@ function buildCargoTestArgs(profile, extraArgs) {
 }
 
 const baseConfig = readJsonFile(baseConfigPath);
-const macosConfig = fs.existsSync(macosConfigPath)
+const macosConfig = process.platform === "darwin" && fs.existsSync(macosConfigPath)
     ? readJsonFile(macosConfigPath)
     : {};
 const mergedTauriConfig = mergeJsonConfig(baseConfig, macosConfig);
