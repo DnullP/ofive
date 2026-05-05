@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -11,6 +11,8 @@ import { spawnSync } from "node:child_process";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
 const packageJsonPath = path.join(repoRoot, "package.json");
+const defaultLayoutV2Root = path.resolve(repoRoot, "..", "layout-v2");
+const LAYOUT_V2_REPOSITORY_URL = "https://github.com/DnullP/layout-v2.git";
 
 function readPackageJson(filePath) {
     return JSON.parse(readFileSync(filePath, "utf8"));
@@ -39,10 +41,117 @@ function resolveLocalDependencyPath(spec) {
     return null;
 }
 
-function buildLayoutV2(layoutRoot) {
+function hasLayoutV2Dependencies(layoutRoot) {
+    return existsSync(path.join(layoutRoot, "node_modules", "typescript"))
+        && existsSync(path.join(layoutRoot, "node_modules", "vite"));
+}
+
+function installLayoutV2Dependencies(layoutRoot) {
+    console.info("[layout-v2-build] installing dependencies", {
+        layoutRoot,
+    });
+
+    const result = spawnSync("bun", ["install"], {
+        cwd: layoutRoot,
+        stdio: "inherit",
+        env: process.env,
+    });
+
+    if (typeof result.status === "number" && result.status !== 0) {
+        process.exit(result.status);
+    }
+
+    if (result.error) {
+        throw result.error;
+    }
+}
+
+function cloneDefaultLayoutV2Source(layoutRoot) {
+    console.info("[layout-v2-build] cloning missing local dependency", {
+        layoutRoot,
+        repository: LAYOUT_V2_REPOSITORY_URL,
+    });
+
+    mkdirSync(path.dirname(layoutRoot), { recursive: true });
+    const result = spawnSync("git", ["clone", "--depth=1", LAYOUT_V2_REPOSITORY_URL, layoutRoot], {
+        cwd: repoRoot,
+        stdio: "inherit",
+        env: process.env,
+    });
+
+    if (typeof result.status === "number" && result.status !== 0) {
+        process.exit(result.status);
+    }
+
+    if (result.error) {
+        throw result.error;
+    }
+}
+
+function ensureLayoutV2Source(layoutRoot, allowClone) {
     const layoutPackageJsonPath = path.join(layoutRoot, "package.json");
-    if (!existsSync(layoutPackageJsonPath)) {
-        throw new Error(`layout-v2 本地依赖缺少 package.json: ${layoutPackageJsonPath}`);
+    if (existsSync(layoutPackageJsonPath)) {
+        return;
+    }
+
+    if (!existsSync(layoutRoot) && allowClone) {
+        cloneDefaultLayoutV2Source(layoutRoot);
+        return;
+    }
+
+    throw new Error(`layout-v2 本地依赖缺少 package.json: ${layoutPackageJsonPath}`);
+}
+
+function pathsReferToSameLocation(firstPath, secondPath) {
+    try {
+        const firstRealPath = realpathSync.native(firstPath);
+        const secondRealPath = realpathSync.native(secondPath);
+        if (process.platform === "win32") {
+            return firstRealPath.toLowerCase() === secondRealPath.toLowerCase();
+        }
+
+        return firstRealPath === secondRealPath;
+    } catch {
+        return false;
+    }
+}
+
+function removeExistingLayoutV2Module(modulePath) {
+    if (!existsSync(modulePath)) {
+        return;
+    }
+
+    const existingStats = lstatSync(modulePath);
+    if (!existingStats.isDirectory() && !existingStats.isSymbolicLink()) {
+        throw new Error(`node_modules/layout-v2 已存在但不是目录或链接: ${modulePath}`);
+    }
+
+    rmSync(modulePath, { recursive: true, force: true });
+}
+
+function ensureLayoutV2NodeModuleLink(layoutRoot) {
+    const nodeModulesRoot = path.join(repoRoot, "node_modules");
+    const modulePath = path.join(nodeModulesRoot, "layout-v2");
+    if (pathsReferToSameLocation(modulePath, layoutRoot)) {
+        return;
+    }
+
+    removeExistingLayoutV2Module(modulePath);
+    mkdirSync(nodeModulesRoot, { recursive: true });
+
+    const linkType = process.platform === "win32" ? "junction" : "dir";
+    symlinkSync(layoutRoot, modulePath, linkType);
+    console.info("[layout-v2-build] linked local dependency", {
+        modulePath,
+        layoutRoot,
+    });
+}
+
+function buildLayoutV2(layoutRoot) {
+    ensureLayoutV2NodeModuleLink(layoutRoot);
+
+    if (!hasLayoutV2Dependencies(layoutRoot)) {
+        installLayoutV2Dependencies(layoutRoot);
     }
 
     console.info("[layout-v2-build] start", {
@@ -70,12 +179,8 @@ function buildLayoutV2(layoutRoot) {
 
 const packageJson = readPackageJson(packageJsonPath);
 const dependencySpec = readLayoutV2DependencySpec(packageJson);
-const layoutRoot = resolveLocalDependencyPath(dependencySpec);
+const configuredLayoutRoot = resolveLocalDependencyPath(dependencySpec);
+const layoutRoot = configuredLayoutRoot ?? defaultLayoutV2Root;
 
-if (!layoutRoot) {
-    console.info("[layout-v2-build] skipped: layout-v2 is not a local file/link dependency", {
-        dependencySpec,
-    });
-} else {
-    buildLayoutV2(layoutRoot);
-}
+ensureLayoutV2Source(layoutRoot, configuredLayoutRoot === null);
+buildLayoutV2(layoutRoot);

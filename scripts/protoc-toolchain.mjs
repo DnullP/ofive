@@ -13,6 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
 export const PINNED_PROTOC_VERSION = "33.4";
+const PINNED_PROTOC_MAJOR = PINNED_PROTOC_VERSION.split(".")[0] ?? PINNED_PROTOC_VERSION;
 
 /**
  * @function parseProtocVersion

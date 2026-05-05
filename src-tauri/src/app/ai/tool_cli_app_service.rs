@@ -14,7 +14,7 @@ use crate::domain::ai::sidecar_contract::{
     SidecarCapabilityCallRequest, SidecarCapabilityCallResult,
 };
 
-const OFIVE_TOOLBOX_SIDECAR: &str = "ofive-toolbox";
+const OFIVE_TOOLBOX_SIDECAR: &str = "ofive-toolbox-sidecar";
 const CAPABILITY_CALL_COMMAND: &str = "capability-call";
 
 /// 通过受控 CLI sidecar 执行一次内置 capability 调用。

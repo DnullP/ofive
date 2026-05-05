@@ -132,6 +132,28 @@ function terminateChild(child, signal = "SIGTERM") {
  * @returns {number[]} 监听指定端口的 pid 列表。
  */
 function listListeningPidsOnDevPort() {
+    if (process.platform === "win32") {
+        const result = spawnSync("powershell.exe", [
+            "-NoProfile",
+            "-Command",
+            `Get-NetTCPConnection -LocalPort ${String(DEV_SERVER_PORT)} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess`,
+        ], {
+            stdio: ["ignore", "pipe", "ignore"],
+            encoding: "utf8",
+        });
+
+        if (typeof result.status === "number" && result.status !== 0) {
+            return [];
+        }
+
+        return String(result.stdout)
+            .split(/\s+/)
+            .map((value) => Number.parseInt(value, 10))
+            .filter((value, index, values) => {
+                return Number.isInteger(value) && value > 0 && values.indexOf(value) === index;
+            });
+    }
+
     const result = spawnSync("lsof", [
         "-nP",
         `-iTCP:${String(DEV_SERVER_PORT)}`,
@@ -159,6 +181,23 @@ function listListeningPidsOnDevPort() {
  * @returns {string} 命令行文本，读取失败时返回空字符串。
  */
 function getProcessCommandLine(pid) {
+    if (process.platform === "win32") {
+        const result = spawnSync("powershell.exe", [
+            "-NoProfile",
+            "-Command",
+            `Get-CimInstance Win32_Process -Filter "ProcessId = ${String(pid)}" | Select-Object -ExpandProperty CommandLine`,
+        ], {
+            stdio: ["ignore", "pipe", "ignore"],
+            encoding: "utf8",
+        });
+
+        if (typeof result.status === "number" && result.status !== 0) {
+            return "";
+        }
+
+        return String(result.stdout).trim();
+    }
+
     const result = spawnSync("ps", ["-o", "command=", "-p", String(pid)], {
         stdio: ["ignore", "pipe", "ignore"],
         encoding: "utf8",

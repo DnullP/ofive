@@ -55,7 +55,7 @@ const SIDECAR_TARGETS = [
  */
 const RUST_TOOL_TARGETS = [
     {
-        id: "ofive-toolbox",
+        id: "ofive-toolbox-sidecar",
         manifestPath: path.join(projectRoot, "src-tauri", "Cargo.toml"),
         bin: "ofive-toolbox",
         targetDir: path.join(projectRoot, "src-tauri", "target"),

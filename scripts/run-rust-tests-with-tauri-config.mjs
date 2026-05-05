@@ -182,7 +182,7 @@ function ensurePlaceholderBinary(binaryPath, label) {
  * @throws {Error} 当 sidecar 画像缺少真实二进制时抛出异常。
  */
 function ensureSidecarBinaryForProfile(profile) {
-    const toolboxBinaryPath = resolveSidecarBinaryPath("ofive-toolbox");
+    const toolboxBinaryPath = resolveSidecarBinaryPath("ofive-toolbox-sidecar");
     ensurePlaceholderBinary(toolboxBinaryPath, "ofive-toolbox Rust tests");
 
     const binaryPath = resolveSidecarBinaryPath("ofive-ai-sidecar");

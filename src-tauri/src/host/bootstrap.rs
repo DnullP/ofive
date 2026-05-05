@@ -8,9 +8,9 @@ use crate::infra::logging;
 use crate::state::AppState;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::{
-    window::Color, App, LogicalSize, Manager, PhysicalPosition, Position, Size, WebviewWindow,
-};
+#[cfg(target_os = "macos")]
+use tauri::window::Color;
+use tauri::{App, LogicalSize, Manager, PhysicalPosition, Position, Size, WebviewWindow};
 
 /// 构建全局共享状态。
 pub(crate) fn build_app_state() -> AppState {

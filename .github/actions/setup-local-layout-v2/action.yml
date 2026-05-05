@@ -24,6 +24,6 @@ runs:
         git clone "${clone_args[@]}" https://github.com/DnullP/layout-v2.git "${layout_root}"
 
         test -f "${GITHUB_WORKSPACE}/../layout-v2/package.json"
-        npm ci --prefix "${layout_root}" --ignore-scripts
+        bun install --cwd "${layout_root}" --ignore-scripts
         bun run --cwd "${layout_root}" build
         test -f "${GITHUB_WORKSPACE}/../layout-v2/dist/index.js"

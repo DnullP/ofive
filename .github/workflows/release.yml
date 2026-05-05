@@ -86,9 +86,6 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      - name: Setup local layout-v2 dependency
-        uses: ./.github/actions/setup-local-layout-v2
-
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -321,7 +318,7 @@ jobs:
       - name: Verify production build
         run: bun run build
 
-  build-installers:
+  build-macos-installer:
     name: Build macOS ARM64
     needs:
       - release-version
@@ -430,7 +427,8 @@ jobs:
     name: Publish GitHub Release
     needs:
       - release-version
-      - build-installers
+      - build-macos-installer
+      - build-windows-installer
       - go-sidecar
       - frontend-unit
       - rust-tests-core
@@ -461,8 +459,9 @@ jobs:
           {
             echo "Automated ofive desktop release for ${{ github.ref_name }}."
             echo
-            echo "Included installer:"
+            echo "Included builds:"
             echo "- macOS ARM64"
+            echo "- Windows x64 installer and portable zip"
             echo
             echo "This open-source build is ad-hoc signed and intentionally not Apple-notarized."
             echo "If macOS reports the app is damaged or cannot verify the developer, move it to Applications and run:"
@@ -484,3 +483,83 @@ jobs:
           files: release-assets/*
           fail_on_unmatched_files: true
           overwrite_files: true
+
+  build-windows-installer:
+    name: Build Windows x64
+    needs:
+      - release-version
+    runs-on: windows-latest
+    env:
+      OFIVE_SIDECAR_PROFILE: release
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sidecars/go/ofive-ai-agent/go.mod
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Tauri installer bundle
+        shell: pwsh
+        run: bun run tauri build --target "x86_64-pc-windows-msvc" --ci
+
+      - name: Build portable app archive
+        shell: pwsh
+        run: bun run package:windows-portable -- --target "x86_64-pc-windows-msvc"
+
+      - name: Collect installer assets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $candidateRoots = @(
+            "src-tauri/target/x86_64-pc-windows-msvc/release/bundle",
+            "src-tauri/target/release/bundle"
+          )
+          $bundleRoot = $candidateRoots | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $bundleRoot) {
+            Write-Error "Tauri bundle directory not found for target x86_64-pc-windows-msvc"
+          }
+
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $artifacts = Get-ChildItem -Path $bundleRoot -Recurse -File | Where-Object {
+            $_.Extension -eq ".msi" -or $_.Extension -eq ".zip" -or ($_.Extension -eq ".exe" -and $_.Name -like "*setup*")
+          }
+
+          foreach ($artifact in $artifacts) {
+            Copy-Item -LiteralPath $artifact.FullName -Destination (Join-Path "release-assets" "windows-x64-$($artifact.Name)")
+          }
+
+          if (-not (Get-ChildItem -Path release-assets -File)) {
+            Get-ChildItem -Path $bundleRoot -Recurse -File | Select-Object -ExpandProperty FullName
+            Write-Error "No Windows installer assets found under $bundleRoot"
+          }
+
+          Get-ChildItem -Path release-assets -File
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ofive-windows-x64-${{ github.ref_name }}
+          path: release-assets/*
+          if-no-files-found: error

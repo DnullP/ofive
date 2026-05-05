@@ -8,7 +8,9 @@
 //! 该模块仅负责窗口层视觉效果，不处理前端透明样式。
 
 use serde::{Deserialize, Serialize};
-use tauri::{Theme, WebviewWindow};
+#[cfg(any(target_os = "macos", test))]
+use tauri::Theme;
+use tauri::WebviewWindow;
 
 #[cfg(target_os = "windows")]
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -104,6 +106,7 @@ pub enum AppThemeMode {
 }
 
 impl AppThemeMode {
+    #[cfg(any(target_os = "macos", test))]
     fn to_tauri_theme(&self) -> Theme {
         match self {
             Self::Dark => Theme::Dark,
