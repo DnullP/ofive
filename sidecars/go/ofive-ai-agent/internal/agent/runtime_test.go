@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"google.golang.org/adk/session"
+	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/toolconfirmation"
 	"google.golang.org/genai"
 )
@@ -434,6 +435,15 @@ func TestBuildAgentInstructionIncludesPatchShapeGuidance(t *testing.T) {
 	if !strings.Contains(instruction, "Use the provided native function tools directly") {
 		t.Fatalf("expected native function tool guidance in instruction, got %q", instruction)
 	}
+	if !strings.Contains(instruction, "If a relevant skill is available") {
+		t.Fatalf("expected skill guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "Prefer ofive managed capability tools for local vault files") {
+		t.Fatalf("expected local tool routing guidance in instruction, got %q", instruction)
+	}
+	if !strings.Contains(instruction, "Use MCP tools for external integrations") {
+		t.Fatalf("expected MCP routing guidance in instruction, got %q", instruction)
+	}
 	if !strings.Contains(instruction, "Legacy fallback only") || !strings.Contains(instruction, plannedCapabilityCallStartTag) {
 		t.Fatalf("expected legacy managed CLI fallback guidance in instruction, got %q", instruction)
 	}
@@ -579,10 +589,48 @@ func TestBuildRuntimeExtraInstructionIncludesContextSnapshot(t *testing.T) {
 	}
 }
 
+func requireToolsetByName(t *testing.T, toolsets []tool.Toolset, name string) tool.Toolset {
+	t.Helper()
+
+	for _, toolset := range toolsets {
+		if toolset.Name() == name {
+			return toolset
+		}
+	}
+
+	names := make([]string, 0, len(toolsets))
+	for _, toolset := range toolsets {
+		names = append(names, toolset.Name())
+	}
+	t.Fatalf("expected toolset %q, got %v", name, names)
+	return nil
+}
+
+func requireToolName(t *testing.T, toolset tool.Toolset, expected string) {
+	t.Helper()
+
+	tools, err := toolset.Tools(nil)
+	if err != nil {
+		t.Fatalf("toolset %q should list tools: %v", toolset.Name(), err)
+	}
+
+	for _, item := range tools {
+		if item.Name() == expected {
+			return
+		}
+	}
+
+	names := make([]string, 0, len(tools))
+	for _, item := range tools {
+		names = append(names, item.Name())
+	}
+	t.Fatalf("expected tool %q in toolset %q, got %v", expected, toolset.Name(), names)
+}
+
 func TestBuildAgentToolsetsUsesCallbackBridgeForManagedCapabilities(t *testing.T) {
 	t.Parallel()
 
-	toolsets, err := buildAgentToolsets(CapabilityBridgeConfig{
+	toolsets, err := buildAgentToolsets(context.Background(), CapabilityBridgeConfig{
 		CallbackURL:   "http://127.0.0.1:9000/capabilities/call",
 		CallbackToken: "test-token",
 		Tools: []ToolDescriptor{{
@@ -594,16 +642,42 @@ func TestBuildAgentToolsetsUsesCallbackBridgeForManagedCapabilities(t *testing.T
 	if err != nil {
 		t.Fatalf("buildAgentToolsets returned error: %v", err)
 	}
-	if len(toolsets) != 1 {
-		t.Fatalf("expected one managed capability toolset, got %d", len(toolsets))
+	if len(toolsets) != 2 {
+		t.Fatalf("expected embedded skills plus one managed capability toolset, got %d", len(toolsets))
 	}
-	tools, err := toolsets[0].Tools(nil)
+	skillToolset := requireToolsetByName(t, toolsets, ofiveSkillToolsetName)
+	requireToolName(t, skillToolset, "list_skills")
+	requireToolName(t, skillToolset, "load_skill")
+	requireToolName(t, skillToolset, "load_skill_resource")
+
+	managedToolset := requireToolsetByName(t, toolsets, "ofive-managed-capabilities")
+	requireToolName(t, managedToolset, "vault_read_markdown_file")
+}
+
+func TestBuildAgentToolsetsKeepsManagedCapabilitiesWhenMCPConfigured(t *testing.T) {
+	t.Parallel()
+
+	toolsets, err := buildAgentToolsets(context.Background(), CapabilityBridgeConfig{
+		CallbackURL:   "http://127.0.0.1:9000/capabilities/call",
+		CallbackToken: "test-token",
+		MCPServerURL:  "http://127.0.0.1:57874/mcp",
+		MCPAuthToken:  "test-token",
+		Tools: []ToolDescriptor{{
+			CapabilityID: "vault.read_markdown_file",
+			Name:         "vault_read_markdown_file",
+		}},
+	})
 	if err != nil {
-		t.Fatalf("managed toolset should list tools: %v", err)
+		t.Fatalf("buildAgentToolsets returned error: %v", err)
 	}
-	if len(tools) != 1 || tools[0].Name() != "vault_read_markdown_file" {
-		t.Fatalf("unexpected managed tools: %+v", tools)
+	if len(toolsets) != 3 {
+		t.Fatalf("expected skills, managed tools, and MCP toolsets, got %d", len(toolsets))
 	}
+
+	requireToolsetByName(t, toolsets, ofiveSkillToolsetName)
+	requireToolsetByName(t, toolsets, "mcp_tool_set")
+	managedToolset := requireToolsetByName(t, toolsets, "ofive-managed-capabilities")
+	requireToolName(t, managedToolset, "vault_read_markdown_file")
 }
 
 func TestExtractPendingToolConfirmationReturnsOriginalToolDetails(t *testing.T) {

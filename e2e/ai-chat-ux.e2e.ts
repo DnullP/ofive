@@ -18,6 +18,30 @@ async function waitForAiChatReady(page: Page): Promise<void> {
 }
 
 test.describe("ai chat ux", () => {
+    test("composer should stay bottom-aligned in empty conversation state", async ({ page }) => {
+        await waitForAiChatReady(page);
+
+        const panel = page.locator(".ai-chat-panel");
+        const welcomeCard = page.locator(".ai-chat-welcome-card");
+        const composer = page.locator(".ai-chat-composer");
+
+        await expect(welcomeCard).toBeVisible();
+        await expect(composer).toBeVisible();
+
+        const [panelBox, composerBox] = await Promise.all([
+            panel.boundingBox(),
+            composer.boundingBox(),
+        ]);
+
+        if (!panelBox || !composerBox) {
+            throw new Error("AI chat panel layout boxes should be measurable in empty state.");
+        }
+
+        const panelBottom = panelBox.y + panelBox.height;
+        const composerBottom = composerBox.y + composerBox.height;
+        expect(Math.abs(panelBottom - composerBottom)).toBeLessThanOrEqual(1);
+    });
+
     test("assistant wikilink should open the target file in a tab section", async ({ page }) => {
         await waitForAiChatReady(page);
 

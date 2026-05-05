@@ -1051,8 +1051,6 @@ func (r *Runtime) buildAgent(
 	extraInstruction string,
 	trace func(DebugTraceEvent) error,
 ) (agent.Agent, string, error) {
-	_ = ctx
-
 	switch strings.TrimSpace(vendorConfig.VendorID) {
 	case "minimax-anthropic":
 		llm := llms.NewMinimaxLLM(
@@ -1069,7 +1067,7 @@ func (r *Runtime) buildAgent(
 			})
 		})
 
-		toolsets, err := buildAgentToolsets(bridgeConfig)
+		toolsets, err := buildAgentToolsets(ctx, bridgeConfig)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1116,7 +1114,7 @@ func (r *Runtime) buildAgent(
 			})
 		})
 
-		toolsets, err := buildAgentToolsets(bridgeConfig)
+		toolsets, err := buildAgentToolsets(ctx, bridgeConfig)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1179,11 +1177,34 @@ func shouldUseLegacyManagedConfirmationFlow(
 	return canUseCapabilityPlanning(bridgeConfig)
 }
 
-func buildAgentToolsets(bridgeConfig CapabilityBridgeConfig) ([]tool.Toolset, error) {
-	if strings.TrimSpace(bridgeConfig.MCPServerURL) != "" {
-		return buildMCPToolsets(bridgeConfig)
+// buildAgentToolsets combines embedded skills, managed capability tools, and
+// optional MCP tools into the ADK toolset list for one agent turn.
+func buildAgentToolsets(
+	ctx context.Context,
+	bridgeConfig CapabilityBridgeConfig,
+) ([]tool.Toolset, error) {
+	managedToolsets, err := buildCapabilityToolsets(bridgeConfig)
+	if err != nil {
+		return nil, err
 	}
-	return buildCapabilityToolsets(bridgeConfig)
+
+	mcpToolsets, err := buildMCPToolsets(bridgeConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	combinedToolsets := append([]tool.Toolset{}, managedToolsets...)
+	combinedToolsets = append(combinedToolsets, mcpToolsets...)
+	if len(combinedToolsets) == 0 {
+		return nil, nil
+	}
+
+	skillToolsets, err := buildSkillToolsets(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(skillToolsets, combinedToolsets...), nil
 }
 
 func runADKTurn(
@@ -1251,9 +1272,13 @@ func buildAgentInstruction(
 		plannedCapabilityCallStartTag + " ... " + plannedCapabilityCallEndTag +
 		" block and no extra text. The block JSON shape is {\"capabilityId\":\"vault.read_markdown_file\",\"input\":{...}}. " +
 		"Use capabilityId from the available tools list. For confirmation=true tools, still emit the block; ofive will ask the user before the managed CLI tool is executed. "
+	skillAndRoutingGuidance := "If a relevant skill is available, load it before executing a multi-step workflow. " +
+		"Prefer ofive managed capability tools for local vault files, notes, canvases, and workspace state. " +
+		"Use MCP tools for external integrations or user-provided remote systems, and keep mixed workflows on the correct side of that boundary. "
 
 	return baseInstruction + "\n\n" +
 		managedToolCallGuidance +
+		skillAndRoutingGuidance +
 		"Confirmation requests are single-flight: request at most one confirmation-required tool call at a time. Do not claim that several other write calls are already waiting for approval unless ofive actually emitted those confirmations. Wait for the approved tool result before planning the next mutating tool call. " +
 		"When the user asks about local vault content, notes, outlines, backlinks, search results, or graph data, you must use the provided tools instead of guessing or claiming you cannot access local files. " +
 		"Never invent tools, parameters, or file contents. If the user's request would require writing, renaming, deleting, or any other modification but no such executable tool is listed, explicitly say that the current assistant session only has non-mutating tools available and do not claim success. " +
