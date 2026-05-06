@@ -76,7 +76,6 @@ windows-sys = { version = "0.59", features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-tauri = { version = "2", features = ["macos-private-api"] }
 objc2 = "0.6"
 raw-window-handle = "0.6"
 

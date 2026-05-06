@@ -21,7 +21,7 @@ const (
 4. The load_skill_resource tool is only for files inside a loaded skill.`
 )
 
-//go:embed skills/**
+//go:embed skills/*/SKILL.md
 var embeddedSkillFiles embed.FS
 
 // buildSkillToolsets loads the sidecar's embedded ADK skills into one toolset.
