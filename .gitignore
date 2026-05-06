@@ -36,5 +36,7 @@ sidecars/go/**/.bin/
 src-tauri/binaries/
 .skills/
 skills/
+!sidecars/go/ofive-ai-agent/internal/agent/skills/
+!sidecars/go/ofive-ai-agent/internal/agent/skills/**
 
 .ofive/
