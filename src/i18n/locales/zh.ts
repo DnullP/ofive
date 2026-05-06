@@ -95,6 +95,25 @@ const zh = {
         loadTreeFailed: "加载仓库目录树失败",
     },
 
+    /* ==================== 外部项目阅读器 ==================== */
+    projectReader: {
+        activityTitle: "项目阅读",
+        panelTitle: "项目阅读",
+        addProject: "添加项目",
+        refreshIndex: "刷新索引",
+        selectProjectDirectory: "选择要阅读的项目目录",
+        enterProjectDirectory: "输入要阅读的项目目录",
+        projectSelectLabel: "选择外部项目",
+        noProjects: "暂无项目",
+        copySelection: "复制",
+        createWikiLink: "创建 WikiLink",
+        loadingCode: "正在加载代码…",
+        referencesLoading: "正在加载引用…",
+        resolvingSymbol: "正在解析符号…",
+        noIndexedDefinitionFound: "未找到索引定义。",
+        noSourceReferencesFound: "未找到源码引用。",
+    },
+
     /* ==================== 文件树 ==================== */
     fileTree: {
         files: "文件",

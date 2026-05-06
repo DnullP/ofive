@@ -11,7 +11,10 @@ import React, {
 import { Settings } from "lucide-react";
 import {
     readWorkbenchTabPayload,
+    WORKBENCH_LEFT_ACTIVITY_BAR_ID,
+    WORKBENCH_RIGHT_ACTIVITY_BAR_ID,
     VSCodeWorkbench,
+    type ActivityBarsState,
     type TabDragPreviewContentRenderContext,
     type PanelSectionPanelDefinition,
     type TabSectionTabDefinition,
@@ -33,6 +36,7 @@ import {
     SETTINGS_ACTIVITY_ID,
     ensureActivityBarConfigLoaded,
     mergeActivityBarConfig,
+    projectActivityBarConfigFromRuntime,
     updateActivityBarConfig,
     useActivityBarConfig,
     type DefaultActivityItemInfo,
@@ -224,6 +228,7 @@ function mapPanelsToDefinitions(panels: PanelDescriptor[]): WorkbenchPanelDefini
     return panels.map((panel) => ({
         id: panel.id,
         label: resolveTitle(panel.title),
+        icon: panel.icon,
         activityId: panel.activityId,
         position: panel.defaultPosition,
         order: panel.defaultOrder,
@@ -242,6 +247,7 @@ function mapInitialTabs(initialTabs?: TabInstanceDefinition[]): WorkbenchTabDefi
 
 function buildPanelRenderContext(
     workbenchContext: WorkbenchPanelContext,
+    workbenchApiRef: MutableRefObject<WorkbenchApi | null>,
     openFileHelper: (options: {
         relativePath: string;
         contentOverride?: string;
@@ -249,9 +255,53 @@ function buildPanelRenderContext(
     }) => Promise<void>,
     buildCommandContext: () => CommandContext,
 ): PanelRenderContext {
+    const workbenchApi = workbenchApiRef.current;
+    const workbenchContainerApi = workbenchApi
+        ? {
+            getPanel: (panelId: string) => {
+                const tab = workbenchApi.getTab(panelId);
+                if (!tab) return null;
+                return {
+                    id: tab.id,
+                    params: tab.params,
+                    api: {
+                        close: () => workbenchApi.closeTab(tab.id),
+                        setActive: () => workbenchApi.setActiveTab(tab.id),
+                        setTitle: (title: string) => workbenchApi.updateTab(tab.id, { title }),
+                        updateParameters: (params: Record<string, unknown>) => {
+                            workbenchApi.updateTab(tab.id, { params });
+                        },
+                    },
+                };
+            },
+            get panels() {
+                return workbenchApi.getTabs().map((tab) => ({
+                    id: tab.id,
+                    params: tab.params,
+                    api: {
+                        close: () => workbenchApi.closeTab(tab.id),
+                        setActive: () => workbenchApi.setActiveTab(tab.id),
+                        setTitle: (title: string) => workbenchApi.updateTab(tab.id, { title }),
+                        updateParameters: (params: Record<string, unknown>) => {
+                            workbenchApi.updateTab(tab.id, { params });
+                        },
+                    },
+                }));
+            },
+            addPanel: (options: { id: string; title: string; component: string; params?: Record<string, unknown> }) => {
+                workbenchApi.openTab({
+                    id: options.id,
+                    title: options.title,
+                    component: options.component,
+                    params: options.params,
+                });
+            },
+        }
+        : null;
+
     return {
         activeTabId: workbenchContext.activeTabId,
-        workbenchApi: null,
+        workbenchApi: workbenchContainerApi,
         hostPanelId: workbenchContext.hostPanelId,
         convertibleView: null,
         openTab: (tab: TabInstanceDefinition) => {
@@ -1010,7 +1060,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
             const activity = activitiesById.get(activityId);
             if (!activity || activity.type !== "callback") return;
-            activity.onActivate(buildPanelRenderContext(context, openFileHelper, buildCommandContext));
+            activity.onActivate(buildPanelRenderContext(context, workbenchApiRef, openFileHelper, buildCommandContext));
         },
         [activitiesById, openFileHelper, buildCommandContext],
     );
@@ -1032,7 +1082,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                     className="workbench-layout-v2__panel-focus-scope"
                     {...{ [PANEL_ID_DATA_ATTR]: panelId }}
                 >
-                    {panel.render(buildPanelRenderContext(context, openFileHelper, buildCommandContext))}
+                    {panel.render(buildPanelRenderContext(context, workbenchApiRef, openFileHelper, buildCommandContext))}
                 </div>
             );
         },
@@ -1215,6 +1265,15 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         [mergedActivityItems, activitiesById, buildCommandContext],
     );
 
+    const handleActivityBarsChange = useCallback((activityBars: ActivityBarsState) => {
+        updateActivityBarConfig(
+            projectActivityBarConfigFromRuntime(mergedActivityItems, {
+                left: activityBars.bars[WORKBENCH_LEFT_ACTIVITY_BAR_ID]?.icons.map((icon) => icon.id) ?? [],
+                right: activityBars.bars[WORKBENCH_RIGHT_ACTIVITY_BAR_ID]?.icons.map((icon) => icon.id) ?? [],
+            }),
+        );
+    }, [mergedActivityItems]);
+
     return (
         <div className="workbench-layout-v2" data-workbench-layout-mode="layout-v2">
             <VSCodeWorkbench
@@ -1244,6 +1303,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 onPanelLayoutChange={handlePanelLayoutChange}
                 onLayoutSnapshotChange={handleWorkspaceLayoutSnapshotChange}
                 onActivityIconContextMenu={handleActivityIconContextMenu}
+                onActivityBarsChange={handleActivityBarsChange}
                 onActiveTabChange={handleActiveTabChange}
                 onActivityBarBackgroundContextMenu={handleActivityBarBackgroundContextMenu}
                 apiRef={workbenchApiRef}

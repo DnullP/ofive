@@ -295,6 +295,9 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         "--cm-editor-font-size": `${editorFontSize}px`,
     } as CSSProperties), [editorFontFamily, editorFontSize]);
     const currentFilePath = String(props.params.path ?? i18n.t("editor.untitledFile"));
+    const initialCursorOffset = typeof props.params.initialCursorOffset === "number"
+        ? props.params.initialCursorOffset
+        : null;
     const initialDoc = useMemo(() => {
         const content = props.params.content;
         if (typeof content === "string") {
@@ -586,6 +589,21 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         onRequestFocusMarkdownTableVimNavigation: focusMarkdownTableVimNavigationTarget,
         onInitialContentReady: commitInitialContentPresentation,
     });
+
+    useEffect(() => {
+        if (!viewRef.current || initialCursorOffset === null) {
+            return;
+        }
+
+        const view = viewRef.current;
+        const targetOffset = Math.max(0, Math.min(initialCursorOffset, view.state.doc.length));
+        view.dispatch({
+            selection: {
+                anchor: targetOffset,
+            },
+            scrollIntoView: true,
+        });
+    }, [initialCursorOffset, viewRef, currentFilePath]);
 
     useEffect(() => {
         displayModeRef.current = effectiveDisplayMode;

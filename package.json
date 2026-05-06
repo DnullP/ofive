@@ -53,6 +53,7 @@
     "@cosmos.gl/graph": "^2.6.4",
     "@replit/codemirror-vim": "^6.3.0",
     "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-clipboard-manager": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2.5.3",
     "@xyflow/react": "^12.10.2",

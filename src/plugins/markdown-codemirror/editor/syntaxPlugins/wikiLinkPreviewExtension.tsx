@@ -28,6 +28,11 @@ import {
     readVaultMarkdownFile,
     resolveWikiLinkTarget,
 } from "../../../../api/vaultApi";
+import { ProjectReaderWikiLinkPreviewContent } from "../../../project-reader/ProjectReaderWikiLinkPreviewContent";
+import {
+    resolveProjectReaderWikiLinkPreview,
+    type ProjectReaderWikiLinkPreview,
+} from "../../../project-reader/projectReaderLinks";
 import { MarkdownReadView } from "../MarkdownReadView";
 import { resolveParentDirectory } from "../pathUtils";
 import {
@@ -99,8 +104,15 @@ type WikiLinkPreviewData =
     | { status: "error"; message: string }
     | {
         status: "ready";
+        kind: "markdown";
         resolvedPath: string;
         content: string;
+    }
+    | {
+        status: "ready";
+        kind: "project-reader";
+        resolvedPath: string;
+        preview: ProjectReaderWikiLinkPreview;
     };
 
 interface WikiLinkPreviewCardProps {
@@ -256,7 +268,7 @@ function WikiLinkPreviewCard(props: WikiLinkPreviewCardProps): ReactNode {
                         {`${i18n.t("editor.wikilinkPreviewError")} ${props.data.message}`}
                     </div>
                 ) : null}
-                {props.data.status === "ready" ? (
+                {props.data.status === "ready" && props.data.kind === "markdown" ? (
                     <WikiLinkPreviewParentContext.Provider value={props.previewId}>
                         <MarkdownReadView
                             content={props.data.content}
@@ -264,6 +276,9 @@ function WikiLinkPreviewCard(props: WikiLinkPreviewCardProps): ReactNode {
                             containerApi={props.containerApi}
                         />
                     </WikiLinkPreviewParentContext.Provider>
+                ) : null}
+                {props.data.status === "ready" && props.data.kind === "project-reader" ? (
+                    <ProjectReaderWikiLinkPreviewContent preview={props.data.preview} />
                 ) : null}
             </div>
         </div>
@@ -505,6 +520,23 @@ class WikiLinkPreviewPlugin implements PluginValue {
         cacheKey: string,
     ): Promise<void> {
         try {
+            const projectPreview = await resolveProjectReaderWikiLinkPreview(target.target);
+            if (!this.shouldAcceptAsyncResult(target, requestToken)) {
+                return;
+            }
+
+            if (projectPreview !== null) {
+                const readyData: WikiLinkPreviewData = {
+                    status: "ready",
+                    kind: "project-reader",
+                    resolvedPath: projectPreview.resolvedPath,
+                    preview: projectPreview,
+                };
+                this.previewCache.set(cacheKey, readyData);
+                this.renderPreview(target, readyData);
+                return;
+            }
+
             const resolved = await resolveWikiLinkTarget(currentDirectory, target.target);
             if (!this.shouldAcceptAsyncResult(target, requestToken)) {
                 return;
@@ -524,6 +556,7 @@ class WikiLinkPreviewPlugin implements PluginValue {
 
             const readyData: WikiLinkPreviewData = {
                 status: "ready",
+                kind: "markdown",
                 resolvedPath: resolved.relativePath,
                 content: file.content,
             };

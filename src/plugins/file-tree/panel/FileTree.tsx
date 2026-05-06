@@ -61,6 +61,7 @@ interface FileTreeProps {
     items: FileTreeItem[],
     targetDirectoryRelativePath: string,
   ) => void;
+  readOnly?: boolean;
   onCreateFileInDirectory?: (targetDirectoryRelativePath: string, draftName: string) => void;
   onCreateCanvasInDirectory?: (targetDirectoryRelativePath: string, draftName: string) => void;
   onCreateFolderInDirectory?: (targetDirectoryRelativePath: string, draftName: string) => void;
@@ -304,6 +305,7 @@ function TreeItem({
   onInputCompositionStart,
   onInputCompositionEnd,
   shouldDeferBlurCommit,
+  readOnly,
 }: {
   node: TreeNode;
   level: number;
@@ -335,6 +337,7 @@ function TreeItem({
   onInputCompositionStart: () => void;
   onInputCompositionEnd: () => void;
   shouldDeferBlurCommit: () => boolean;
+  readOnly: boolean;
 }): ReactNode {
   const { t } = useTranslation();
   const isExpanded = expanded.has(node.path);
@@ -432,9 +435,13 @@ function TreeItem({
           }
         }}
         onContextMenu={(event) => {
+          if (readOnly) {
+            event.preventDefault();
+            return;
+          }
           onOpenContextMenu(event, node);
         }}
-        draggable
+        draggable={!readOnly}
         onDragStart={(event) => {
           onBeginDrag(event, node);
         }}
@@ -491,6 +498,7 @@ function TreeItem({
               onInputCompositionStart={onInputCompositionStart}
               onInputCompositionEnd={onInputCompositionEnd}
               shouldDeferBlurCommit={shouldDeferBlurCommit}
+              readOnly={readOnly}
             />
           ))}
           {shouldRenderCreateInputInsideFolder && (
@@ -593,6 +601,7 @@ export function FileTree({
   onMoveItemsToDirectory,
   onMoveFileByDrop,
   onMoveItemsByDrop,
+  readOnly = false,
   onCreateFileInDirectory,
   onCreateCanvasInDirectory,
   onCreateFolderInDirectory,
@@ -1053,6 +1062,11 @@ export function FileTree({
     event: ReactMouseEvent<HTMLButtonElement>,
     node: TreeNode,
   ): Promise<void> => {
+    if (readOnly) {
+      event.preventDefault();
+      return;
+    }
+
     const nextSelectionPaths = selectedPaths.has(node.path)
       ? selectedPaths
       : new Set([node.path]);
@@ -1072,6 +1086,11 @@ export function FileTree({
   };
 
   const handleRootContextMenu = (event: ReactMouseEvent<HTMLElement>): void => {
+    if (readOnly) {
+      event.preventDefault();
+      return;
+    }
+
     const targetElement = event.target as HTMLElement | null;
     if (targetElement?.closest(".tree-item")) {
       return;
@@ -1087,6 +1106,11 @@ export function FileTree({
   };
 
   const handleBeginDrag = (event: ReactDragEvent<HTMLButtonElement>, node: TreeNode): void => {
+    if (readOnly) {
+      event.preventDefault();
+      return;
+    }
+
     const nextSelectionPaths = selectedPaths.has(node.path)
       ? selectedPaths
       : new Set([node.path]);
@@ -1386,6 +1410,7 @@ export function FileTree({
               onInputCompositionStart={handleInputCompositionStart}
               onInputCompositionEnd={handleInputCompositionEnd}
               shouldDeferBlurCommit={shouldDeferInputBlurCommit}
+              readOnly={readOnly}
             />
           ))
         ) : (

@@ -85,6 +85,25 @@ const en = {
         loadTreeFailed: "Failed to load vault tree",
     },
 
+    /* ==================== Project reader ==================== */
+    projectReader: {
+        activityTitle: "Project Reader",
+        panelTitle: "Project Reader",
+        addProject: "Add Project",
+        refreshIndex: "Refresh Index",
+        selectProjectDirectory: "Select project directory to read",
+        enterProjectDirectory: "Enter project directory to read",
+        projectSelectLabel: "Select external project",
+        noProjects: "No projects",
+        copySelection: "Copy",
+        createWikiLink: "Create WikiLink",
+        loadingCode: "Loading code...",
+        referencesLoading: "References loading...",
+        resolvingSymbol: "Resolving...",
+        noIndexedDefinitionFound: "No indexed definition found.",
+        noSourceReferencesFound: "No source references found.",
+    },
+
     /* ==================== File tree ==================== */
     fileTree: {
         files: "Files",

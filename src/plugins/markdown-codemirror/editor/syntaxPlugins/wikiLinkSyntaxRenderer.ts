@@ -18,6 +18,7 @@ import {
 import { resolveWikiLinkTarget } from "../../../../api/vaultApi";
 import { openFileInWorkbench } from "../../../../host/layout/openFileService";
 import { resolveParentDirectory } from "../pathUtils";
+import { openProjectReaderWikiLinkTarget } from "../../../project-reader/projectReaderLinks";
 import { parseWikiLinkParts } from "./wikiLinkParser";
 
 const WIKI_LINK_PATTERN = /(\[\[)([^\]\n]+?)(\]\])/g;
@@ -129,6 +130,10 @@ export async function openWikiLinkTarget(
     getCurrentFilePath: () => string,
     target: string,
 ): Promise<void> {
+    if (await openProjectReaderWikiLinkTarget(containerApi, target)) {
+        return;
+    }
+
     const currentFilePath = getCurrentFilePath();
     const currentDirectory = resolveParentDirectory(currentFilePath);
 

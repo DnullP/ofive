@@ -246,6 +246,7 @@ const MOCK_FILE_CONTENTS: Record<string, string> = {
     "test-resources/notes/network-segment.md": NETWORK_SEGMENT_SAMPLE,
     "test-resources/notes/latex-test.md": LATEX_TEST_SAMPLE,
     "test-resources/notes/header-wikilink-regression.md": "# [[Plain Note]] [[Target Note|Alias Note]]\n\nbody\n",
+    "test-resources/notes/project-reader-preview.md": "# Project Reader Preview\n\n[[mock-ofive:/src/main.ts:7:1-9:1|createMainRuntime]]\n",
     "test-resources/notes/scroll-regression.md": SCROLL_REGRESSION_SAMPLE,
     "test-resources/notes/scroll-regression-alt.md": SCROLL_REGRESSION_ALT_SAMPLE,
     "test-resources/notes/table-editor.md": TABLE_EDITOR_SAMPLE,

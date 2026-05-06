@@ -455,6 +455,10 @@ describe("aiChatShared", () => {
                     title: "a.md",
                     component: "markdown.codemirror",
                     active: true,
+                    projectId: null,
+                    projectName: null,
+                    rootPath: null,
+                    relativePath: null,
                 },
                 {
                     id: "graph",
@@ -462,12 +466,23 @@ describe("aiChatShared", () => {
                     title: "Graph",
                     component: "knowledge-graph",
                     active: false,
+                    projectId: null,
+                    projectName: null,
+                    rootPath: null,
+                    relativePath: null,
                 },
             ],
             files: [
                 { path: "notes/a.md", isDir: false },
                 { path: "notes", isDir: true },
                 { path: "canvas/board.canvas", isDir: false },
+            ],
+            projectReaderProjects: [
+                {
+                    id: "project-reader-1",
+                    name: "external-codebase",
+                    rootPath: "/tmp/external-codebase",
+                },
             ],
             settings: {
                 vendorId: "anthropic",
@@ -484,6 +499,15 @@ describe("aiChatShared", () => {
             fileCount: 2,
             directoryCount: 1,
             samplePaths: ["canvas/board.canvas", "notes/a.md"],
+        });
+        expect(snapshot.projectReader).toEqual({
+            projects: [
+                {
+                    id: "project-reader-1",
+                    name: "external-codebase",
+                    rootPath: "/tmp/external-codebase",
+                },
+            ],
         });
         expect(JSON.parse(serializeAiChatRuntimeContextSnapshot(snapshot)).ai.model).toBe("claude-sonnet");
     });

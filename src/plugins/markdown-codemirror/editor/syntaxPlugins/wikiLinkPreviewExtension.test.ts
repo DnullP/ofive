@@ -14,6 +14,20 @@ import {
     isWikiLinkPreviewModifierPressed,
     resolveWikiLinkPreviewAtMouseEvent,
 } from "./wikiLinkPreviewExtension";
+import { resolveProjectReaderWikiLinkPreview } from "../../../project-reader/projectReaderLinks";
+
+describe("resolveProjectReaderWikiLinkPreview", () => {
+    it("resolves project-reader wikilink preview to source code snippet", async () => {
+        const preview = await resolveProjectReaderWikiLinkPreview(
+            "mock-ofive:/src/main.ts:7:1-9:1",
+        );
+
+        expect(preview).not.toBeNull();
+        expect(preview?.resolvedPath).toBe("mock-ofive:/src/main.ts:7:1-9:1");
+        expect(preview?.snippetLines.map((line) => line.lineNumber)).toEqual([7, 8, 9]);
+        expect(preview?.content).toContain("export function createMainRuntime(): AppRuntime");
+    });
+});
 
 function createRenderTarget(options?: {
     rendered?: boolean;

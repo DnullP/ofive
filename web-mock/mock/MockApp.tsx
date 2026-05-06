@@ -24,6 +24,7 @@ import { CalendarPanel } from "../../src/plugins/calendar/CalendarPanel";
 import { CalendarTab } from "../../src/plugins/calendar/CalendarTab";
 import { activatePlugin as activateCommandPalettePlugin } from "../../src/plugins/command-palette/commandPalettePlugin";
 import { activatePlugin as activateAiChatPlugin } from "../../src/plugins/ai-chat/aiChatPlugin";
+import { activatePlugin as activateProjectReaderPlugin } from "../../src/plugins/project-reader/projectReaderPlugin";
 import { SettingsTab } from "../../src/host/layout/SettingsTab";
 import { useConfigSync } from "../../src/host/config/configStore";
 import { useVaultTreeSync } from "../../src/host/vault/vaultStore";
@@ -460,6 +461,46 @@ const MOCK_AI_TOOLS: AiToolDescriptor[] = [
         riskLevel: "medium",
         requiresConfirmation: true,
     },
+    {
+        capabilityId: "project_reader.list_projects",
+        apiVersion: "v1",
+        name: "project_reader_list_projects",
+        description: "List imported external projects.",
+        inputSchema: {},
+        outputSchema: {},
+        riskLevel: "low",
+        requiresConfirmation: false,
+    },
+    {
+        capabilityId: "project_reader.get_project_tree",
+        apiVersion: "v1",
+        name: "project_reader_get_project_tree",
+        description: "Read the cached file tree for an imported project.",
+        inputSchema: {},
+        outputSchema: {},
+        riskLevel: "low",
+        requiresConfirmation: false,
+    },
+    {
+        capabilityId: "project_reader.read_project_file",
+        apiVersion: "v1",
+        name: "project_reader_read_project_file",
+        description: "Read a file from an imported project.",
+        inputSchema: {},
+        outputSchema: {},
+        riskLevel: "low",
+        requiresConfirmation: false,
+    },
+    {
+        capabilityId: "project_reader.resolve_symbol",
+        apiVersion: "v1",
+        name: "project_reader_resolve_symbol",
+        description: "Resolve a symbol inside an imported project.",
+        inputSchema: {},
+        outputSchema: {},
+        riskLevel: "low",
+        requiresConfirmation: false,
+    },
 ];
 
 function createMockAiRuntime(): BrowserMockAiRuntime {
@@ -702,6 +743,7 @@ function ensureMockComponentsRegistered(): void {
 
     activateCommandPalettePlugin();
     activateAiChatPlugin();
+    activateProjectReaderPlugin();
     registerCommands([
         {
             id: "fileTree.deleteSelected",

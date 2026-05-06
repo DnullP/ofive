@@ -7,6 +7,7 @@ pub(crate) mod ai;
 pub(crate) mod app_storage;
 pub(crate) mod capability;
 pub(crate) mod persistence;
+pub(crate) mod project_reader;
 pub(crate) mod semantic_index;
 pub(crate) mod sync;
 pub(crate) mod vault;

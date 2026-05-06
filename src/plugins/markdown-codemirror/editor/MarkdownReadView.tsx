@@ -40,6 +40,11 @@ import {
     resolveWikiLinkTarget,
     resolveMediaEmbedTarget,
 } from "../../../api/vaultApi";
+import { ProjectReaderWikiLinkPreviewContent } from "../../project-reader/ProjectReaderWikiLinkPreviewContent";
+import {
+    resolveProjectReaderWikiLinkPreview,
+    type ProjectReaderWikiLinkPreview,
+} from "../../project-reader/projectReaderLinks";
 import { resolveParentDirectory } from "./pathUtils";
 import { openWikiLinkTarget } from "./syntaxPlugins/wikiLinkSyntaxRenderer";
 import {
@@ -74,8 +79,15 @@ type ReadModeWikiLinkPreviewData =
     | { status: "error"; message: string }
     | {
         status: "ready";
+        kind: "markdown";
         resolvedPath: string;
         content: string;
+    }
+    | {
+        status: "ready";
+        kind: "project-reader";
+        resolvedPath: string;
+        preview: ProjectReaderWikiLinkPreview;
     };
 
 interface ReadModeWikiLinkAnchorProps extends ComponentPropsWithoutRef<"a"> {
@@ -370,8 +382,25 @@ function ReadModeWikiLinkAnchor(props: ReadModeWikiLinkAnchorProps): ReactNode {
         const requestToken = requestSequenceRef.current + 1;
         requestSequenceRef.current = requestToken;
 
-        void resolveWikiLinkTarget(currentDirectory, wikiLinkTarget)
-            .then(async (resolved) => {
+        void resolveProjectReaderWikiLinkPreview(wikiLinkTarget)
+            .then(async (projectPreview) => {
+                if (requestSequenceRef.current !== requestToken) {
+                    return;
+                }
+
+                if (projectPreview !== null) {
+                    const readyData: ReadModeWikiLinkPreviewData = {
+                        status: "ready",
+                        kind: "project-reader",
+                        resolvedPath: projectPreview.resolvedPath,
+                        preview: projectPreview,
+                    };
+                    readModeWikiLinkPreviewCache.set(cacheKey, readyData);
+                    setPreviewData(readyData);
+                    return;
+                }
+
+                const resolved = await resolveWikiLinkTarget(currentDirectory, wikiLinkTarget);
                 if (requestSequenceRef.current !== requestToken) {
                     return;
                 }
@@ -390,6 +419,7 @@ function ReadModeWikiLinkAnchor(props: ReadModeWikiLinkAnchorProps): ReactNode {
 
                 const readyData: ReadModeWikiLinkPreviewData = {
                     status: "ready",
+                    kind: "markdown",
                     resolvedPath: resolved.relativePath,
                     content: file.content,
                 };
@@ -710,7 +740,7 @@ function ReadModeWikiLinkAnchor(props: ReadModeWikiLinkAnchorProps): ReactNode {
                                         {`${i18n.t("editor.wikilinkPreviewError")} ${previewData.message}`}
                                     </div>
                                 ) : null}
-                                {previewData.status === "ready" ? (
+                                {previewData.status === "ready" && previewData.kind === "markdown" ? (
                                     <WikiLinkPreviewParentContext.Provider value={previewIdRef.current}>
                                         <MarkdownReadView
                                             content={previewData.content}
@@ -718,6 +748,9 @@ function ReadModeWikiLinkAnchor(props: ReadModeWikiLinkAnchorProps): ReactNode {
                                             containerApi={containerApi}
                                         />
                                     </WikiLinkPreviewParentContext.Provider>
+                                ) : null}
+                                {previewData.status === "ready" && previewData.kind === "project-reader" ? (
+                                    <ProjectReaderWikiLinkPreviewContent preview={previewData.preview} />
                                 ) : null}
                             </div>
                         </div>

@@ -39,6 +39,7 @@ import {
     type AiVendorDefinition,
     type AiVendorModelDefinition,
 } from "../../api/aiApi";
+import { listProjectReaderProjects } from "../../api/projectReaderApi";
 import {
     ensureAiChatSettingsLoaded,
     getAiChatSettingsSnapshot,
@@ -66,6 +67,10 @@ import {
 import { resolveParentDirectory } from "../markdown-codemirror/editor/pathUtils";
 import { resolveWikiLinkTarget } from "../../api/vaultApi";
 import { openFileInWorkbench } from "../../host/layout/openFileService";
+import {
+    openProjectReaderWikiLinkTarget,
+    resolveProjectReaderWikiLinkTabDefinition,
+} from "../project-reader/projectReaderLinks";
 import {
     createEmptyPendingStreamBinding,
     createPendingStreamBinding,
@@ -352,6 +357,10 @@ function buildOpenTabsSnapshot(
         title: resolvePanelParamString(panel.params, ["title", "name"]) ?? panel.id,
         component: resolvePanelParamString(panel.params, ["component", "openerId", "type"]),
         active: panel.id === context?.activeTabId,
+        projectId: resolvePanelParamString(panel.params, ["projectId"]),
+        projectName: resolvePanelParamString(panel.params, ["projectName"]),
+        rootPath: resolvePanelParamString(panel.params, ["rootPath"]),
+        relativePath: resolvePanelParamString(panel.params, ["relativePath"]),
     }));
 }
 
@@ -869,6 +878,18 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     );
 
     const handleOpenWikiLinkTarget = async (target: string): Promise<void> => {
+        if (props.tabContainerApi && await openProjectReaderWikiLinkTarget(props.tabContainerApi, target)) {
+            return;
+        }
+
+        if (props.panelContext) {
+            const projectTab = await resolveProjectReaderWikiLinkTabDefinition(target);
+            if (projectTab) {
+                props.panelContext.openTab(projectTab);
+                return;
+            }
+        }
+
         const currentDirectory = resolveParentDirectory(activeEditor?.path ?? "");
         const resolved = await resolveWikiLinkTarget(currentDirectory, target);
         if (!resolved) {
@@ -1584,12 +1605,20 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         }
 
         const openTabs = buildOpenTabsSnapshot(props.panelContext);
+        const projectReaderProjects = await listProjectReaderProjects()
+            .then((response) => response.projects.map((project) => ({
+                id: project.id,
+                name: project.name,
+                rootPath: project.rootPath,
+            })))
+            .catch(() => []);
         const contextSnapshotJson = serializeAiChatRuntimeContextSnapshot(
             buildAiChatRuntimeContextSnapshot({
                 vaultPath: currentVaultPath,
                 activeFile: activeEditor,
                 openTabs,
                 files,
+                projectReaderProjects,
                 settings,
             }),
         );

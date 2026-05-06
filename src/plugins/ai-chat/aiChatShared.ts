@@ -65,6 +65,9 @@ export interface AiChatRuntimeContextSnapshot {
         directoryCount: number;
         samplePaths: string[];
     };
+    projectReader: {
+        projects: AiChatRuntimeProjectReaderProjectSnapshot[];
+    } | null;
     ai: {
         vendorId: string | null;
         model: string | null;
@@ -81,6 +84,20 @@ export interface AiChatRuntimeOpenTabSnapshot {
     title: string | null;
     component: string | null;
     active: boolean;
+    projectId: string | null;
+    projectName: string | null;
+    rootPath: string | null;
+    relativePath: string | null;
+}
+
+/**
+ * @interface AiChatRuntimeProjectReaderProjectSnapshot
+ * @description 项目阅读器导入项目的最小上下文。
+ */
+export interface AiChatRuntimeProjectReaderProjectSnapshot {
+    id: string;
+    name: string;
+    rootPath: string;
 }
 
 export interface BuildAiChatRuntimeContextSnapshotInput {
@@ -96,6 +113,7 @@ export interface BuildAiChatRuntimeContextSnapshotInput {
         path: string;
         isDir: boolean;
     }>;
+    projectReaderProjects?: AiChatRuntimeProjectReaderProjectSnapshot[];
     settings: AiChatSettings | null;
 }
 
@@ -214,6 +232,10 @@ export function buildAiChatRuntimeContextSnapshot(
             title: tab.title,
             component: tab.component,
             active: tab.active,
+            projectId: tab.projectId,
+            projectName: tab.projectName,
+            rootPath: tab.rootPath ? tab.rootPath.replace(/\\/g, "/") : null,
+            relativePath: tab.relativePath ? tab.relativePath.replace(/\\/g, "/") : null,
         })),
         fileTree: {
             totalEntries: normalizedFiles.length,
@@ -224,6 +246,15 @@ export function buildAiChatRuntimeContextSnapshot(
                 .slice(0, AI_CHAT_CONTEXT_MAX_SAMPLE_PATHS)
                 .map((entry) => entry.path),
         },
+        projectReader: input.projectReaderProjects?.length
+            ? {
+                projects: input.projectReaderProjects.map((project) => ({
+                    id: project.id,
+                    name: project.name,
+                    rootPath: project.rootPath.replace(/\\/g, "/"),
+                })),
+            }
+            : null,
         ai: {
             vendorId: input.settings?.vendorId?.trim() || null,
             model: input.settings?.model?.trim() || null,

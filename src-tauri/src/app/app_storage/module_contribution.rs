@@ -12,6 +12,7 @@ const APP_STORAGE_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[BackendModu
     namespace: "crate::app::app_storage::storage_registry_facade",
     allowed_paths: &[
         "src/app/app_storage/",
+        "src/app/project_reader/",
         "src/app/semantic_index/",
         "src/infra/vector/",
         "src/test_support/",

@@ -1,0 +1,182 @@
+/**
+ * @module e2e/project-reader
+ * @description 外部项目阅读器基础链路回归测试。
+ */
+
+import { expect, test, type Page } from "@playwright/test";
+import { gotoMockVaultPage } from "./helpers/mockVault";
+
+async function waitForWorkbench(page: Page): Promise<void> {
+    await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
+    await page.locator("[data-testid='sidebar-left']").waitFor({ state: "visible" });
+    await page.getByTestId("activity-bar-item-files").waitFor({ state: "visible" });
+}
+
+async function openProjectReaderPanel(page: Page): Promise<void> {
+    await page.getByTestId("activity-bar-item-files").click();
+    await expect(page.getByTestId("activity-bar-item-project-reader")).toHaveCount(0);
+    const projectReaderPanelIcon = page.locator(
+        "[data-layout-panel-section-id='left-panel-section'] [data-layout-role='panel'][data-layout-panel-id='project-reader']",
+    );
+    await expect(projectReaderPanelIcon).toBeVisible();
+    await projectReaderPanelIcon.click();
+}
+
+async function expandMockNotes(page: Page): Promise<void> {
+    const notesTreeItem = page.locator(".tree-item[data-tree-path='test-resources/notes']");
+    if (await notesTreeItem.count()) {
+        return;
+    }
+
+    await page.locator(".tree-item[data-tree-path='test-resources']").click();
+    await page.locator(".tree-item[data-tree-path='test-resources/notes']").click();
+}
+
+async function openMockNote(page: Page, relativePath: string): Promise<void> {
+    await page.getByTestId("activity-bar-item-files").click();
+    await expandMockNotes(page);
+    await page.locator(`.tree-item[data-tree-path='${relativePath}']`).click();
+    await page.locator(".layout-v2-tab-section__card--active .cm-content").waitFor({ state: "visible" });
+}
+
+async function readVisibleEditorState(page: Page): Promise<{
+    title: string | null;
+}> {
+    return page.evaluate(() => {
+        const activeCard = document.querySelector<HTMLElement>(".layout-v2-tab-section__card[aria-hidden='false']");
+        const titleInput = activeCard?.querySelector(".cm-tab-title-input");
+
+        return {
+            title: titleInput instanceof HTMLInputElement ? titleInput.value : null,
+        };
+    });
+}
+
+async function waitForVisibleEditorTitle(page: Page, expectedTitle: string): Promise<void> {
+    await expect.poll(async () => (await readVisibleEditorState(page)).title).toBe(expectedTitle);
+}
+
+async function clickTokenWithModifier(page: Page, locator: ReturnType<Page["locator"]>, modifier: "Meta" | "Control"): Promise<void> {
+    const box = await locator.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) {
+        throw new Error("Project reader token is missing a bounding box.");
+    }
+
+    const x = box.x + Math.min(box.width - 1, 4);
+    const y = box.y + box.height / 2;
+    await page.keyboard.down(modifier);
+    try {
+        await page.mouse.move(x, y);
+        await page.mouse.down();
+        await page.mouse.up();
+    } finally {
+        await page.keyboard.up(modifier);
+    }
+}
+
+test.describe("project reader", () => {
+    test("should preview project source wikilink on modifier hover", async ({ page }) => {
+        await gotoMockVaultPage(page, "project-reader-preview", "/web-mock/mock-tauri-test.html?showControls=0");
+        await waitForWorkbench(page);
+
+        await openMockNote(page, "test-resources/notes/project-reader-preview.md");
+        await page.locator(".layout-v2-tab-section__card--active .cm-line", { hasText: "Project Reader Preview" }).click();
+
+        const projectWikiLink = page.locator(".layout-v2-tab-section__card--active .cm-rendered-wikilink-display", {
+            hasText: "createMainRuntime",
+        });
+        await expect(projectWikiLink).toBeVisible();
+
+        await page.keyboard.down("Control");
+        try {
+            await projectWikiLink.hover();
+            const preview = page.locator(".cm-wikilink-preview-tooltip .project-reader-wikilink-preview");
+            await expect(preview).toBeVisible();
+            await expect(preview).toContainText("export function createMainRuntime(): AppRuntime");
+            await expect(preview).toContainText("return createApp();");
+            await expect(page.locator(".cm-wikilink-preview-tooltip .cm-wikilink-preview__status")).toHaveCount(0);
+        } finally {
+            await page.keyboard.up("Control");
+        }
+    });
+
+    test("should open imported project, read code and resolve symbol popup", async ({ page }) => {
+        await gotoMockVaultPage(page, "project-reader", "/web-mock/mock-tauri-test.html?showControls=0");
+        await waitForWorkbench(page);
+
+        await openProjectReaderPanel(page);
+        const panel = page.locator(".project-reader-panel");
+        await expect(panel).toBeVisible();
+
+        const projectSelect = page.locator(".project-reader-project-select");
+        await expect(projectSelect).toBeVisible();
+        await expect(projectSelect).toHaveValue(/mock-ofive/);
+
+        await page.locator(".tree-item[data-tree-path='src']").click();
+        await page.locator(".tree-item[data-tree-path='src/main.ts']").click();
+
+        const codeTab = page.locator(".project-reader-code-tab");
+        await expect(codeTab).toBeVisible();
+        await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/main.ts");
+        await expect(codeTab.locator(".project-reader-code-line").filter({ hasText: "createMainRuntime" })).toBeVisible();
+        await expect(codeTab.locator(".project-reader-code-line.is-referenced").first()).toBeVisible();
+        await expect(codeTab.locator(".project-reader-code-reference").filter({ hasText: "note1.md" })).toBeVisible();
+
+        await codeTab.locator(".project-reader-code-reference").filter({ hasText: "note1.md" }).first().click();
+        await waitForVisibleEditorTitle(page, "note1");
+        await expect(page.locator(".layout-v2-tab-section__tab-main", { hasText: "note1.md" })).toBeVisible();
+        await expect(page.locator(".layout-v2-tab-section__card--active .cm-line", { hasText: "同一个Session" })).toBeVisible();
+        await page.locator(".layout-v2-tab-section__tab-main", { hasText: "main.ts" }).first().click();
+        await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/main.ts");
+
+        const runtimeLineText = codeTab.locator(".project-reader-code-line", { hasText: "AppRuntime" })
+            .first()
+            .locator(".project-reader-code-text");
+        const runtimeLineBox = await runtimeLineText.boundingBox();
+        expect(runtimeLineBox).not.toBeNull();
+        if (!runtimeLineBox) {
+            throw new Error("Project reader runtime line is missing a bounding box.");
+        }
+
+        await page.mouse.move(runtimeLineBox.x + 1, runtimeLineBox.y + runtimeLineBox.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(runtimeLineBox.x + Math.min(runtimeLineBox.width - 1, 320), runtimeLineBox.y + runtimeLineBox.height / 2, {
+            steps: 8,
+        });
+        await page.mouse.up();
+        await expect.poll(async () => page.evaluate(() => window.getSelection()?.toString() ?? ""))
+            .toContain("AppRuntime");
+        await runtimeLineText.click({ button: "right", position: { x: 12, y: Math.max(2, runtimeLineBox.height / 2) } });
+        await expect.poll(async () => page.evaluate(() => window.getSelection()?.toString() ?? ""))
+            .toContain("AppRuntime");
+        await page.keyboard.press("Escape");
+        await page.evaluate(() => window.getSelection()?.removeAllRanges());
+
+        const runtimeToken = codeTab.locator(".project-reader-code-token", { hasText: "AppRuntime" }).first();
+        await expect(runtimeToken).toBeVisible();
+        await page.keyboard.down("Control");
+        try {
+            await runtimeToken.hover();
+            await expect(runtimeToken).toHaveClass(/project-reader-code-token--hovered/);
+        } finally {
+            await page.keyboard.up("Control");
+        }
+
+        await clickTokenWithModifier(page, codeTab.getByText("AppRuntime", { exact: true }).first(), "Meta");
+
+        await page.locator(".tree-item[data-tree-path='src/alternate.ts']").click();
+        await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/alternate.ts");
+        await expect(codeTab.locator(".project-reader-code-reference").filter({ hasText: "note2.md" })).toBeVisible();
+
+        await codeTab.locator(".project-reader-code-reference").filter({ hasText: "note2.md" }).first().click();
+        await waitForVisibleEditorTitle(page, "note2");
+        await expect(page.locator(".layout-v2-tab-section__tab-main", { hasText: "note2.md" })).toBeVisible();
+        await expect(page.locator(".layout-v2-tab-section__card--active .cm-line", { hasText: "名为Session的结构" })).toBeVisible();
+        await page.locator(".layout-v2-tab-section__tab-main", { hasText: "alternate.ts" }).first().click();
+
+        await clickTokenWithModifier(page, codeTab.getByText("AppRuntime", { exact: true }).first(), "Meta");
+        await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/alternate.ts");
+        await expect(codeTab.locator(".project-reader-code-line.is-target-line")).toBeVisible();
+    });
+});

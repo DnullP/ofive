@@ -9,6 +9,7 @@ mod descriptor;
 mod executor;
 mod policy;
 mod registry;
+mod project_reader_catalog;
 mod semantic_index_catalog;
 mod vault_catalog;
 
@@ -20,5 +21,6 @@ pub(crate) use descriptor::{
 pub(crate) use executor::{CapabilityExecutionContext, CapabilityExecutionRequest};
 pub(crate) use policy::evaluate_capability_access;
 pub(crate) use registry::CapabilityRegistry;
+pub(crate) use project_reader_catalog::project_reader_capability_descriptors;
 pub(crate) use semantic_index_catalog::semantic_index_capability_descriptors;
 pub(crate) use vault_catalog::vault_capability_descriptors;

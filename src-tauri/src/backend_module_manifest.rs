@@ -49,6 +49,7 @@ pub(crate) fn builtin_backend_module_manifests() -> Vec<BackendModuleManifest> {
         crate::app::app_storage::module_contribution::app_storage_backend_module_manifest(),
         crate::app::vault::module_contribution::vault_backend_module_manifest(),
         crate::app::ai::module_contribution::ai_backend_module_manifest(),
+        crate::app::project_reader::module_contribution::project_reader_backend_module_manifest(),
         crate::app::semantic_index::module_contribution::semantic_index_backend_module_manifest(),
         crate::app::sync::module_contribution::sync_backend_module_manifest(),
     ]

@@ -5,5 +5,6 @@
 pub(crate) mod ai_service;
 pub(crate) mod backend_plugin_contracts;
 pub(crate) mod persistence_contracts;
+pub(crate) mod project_reader_contracts;
 pub(crate) mod semantic_index_contracts;
 pub(crate) mod vault_contracts;

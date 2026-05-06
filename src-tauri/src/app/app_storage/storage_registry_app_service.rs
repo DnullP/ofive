@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use crate::infra::persistence::app_private_store;
 
 const SEMANTIC_INDEX_CONSUMERS: &[&str] = &["semantic-index"];
+const PROJECT_READER_CONSUMERS: &[&str] = &["project-reader"];
 
 #[derive(Clone, Copy)]
 struct AppStorageOwnerDescriptor {
@@ -17,11 +18,18 @@ struct AppStorageOwnerDescriptor {
     description: &'static str,
 }
 
-const BUILTIN_APP_STORAGE_OWNERS: &[AppStorageOwnerDescriptor] = &[AppStorageOwnerDescriptor {
-    owner: "semantic-index",
-    consumer_module_ids: SEMANTIC_INDEX_CONSUMERS,
-    description: "Semantic-index shared application assets such as embedding models.",
-}];
+const BUILTIN_APP_STORAGE_OWNERS: &[AppStorageOwnerDescriptor] = &[
+    AppStorageOwnerDescriptor {
+        owner: "semantic-index",
+        consumer_module_ids: SEMANTIC_INDEX_CONSUMERS,
+        description: "Semantic-index shared application assets such as embedding models.",
+    },
+    AppStorageOwnerDescriptor {
+        owner: "project-reader",
+        consumer_module_ids: PROJECT_READER_CONSUMERS,
+        description: "Project-reader external project registry and read-only file index.",
+    },
+];
 
 /// 解析应用级 owner 目录，并校验消费者是否有权访问。
 pub(crate) fn resolve_app_storage_owner_dir(

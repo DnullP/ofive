@@ -384,6 +384,7 @@ mod tests {
 
     static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(1);
     static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    const TEST_OWNER: &str = "app-private-store-test-owner";
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
     #[serde(rename_all = "camelCase")]
@@ -414,7 +415,7 @@ mod tests {
         set_app_private_store_test_root(Some(root.clone())).expect("test root should set");
 
         save_app_private_state(
-            "semantic-index",
+            TEST_OWNER,
             "settings",
             &MockAppState {
                 enabled: true,
@@ -423,7 +424,7 @@ mod tests {
         )
         .expect("state should save");
 
-        let loaded = load_app_private_state::<MockAppState>("semantic-index", "settings")
+        let loaded = load_app_private_state::<MockAppState>(TEST_OWNER, "settings")
             .expect("state should load")
             .expect("state should exist");
 
@@ -443,7 +444,7 @@ mod tests {
         set_app_private_store_test_root(Some(root.clone())).expect("test root should set");
 
         save_app_private_state(
-            "semantic-index",
+            TEST_OWNER,
             "models",
             &MockAppState {
                 enabled: true,
@@ -452,7 +453,7 @@ mod tests {
         )
         .expect("models should save");
         save_app_private_state(
-            "semantic-index",
+            TEST_OWNER,
             "settings",
             &MockAppState {
                 enabled: false,
@@ -461,12 +462,12 @@ mod tests {
         )
         .expect("settings should save");
 
-        let items = list_app_private_states("semantic-index").expect("states should list");
+        let items = list_app_private_states(TEST_OWNER).expect("states should list");
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].state_key, "models");
         assert_eq!(items[1].state_key, "settings");
 
-        let owner_dir = app_private_owner_dir("semantic-index").expect("owner dir should resolve");
+        let owner_dir = app_private_owner_dir(TEST_OWNER).expect("owner dir should resolve");
         assert!(owner_dir.starts_with(&root));
 
         set_app_private_store_test_root(None).expect("test root should reset");

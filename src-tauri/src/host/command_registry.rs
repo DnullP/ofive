@@ -108,6 +108,30 @@ define_app_commands![
         crate::host::commands::persistence_commands::execute_persistence_request
     ),
     (
+        "list_project_reader_projects",
+        crate::host::commands::project_reader_commands::list_project_reader_projects
+    ),
+    (
+        "add_project_reader_project",
+        crate::host::commands::project_reader_commands::add_project_reader_project
+    ),
+    (
+        "get_project_reader_tree",
+        crate::host::commands::project_reader_commands::get_project_reader_tree
+    ),
+    (
+        "read_project_reader_file",
+        crate::host::commands::project_reader_commands::read_project_reader_file
+    ),
+    (
+        "get_project_reader_code_references",
+        crate::host::commands::project_reader_commands::get_project_reader_code_references
+    ),
+    (
+        "resolve_project_reader_symbol",
+        crate::host::commands::project_reader_commands::resolve_project_reader_symbol
+    ),
+    (
         "update_main_window_acrylic_effect",
         crate::host::commands::window_commands::update_main_window_acrylic_effect
     ),

@@ -36,6 +36,7 @@ import type { PanelRenderContext, PanelPosition } from "../layout/workbenchContr
  * @description 侧边栏面板的注册描述，包含面板的渲染和定位信息。
  * @field id             - 面板唯一标识
  * @field title          - 面板标题（字符串或返回字符串的函数，支持 i18n 动态更新）
+ * @field icon           - 渲染在 sidebar panel rail 上的 icon
  * @field activityId     - 关联的活动图标 ID，决定在哪个 activity 分组下显示
  * @field defaultPosition - 默认侧栏位置：left / right
  * @field defaultOrder   - 默认排序值（数值越小越靠前）
@@ -47,6 +48,8 @@ export interface PanelDescriptor {
     id: string;
     /** 面板标题（字符串或函数，函数支持 i18n 动态更新） */
     title: string | (() => string);
+    /** 渲染在 sidebar panel rail 上的 icon */
+    icon?: ReactNode;
     /** 关联的活动图标 ID */
     activityId: string;
     /** 默认侧栏位置 */
