@@ -81,6 +81,24 @@ describe("shouldSuppressLineSyntaxRendering", () => {
         expect(result).toBe(true);
     });
 
+    test("compositionstart 同步保护开启后即使 view.composing 尚未翻转也应跳过当前行渲染", () => {
+        const result = shouldSuppressLineSyntaxRendering(
+            {
+                composing: false,
+                state: {
+                    field: () => true,
+                    selection: {
+                        ranges: [{ from: 12, to: 12, empty: true }],
+                    },
+                },
+            } as never,
+            10,
+            20,
+        );
+
+        expect(result).toBe(true);
+    });
+
     test("非组合态时不应跳过当前行渲染", () => {
         const result = shouldSuppressLineSyntaxRendering(
             {

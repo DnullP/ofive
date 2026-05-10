@@ -16,8 +16,6 @@ import {
     useContextMenuProvider,
     type NativeContextMenuItem,
 } from "../../host/layout/contextMenuCenter";
-import { emitEditorRevealRequestedEvent } from "../../host/events/appEventBus";
-import { buildFileTabId, openFileInWorkbench } from "../../host/layout/openFileService";
 import {
     copyProjectReaderTextToClipboard,
     getProjectReaderCodeReferences,
@@ -26,7 +24,6 @@ import {
     type ProjectReaderCodeReference,
     type ProjectReaderSymbolLocation,
 } from "../../api/projectReaderApi";
-import { readVaultMarkdownFile } from "../../api/vaultApi";
 import {
     buildProjectReaderWikiLinkMarkup,
     buildProjectReaderSymbolResolveContext,
@@ -54,8 +51,6 @@ interface CodeTabState {
     loading: boolean;
     error: string | null;
     references: ProjectReaderCodeReference[];
-    referencesLoading: boolean;
-    referencesError: string | null;
 }
 
 interface SymbolPopupState {
@@ -283,17 +278,6 @@ function buildProjectReaderCodeReferenceLineClassName(
     ].filter(Boolean).join(" ");
 }
 
-function buildProjectReaderCodeReferenceSummary(
-    reference: ProjectReaderCodeReference,
-): string {
-    const target = reference.target;
-    const targetPath = target.relativePath.split("/").pop() ?? target.relativePath;
-    const targetRange = target.lineNumber !== null && target.lineNumber !== undefined
-        ? `:${String(target.lineNumber)}`
-        : "";
-    return `${reference.linkText} → ${targetPath}${targetRange}`;
-}
-
 function rankProjectReaderCodeReferences(
     references: ProjectReaderCodeReference[],
 ): ProjectReaderCodeReference[] {
@@ -325,28 +309,6 @@ function isLineInsideProjectReaderReference(
     }
     const endLine = reference.target.endLineNumber ?? startLine;
     return lineNumber >= startLine && lineNumber <= endLine;
-}
-
-function resolveProjectReaderReferenceInitialOffset(
-    content: string,
-    lineNumber: number,
-    columnNumber: number,
-): number {
-    const targetLine = Math.max(1, lineNumber);
-    const targetColumn = Math.max(1, columnNumber);
-    let offset = 0;
-    let currentLine = 1;
-
-    while (currentLine < targetLine && offset < content.length) {
-        const newlineIndex = content.indexOf("\n", offset);
-        if (newlineIndex < 0) {
-            return content.length;
-        }
-        offset = newlineIndex + 1;
-        currentLine += 1;
-    }
-
-    return Math.min(content.length, offset + targetColumn - 1);
 }
 
 function getCodeTextElementForLine(scroller: HTMLElement, lineNumber: number): HTMLElement | null {
@@ -720,8 +682,6 @@ export function ProjectReaderCodeTab(
         loading: true,
         error: null,
         references: [],
-        referencesLoading: false,
-        referencesError: null,
     });
     const [symbolPopup, setSymbolPopup] = useState<SymbolPopupState | null>(null);
     const [hoveredTokenId, setHoveredTokenId] = useState<string | null>(null);
@@ -781,8 +741,6 @@ export function ProjectReaderCodeTab(
                 loading: false,
                 error: "Missing project file parameters.",
                 references: [],
-                referencesLoading: false,
-                referencesError: null,
             });
             props.api.markContentReady?.();
             return;
@@ -799,8 +757,6 @@ export function ProjectReaderCodeTab(
                     loading: false,
                     error: null,
                     references: [],
-                    referencesLoading: true,
-                    referencesError: null,
                 });
                 props.api.markContentReady?.();
             })
@@ -814,8 +770,6 @@ export function ProjectReaderCodeTab(
                     loading: false,
                     error: error instanceof Error ? error.message : String(error),
                     references: [],
-                    referencesLoading: false,
-                    referencesError: null,
                 });
                 props.api.markContentReady?.();
             });
@@ -831,12 +785,6 @@ export function ProjectReaderCodeTab(
         }
 
         let disposed = false;
-        setState((previous) => ({
-            ...previous,
-            referencesLoading: true,
-            referencesError: null,
-        }));
-
         void getProjectReaderCodeReferences(projectId)
             .then((response) => {
                 if (disposed) {
@@ -850,19 +798,15 @@ export function ProjectReaderCodeTab(
                 setState((previous) => ({
                     ...previous,
                     references,
-                    referencesLoading: false,
-                    referencesError: null,
                 }));
             })
-            .catch((error) => {
+            .catch(() => {
                 if (disposed) {
                     return;
                 }
                 setState((previous) => ({
                     ...previous,
                     references: [],
-                    referencesLoading: false,
-                    referencesError: error instanceof Error ? error.message : String(error),
                 }));
             });
 
@@ -1009,62 +953,6 @@ export function ProjectReaderCodeTab(
             endColumnNumber,
         });
         setSymbolPopup(null);
-    };
-
-    const openReferenceSource = async (reference: ProjectReaderCodeReference): Promise<void> => {
-        const sourcePath = reference.sourcePath;
-        const sourceLineNumber = Math.max(1, reference.sourceLineNumber);
-        const sourceColumnNumber = Math.max(1, reference.sourceColumnNumber);
-        let initialCursorOffset = 0;
-
-        try {
-            const sourceFile = await readVaultMarkdownFile(sourcePath);
-            initialCursorOffset = resolveProjectReaderReferenceInitialOffset(
-                sourceFile.content,
-                sourceLineNumber,
-                sourceColumnNumber,
-            );
-        } catch (error) {
-            console.warn("[project-reader] failed to preload reference source before opening", {
-                sourcePath,
-                message: error instanceof Error ? error.message : String(error),
-            });
-        }
-
-        const tabId = buildFileTabId(sourcePath);
-        const existingPanel = props.containerApi.getPanel(tabId);
-        if (existingPanel) {
-            existingPanel.api.updateParameters?.({
-                ...(existingPanel.params ?? {}),
-                initialCursorOffset,
-                autoFocus: true,
-            });
-            existingPanel.api.setActive();
-            window.requestAnimationFrame(() => {
-                emitEditorRevealRequestedEvent({
-                    articleId: tabId,
-                    path: sourcePath,
-                    line: sourceLineNumber,
-                });
-            });
-            return;
-        }
-
-        await openFileInWorkbench({
-            containerApi: props.containerApi,
-            relativePath: sourcePath,
-            tabParams: {
-                initialCursorOffset,
-                autoFocus: true,
-            },
-        });
-        window.requestAnimationFrame(() => {
-            emitEditorRevealRequestedEvent({
-                articleId: tabId,
-                path: sourcePath,
-                line: sourceLineNumber,
-            });
-        });
     };
 
     const handleCodeModifierMouseDown = async (event: MouseEvent<HTMLElement>): Promise<void> => {
@@ -1250,48 +1138,7 @@ export function ProjectReaderCodeTab(
             <div className="project-reader-code-meta">
                 <span>{projectName}</span>
                 <span>{relativePath}</span>
-                {state.referencesLoading ? (
-                    <span className="project-reader-code-meta__state">
-                        {t("projectReader.referencesLoading")}
-                    </span>
-                ) : null}
             </div>
-            {state.referencesError ? (
-                <div className="project-reader-code-references-error">{state.referencesError}</div>
-            ) : null}
-            {state.referencesLoading ? (
-                <div className="project-reader-code-references__empty">
-                    {t("projectReader.referencesLoading")}
-                </div>
-            ) : state.references.length > 0 ? (
-                <div className="project-reader-code-references">
-                    {state.references.map((reference) => (
-                        <button
-                            key={getReferenceLineKey(reference)}
-                            type="button"
-                            className="project-reader-code-reference"
-                            onClick={() => {
-                                void openReferenceSource(reference);
-                            }}
-                            title={reference.sourcePath}
-                        >
-                            <span className="project-reader-code-reference__title">
-                                {reference.title}
-                            </span>
-                            <span className="project-reader-code-reference__path">
-                                {reference.sourcePath}:{reference.sourceLineNumber}
-                            </span>
-                            <span className="project-reader-code-reference__text">
-                                {buildProjectReaderCodeReferenceSummary(reference)}
-                            </span>
-                        </button>
-                    ))}
-                </div>
-            ) : (
-                <div className="project-reader-code-references__empty">
-                    {t("projectReader.noSourceReferencesFound")}
-                </div>
-            )}
             <div
                 ref={scrollerRef}
                 className={`project-reader-code-scroller window-no-drag${hoveredTokenId ? " is-command-hovering" : ""}`}

@@ -14,6 +14,7 @@ import {
     type ProjectReaderSymbolResolveContext,
     type ProjectReaderSymbolLocation,
 } from "../../api/projectReaderApi";
+import { reportProjectSourceBacklinkTarget } from "../../host/editor/activeBacklinkTargetStore";
 
 export const PROJECT_READER_PANEL_ID = "project-reader";
 export const PROJECT_READER_CODE_TAB_COMPONENT_ID = "project-reader.code";
@@ -87,6 +88,26 @@ export function buildProjectReaderTabDefinition(input: ProjectReaderTabInput): T
             endColumnNumber: input.endColumnNumber ?? null,
         },
     };
+}
+
+export function reportProjectReaderTabBacklinkTarget(tab: TabInstanceDefinition): void {
+    const params = tab.params ?? {};
+    if (
+        typeof params.projectId !== "string"
+        || typeof params.projectName !== "string"
+        || typeof params.rootPath !== "string"
+        || typeof params.relativePath !== "string"
+    ) {
+        return;
+    }
+
+    reportProjectSourceBacklinkTarget({
+        tabId: tab.id,
+        projectId: params.projectId,
+        projectName: params.projectName,
+        rootPath: params.rootPath,
+        relativePath: normalizeProjectRelativePath(params.relativePath),
+    });
 }
 
 export function buildProjectReaderWikiLinkTarget(
@@ -247,6 +268,7 @@ export function openProjectReaderLocationInWorkbench(
     if (existing) {
         existing.api.updateParameters?.(tab.params ?? {});
         existing.api.setActive();
+        reportProjectReaderTabBacklinkTarget(tab);
         return;
     }
 
@@ -256,6 +278,8 @@ export function openProjectReaderLocationInWorkbench(
         component: tab.component,
         params: tab.params,
     });
+    containerApi.getPanel(tab.id)?.api.setActive();
+    reportProjectReaderTabBacklinkTarget(tab);
 }
 
 export function parseProjectReaderWikiLinkTarget(target: string): ProjectReaderLinkTarget | null {
@@ -338,6 +362,7 @@ export async function openProjectReaderWikiLinkTarget(
     if (existing) {
         existing.api.updateParameters?.(tab.params ?? {});
         existing.api.setActive();
+        reportProjectReaderTabBacklinkTarget(tab);
         return true;
     }
 
@@ -347,5 +372,7 @@ export async function openProjectReaderWikiLinkTarget(
         component: tab.component,
         params: tab.params,
     });
+    containerApi.getPanel(tab.id)?.api.setActive();
+    reportProjectReaderTabBacklinkTarget(tab);
     return true;
 }

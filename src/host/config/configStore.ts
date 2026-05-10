@@ -99,6 +99,7 @@ const LAST_VAULT_PATH_STORAGE_KEY = "ofive:last-vault-path";
  * @field notificationsEnabled - 是否开启前端消息通知
  * @field notificationsMaxVisible - 前端同时最多显示的通知数量，范围 1–10
  * @field frontmatterTemplate - Frontmatter 模板，支持 {{filename}} / {{date}} / {{directory}} 占位符
+ * @field frontmatterAutoInsertOnCreate - 创建新 Markdown 笔记时是否自动插入 frontmatter 模板
  * @field restoreWorkspaceLayout - 重启时是否恢复上次的工作区布局和标签页
  */
 export interface FeatureSettings {
@@ -168,6 +169,8 @@ export interface FeatureSettings {
     notificationsMaxVisible: number;
     /** Frontmatter 模板，支持 {{filename}} / {{date}} / {{directory}} 占位符 */
     frontmatterTemplate: string;
+    /** 创建新 Markdown 笔记时是否自动插入 frontmatter 模板，默认 false */
+    frontmatterAutoInsertOnCreate: boolean;
     /** 重启时是否恢复上次的工作区布局和标签页，默认 true */
     restoreWorkspaceLayout: boolean;
 }
@@ -253,6 +256,7 @@ export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
     notificationsEnabled: true,
     notificationsMaxVisible: 3,
     frontmatterTemplate: "---\ntitle: {{filename}}\ndate: {{date}}\n---",
+    frontmatterAutoInsertOnCreate: false,
     restoreWorkspaceLayout: true,
 };
 
@@ -524,6 +528,10 @@ function normalizeBackendConfig(config: VaultConfig): {
         typeof featuresObj.frontmatterTemplate === "string"
             ? (featuresObj.frontmatterTemplate as string)
             : DEFAULT_FEATURE_SETTINGS.frontmatterTemplate;
+    const frontmatterAutoInsertOnCreate =
+        typeof featuresObj.frontmatterAutoInsertOnCreate === "boolean"
+            ? featuresObj.frontmatterAutoInsertOnCreate
+            : DEFAULT_FEATURE_SETTINGS.frontmatterAutoInsertOnCreate;
     const restoreWorkspaceLayout =
         typeof featuresObj.restoreWorkspaceLayout === "boolean"
             ? featuresObj.restoreWorkspaceLayout
@@ -564,6 +572,7 @@ function normalizeBackendConfig(config: VaultConfig): {
         notificationsEnabled,
         notificationsMaxVisible,
         frontmatterTemplate,
+        frontmatterAutoInsertOnCreate,
         restoreWorkspaceLayout,
     };
 
@@ -609,6 +618,7 @@ function normalizeBackendConfig(config: VaultConfig): {
         featuresObj.notificationsEnabled !== notificationsEnabled ||
         featuresObj.notificationsMaxVisible !== notificationsMaxVisible ||
         featuresObj.frontmatterTemplate !== frontmatterTemplate ||
+        featuresObj.frontmatterAutoInsertOnCreate !== frontmatterAutoInsertOnCreate ||
         featuresObj.restoreWorkspaceLayout !== restoreWorkspaceLayout;
 
     return {
@@ -647,6 +657,7 @@ function normalizeBackendConfig(config: VaultConfig): {
             notificationsEnabled,
             notificationsMaxVisible,
             frontmatterTemplate,
+            frontmatterAutoInsertOnCreate,
             restoreWorkspaceLayout,
         },
         changed,

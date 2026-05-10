@@ -101,10 +101,12 @@ import { createMarkdownTableSyntaxExtension } from "./syntaxPlugins/markdownTabl
 import { createTaskCheckboxToggleExtension } from "./syntaxPlugins/listSyntaxRenderer";
 import { createWikiLinkNavigationExtension } from "./syntaxPlugins/wikiLinkSyntaxRenderer";
 import { createWikiLinkPreviewExtension } from "./syntaxPlugins/wikiLinkPreviewExtension";
+import { setLineSyntaxImeCompositionActive } from "./syntaxRenderRegistry";
 import {
     registerVimTokenProvider,
     unregisterVimTokenProvider,
 } from "./vimChineseMotionExtension";
+import { createVimImeInputPriorityExtension } from "./vimImeInputPriorityExtension";
 import { createImeCompositionGuard } from "../../../utils/imeInputGuard";
 
 const SHARED_EDITOR_FONT_FAMILY_CSS_VALUE = "var(--cm-editor-font-family)";
@@ -567,7 +569,13 @@ export function useCodeMirrorEditorLifecycle(
     const exitFrontmatterVimNavigationRef = useRef(options.onRequestExitFrontmatterVimNavigation);
     const focusFrontmatterVimNavigationRef = useRef(options.onRequestFocusFrontmatterVimNavigation);
     const focusMarkdownTableVimNavigationRef = useRef(options.onRequestFocusMarkdownTableVimNavigation);
+    const vimModeEnabledRef = useRef(options.vimModeEnabled);
     const editorImeCompositionGuard = useRef(createImeCompositionGuard()).current;
+    const editorImeCompositionAnchorRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        vimModeEnabledRef.current = options.vimModeEnabled;
+    }, [options.vimModeEnabled]);
 
     useEffect(() => {
         exitFrontmatterVimNavigationRef.current = options.onRequestExitFrontmatterVimNavigation;
@@ -625,6 +633,23 @@ export function useCodeMirrorEditorLifecycle(
 
         const extensions = [
             vimModeCompartmentRef.current.of(options.vimModeEnabled ? vim() : []),
+            createVimImeInputPriorityExtension({
+                isVimModeEnabled: () => vimModeEnabledRef.current,
+                focusWidgetNavigationTarget: (widget, position, blockFrom) => {
+                    if (widget === "frontmatter") {
+                        return focusFrontmatterVimNavigationRef.current(position);
+                    }
+
+                    if (typeof blockFrom !== "number") {
+                        return false;
+                    }
+
+                    return focusMarkdownTableVimNavigationRef.current({
+                        blockFrom,
+                        position,
+                    });
+                },
+            }),
             editorBaseSetup,
             markdown(),
             createCodeMirrorThemeExtension(),
@@ -698,12 +723,52 @@ export function useCodeMirrorEditorLifecycle(
                         return false;
                     }
                 },
-                compositionstart() {
+                compositionstart(_event, view) {
                     editorImeCompositionGuard.handleCompositionStart();
+                    editorImeCompositionAnchorRef.current = view.state.selection.main.head;
+                    setLineSyntaxImeCompositionActive(view, true);
                     return false;
                 },
-                compositionend() {
+                beforeinput(event, view) {
+                    if (event.inputType === "insertCompositionText") {
+                        editorImeCompositionAnchorRef.current ??= view.state.selection.main.head;
+                        setLineSyntaxImeCompositionActive(view, true);
+                    }
+                    if (
+                        (event.inputType === "deleteCompositionText" || event.inputType === "deleteContentBackward")
+                        && (event.isComposing || editorImeCompositionGuard.state.isComposing || view.composing)
+                    ) {
+                        const compositionAnchor = editorImeCompositionAnchorRef.current;
+                        if (typeof compositionAnchor === "number") {
+                            // Some IMEs cancel preedit text with Backspace and briefly report the
+                            // selection at the start of the active line. Keep the next commit at
+                            // the original composition anchor instead of letting Vim see a jump.
+                            window.requestAnimationFrame(() => {
+                                const anchor = Math.max(0, Math.min(compositionAnchor, view.state.doc.length));
+                                const selection = view.state.selection.main;
+                                if (!selection.empty || selection.head >= anchor) {
+                                    return;
+                                }
+
+                                const anchorLine = view.state.doc.lineAt(anchor);
+                                const selectionLine = view.state.doc.lineAt(selection.head);
+                                if (selectionLine.number !== anchorLine.number) {
+                                    return;
+                                }
+
+                                view.dispatch({
+                                    selection: { anchor },
+                                    scrollIntoView: true,
+                                });
+                            });
+                        }
+                    }
+                    return false;
+                },
+                compositionend(_event, view) {
                     editorImeCompositionGuard.handleCompositionEnd();
+                    editorImeCompositionAnchorRef.current = null;
+                    setLineSyntaxImeCompositionActive(view, false);
                     return false;
                 },
             }),

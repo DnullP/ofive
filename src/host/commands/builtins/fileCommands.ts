@@ -32,6 +32,8 @@ import {
     buildCreatedCanvasInitialContent,
     resolveCreatedCanvasPath,
 } from "../../../utils/canvasFileSpec";
+import { buildCreatedMarkdownInitialContent } from "../../../utils/frontmatterTemplate";
+import { getConfigSnapshot } from "../../config/configStore";
 import { emitFileTreeRenameRequestedEvent } from "../../events/appEventBus";
 import { markContentAsSaved } from "../../editor/autoSaveService";
 import {
@@ -173,18 +175,6 @@ function resolveCreatedDirectoryPath(directoryPath: string, draftName: string): 
 }
 
 /**
- * @function buildCreatedMarkdownInitialContent
- * @description 为新建 Markdown 文件生成初始正文，仅保留去后缀的一级标题。
- * @param relativePath 新文件相对路径。
- * @returns 初始正文。
- */
-function buildCreatedMarkdownInitialContent(relativePath: string): string {
-    const fileName = relativePath.split("/").pop() ?? relativePath;
-    const title = fileName.replace(/\.(md|markdown)$/i, "");
-    return `# ${title}\n`;
-}
-
-/**
  * @function resolveBaseDirectoryForCreateCommand
  * @description 解析创建命令目标目录，优先文件树选中项，其次当前文章目录。
  * @param context 命令执行上下文。
@@ -231,7 +221,10 @@ async function executeCreateFileInFocusedDirectory(context: CommandContext): Pro
         return;
     }
 
-    const initialContent = buildCreatedMarkdownInitialContent(relativePath);
+    const initialContent = buildCreatedMarkdownInitialContent(
+        relativePath,
+        getConfigSnapshot().featureSettings,
+    );
 
     await createVaultMarkdownFile(relativePath, initialContent);
     context.openFileTab(relativePath, initialContent, {

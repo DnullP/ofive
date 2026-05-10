@@ -23,8 +23,8 @@ const PROJECT_READER_PUBLIC_SURFACES: &[BackendModulePublicSurface] =
     }];
 
 #[cfg(test)]
-const PROJECT_READER_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] =
-    &[ModulePrivateNamespaceTemplate {
+const PROJECT_READER_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[
+    ModulePrivateNamespaceTemplate {
         namespace: "crate::app::project_reader::project_reader_app_service",
         allowed_paths: &[
             "src/app/project_reader/",
@@ -41,7 +41,8 @@ const PROJECT_READER_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] =
             "src/test_support/",
         ],
         rationale: "project-reader capability execution 属于外部项目阅读器模块私有实现边界",
-    }];
+    },
+];
 
 const PROJECT_READER_PERSISTENCE_OWNERS: &[&str] = &["project-reader"];
 

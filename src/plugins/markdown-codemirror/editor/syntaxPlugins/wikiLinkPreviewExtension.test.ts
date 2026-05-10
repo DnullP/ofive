@@ -173,4 +173,32 @@ describe("resolveWikiLinkPreviewAtMouseEvent", () => {
 
         expect(match).toBeNull();
     });
+
+    it("代码块内的 wikilink 文本即使命中渲染态目标也不触发预览", () => {
+        const state = EditorState.create({
+            doc: [
+                "```ts",
+                'const target = "[[Target Note]]";',
+                "```",
+            ].join("\n"),
+        });
+
+        const match = resolveWikiLinkPreviewAtMouseEvent(
+            {
+                metaKey: true,
+                ctrlKey: false,
+                target: createRenderTarget({ rendered: true }),
+                clientX: 10,
+                clientY: 18,
+            },
+            {
+                state,
+                posAtCoords() {
+                    return state.doc.toString().indexOf("[[Target Note]]") + 4;
+                },
+            },
+        );
+
+        expect(match).toBeNull();
+    });
 });

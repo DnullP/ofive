@@ -32,7 +32,7 @@
  *  - attachEditorKeyboardBridge: 绑定/解绑编辑器 keydown 监听
  */
 
-import { getCM } from "@replit/codemirror-vim";
+import { getCM, Vim, type CodeMirror } from "@replit/codemirror-vim";
 import { EditorView } from "codemirror";
 import type { CommandId } from "../../../host/commands/commandSystem";
 import { dispatchShortcut } from "../../../host/commands/shortcutDispatcher";
@@ -54,6 +54,17 @@ interface ClosestCapableTarget extends EventTarget {
     closest(selector: string): Element | null;
 }
 
+interface VimStateLike {
+    insertMode?: boolean;
+    visualMode?: boolean;
+}
+
+interface CodeMirrorLike {
+    state?: {
+        vim?: VimStateLike | null;
+    };
+}
+
 function isClosestCapableTarget(target: EventTarget | null): target is ClosestCapableTarget {
     return typeof target === "object"
         && target !== null
@@ -68,6 +79,8 @@ function isClosestCapableTarget(target: EventTarget | null): target is ClosestCa
 export interface EditorKeyboardEventLike {
     /** 当前按下的键。 */
     key: string;
+    /** 物理按键编码，例如 KeyJ；输入法组合态下 key 可能退化为 Process。 */
+    code?: string;
     /** IME 组合阶段的浏览器 keyCode。 */
     keyCode?: number;
     /** 是否处于输入法组合态。 */
@@ -125,6 +138,10 @@ export interface EditorKeyboardBridgeDependencies {
     flushFocusedMarkdownTableEditor: typeof flushFocusedMarkdownTableEditor;
     /** 正文首锚点解析器。 */
     resolveEditorBodyAnchor: typeof resolveEditorBodyAnchor;
+    /** 读取当前 CodeMirror/Vim 兼容实例。 */
+    getCodeMirror(view: EditorView): CodeMirrorLike | null;
+    /** 将按键直接交给 @replit/codemirror-vim。 */
+    handleVimKey(cm: CodeMirrorLike, key: string): boolean | undefined;
 }
 
 /**
@@ -177,7 +194,71 @@ const DEFAULT_DEPENDENCIES: EditorKeyboardBridgeDependencies = {
     isMarkdownTableEditorFocused,
     flushFocusedMarkdownTableEditor,
     resolveEditorBodyAnchor,
+    getCodeMirror: (view) => getCM(view) as CodeMirrorLike | null,
+    handleVimKey: (cm, key) => Vim.handleKey(cm as CodeMirror, key, "user"),
 };
+
+function isVimCommandMode(cm: CodeMirrorLike | null): boolean {
+    const vimState = cm?.state?.vim ?? null;
+    return Boolean(vimState && !vimState.insertMode);
+}
+
+function isPlainLetterKeydown(event: EditorKeyboardEventLike): boolean {
+    return !event.metaKey
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.getModifierState?.("AltGraph");
+}
+
+function resolveLetterKeyFromPhysicalCode(event: EditorKeyboardEventLike): string | null {
+    const match = /^Key([A-Z])$/.exec(event.code ?? "");
+    if (!match) {
+        return null;
+    }
+
+    const letter = match[1]!;
+    return event.shiftKey ? letter : letter.toLowerCase();
+}
+
+function resolvePlainTextVimKeydownKey(
+    event: EditorKeyboardEventLike,
+    isComposing: boolean,
+): string | null {
+    if (!isPlainLetterKeydown(event)) {
+        return null;
+    }
+
+    if ([...event.key].length === 1 && event.key !== "\n" && event.key !== "\r") {
+        return event.key;
+    }
+
+    if (!isComposing) {
+        return null;
+    }
+
+    return resolveLetterKeyFromPhysicalCode(event);
+}
+
+function handleVimImeKeydown(
+    event: EditorKeyboardEventLike,
+    view: EditorView,
+    dependencies: Pick<EditorKeyboardBridgeDependencies, "getCodeMirror" | "handleVimKey">,
+    vimKey: string | null,
+): boolean {
+    if (!vimKey) {
+        return false;
+    }
+
+    const cm = dependencies.getCodeMirror(view);
+    if (cm === null || !isVimCommandMode(cm)) {
+        return false;
+    }
+
+    dependencies.handleVimKey(cm, vimKey);
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
+}
 
 /**
  * @function isVimNormalMode
@@ -185,8 +266,8 @@ const DEFAULT_DEPENDENCIES: EditorKeyboardBridgeDependencies = {
  * @param view 编辑器视图。
  * @returns 是否处于 Vim normal 模式。
  */
-function isVimNormalMode(view: EditorView): boolean {
-    const cm = getCM(view) as { state?: { vim?: { insertMode?: boolean; visualMode?: boolean } } } | null;
+export function isVimNormalMode(view: EditorView): boolean {
+    const cm = getCM(view) as CodeMirrorLike | null;
     const vimState = cm?.state?.vim;
     if (!vimState) {
         return false;
@@ -203,7 +284,7 @@ function isVimNormalMode(view: EditorView): boolean {
  * @param focusWidgetNavigationTarget 隐藏 widget 导航聚焦回调。
  * @returns 是否成功消费 handoff。
  */
-function applyResolvedVimHandoff(
+export function applyResolvedVimHandoff(
     view: EditorView,
     result: VimHandoffResult,
     focusWidgetNavigationTarget: (
@@ -226,6 +307,43 @@ function applyResolvedVimHandoff(
     }
 
     return false;
+}
+
+export interface ResolveEditorBodyVimHandoffOptions {
+    view: EditorView;
+    key: string;
+    isVimModeEnabled: boolean;
+    dependencies?: Pick<EditorKeyboardBridgeDependencies, "resolveEditorBodyAnchor" | "resolveRegisteredVimHandoff">;
+}
+
+export function resolveEditorBodyVimHandoff(
+    options: ResolveEditorBodyVimHandoffOptions,
+): VimHandoffResult | null {
+    const dependencies = {
+        resolveEditorBodyAnchor,
+        resolveRegisteredVimHandoff,
+        ...options.dependencies,
+    };
+    if (!options.isVimModeEnabled) {
+        return null;
+    }
+
+    const selection = options.view.state.selection.main;
+    const bodyAnchor = dependencies.resolveEditorBodyAnchor(options.view.state);
+    const firstBodyLineNumber = options.view.state.doc.lineAt(bodyAnchor).number;
+    const currentLineNumber = options.view.state.doc.lineAt(selection.head).number;
+
+    return dependencies.resolveRegisteredVimHandoff({
+        surface: "editor-body",
+        key: options.key,
+        markdown: options.view.state.doc.toString(),
+        currentLineNumber,
+        selectionHead: selection.head,
+        hasFrontmatter: bodyAnchor > 0,
+        firstBodyLineNumber,
+        isVimEnabled: options.isVimModeEnabled,
+        isVimNormalMode: isVimNormalMode(options.view),
+    });
 }
 
 /**
@@ -268,9 +386,7 @@ export function handleEditorKeydown(options: HandleEditorKeydownOptions): void {
     };
     const { event, view } = options;
     const isComposing = event.isComposing || event.keyCode === 229;
-    if (isComposing) {
-        return;
-    }
+    const vimKeydownKey = resolvePlainTextVimKeydownKey(event, Boolean(isComposing));
 
     const eventTarget = isClosestCapableTarget(event.target)
         ? event.target
@@ -285,21 +401,14 @@ export function handleEditorKeydown(options: HandleEditorKeydownOptions): void {
         && !isFrontmatterFieldTarget
         && !isMarkdownTableTarget
     ) {
-        const selection = view.state.selection.main;
-        const bodyAnchor = dependencies.resolveEditorBodyAnchor(view.state);
-        const firstBodyLineNumber = view.state.doc.lineAt(bodyAnchor).number;
-        const currentLineNumber = view.state.doc.lineAt(selection.head).number;
-
-        const handoffResult = dependencies.resolveRegisteredVimHandoff({
-            surface: "editor-body",
-            key: event.key,
-            markdown: view.state.doc.toString(),
-            currentLineNumber,
-            selectionHead: selection.head,
-            hasFrontmatter: bodyAnchor > 0,
-            firstBodyLineNumber,
-            isVimEnabled: options.isVimModeEnabled(),
-            isVimNormalMode: isVimNormalMode(view),
+        const handoffResult = resolveEditorBodyVimHandoff({
+            view,
+            key: vimKeydownKey ?? event.key,
+            isVimModeEnabled: options.isVimModeEnabled(),
+            dependencies: {
+                resolveEditorBodyAnchor: dependencies.resolveEditorBodyAnchor,
+                resolveRegisteredVimHandoff: dependencies.resolveRegisteredVimHandoff,
+            },
         });
 
         if (handoffResult) {
@@ -314,6 +423,20 @@ export function handleEditorKeydown(options: HandleEditorKeydownOptions): void {
                 return;
             }
         }
+    }
+
+    if (isComposing) {
+        if (
+            options.isVimModeEnabled()
+            && !isFrontmatterNavigationTarget
+            && !isFrontmatterFieldTarget
+            && !isMarkdownTableTarget
+            && handleVimImeKeydown(event, view, dependencies, vimKeydownKey)
+        ) {
+            return;
+        }
+
+        return;
     }
 
     const resolution = dependencies.dispatchShortcut({

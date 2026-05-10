@@ -38,6 +38,8 @@ import {
     isCanvasPath,
     resolveCreatedCanvasPath,
 } from "../../../utils/canvasFileSpec";
+import { buildCreatedMarkdownInitialContent } from "../../../utils/frontmatterTemplate";
+import { getConfigSnapshot } from "../../../host/config/configStore";
 import { getArticleSnapshotById, useFocusedArticle } from "../../../host/editor/editorContextStore";
 import {
     setCurrentVaultPath,
@@ -129,18 +131,6 @@ function resolveCreatedDirectoryPath(directoryPath: string, draftName: string): 
 
     const normalizedDirectory = directoryPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
     return normalizedDirectory ? `${normalizedDirectory}/${trimmedName}` : trimmedName;
-}
-
-/**
- * @function buildCreatedMarkdownInitialContent
- * @description 为新建 Markdown 文件生成初始正文，仅保留去后缀的一级标题。
- * @param relativePath 新文件相对路径。
- * @returns 初始正文。
- */
-function buildCreatedMarkdownInitialContent(relativePath: string): string {
-    const fileName = relativePath.split("/").pop() ?? relativePath;
-    const title = fileName.replace(/\.(md|markdown)$/i, "");
-    return `# ${title}\n`;
 }
 
 /**
@@ -732,7 +722,10 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
 
         const initialContent = isCanvasPath(relativePath)
             ? buildCreatedCanvasInitialContent(relativePath)
-            : buildCreatedMarkdownInitialContent(relativePath);
+            : buildCreatedMarkdownInitialContent(
+                relativePath,
+                getConfigSnapshot().featureSettings,
+            );
 
         try {
             if (isCanvasPath(relativePath)) {

@@ -12,6 +12,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { FileTree, type FileTreeItem } from "../../src/plugins/file-tree/panel/FileTree";
 import type { TabInstanceDefinition } from "../../src/host/layout/workbenchContracts";
 import { loadBrowserMockMarkdownContents } from "../../src/api/vaultBrowserMockFixtures";
+import CODE_BLOCK_TEST_SAMPLE from "../../test-resources/notes/code-block-test.md?raw";
 import "../../src/plugins/file-tree/panel/VaultPanel.css";
 
 const MOCK_VAULT_PATH = "/mock/notes";
@@ -167,6 +168,25 @@ const TABLE_VIM_BOUNDARY_SAMPLE = `# Markdown Table Vim Boundary
 | 宿主集成层 | 把业务数据投影到布局引擎 | \`VSCodeWorkbench\`, \`Workbench*Definition\`, host adapters |
 `;
 
+const VIM_INLINE_CODE_WIKILINK_SAMPLE = [
+    "- 我可以创建特殊的wikilink `[[projectName:/path/to/file:42]]` 来连",
+    "---",
+].join("\n");
+
+const VIM_EDITING_BOUNDARIES_SAMPLE = [
+    "# Vim Editing Boundaries",
+    "",
+    "alpha beta gamma",
+    "delta epsilon zeta",
+    "syntax **bold** `inline code` [[guide]] tail",
+    "中文English mixed words line1",
+    "English mixed words line2",
+    "mixed words line3",
+    "visual-one",
+    "visual-two",
+    "visual-three",
+].join("\n");
+
 const SCROLL_REGRESSION_SAMPLE = [
     "# Scroll Regression Demo",
     "",
@@ -243,6 +263,7 @@ function resolveShouldIncludeBulkEditorPerfFiles(): boolean {
 }
 
 const MOCK_FILE_CONTENTS: Record<string, string> = {
+    "test-resources/notes/code-block-test.md": CODE_BLOCK_TEST_SAMPLE,
     "test-resources/notes/network-segment.md": NETWORK_SEGMENT_SAMPLE,
     "test-resources/notes/latex-test.md": LATEX_TEST_SAMPLE,
     "test-resources/notes/header-wikilink-regression.md": "# [[Plain Note]] [[Target Note|Alias Note]]\n\nbody\n",
@@ -251,6 +272,8 @@ const MOCK_FILE_CONTENTS: Record<string, string> = {
     "test-resources/notes/scroll-regression-alt.md": SCROLL_REGRESSION_ALT_SAMPLE,
     "test-resources/notes/table-editor.md": TABLE_EDITOR_SAMPLE,
     "test-resources/notes/table-vim-boundary.md": TABLE_VIM_BOUNDARY_SAMPLE,
+    "test-resources/notes/vim-inline-code-wikilink.md": VIM_INLINE_CODE_WIKILINK_SAMPLE,
+    "test-resources/notes/vim-editing-boundaries.md": VIM_EDITING_BOUNDARIES_SAMPLE,
     "test-resources/notes/guide.md": "# Guide\n\n- 系统代理对一般应用程序生效\n- 终端无代理, 需要在`./zshrc`中配置, 或者直接`export \"HTTP_PROXY\"`\n- docker本身不走系统代理和终端代[[Cron1234]]理中的任何一个, 需要单独配置\n\nDocker本身是通过[[Daemon (linux)]]进程启动的, 而deamon默认是没有代理的, 需要在systemd的配置中进行设置.\n",
     "test-resources/notes/glass-validation.canvas": CANVAS_SAMPLE,
     "test-resources/notes/mock-image.png": "",

@@ -245,6 +245,75 @@ test.describe("frontmatter 可见性", () => {
         expect(bodyBox!.y).toBeGreaterThanOrEqual(widgetBox!.y + widgetBox!.height);
     });
 
+    test("frontmatter 字段行应显示 KV 分隔线，并能自动补全 alias 字段为列表", async ({ page }) => {
+        await waitForMockLayoutReady(page);
+        await openMockFrontmatterNote(page);
+
+        const divider = page.locator(`${ACTIVE_FRONTMATTER_WIDGET_SELECTOR} .fmv-kv-divider`).first();
+        await expectVisibleWithPositiveRect(divider);
+
+        await page.evaluate(() => {
+            const addButton = document.querySelector<HTMLButtonElement>(".layout-v2-tab-section__card--active .fmv-add-button");
+            addButton?.click();
+        });
+
+        await focusFrontmatterKeyInput(page, "newField");
+        await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+        await page.keyboard.type("al");
+
+        const suggestion = page
+            .locator(`${ACTIVE_FRONTMATTER_WIDGET_SELECTOR} .fmv-field-suggest-item`)
+            .filter({ hasText: "alias" })
+            .first();
+        await expect(suggestion).toBeVisible();
+
+        const suggestionPresentation = await suggestion.evaluate((node) => {
+            const item = node as HTMLElement;
+            const popup = item.closest(".fmv-field-suggest-popup") as HTMLElement | null;
+            if (!popup) {
+                throw new Error("Frontmatter field suggestion popup not found");
+            }
+
+            const popupStyle = window.getComputedStyle(popup);
+            const key = item.querySelector(".fmv-field-suggest-key") as HTMLElement | null;
+            const keyStyle = key ? window.getComputedStyle(key) : null;
+            const popupBox = popup.getBoundingClientRect();
+            const keyBox = key?.getBoundingClientRect();
+            const alphaMatch = popupStyle.backgroundColor.match(/^rgba\([^,]+,\s*[^,]+,\s*[^,]+,\s*([^)]+)\)$/);
+            const backgroundAlpha = alphaMatch ? Number(alphaMatch[1]) : 1;
+
+            return {
+                popupWidth: popupBox.width,
+                popupBackground: popupStyle.backgroundColor,
+                backgroundAlpha,
+                keyWidth: keyBox?.width ?? 0,
+                keyHeight: keyBox?.height ?? 0,
+                keyWhiteSpace: keyStyle?.whiteSpace ?? "",
+            };
+        });
+        expect(suggestionPresentation.popupWidth).toBeGreaterThan(160);
+        expect(suggestionPresentation.popupBackground).not.toMatch(/rgba\([^)]*,\s*0(?:\.0+)?\)/);
+        expect(suggestionPresentation.backgroundAlpha).toBeGreaterThan(0.6);
+        expect(suggestionPresentation.keyWidth).toBeGreaterThan(24);
+        expect(suggestionPresentation.keyHeight).toBeLessThan(24);
+        expect(suggestionPresentation.keyWhiteSpace).toBe("nowrap");
+
+        await suggestion.click();
+
+        const aliasState = await page.evaluate(() => {
+            const aliasRow = document.querySelector<HTMLElement>(
+                '.layout-v2-tab-section__card--active [data-frontmatter-field-key="alias"]',
+            );
+            return {
+                hasAliasRow: aliasRow instanceof HTMLElement,
+                hasListControl: aliasRow?.querySelector(".fmv-list") instanceof HTMLElement,
+            };
+        });
+
+        expect(aliasState.hasAliasRow).toBe(true);
+        expect(aliasState.hasListControl).toBe(true);
+    });
+
     test("frontmatter 文本字段提交再按 j 不应展开源码或写入正文", async ({ page }) => {
         await waitForMockLayoutReady(page);
         await enableVimMode(page);

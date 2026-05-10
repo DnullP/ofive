@@ -76,6 +76,7 @@ function createFeatureSettings(): FeatureSettings {
         notificationsEnabled: true,
         notificationsMaxVisible: 3,
         frontmatterTemplate: "",
+        frontmatterAutoInsertOnCreate: false,
         restoreWorkspaceLayout: true,
     };
 }

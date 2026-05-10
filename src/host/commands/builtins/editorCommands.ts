@@ -129,6 +129,22 @@ export const EDITOR_COMMAND_DEFINITIONS = {
             editableInSettings: true,
         },
     }),
+    "editor.toggleInlineLatex": createEditorNativeCommandDefinition({
+        id: "editor.toggleInlineLatex",
+        title: "commands.toggleInlineLatex",
+        shortcut: {
+            defaultBinding: "Cmd+M",
+            editableInSettings: true,
+        },
+    }),
+    "editor.toggleBlockLatex": createEditorNativeCommandDefinition({
+        id: "editor.toggleBlockLatex",
+        title: "commands.toggleBlockLatex",
+        shortcut: {
+            defaultBinding: "Cmd+Shift+M",
+            editableInSettings: true,
+        },
+    }),
     "editor.toggleHighlight": createEditorNativeCommandDefinition({
         id: "editor.toggleHighlight",
         title: "commands.toggleHighlight",

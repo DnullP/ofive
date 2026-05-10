@@ -26,6 +26,7 @@ import {
     WidgetType,
 } from "@codemirror/view";
 import katex from "katex";
+import { detectExcludedLineRanges } from "../../../../utils/markdownBlockDetector";
 import { rangeIntersectsSelection } from "../syntaxRenderRegistry";
 import {
     hiddenBlockLineDecoration,
@@ -258,6 +259,28 @@ interface BlockLatexRange {
 /** 通过 WeakMap 在 ViewPlugin 实例间共享块级公式范围 */
 const blockLatexRangesMap = new WeakMap<EditorView, BlockLatexRange[]>();
 
+interface LatexPriorityExclusionRange {
+    from: number;
+    to: number;
+}
+
+export function resolveLatexPriorityExclusionRanges(doc: Text): LatexPriorityExclusionRange[] {
+    return detectExcludedLineRanges(doc.toString())
+        .filter((range) => range.type === "frontmatter" || range.type === "code-fence")
+        .map((range) => ({
+            from: doc.line(range.fromLine).from,
+            to: doc.line(range.toLine).to,
+        }));
+}
+
+function rangeIntersectsLatexPriorityExclusion(
+    ranges: LatexPriorityExclusionRange[],
+    from: number,
+    to: number,
+): boolean {
+    return ranges.some((range) => from <= range.to && to >= range.from);
+}
+
 /**
  * @interface BlockLatexWidgetPlacement
  * @description 块级公式源码隐藏与 widget 挂载策略。
@@ -320,6 +343,7 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
     const builder = new RangeSetBuilder<Decoration>();
     const doc = view.state.doc;
     const blockRanges: BlockLatexRange[] = [];
+    const priorityExclusionRanges = resolveLatexPriorityExclusionRanges(doc);
 
     /**
      * 收集所有需要渲染的装饰，按 from 排序后再添加到 builder。
@@ -353,9 +377,18 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
             const blockTo = line.to;
 
             /* 跳过被更高优先级区域（frontmatter / code-fence）覆盖的范围 */
-            if (isRangeInsideHigherPriorityZone(view, blockFrom, blockTo, "latex-block")) {
+            if (
+                rangeIntersectsLatexPriorityExclusion(priorityExclusionRanges, blockFrom, blockTo) ||
+                isRangeInsideHigherPriorityZone(view, blockFrom, blockTo, "latex-block")
+            ) {
                 lineIndex++;
                 continue;
+            }
+
+            if (latex.length > 0) {
+                blockRanges.push({ from: blockFrom, to: blockTo });
+                exclusionZones.push({ from: blockFrom, to: blockTo });
+                blockCoveredLines.add(lineIndex);
             }
 
             const isEditing = rangeTouchesBlock({ from: blockFrom, to: blockTo }, view.state.selection.ranges);
@@ -378,10 +411,6 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
                     decoration: Decoration.widget({ widget, block: false, side: placement.widgetSide }),
                     priority: 1,
                 });
-
-                blockRanges.push({ from: blockFrom, to: blockTo });
-                exclusionZones.push({ from: blockFrom, to: blockTo });
-                blockCoveredLines.add(lineIndex);
             }
 
             lineIndex++;
@@ -412,9 +441,20 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
                 const latex = contentLines.join("\n").trim();
 
                 /* 跳过被更高优先级区域覆盖的范围 */
-                if (isRangeInsideHigherPriorityZone(view, blockFrom, blockTo, "latex-block")) {
+                if (
+                    rangeIntersectsLatexPriorityExclusion(priorityExclusionRanges, blockFrom, blockTo) ||
+                    isRangeInsideHigherPriorityZone(view, blockFrom, blockTo, "latex-block")
+                ) {
                     lineIndex = closeLineNumber + 1;
                     continue;
+                }
+
+                if (latex.length > 0) {
+                    blockRanges.push({ from: blockFrom, to: blockTo });
+                    exclusionZones.push({ from: blockFrom, to: blockTo });
+                    for (let ln = openLineNumber; ln <= closeLineNumber; ln += 1) {
+                        blockCoveredLines.add(ln);
+                    }
                 }
 
                 const isEditing = rangeTouchesBlock({ from: blockFrom, to: blockTo }, view.state.selection.ranges);
@@ -454,9 +494,6 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
                         decoration: Decoration.widget({ widget, block: false, side: placement.widgetSide }),
                         priority: 1,
                     });
-
-                    blockRanges.push({ from: blockFrom, to: blockTo });
-                    exclusionZones.push({ from: blockFrom, to: blockTo });
                 }
 
                 lineIndex = closeLineNumber + 1;
@@ -479,6 +516,11 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
             /* 跳过被块级公式覆盖的行和被更高优先级区域覆盖的行 */
             if (
                 !blockCoveredLines.has(currentLine.number) &&
+                !rangeIntersectsLatexPriorityExclusion(
+                    priorityExclusionRanges,
+                    currentLine.from,
+                    currentLine.to,
+                ) &&
                 !isRangeInsideHigherPriorityZone(
                     view,
                     currentLine.from,
@@ -498,6 +540,16 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
 
                     const tokenFrom = currentLine.from + matchIndex;
                     const tokenTo = tokenFrom + fullMatch.length;
+
+                    if (
+                        rangeIntersectsLatexPriorityExclusion(
+                            priorityExclusionRanges,
+                            tokenFrom,
+                            tokenTo,
+                        )
+                    ) {
+                        continue;
+                    }
 
                     const isEditing = rangeIntersectsSelection(view, tokenFrom, tokenTo);
                     if (isEditing) {

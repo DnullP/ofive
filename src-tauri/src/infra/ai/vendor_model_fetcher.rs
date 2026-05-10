@@ -89,8 +89,9 @@ async fn fetch_baidu_vendor_models(
         .unwrap_or("https://qianfan.baidubce.com/v2/chat/completions");
     let list_endpoint = resolve_models_endpoint(endpoint);
     let mut headers = HeaderMap::new();
-    let authorization_header = HeaderValue::from_str(&authorization_header)
-        .map_err(|error| format!("Baidu Qianfan Authorization 不能作为 HTTP header 发送: {error}"))?;
+    let authorization_header = HeaderValue::from_str(&authorization_header).map_err(|error| {
+        format!("Baidu Qianfan Authorization 不能作为 HTTP header 发送: {error}")
+    })?;
     headers.insert(AUTHORIZATION, authorization_header);
 
     fetch_openai_style_models(list_endpoint, headers, "Baidu Qianfan").await
@@ -179,7 +180,9 @@ fn resolve_models_endpoint(endpoint: &str) -> String {
     let last_segment = trimmed.rsplit('/').next().unwrap_or_default();
     if last_segment.len() >= 2
         && last_segment.starts_with('v')
-        && last_segment[1..].chars().all(|character| character.is_ascii_digit())
+        && last_segment[1..]
+            .chars()
+            .all(|character| character.is_ascii_digit())
     {
         return format!("{trimmed}/models");
     }
@@ -190,10 +193,10 @@ fn resolve_models_endpoint(endpoint: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{fetch_ai_vendor_models, resolve_models_endpoint};
+    use crate::shared::ai_service::AiChatSettings;
     use axum::http::{HeaderMap, StatusCode};
     use axum::routing::get;
     use axum::{Json, Router};
-    use crate::shared::ai_service::AiChatSettings;
     use serde_json::json;
     use std::collections::HashMap;
     use tokio::net::TcpListener;
@@ -231,11 +234,15 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .expect("test server should bind");
-        let address = listener.local_addr().expect("test server address should exist");
+        let address = listener
+            .local_addr()
+            .expect("test server address should exist");
         let router = Router::new().route(
             "/anthropic/v1/models",
             get(|headers: HeaderMap| async move {
-                let api_key = headers.get("x-api-key").and_then(|value| value.to_str().ok());
+                let api_key = headers
+                    .get("x-api-key")
+                    .and_then(|value| value.to_str().ok());
                 let anthropic_version = headers
                     .get("anthropic-version")
                     .and_then(|value| value.to_str().ok());

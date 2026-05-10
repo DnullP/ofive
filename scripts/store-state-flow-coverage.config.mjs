@@ -13,6 +13,7 @@ export const explicitlyGovernedStoreLogicModules = [
     "src/host/layout/activityBarStore.ts",
     "src/host/editor/editorDisplayModeStore.ts",
     "src/host/editor/activeEditorStore.ts",
+    "src/host/editor/activeBacklinkTargetStore.ts",
     "src/host/editor/editorContextStore.ts",
     "src/host/editor/autoSaveService.ts",
 ];
@@ -66,6 +67,10 @@ export const explicitStoreLogicCoverage = {
     ],
     "src/host/editor/activeEditorStore.ts": [
         "src/host/editor/activeEditorStore.test.ts",
+    ],
+    "src/host/editor/activeBacklinkTargetStore.ts": [
+        "src/host/editor/activeBacklinkTargetStore.test.ts",
+        "e2e/project-reader.e2e.ts",
     ],
     "src/host/editor/editorContextStore.ts": [
         "src/host/editor/editorContextStore.test.ts",
@@ -331,7 +336,10 @@ export const storeConsumerCoverage = {
         "src/plugins/vault-fs-sync/vaultFsSyncPlugin.test.ts",
     ],
     "src/plugins/backlinks/backlinksPlugin.tsx": [
-        "e2e/frontmatter-visibility.e2e.ts",
+        "e2e/project-reader.e2e.ts",
+    ],
+    "src/plugins/project-reader/projectReaderLinks.ts": [
+        "e2e/project-reader.e2e.ts",
     ],
     "src/plugins/outline/outlinePlugin.tsx": [
         "e2e/frontmatter-visibility.e2e.ts",

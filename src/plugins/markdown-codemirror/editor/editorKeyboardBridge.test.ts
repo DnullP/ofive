@@ -6,6 +6,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { EditorView } from "codemirror";
 import {
+    type EditorKeyboardBridgeDependencies,
     handleEditorKeydown,
     type EditorKeyboardEventLike,
 } from "./editorKeyboardBridge";
@@ -195,6 +196,118 @@ describe("handleEditorKeydown", () => {
         });
 
         expect(focusWidgetNavigationTarget).toHaveBeenCalledWith("frontmatter", "last", undefined);
+        expect(event.preventDefault).toHaveBeenCalledTimes(1);
+        expect(event.stopPropagation).toHaveBeenCalledTimes(1);
+        expect(dispatchShortcut).not.toHaveBeenCalled();
+    });
+
+    test("should let vim handoff outrank IME composition in normal mode", () => {
+        const view = createViewStub("---\ntitle: Demo\n---\n# Demo");
+        const focusWidgetNavigationTarget = mock(() => true);
+        const event = createEventStub({
+            key: "k",
+            keyCode: 229,
+            isComposing: true,
+        });
+        const dispatchShortcut = mock(() => ({
+            kind: "none" as const,
+            commandId: null,
+            shouldPreventDefault: false,
+            shouldStopPropagation: false,
+            notifyTabClose: false,
+            reason: "no-match" as const,
+        }));
+
+        handleEditorKeydown({
+            articleId: "file:demo",
+            event,
+            view,
+            getBindings: () => ({}),
+            getManagedShortcutCandidates: () => [],
+            getCurrentVaultPath: () => "/vault",
+            isVimModeEnabled: () => true,
+            executeEditorCommand: mock(() => undefined),
+            focusWidgetNavigationTarget,
+            frontmatterSelectors: {
+                focusable: "[data-frontmatter-field-focusable='true']",
+                navigation: "[data-frontmatter-vim-nav='true']",
+            },
+            markdownTableSelectors: {
+                shell: "[data-markdown-table-block-from]",
+            },
+            dependencies: {
+                dispatchShortcut,
+                resolveEditorBodyAnchor: () => 1,
+                resolveRegisteredVimHandoff: () => ({
+                    kind: "focus-widget-navigation",
+                    widget: "frontmatter",
+                    position: "last",
+                    reason: "test-ime-handoff",
+                }),
+            },
+        });
+
+        expect(focusWidgetNavigationTarget).toHaveBeenCalledWith("frontmatter", "last", undefined);
+        expect(event.preventDefault).toHaveBeenCalledTimes(1);
+        expect(event.stopPropagation).toHaveBeenCalledTimes(1);
+        expect(dispatchShortcut).not.toHaveBeenCalled();
+    });
+
+    test("should route composing letter keydown through Vim before the IME accumulates pinyin", () => {
+        const view = createViewStub("# Demo");
+        const event = createEventStub({
+            key: "Process",
+            keyCode: 229,
+            isComposing: true,
+        });
+        (event as EditorKeyboardEventLike & { code: string }).code = "KeyJ";
+        const cm = {
+            state: {
+                vim: {
+                    insertMode: false,
+                    visualMode: false,
+                },
+            },
+        };
+        const handleVimKey = mock(() => true);
+        const dispatchShortcut = mock(() => ({
+            kind: "none" as const,
+            commandId: null,
+            shouldPreventDefault: false,
+            shouldStopPropagation: false,
+            notifyTabClose: false,
+            reason: "no-match" as const,
+        }));
+
+        handleEditorKeydown({
+            articleId: "file:demo",
+            event,
+            view,
+            getBindings: () => ({}),
+            getManagedShortcutCandidates: () => [],
+            getCurrentVaultPath: () => "/vault",
+            isVimModeEnabled: () => true,
+            executeEditorCommand: mock(() => undefined),
+            focusWidgetNavigationTarget: mock(() => false),
+            frontmatterSelectors: {
+                focusable: "[data-frontmatter-field-focusable='true']",
+                navigation: "[data-frontmatter-vim-nav='true']",
+            },
+            markdownTableSelectors: {
+                shell: "[data-markdown-table-block-from]",
+            },
+            dependencies: {
+                dispatchShortcut,
+                resolveRegisteredVimHandoff: () => null,
+                getCodeMirror: () => cm,
+                handleVimKey,
+            } as Partial<EditorKeyboardBridgeDependencies> & {
+                getCodeMirror: () => typeof cm;
+                handleVimKey: typeof handleVimKey;
+            },
+        });
+
+        expect(handleVimKey).toHaveBeenCalledWith(cm, "j");
         expect(event.preventDefault).toHaveBeenCalledTimes(1);
         expect(event.stopPropagation).toHaveBeenCalledTimes(1);
         expect(dispatchShortcut).not.toHaveBeenCalled();

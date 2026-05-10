@@ -15,6 +15,7 @@ import {
     buildProjectReaderTabDefinition,
     normalizeProjectRelativePath,
     openProjectReaderLocationInWorkbench,
+    reportProjectReaderTabBacklinkTarget,
 } from "./projectReaderLinks";
 import "./projectReaderPlugin.css";
 
@@ -200,6 +201,7 @@ export function ProjectReaderPanel(props: ProjectReaderPanelProps): ReactNode {
         }
 
         props.context.openTab(tab);
+        reportProjectReaderTabBacklinkTarget(tab);
     };
 
     return (

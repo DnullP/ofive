@@ -14,6 +14,8 @@ import {
     toggleItalic,
     toggleStrikethrough,
     toggleInlineCode,
+    toggleInlineLatex,
+    toggleBlockLatex,
     toggleHighlight,
     toggleWikiLink,
     insertLink,
@@ -178,6 +180,64 @@ describe("toggleInlineCode", () => {
         toggleInlineCode(view);
         expect(dispatches).toHaveLength(1);
         expect(dispatches[0]!.changes).toEqual({ from: 0, to: 7, insert: "hello" });
+    });
+});
+
+/* ================================================================== */
+/*  toggleInlineLatex 测试                                             */
+/* ================================================================== */
+
+describe("toggleInlineLatex", () => {
+    test("选中文本时包裹 $", () => {
+        const { view, dispatches } = createMockView("E=mc^2", 0, 6);
+        toggleInlineLatex(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({ from: 0, to: 6, insert: "$E=mc^2$" });
+        expect(dispatches[0]!.selection).toEqual({ anchor: 1, head: 7 });
+    });
+
+    test("空选区时插入一对 $ 并将光标放在中间", () => {
+        const { view, dispatches } = createMockView("hello", 5, 5);
+        toggleInlineLatex(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({ from: 5, to: 5, insert: "$$" });
+        expect(dispatches[0]!.selection).toEqual({ anchor: 6 });
+    });
+
+    test("已被 $ 包裹的选中文本移除标记", () => {
+        const { view, dispatches } = createMockView("$E=mc^2$", 0, 8);
+        toggleInlineLatex(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({ from: 0, to: 8, insert: "E=mc^2" });
+    });
+});
+
+/* ================================================================== */
+/*  toggleBlockLatex 测试                                              */
+/* ================================================================== */
+
+describe("toggleBlockLatex", () => {
+    test("选中文本时包裹为整行公式块", () => {
+        const { view, dispatches } = createMockView("E=mc^2", 0, 6);
+        toggleBlockLatex(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({ from: 0, to: 6, insert: "$$\nE=mc^2\n$$" });
+        expect(dispatches[0]!.selection).toEqual({ anchor: 3, head: 9 });
+    });
+
+    test("空选区时插入整行公式块并将光标放在中间行", () => {
+        const { view, dispatches } = createMockView("hello", 5, 5);
+        toggleBlockLatex(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({ from: 5, to: 5, insert: "$$\n\n$$" });
+        expect(dispatches[0]!.selection).toEqual({ anchor: 8 });
+    });
+
+    test("已被 $$ 块包裹的选中文本移除块标记", () => {
+        const { view, dispatches } = createMockView("$$\nE=mc^2\n$$", 0, 12);
+        toggleBlockLatex(view);
+        expect(dispatches).toHaveLength(1);
+        expect(dispatches[0]!.changes).toEqual({ from: 0, to: 12, insert: "E=mc^2" });
     });
 });
 

@@ -53,6 +53,10 @@ describe("builtin settings registrars", () => {
         expect(snapshot.find((section) => section.id === "shortcut-system")?.items.map((item) => item.id)).toEqual([
             "shortcut-table",
         ]);
+        expect(snapshot.find((section) => section.id === "frontmatter-template")?.items.map((item) => item.id)).toEqual([
+            "frontmatter-auto-insert-on-create",
+            "frontmatter-template-editor",
+        ]);
 
         unregisters.forEach((unregister) => unregister());
     });

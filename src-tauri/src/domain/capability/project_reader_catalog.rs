@@ -26,7 +26,8 @@ fn list_projects_capability() -> CapabilityDescriptor {
         id: "project_reader.list_projects".to_string(),
         api_version: CAPABILITY_API_VERSION.to_string(),
         display_name: "List Project Reader Projects".to_string(),
-        description: "List imported external projects that are available for read-only analysis.".to_string(),
+        description: "List imported external projects that are available for read-only analysis."
+            .to_string(),
         kind: CapabilityKind::Read,
         input_schema: json!({
             "type": "object",
@@ -95,7 +96,8 @@ fn read_project_file_capability() -> CapabilityDescriptor {
         id: "project_reader.read_project_file".to_string(),
         api_version: CAPABILITY_API_VERSION.to_string(),
         display_name: "Read Project File".to_string(),
-        description: "Read one file from an imported external project by relative path.".to_string(),
+        description: "Read one file from an imported external project by relative path."
+            .to_string(),
         kind: CapabilityKind::Read,
         input_schema: json!({
             "type": "object",
@@ -190,7 +192,9 @@ fn get_code_references_capability() -> CapabilityDescriptor {
         id: "project_reader.get_code_references".to_string(),
         api_version: CAPABILITY_API_VERSION.to_string(),
         display_name: "Get Project Code References".to_string(),
-        description: "Find current-vault notes that reference snippets in one imported external project.".to_string(),
+        description:
+            "Find current-vault notes that reference snippets in one imported external project."
+                .to_string(),
         kind: CapabilityKind::Read,
         input_schema: json!({
             "type": "object",

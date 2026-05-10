@@ -7,6 +7,8 @@ import { describe, expect, test } from "bun:test";
 import {
     buildDefaultValueByFieldType,
     convertValueToFieldType,
+    getFrontmatterFieldSuggestions,
+    getGovernedFrontmatterField,
     resolveNextFieldKey,
 } from "./FrontmatterYamlVisualEditor";
 
@@ -52,5 +54,24 @@ describe("convertValueToFieldType", () => {
     test("should convert list and null values to string", () => {
         expect(convertValueToFieldType(["a", "b"], "string")).toBe("a, b");
         expect(convertValueToFieldType(null, "string")).toBe("");
+    });
+});
+
+describe("governed frontmatter fields", () => {
+    test("should expose alias as a governed list field used by note-name features", () => {
+        const aliasField = getGovernedFrontmatterField("alias");
+
+        expect(aliasField).toMatchObject({
+            key: "alias",
+            fieldType: "list",
+        });
+        expect(aliasField?.usedBy).toContain("wikilink");
+        expect(aliasField?.usedBy).toContain("quick-switcher");
+        expect(aliasField?.usedBy).toContain("search");
+    });
+
+    test("should suggest governed field keys by typed prefix and skip existing keys", () => {
+        expect(getFrontmatterFieldSuggestions("al", ["title"]).map((field) => field.key)).toEqual(["alias"]);
+        expect(getFrontmatterFieldSuggestions("", ["title", "alias"]).map((field) => field.key)).toEqual(["date"]);
     });
 });

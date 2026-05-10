@@ -5,6 +5,7 @@
 
 pub(crate) mod backlinks;
 pub(crate) mod canvas_document;
+pub(crate) mod frontmatter_alias;
 pub(crate) mod frontmatter_query;
 pub(crate) mod graph;
 pub(crate) mod markdown_ast;

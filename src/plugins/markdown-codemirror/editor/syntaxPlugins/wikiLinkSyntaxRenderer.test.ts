@@ -19,6 +19,7 @@ mock.module("../../../../api/vaultApi", () => createMockVaultApi({
 
 const {
     extractWidgetWikiLinkTarget,
+    findWikiLinkAtPosition,
     handleWikiLinkMouseDown,
     isRenderedWikiLinkTarget,
 } = await import("./wikiLinkSyntaxRenderer");
@@ -85,6 +86,24 @@ describe("parseWikiLinkParts", () => {
 });
 
 describe("wikilink navigation interaction", () => {
+    it("代码块内的 wikilink 文本不应被识别为可交互链接", () => {
+        const state = EditorState.create({
+            doc: [
+                "```ts",
+                'const target = "[[Target Note]]";',
+                "```",
+                "",
+                "[[Outside Note]]",
+            ].join("\n"),
+        });
+
+        const insidePosition = state.doc.toString().indexOf("[[Target Note]]") + 4;
+        const outsidePosition = state.doc.toString().indexOf("[[Outside Note]]") + 4;
+
+        expect(findWikiLinkAtPosition(state, insidePosition)).toBeNull();
+        expect(findWikiLinkAtPosition(state, outsidePosition)?.target).toBe("Outside Note");
+    });
+
     it("识别渲染态 wikilink DOM 命中", () => {
         expect(isRenderedWikiLinkTarget(createRenderTarget({ rendered: true }))).toBe(true);
         expect(isRenderedWikiLinkTarget(createRenderTarget())).toBe(false);

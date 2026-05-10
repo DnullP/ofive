@@ -60,8 +60,8 @@ export interface ExcludedLineRange {
 /*  正则                                                               */
 /* ================================================================== */
 
-/** 匹配围栏开始行 ```lang 或 ~~~lang */
-const FENCE_OPEN_RE = /^(`{3,}|~{3,})\s*(\S*)\s*$/;
+/** 匹配围栏开始行 ```lang 或 ~~~lang，允许 CommonMark 兼容的 0-3 个前导空格和 info string。 */
+const FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})(?:[ \t]*(.*?))?[ \t]*$/;
 
 /** 匹配 frontmatter 分隔符 --- */
 const FRONTMATTER_DELIMITER_RE = /^---\s*$/;
@@ -69,8 +69,8 @@ const FRONTMATTER_DELIMITER_RE = /^---\s*$/;
 /** 匹配单行 LaTeX 块：整行仅包含 `$$...$$`（允许前后空白）。 */
 const LATEX_BLOCK_SINGLE_LINE_RE = /^\s*\$\$(.+?)\$\$\s*$/;
 
-/** 匹配 LaTeX 块分隔符 $$ */
-const LATEX_BLOCK_DELIMITER_RE = /^\$\$\s*$/;
+/** 匹配 LaTeX 块分隔符 $$，允许列表或引用场景中的前导空白。 */
+const LATEX_BLOCK_DELIMITER_RE = /^\s*\$\$\s*$/;
 
 /* ================================================================== */
 /*  公共 API                                                           */
@@ -111,7 +111,7 @@ export function detectExcludedLineRanges(text: string): ExcludedLineRange[] {
             const fenceChar = (fenceMatch[1] ?? "```").charAt(0);
             const fenceLen = (fenceMatch[1] ?? "```").length;
             const closeRe = new RegExp(
-                `^${fenceChar === "\`" ? "`" : "~"}{${String(fenceLen)},}\\s*$`,
+                `^ {0,3}${fenceChar === "\`" ? "`" : "~"}{${String(fenceLen)},}[ \\t]*$`,
             );
 
             let closed = false;

@@ -42,6 +42,19 @@ describe("detectExcludedLineRanges", () => {
         ]);
     });
 
+    test("should detect indented code fence with info string", () => {
+        const text = [
+            "  ```ts title=\"math.ts\"",
+            "const value = '$E=mc^2$';",
+            "  ```",
+            "$real$",
+        ].join("\n");
+        const ranges = detectExcludedLineRanges(text);
+        expect(ranges).toEqual([
+            { fromLine: 1, toLine: 3, type: "code-fence" },
+        ]);
+    });
+
     test("should detect tilde code fence", () => {
         const text = "~~~python\nprint('hi')\n~~~";
         const ranges = detectExcludedLineRanges(text);
@@ -141,6 +154,55 @@ describe("detectExcludedLineRanges", () => {
         const ranges = detectExcludedLineRanges(text);
         expect(ranges).toEqual([
             { fromLine: 2, toLine: 6, type: "code-fence" },
+        ]);
+    });
+
+    test("should enumerate nested wikilink/code/latex/list exclusion cases", () => {
+        const text = [
+            "---",
+            "title: [[frontmatter link]]",
+            "tags:",
+            "  - $frontmatter$",
+            "---",
+            "",
+            "- active [[wikilink]]",
+            "- inline code `[[suppressed-inline-code]]`",
+            "",
+            "```ts",
+            'const code = "[[suppressed-code]] $E=mc^2$ - [ ] task";',
+            "```",
+            "",
+            "- list code follows",
+            "  ```ts",
+            '  const nested = "[[suppressed-list-code]] $E=mc^2$";',
+            "  ```",
+            "",
+            "~~~md",
+            "[[suppressed-tilde-code]] $$x$$",
+            "~~~",
+            "",
+            "$$",
+            "[[suppressed-latex]] - [ ] task",
+            "$$",
+            "",
+            "$$ [[suppressed-single-line-latex]] $$",
+            "",
+            "- list latex follows",
+            "  $$",
+            "  [[suppressed-list-latex]] - [ ] task",
+            "  $$",
+            "",
+            "> quote [[active]]",
+        ].join("\n");
+
+        expect(detectExcludedLineRanges(text)).toEqual([
+            { fromLine: 1, toLine: 5, type: "frontmatter" },
+            { fromLine: 10, toLine: 12, type: "code-fence" },
+            { fromLine: 15, toLine: 17, type: "code-fence" },
+            { fromLine: 19, toLine: 21, type: "code-fence" },
+            { fromLine: 23, toLine: 25, type: "latex-block" },
+            { fromLine: 27, toLine: 27, type: "latex-block" },
+            { fromLine: 30, toLine: 32, type: "latex-block" },
         ]);
     });
 });

@@ -49,6 +49,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 6px;
 }
 
@@ -60,9 +61,26 @@
 /* 链接标题：文字溢出以省略号截断 */
 .backlinks-item-title {
     flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.backlinks-item-detail,
+.backlinks-item-preview {
+    flex: 0 0 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.backlinks-item-preview {
+    color: var(--text-tertiary, var(--text-secondary));
+    font-size: 10px;
 }
 
 /* 引用次数徽章：仅在引用次数 > 1 时渲染 */

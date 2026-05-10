@@ -16,6 +16,8 @@ function fibonacci(n) {
 }
 
 const result = fibonacci(10);
+const formula = "$E=mc^2$";
+const markdownSyntax = "[[Target Note]] ==highlight== #tag";
 console.log(`Fibonacci(10) = ${result}`);
 ```
 

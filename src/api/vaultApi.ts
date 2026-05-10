@@ -698,6 +698,30 @@ function toBrowserFallbackFrontmatterMatchValues(value: unknown): string[] {
     return [];
 }
 
+function extractBrowserFallbackAliases(content: string): string[] {
+    const frontmatterText = extractBrowserFallbackFrontmatterText(content);
+    if (!frontmatterText) {
+        return [];
+    }
+
+    try {
+        const parsed = YAML.parse(frontmatterText) as Record<string, unknown> | null;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            return [];
+        }
+
+        return [
+            ...toBrowserFallbackFrontmatterMatchValues(parsed.alias),
+            ...toBrowserFallbackFrontmatterMatchValues(parsed.aliases),
+        ].filter((value) => value.trim().length > 0);
+    } catch (error) {
+        console.warn("[vault-api] browser fallback alias parse failed", {
+            message: error instanceof Error ? error.message : String(error),
+        });
+        return [];
+    }
+}
+
 /**
  * @function buildBrowserFallbackFrontmatterQuery
  * @description 在浏览器回退模式下查询具有指定 frontmatter 字段的 Markdown 笔记。
@@ -1038,6 +1062,24 @@ function scoreBrowserFallbackQuickSwitch(relativePath: string, query: string): n
     }
 
     return score;
+}
+
+function scoreBrowserFallbackNoteName(relativePath: string, aliases: readonly string[], query: string): number | null {
+    const pathScore = scoreBrowserFallbackQuickSwitch(relativePath, query);
+    const aliasScore = aliases
+        .map((alias) => scoreBrowserFallbackQuickSwitch(alias, query))
+        .filter((score): score is number => score !== null)
+        .reduce<number | null>((best, score) => best === null ? score + 110 : Math.max(best, score + 110), null);
+
+    if (pathScore === null) {
+        return aliasScore;
+    }
+
+    if (aliasScore === null) {
+        return pathScore;
+    }
+
+    return Math.max(pathScore, aliasScore);
 }
 
 /**
@@ -1447,7 +1489,7 @@ export async function resolveWikiLinkTarget(
 ): Promise<ResolveWikiLinkTargetResponse | null> {
     if (!isTauriRuntime()) {
         const markdownContents = await getBrowserMockMarkdownContents();
-        const normalizedTarget = normalizeSlashPath(target.trim());
+        const normalizedTarget = normalizeSlashPath(normalizeWikiTarget(target));
         if (!normalizedTarget) {
             return null;
         }
@@ -1484,13 +1526,27 @@ export async function resolveWikiLinkTarget(
             return fileName.replace(/\.(md|markdown)$/i, "") === stem;
         });
 
-        if (!byStem) {
+        if (byStem) {
+            return {
+                relativePath: byStem,
+                absolutePath: `${browserFallbackVaultPath}/${byStem}`,
+            };
+        }
+
+        const normalizedAliasTarget = normalizedTarget.toLowerCase();
+        const byAlias = allMockPaths.find((path) => {
+            const content = markdownContents[path] ?? "";
+            return extractBrowserFallbackAliases(content)
+                .some((alias) => normalizeSlashPath(alias).trim().toLowerCase() === normalizedAliasTarget);
+        });
+
+        if (!byAlias) {
             return null;
         }
 
         return {
-            relativePath: byStem,
-            absolutePath: `${browserFallbackVaultPath}/${byStem}`,
+            relativePath: byAlias,
+            absolutePath: `${browserFallbackVaultPath}/${byAlias}`,
         };
     }
 
@@ -1568,7 +1624,11 @@ export async function searchVaultMarkdownFiles(
         const markdownContents = await getBrowserMockMarkdownContents();
         const fallbackItems = Object.keys(markdownContents)
             .map((relativePath) => {
-                const score = scoreBrowserFallbackQuickSwitch(relativePath, query);
+                const score = scoreBrowserFallbackNoteName(
+                    relativePath,
+                    extractBrowserFallbackAliases(markdownContents[relativePath] ?? ""),
+                    query,
+                );
                 if (score === null) {
                     return null;
                 }
@@ -1667,7 +1727,7 @@ export async function searchVaultMarkdown(
 
             const matchedFileName = query.trim().length > 0
                 && normalizedScope !== "content"
-                && scoreBrowserFallbackQuickSwitch(relativePath, query) !== null;
+                && scoreBrowserFallbackNoteName(relativePath, extractBrowserFallbackAliases(content), query) !== null;
             const contentMatch = query.trim().length > 0 && normalizedScope !== "fileName"
                 ? scoreBrowserFallbackContentMatch(content, query)
                 : null;
@@ -1686,7 +1746,7 @@ export async function searchVaultMarkdown(
             }
 
             const fileScore = matchedFileName
-                ? scoreBrowserFallbackQuickSwitch(relativePath, query) ?? 0
+                ? scoreBrowserFallbackNoteName(relativePath, extractBrowserFallbackAliases(content), query) ?? 0
                 : 0;
             const item = normalizeVaultSearchMatchItem({
                 relativePath,
@@ -1761,7 +1821,11 @@ export async function suggestWikiLinkTargets(
         const fallbackItems = Object.keys(markdownContents)
             .map((relativePath) => {
                 const score = query.trim()
-                    ? scoreBrowserFallbackQuickSwitch(relativePath, query) ?? undefined
+                    ? scoreBrowserFallbackNoteName(
+                        relativePath,
+                        extractBrowserFallbackAliases(markdownContents[relativePath] ?? ""),
+                        query,
+                    ) ?? undefined
                     : 0;
                 if (score === undefined) {
                     return null;

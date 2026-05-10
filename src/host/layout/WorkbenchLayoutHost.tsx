@@ -48,6 +48,11 @@ import {
 } from "./contextMenuCenter";
 import { emitCustomActivityRemovalRequestedEvent, emitEditorCommandRequestedEvent } from "../events/appEventBus";
 import { clearActiveEditor, getActiveEditorSnapshot, reportActiveEditor } from "../editor/activeEditorStore";
+import {
+    clearActiveBacklinkTarget,
+    reportMarkdownBacklinkTarget,
+    reportProjectSourceBacklinkTarget,
+} from "../editor/activeBacklinkTargetStore";
 import { requestApplicationQuit } from "../commands/systemShortcutSubsystem";
 import {
     getSidebarLayoutFromVaultConfig,
@@ -123,6 +128,29 @@ const DEFAULT_RIGHT_RAIL_WIDTH = 260;
 const CUSTOM_ACTIVITY_REGISTRATION_PREFIX = "custom-activity:";
 const CUSTOM_ACTIVITY_CREATE_COMMAND_ID = "customActivity.create";
 const KEEP_ALIVE_INACTIVE_TAB_COMPONENT_IDS = new Set(["knowledgegraph"]);
+const WORKBENCH_TITLEBAR_OFFSET_ATTR = "data-workbench-titlebar-offset";
+const WORKBENCH_MAC_LEFT_TITLEBAR_OFFSET = "mac-left";
+
+function syncWorkbenchTitlebarOffsetTarget(root: HTMLElement): void {
+    const strips = Array.from(root.querySelectorAll<HTMLElement>(".layout-v2-tab-section__strip"));
+    for (const strip of strips) {
+        strip.removeAttribute(WORKBENCH_TITLEBAR_OFFSET_ATTR);
+    }
+
+    const target = strips
+        .map((strip) => ({ strip, rect: strip.getBoundingClientRect() }))
+        .filter(({ rect }) => rect.width > 0 && rect.height > 0)
+        .sort((left, right) => {
+            const topDelta = left.rect.top - right.rect.top;
+            if (Math.abs(topDelta) > 2) {
+                return topDelta;
+            }
+
+            return left.rect.left - right.rect.left;
+        })[0]?.strip ?? null;
+
+    target?.setAttribute(WORKBENCH_TITLEBAR_OFFSET_ATTR, WORKBENCH_MAC_LEFT_TITLEBAR_OFFSET);
+}
 
 function getFocusedFileTreeElement(): HTMLElement | null {
     if (typeof document === "undefined") {
@@ -532,6 +560,8 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     const syncedPanelLayoutSidebarSnapshotRef = useRef(sidebarSnapshot);
     const persistedWorkspaceLayoutRef = useRef<string | null>(null);
     const workspaceLayoutRestorePendingRef = useRef(false);
+    const workspaceLayoutInitialDecisionVaultPathRef = useRef<string | null>(null);
+    const layoutRootRef = useRef<HTMLDivElement | null>(null);
     const [createEntryDraftRequest, setCreateEntryDraftRequest] = useState<{
         kind: CreateEntryDraftRequest["kind"];
         baseDirectory: string;
@@ -551,6 +581,48 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             ? JSON.stringify(buildWorkspaceLayoutConfigValue(workspaceSnapshot))
             : null;
     }, [workspaceSnapshot]);
+
+    useEffect(() => {
+        const root = layoutRootRef.current;
+        if (!root) {
+            return undefined;
+        }
+
+        let frameId: number | null = null;
+        const scheduleSync = () => {
+            if (frameId !== null) {
+                return;
+            }
+
+            frameId = window.requestAnimationFrame(() => {
+                frameId = null;
+                syncWorkbenchTitlebarOffsetTarget(root);
+            });
+        };
+
+        scheduleSync();
+
+        const mutationObserver = new MutationObserver(scheduleSync);
+        mutationObserver.observe(root, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["class", "style", "data-testid", "data-section-id", "data-tab-section-id"],
+        });
+
+        const resizeObserver = typeof ResizeObserver === "undefined"
+            ? null
+            : new ResizeObserver(scheduleSync);
+        resizeObserver?.observe(root);
+
+        return () => {
+            mutationObserver.disconnect();
+            resizeObserver?.disconnect();
+            if (frameId !== null) {
+                window.cancelAnimationFrame(frameId);
+            }
+        };
+    }, []);
 
     /* ── Open file helper ── */
 
@@ -578,8 +650,10 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
     useEffect(() => {
         let cancelled = false;
+        const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath || null;
 
-        if (!workspaceSnapshot || !configState.featureSettings.restoreWorkspaceLayout) {
+        if (!currentVaultPath || !configState.backendConfig || !configState.featureSettings.restoreWorkspaceLayout) {
+            workspaceLayoutInitialDecisionVaultPathRef.current = null;
             workspaceLayoutRestorePendingRef.current = false;
             setWorkspaceLayoutHydrationComplete(false);
             setHydratedWorkspaceSnapshot(null);
@@ -588,9 +662,25 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             };
         }
 
+        if (workspaceLayoutInitialDecisionVaultPathRef.current === currentVaultPath) {
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        workspaceLayoutInitialDecisionVaultPathRef.current = currentVaultPath;
+
+        if (!workspaceSnapshot) {
+            workspaceLayoutRestorePendingRef.current = false;
+            setWorkspaceLayoutHydrationComplete(true);
+            setHydratedWorkspaceSnapshot(null);
+            return () => {
+                cancelled = true;
+            };
+        }
+
         workspaceLayoutRestorePendingRef.current = true;
         setWorkspaceLayoutHydrationComplete(false);
-        const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath || undefined;
         void hydrateWorkspaceLayoutSnapshot(workspaceSnapshot, async (tab) => {
             const relativePath = typeof tab.params?.path === "string"
                 ? tab.params.path.replace(/\\/g, "/")
@@ -642,6 +732,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     }, [
         workspaceSnapshot,
         configState.featureSettings.restoreWorkspaceLayout,
+        configState.backendConfig,
         configState.loadedVaultPath,
         vaultState.currentVaultPath,
     ]);
@@ -740,17 +831,47 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         activeTabIdRef.current = tabId;
         if (!tabId) {
             clearActiveEditor();
+            clearActiveBacklinkTarget();
             return;
         }
         const tab = workbenchApiRef.current?.getTab(tabId);
+        if (
+            typeof tab?.params?.projectId === "string"
+            && typeof tab.params.projectName === "string"
+            && typeof tab.params.rootPath === "string"
+            && typeof tab.params.relativePath === "string"
+        ) {
+            const projectId = typeof tab.params?.projectId === "string" ? tab.params.projectId : null;
+            const projectName = typeof tab.params?.projectName === "string" ? tab.params.projectName : null;
+            const rootPath = typeof tab.params?.rootPath === "string" ? tab.params.rootPath : null;
+            const relativePath = typeof tab.params?.relativePath === "string"
+                ? tab.params.relativePath.replace(/\\/g, "/")
+                : null;
+            if (!projectId || !projectName || !rootPath || !relativePath) {
+                clearActiveEditor();
+                clearActiveBacklinkTarget();
+                return;
+            }
+            clearActiveEditor();
+            reportProjectSourceBacklinkTarget({
+                tabId,
+                projectId,
+                projectName,
+                rootPath,
+                relativePath,
+            });
+            return;
+        }
         const path = typeof tab?.params?.path === "string"
             ? tab.params.path.replace(/\\/g, "/")
             : null;
         if (!path || !(path.toLowerCase().endsWith(".md") || path.toLowerCase().endsWith(".markdown"))) {
             clearActiveEditor();
+            clearActiveBacklinkTarget();
             return;
         }
         reportActiveEditor({ articleId: tabId, path });
+        reportMarkdownBacklinkTarget({ articleId: tabId, path });
     }, []);
 
     /* ── Global keyboard shortcut dispatcher ── */
@@ -1275,7 +1396,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     }, [mergedActivityItems]);
 
     return (
-        <div className="workbench-layout-v2" data-workbench-layout-mode="layout-v2">
+        <div ref={layoutRootRef} className="workbench-layout-v2" data-workbench-layout-mode="layout-v2">
             <VSCodeWorkbench
                 activities={activityDefinitions}
                 panels={panelDefinitions}

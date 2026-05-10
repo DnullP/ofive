@@ -49,3 +49,39 @@ test("command palette create-file command should open create-entry modal", async
     await expect(createEntryModal.locator(".create-entry-title")).toHaveText(/New File|新建文件/);
     await expect(createEntryModal.locator(".create-entry-input")).toHaveValue("untitled");
 });
+
+test("create-file command should insert frontmatter when frontmatter auto-create setting is enabled", async ({ page }) => {
+    await page.goto("/web-mock/mock-tauri-test.html?showControls=0");
+
+    await page.evaluate(async () => {
+        const configStore = await import("/src/host/config/configStore.ts");
+        await configStore.syncConfigStateForVault("/mock/notes", true);
+        await configStore.updateFeatureSetting("frontmatterAutoInsertOnCreate", true);
+        await configStore.updateFeatureSetting("frontmatterTemplate", "---\ntitle: {{filename}}\ndate: {{date}}\n---");
+    });
+
+    await openCommandPalette(page);
+
+    const commandPalette = page.locator(".command-palette-panel");
+    await commandPalette.locator(".command-palette-input").fill("note.createNew");
+    await commandPalette
+        .locator(".command-palette-item")
+        .filter({ hasText: "note.createNew" })
+        .first()
+        .click();
+
+    const createEntryModal = page.locator(".create-entry-panel");
+    await expect(createEntryModal).toBeVisible();
+    await createEntryModal.locator(".create-entry-input").fill("alias-auto-frontmatter");
+    await createEntryModal.locator(".create-entry-button.primary").click();
+
+    await expect(page.locator(".layout-v2-tab-section__card--active .cm-frontmatter-widget").first()).toBeVisible();
+
+    const createdContent = await page.evaluate(async () => {
+        const vaultApi = await import("/src/api/vaultApi.ts");
+        return (await vaultApi.readVaultMarkdownFile("alias-auto-frontmatter.md")).content;
+    });
+
+    expect(createdContent).toContain("---\ntitle: alias-auto-frontmatter\ndate:");
+    expect(createdContent).toContain("\n---\n\n# alias-auto-frontmatter\n");
+});

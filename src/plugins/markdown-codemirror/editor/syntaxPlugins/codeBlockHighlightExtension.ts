@@ -131,8 +131,8 @@ interface DecoRange {
 /*  围栏代码块解析                                                     */
 /* ================================================================== */
 
-/** 匹配围栏开始行（```lang 或 ~~~lang） */
-const FENCE_OPEN_RE = /^(`{3,}|~{3,})\s*(\S*)\s*$/;
+/** 匹配围栏开始行（```lang 或 ~~~lang），允许 CommonMark 兼容的 0-3 个前导空格和 info string。 */
+const FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})(?:[ \t]*(.*?))?[ \t]*$/;
 
 /**
  * @function parseCodeBlocks
@@ -157,7 +157,7 @@ function parseCodeBlocks(state: EditorView["state"]): CodeBlock[] {
 
             const fenceChar = (openMatch[1] ?? "```").charAt(0);
             const fenceLength = (openMatch[1] ?? "```").length;
-            const language = (openMatch[2] ?? "").trim();
+            const language = ((openMatch[2] ?? "").trim().split(/\s+/)[0] ?? "").trim();
             const startLine = lineNumber;
             const blockFrom = line.from;
 
@@ -166,7 +166,7 @@ function parseCodeBlocks(state: EditorView["state"]): CodeBlock[] {
             for (let ln = lineNumber + 1; ln <= totalLines; ln += 1) {
                 const candidate = doc.line(ln);
                 const closeRe = new RegExp(
-                    `^${fenceChar === "\`" ? "`" : "~"}{${fenceLength},}\\s*$`,
+                    `^ {0,3}${fenceChar === "\`" ? "`" : "~"}{${fenceLength},}[ \\t]*$`,
                 );
                 if (closeRe.test(candidate.text)) {
                     endLine = ln;

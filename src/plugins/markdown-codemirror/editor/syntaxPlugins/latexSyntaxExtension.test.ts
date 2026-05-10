@@ -6,7 +6,10 @@
 
 import { EditorState } from "@codemirror/state";
 import { describe, expect, test } from "bun:test";
-import { resolveLatexBlockWidgetPlacement } from "./latexSyntaxExtension";
+import {
+    resolveLatexBlockWidgetPlacement,
+    resolveLatexPriorityExclusionRanges,
+} from "./latexSyntaxExtension";
 
 /**
  * @function createDoc
@@ -39,5 +42,28 @@ describe("resolveLatexBlockWidgetPlacement", () => {
         expect(placement.anchorLineNumber).toBe(4);
         expect(placement.widgetPos).toBe(doc.line(4).to);
         expect(placement.widgetSide).toBe(-1);
+    });
+});
+
+describe("resolveLatexPriorityExclusionRanges", () => {
+    test("代码块内的 $...$ 应被 LaTeX 渲染排斥区覆盖", () => {
+        const doc = createDoc([
+            "---",
+            "title: Demo",
+            "---",
+            "",
+            "  ```ts title=\"math.ts\"",
+            "const formula = '$E=mc^2$';",
+            "  ```",
+            "",
+            "$real$",
+        ].join("\n"));
+
+        const ranges = resolveLatexPriorityExclusionRanges(doc);
+
+        expect(ranges).toEqual([
+            { from: doc.line(1).from, to: doc.line(3).to },
+            { from: doc.line(5).from, to: doc.line(7).to },
+        ]);
     });
 });

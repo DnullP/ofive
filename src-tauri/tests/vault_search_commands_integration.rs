@@ -130,6 +130,47 @@ fn search_vault_markdown_should_support_full_text_tag_filter_and_file_name_scope
 }
 
 #[test]
+fn search_vault_markdown_should_treat_frontmatter_alias_as_note_name() {
+    let vault = TestVault::new();
+    vault.write_markdown(
+        "memory/context.md",
+        "---\nalias:\n  - Memory Service\n---\n# Context\n",
+    );
+
+    let quick_switch_results =
+        search_vault_markdown_files_in_root(&vault.root, "memory service".to_string(), Some(20))
+            .expect("快速切换 alias 搜索应成功");
+    let first_quick_switch =
+        serde_json::to_value(&quick_switch_results[0]).expect("结果应可序列化");
+    assert_eq!(
+        first_quick_switch
+            .get("relativePath")
+            .and_then(Value::as_str),
+        Some("memory/context.md")
+    );
+
+    let file_name_results = search_vault_markdown_in_root(
+        &vault.root,
+        "memory service".to_string(),
+        None,
+        VaultSearchScope::FileName,
+        Some(20),
+    )
+    .expect("文件名范围 alias 搜索应成功");
+    let first_file_name = serde_json::to_value(&file_name_results[0]).expect("结果应可序列化");
+    assert_eq!(
+        first_file_name.get("relativePath").and_then(Value::as_str),
+        Some("memory/context.md")
+    );
+    assert_eq!(
+        first_file_name
+            .get("matchedFileName")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+}
+
+#[test]
 fn query_vault_tasks_should_collect_repo_tasks_and_skip_code_blocks() {
     let vault = TestVault::new();
     vault.write_markdown(

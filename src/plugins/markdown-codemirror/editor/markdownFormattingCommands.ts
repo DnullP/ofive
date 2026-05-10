@@ -16,6 +16,8 @@
  *  - toggleItalic       — 切换斜体 `*text*`
  *  - toggleStrikethrough — 切换删除线 `~~text~~`
  *  - toggleInlineCode   — 切换行内代码 `` `text` ``
+ *  - toggleInlineLatex  — 切换行内公式 `$text$`
+ *  - toggleBlockLatex   — 切换整行公式块 `$$`
  *  - toggleHighlight    — 切换高亮 `==text==`
  *  - toggleWikiLink     — 切换双中括号链接 `[[text]]`
  *  - insertLink         — 插入/包裹链接 `[text](url)`
@@ -25,6 +27,7 @@
  */
 
 import type { EditorView } from "codemirror";
+import { expandFrontmatterTemplate } from "../../../utils/frontmatterTemplate";
 
 /* ================================================================== */
 /*  内部工具函数                                                       */
@@ -237,6 +240,64 @@ function toggleDelimiter(view: EditorView, delimiter: string): boolean {
     return toggleWrapPair(view, delimiter, delimiter);
 }
 
+function insertTemplateAtSelection(
+    view: EditorView,
+    openMarker: string,
+    closeMarker: string,
+): boolean {
+    const selection = view.state.selection.main;
+
+    if (selection.empty) {
+        const insertText = openMarker + closeMarker;
+        view.dispatch({
+            changes: { from: selection.from, to: selection.to, insert: insertText },
+            selection: { anchor: selection.from + openMarker.length },
+        });
+        return true;
+    }
+
+    return toggleWrapPair(view, openMarker, closeMarker);
+}
+
+function toggleBlockTemplate(view: EditorView, openMarker: string, closeMarker: string): boolean {
+    const selection = view.state.selection.main;
+    const openLength = openMarker.length;
+    const closeLength = closeMarker.length;
+
+    if (selection.empty) {
+        const insertText = `${openMarker}\n\n${closeMarker}`;
+        view.dispatch({
+            changes: { from: selection.from, to: selection.to, insert: insertText },
+            selection: { anchor: selection.from + openLength + 1 },
+        });
+        return true;
+    }
+
+    const selectedText = view.state.doc.sliceString(selection.from, selection.to);
+    if (
+        selectedText.length >= openLength + closeLength + 2 &&
+        selectedText.startsWith(`${openMarker}\n`) &&
+        selectedText.endsWith(`\n${closeMarker}`)
+    ) {
+        const inner = selectedText.slice(openLength + 1, selectedText.length - closeLength - 1);
+        view.dispatch({
+            changes: { from: selection.from, to: selection.to, insert: inner },
+            selection: { anchor: selection.from, head: selection.from + inner.length },
+        });
+        return true;
+    }
+
+    const wrappedText = `${openMarker}\n${selectedText}\n${closeMarker}`;
+    view.dispatch({
+        changes: { from: selection.from, to: selection.to, insert: wrappedText },
+        selection: {
+            anchor: selection.from + openLength + 1,
+            head: selection.from + openLength + 1 + selectedText.length,
+        },
+    });
+    return true;
+}
+
 /* ================================================================== */
 /*  导出命令函数                                                       */
 /* ================================================================== */
@@ -279,6 +340,26 @@ export function toggleStrikethrough(view: EditorView): boolean {
  */
 export function toggleInlineCode(view: EditorView): boolean {
     return toggleDelimiter(view, "`");
+}
+
+/**
+ * @function toggleInlineLatex
+ * @description 切换行内 LaTeX 公式 `$text$`。空选区时只插入一对 `$`，不扩展当前词。
+ * @param view 编辑器视图。
+ * @returns 是否执行成功。
+ */
+export function toggleInlineLatex(view: EditorView): boolean {
+    return insertTemplateAtSelection(view, "$", "$");
+}
+
+/**
+ * @function toggleBlockLatex
+ * @description 切换整行 LaTeX 公式块 `$$`。空选区时插入 `$$\n\n$$` 并把光标放到中间行。
+ * @param view 编辑器视图。
+ * @returns 是否执行成功。
+ */
+export function toggleBlockLatex(view: EditorView): boolean {
+    return toggleBlockTemplate(view, "$$", "$$");
 }
 
 /**
@@ -375,26 +456,7 @@ export interface FrontmatterInsertContext {
     filePath?: string;
 }
 
-/**
- * @function expandFrontmatterTemplate
- * @description 将 frontmatter 模板中的占位符替换为实际值。
- *   支持占位符：{{filename}} 文件名（无扩展名）、{{date}} 当前日期（YYYY-MM-DD）、{{directory}} 所在目录路径。
- * @param template 模板字符串。
- * @param filePath vault 相对路径。
- * @returns 替换后的字符串。
- */
-export function expandFrontmatterTemplate(template: string, filePath: string): string {
-    const segments = filePath.split("/");
-    const fullName = segments.pop() ?? "";
-    const directory = segments.join("/");
-    const filename = fullName.replace(/\.[^.]+$/, "");
-    const date = new Date().toISOString().slice(0, 10);
-
-    return template
-        .replace(/\{\{filename\}\}/g, filename)
-        .replace(/\{\{date\}\}/g, date)
-        .replace(/\{\{directory\}\}/g, directory);
-}
+export { expandFrontmatterTemplate };
 
 /**
  * @function insertFrontmatter

@@ -11,12 +11,16 @@
  *   - @playwright/test
  */
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
 const BROWSER_FALLBACK_CONFIG_PREFIX = "ofive:browser-fallback:vault-config:";
 const LAST_VAULT_PATH_STORAGE_KEY = "ofive:last-vault-path";
 const FRONTEND_REMEMBER_LAST_VAULT_KEY = "ofive:settings:remember-last-vault";
+const GUIDE_NOTE_PATH = "test-resources/notes/guide.md";
+const NETWORK_NOTE_PATH = "test-resources/notes/network-segment.md";
+const NOTE1_PATH = "test-resources/notes/note1.md";
+const SPLIT_SETTLE_MS = 360;
 
 function buildCollapsedSidebarVaultConfig(): Record<string, unknown> {
     const collapsedPanelLayout = {
@@ -363,6 +367,106 @@ async function waitForMockLayoutReady(page: Page): Promise<void> {
     await page.locator(".layout-v2-tab-section__tab-main").first().waitFor({ state: "visible" });
 }
 
+async function expandMockNotes(page: Page): Promise<void> {
+    if (await page.locator(".tree-item[data-tree-path='test-resources/notes']").count()) {
+        return;
+    }
+
+    await page.locator(".tree-item[data-tree-path='test-resources']").click();
+    await page.locator(".tree-item[data-tree-path='test-resources/notes']").click();
+}
+
+async function openMockNote(page: Page, relativePath: string): Promise<void> {
+    await expandMockNotes(page);
+    const fileName = relativePath.split("/").pop() ?? relativePath;
+    await page.locator(`.tree-item[data-tree-path='${relativePath}']`).click();
+    await page.getByRole("button", { name: fileName, exact: true }).first().waitFor({ state: "visible" });
+}
+
+async function dragLocatorToPoint(
+    page: Page,
+    locator: Locator,
+    targetX: number,
+    targetY: number,
+): Promise<void> {
+    await locator.waitFor({ state: "visible" });
+    const sourceBounds = await locator.boundingBox();
+    if (!sourceBounds) {
+        throw new Error("dragLocatorToPoint: source bounds missing");
+    }
+
+    await page.mouse.move(sourceBounds.x + sourceBounds.width / 2, sourceBounds.y + sourceBounds.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(targetX, targetY, { steps: 12 });
+    await page.waitForTimeout(80);
+    await page.mouse.up();
+    await page.waitForTimeout(SPLIT_SETTLE_MS);
+}
+
+async function splitTabToRight(page: Page, tabTitle: string): Promise<void> {
+    const sourceTab = page.locator(".layout-v2-tab-section__tab-main", { hasText: tabTitle }).first();
+    const targetContent = page
+        .locator('.layout-v2-tab-section[data-tab-section-id="main-tabs"] .layout-v2-tab-section__content')
+        .first();
+    const targetBounds = await targetContent.boundingBox();
+    if (!targetBounds) {
+        throw new Error("splitTabToRight: target bounds missing");
+    }
+
+    await dragLocatorToPoint(
+        page,
+        sourceTab,
+        targetBounds.x + targetBounds.width - 14,
+        targetBounds.y + targetBounds.height / 2,
+    );
+}
+
+async function splitTabToBottom(page: Page, tabTitle: string, targetTabSectionId: string): Promise<void> {
+    const sourceTab = page.locator(".layout-v2-tab-section__tab-main", { hasText: tabTitle }).first();
+    const targetContent = page
+        .locator(`.layout-v2-tab-section[data-tab-section-id="${targetTabSectionId}"] .layout-v2-tab-section__content`)
+        .first();
+    const targetBounds = await targetContent.boundingBox();
+    if (!targetBounds) {
+        throw new Error("splitTabToBottom: target bounds missing");
+    }
+
+    await dragLocatorToPoint(
+        page,
+        sourceTab,
+        targetBounds.x + targetBounds.width / 2,
+        targetBounds.y + targetBounds.height - 14,
+    );
+}
+
+async function readTabStripMetrics(page: Page): Promise<Array<{
+    id: string | null;
+    stripLeft: number;
+    stripTop: number;
+    paddingLeft: number;
+    tabOffsetLeft: number;
+}>> {
+    return page.evaluate(() => Array.from(
+        document.querySelectorAll<HTMLElement>(".layout-v2-tab-section"),
+    ).map((section) => {
+        const strip = section.querySelector<HTMLElement>(".layout-v2-tab-section__strip");
+        const firstTab = section.querySelector<HTMLElement>(".layout-v2-tab-section__tab-main");
+        if (!strip || !firstTab) {
+            throw new Error("tab section strip metric selectors missing");
+        }
+
+        const stripRect = strip.getBoundingClientRect();
+        const firstTabRect = firstTab.getBoundingClientRect();
+        return {
+            id: section.getAttribute("data-tab-section-id"),
+            stripLeft: stripRect.left,
+            stripTop: stripRect.top,
+            paddingLeft: Number.parseFloat(getComputedStyle(strip).paddingLeft || "0"),
+            tabOffsetLeft: firstTabRect.left - stripRect.left,
+        };
+    }));
+}
+
 test.describe("sidebar toggle regression", () => {
     test.beforeEach(async ({ page }) => {
         await page.goto(MOCK_PAGE);
@@ -496,5 +600,76 @@ test.describe("sidebar titlebar integration", () => {
         await expect(page.locator(".app-titlebar__control--sidebar")).toHaveCount(0);
         await expect(page.locator(".app-titlebar--mac .app-titlebar__control")).toHaveCount(0);
         await expectCollapsedSidebarControlsUsable(page);
+    });
+
+    test("hidden left sidebar only adds mac titlebar padding to the leftmost tab strip", async ({ page }) => {
+        await page.addInitScript(() => {
+            Object.defineProperty(window.navigator, "platform", {
+                configurable: true,
+                get: () => "MacIntel",
+            });
+        });
+
+        await page.goto("/");
+        await expect(page.locator(".app-titlebar--mac")).toBeVisible();
+        await waitForMockLayoutReady(page);
+
+        await openMockNote(page, GUIDE_NOTE_PATH);
+        await openMockNote(page, NETWORK_NOTE_PATH);
+        await splitTabToRight(page, "network-segment.md");
+        await expect(page.locator(".layout-v2-tab-section")).toHaveCount(2);
+
+        await page.keyboard.press("Meta+Shift+J");
+        await expect(page.locator("[data-testid='sidebar-left']")).toHaveCount(0);
+
+        const stripMetrics = (await readTabStripMetrics(page))
+            .sort((left, right) => left.stripLeft - right.stripLeft);
+
+        expect(stripMetrics).toHaveLength(2);
+        expect(stripMetrics[0].paddingLeft).toBeGreaterThanOrEqual(96);
+        expect(stripMetrics[0].tabOffsetLeft).toBeGreaterThanOrEqual(96);
+        expect(stripMetrics[1].paddingLeft).toBeLessThanOrEqual(1);
+        expect(stripMetrics[1].tabOffsetLeft).toBeLessThan(24);
+    });
+
+    test("hidden left sidebar only pads the top-left tab strip inside nested splits", async ({ page }) => {
+        await page.addInitScript(() => {
+            Object.defineProperty(window.navigator, "platform", {
+                configurable: true,
+                get: () => "MacIntel",
+            });
+        });
+
+        await page.goto("/");
+        await expect(page.locator(".app-titlebar--mac")).toBeVisible();
+        await waitForMockLayoutReady(page);
+
+        await openMockNote(page, GUIDE_NOTE_PATH);
+        await openMockNote(page, NETWORK_NOTE_PATH);
+        await openMockNote(page, NOTE1_PATH);
+        await splitTabToRight(page, "network-segment.md");
+        await expect(page.locator(".layout-v2-tab-section")).toHaveCount(2);
+        await splitTabToBottom(page, "note1.md", "main-tabs");
+        await expect(page.locator(".layout-v2-tab-section")).toHaveCount(3);
+
+        await page.keyboard.press("Meta+Shift+J");
+        await expect(page.locator("[data-testid='sidebar-left']")).toHaveCount(0);
+
+        const stripMetrics = await readTabStripMetrics(page);
+        const topLeftStrip = [...stripMetrics]
+            .sort((left, right) => {
+                const topDelta = left.stripTop - right.stripTop;
+                return Math.abs(topDelta) > 2 ? topDelta : left.stripLeft - right.stripLeft;
+            })[0];
+        const paddedStrips = stripMetrics.filter((metric) => metric.paddingLeft >= 96);
+
+        expect(stripMetrics).toHaveLength(3);
+        expect(paddedStrips).toHaveLength(1);
+        expect(paddedStrips[0].id).toBe(topLeftStrip.id);
+        expect(paddedStrips[0].tabOffsetLeft).toBeGreaterThanOrEqual(96);
+        for (const metric of stripMetrics.filter((item) => item.id !== paddedStrips[0].id)) {
+            expect(metric.paddingLeft).toBeLessThanOrEqual(1);
+            expect(metric.tabOffsetLeft).toBeLessThan(24);
+        }
     });
 });

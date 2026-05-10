@@ -10,7 +10,7 @@
  *   const extension = createRegisteredLineSyntaxRenderExtension()
  */
 
-import { RangeSetBuilder } from "@codemirror/state";
+import { RangeSetBuilder, StateEffect, StateField, type Extension } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { isInsideExclusionZone } from "./syntaxExclusionZones";
 
@@ -83,6 +83,49 @@ export interface LineSyntaxRendererRegistration {
 }
 
 const lineSyntaxRendererMap = new Map<string, LineSyntaxRendererRegistration>();
+
+const setLineSyntaxImeCompositionActiveEffect = StateEffect.define<boolean>();
+
+const lineSyntaxImeCompositionActiveField = StateField.define<boolean>({
+    create: () => false,
+    update(value, transaction) {
+        for (const effect of transaction.effects) {
+            if (effect.is(setLineSyntaxImeCompositionActiveEffect)) {
+                value = effect.value;
+            }
+        }
+        return value;
+    },
+});
+
+function isLineSyntaxImeCompositionActive(view: EditorView): boolean {
+    const fieldReader = (view.state as {
+        field?: <T>(field: StateField<T>, require?: boolean) => T | undefined;
+    }).field;
+
+    if (typeof fieldReader !== "function") {
+        return false;
+    }
+
+    return fieldReader.call(view.state, lineSyntaxImeCompositionActiveField, false) === true;
+}
+
+/**
+ * @function setLineSyntaxImeCompositionActive
+ * @description 在原生 IME compositionstart 事件内同步打开行级语法渲染保护，
+ *   让当前行先回退到源码 DOM，再允许浏览器写入组合文本。
+ * @param view 编辑器视图。
+ * @param active 是否处于输入法组合保护窗口。
+ */
+export function setLineSyntaxImeCompositionActive(view: EditorView, active: boolean): void {
+    if (isLineSyntaxImeCompositionActive(view) === active) {
+        return;
+    }
+
+    view.dispatch({
+        effects: setLineSyntaxImeCompositionActiveEffect.of(active),
+    });
+}
 
 /**
  * @function registerLineSyntaxRenderer
@@ -190,7 +233,7 @@ export function shouldSuppressLineSyntaxRendering(
     lineFrom: number,
     lineTo: number,
 ): boolean {
-    if (!view.composing) {
+    if (!view.composing && !isLineSyntaxImeCompositionActive(view)) {
         return false;
     }
 
@@ -365,20 +408,25 @@ function buildRegisteredSyntaxDecorations(view: EditorView): DecorationSet {
  * @description 创建注册语法渲染插件扩展。
  * @returns CodeMirror 扩展。
  */
-export function createRegisteredLineSyntaxRenderExtension() {
-    return ViewPlugin.fromClass(
+export function createRegisteredLineSyntaxRenderExtension(): Extension {
+    const registeredLineSyntaxRenderViewPlugin = ViewPlugin.fromClass(
         class {
             decorations: DecorationSet;
             private wasComposing: boolean;
+            private wasImeCompositionActive: boolean;
 
             constructor(view: EditorView) {
                 this.decorations = buildRegisteredSyntaxDecorations(view);
                 this.wasComposing = view.composing;
+                this.wasImeCompositionActive = isLineSyntaxImeCompositionActive(view);
             }
 
             update(update: ViewUpdate): void {
                 const compositionChanged = update.view.composing !== this.wasComposing;
                 this.wasComposing = update.view.composing;
+                const imeCompositionActive = isLineSyntaxImeCompositionActive(update.view);
+                const imeCompositionActiveChanged = imeCompositionActive !== this.wasImeCompositionActive;
+                this.wasImeCompositionActive = imeCompositionActive;
 
                 if (
                     update.docChanged
@@ -386,6 +434,7 @@ export function createRegisteredLineSyntaxRenderExtension() {
                     || update.viewportChanged
                     || update.focusChanged
                     || compositionChanged
+                    || imeCompositionActiveChanged
                 ) {
                     this.decorations = buildRegisteredSyntaxDecorations(update.view);
                 }
@@ -395,4 +444,9 @@ export function createRegisteredLineSyntaxRenderExtension() {
             decorations: (plugin) => plugin.decorations,
         },
     );
+
+    return [
+        lineSyntaxImeCompositionActiveField,
+        registeredLineSyntaxRenderViewPlugin,
+    ];
 }

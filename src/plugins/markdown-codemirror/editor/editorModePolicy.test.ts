@@ -19,6 +19,8 @@ import {
 describe("editorModePolicy", () => {
     test("should allow all native commands in edit mode", () => {
         expect(canExecuteEditorNativeCommandInMode("edit", "editor.toggleBold")).toBe(true);
+        expect(canExecuteEditorNativeCommandInMode("edit", "editor.toggleInlineLatex")).toBe(true);
+        expect(canExecuteEditorNativeCommandInMode("edit", "editor.toggleBlockLatex")).toBe(true);
         expect(canExecuteEditorNativeCommandInMode("edit", "editor.find")).toBe(true);
     });
 
@@ -26,6 +28,8 @@ describe("editorModePolicy", () => {
         expect(canExecuteEditorNativeCommandInMode("read", "editor.find")).toBe(true);
         expect(canExecuteEditorNativeCommandInMode("read", "editor.selectAll")).toBe(true);
         expect(canExecuteEditorNativeCommandInMode("read", "editor.toggleBold")).toBe(false);
+        expect(canExecuteEditorNativeCommandInMode("read", "editor.toggleInlineLatex")).toBe(false);
+        expect(canExecuteEditorNativeCommandInMode("read", "editor.toggleBlockLatex")).toBe(false);
         expect(canExecuteEditorNativeCommandInMode("read", "editor.toggleWikiLink")).toBe(false);
         expect(canExecuteEditorNativeCommandInMode("read", "editor.insertTask")).toBe(false);
         expect(canExecuteEditorNativeCommandInMode("read", "editor.insertFrontmatter")).toBe(false);

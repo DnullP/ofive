@@ -53,6 +53,8 @@ import {
     toggleItalic,
     toggleStrikethrough,
     toggleInlineCode,
+    toggleInlineLatex,
+    toggleBlockLatex,
     toggleHighlight,
     toggleWikiLink,
     insertLink,
@@ -108,6 +110,27 @@ const FRONTMATTER_VIM_ROW_SELECTOR = "[data-frontmatter-vim-nav='true'][data-fro
 const MARKDOWN_TABLE_SHELL_SELECTOR = "[data-markdown-table-block-from]";
 const MARKDOWN_TABLE_VIM_NAV_SELECTOR = "[data-markdown-table-vim-nav='true']";
 const MARKDOWN_TABLE_ENTRY_SELECTOR = `${MARKDOWN_TABLE_VIM_NAV_SELECTOR}[data-markdown-table-entry-anchor='true']`;
+const TAB_HEADER_SCROLL_DIRECTION_THRESHOLD_PX = 12;
+const TAB_HEADER_SCROLL_TOP_EXPAND_THRESHOLD_PX = 4;
+
+function resolveReadModeScrollElement(tabRoot: HTMLElement | null): HTMLElement | null {
+    if (!tabRoot) {
+        return null;
+    }
+
+    return Array.from(tabRoot.children).find(
+        (child): child is HTMLElement =>
+            child instanceof HTMLElement && child.classList.contains("cm-tab-reader"),
+    ) ?? null;
+}
+
+function isTabHeaderFocused(tabRoot: HTMLElement | null): boolean {
+    if (!tabRoot || !(document.activeElement instanceof HTMLElement)) {
+        return false;
+    }
+
+    return Boolean(tabRoot.querySelector(".cm-tab-header")?.contains(document.activeElement));
+}
 
 /**
  * @function exitVimInsertMode
@@ -257,6 +280,8 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         "editor.toggleItalic": "Cmd+I",
         "editor.toggleStrikethrough": "Cmd+Shift+X",
         "editor.toggleInlineCode": "Cmd+E",
+        "editor.toggleInlineLatex": "Cmd+M",
+        "editor.toggleBlockLatex": "Cmd+Shift+M",
         "editor.toggleHighlight": "Cmd+Shift+H",
         "editor.toggleWikiLink": "Cmd+Alt+K",
         "editor.insertLink": "Cmd+K",
@@ -341,6 +366,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
     const [initialContentPresented, setInitialContentPresented] = useState<boolean>(false);
     const titleRenameInFlightRef = useRef<boolean>(false);
     const titleImeCompositionGuard = useRef(createImeCompositionGuard()).current;
+    const [tabHeaderCollapsed, setTabHeaderCollapsed] = useState<boolean>(false);
     const activeEditor = useActiveEditor();
     const { displayMode } = useEditorDisplayModeState();
     const isActiveEditor = activeEditor?.articleId === articleId;
@@ -614,6 +640,50 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
     }, [initialDoc]);
 
     useEffect(() => {
+        setTabHeaderCollapsed(false);
+    }, [displayFilePath, effectiveDisplayMode]);
+
+    useEffect(() => {
+        const tabRoot = tabRootRef.current;
+        const scrollElement = effectiveDisplayMode === "read"
+            ? resolveReadModeScrollElement(tabRoot)
+            : viewRef.current?.scrollDOM ?? null;
+        if (!scrollElement) {
+            setTabHeaderCollapsed(false);
+            return;
+        }
+
+        let lastScrollTop = scrollElement.scrollTop;
+
+        const handleScroll = (): void => {
+            const nextScrollTop = scrollElement.scrollTop;
+            const delta = nextScrollTop - lastScrollTop;
+
+            if (nextScrollTop <= TAB_HEADER_SCROLL_TOP_EXPAND_THRESHOLD_PX) {
+                setTabHeaderCollapsed(false);
+                lastScrollTop = nextScrollTop;
+                return;
+            }
+
+            if (Math.abs(delta) < TAB_HEADER_SCROLL_DIRECTION_THRESHOLD_PX) {
+                return;
+            }
+
+            if (delta > 0 && !isTabHeaderFocused(tabRoot)) {
+                setTabHeaderCollapsed(true);
+            } else if (delta < 0) {
+                setTabHeaderCollapsed(false);
+            }
+            lastScrollTop = nextScrollTop;
+        };
+
+        scrollElement.addEventListener("scroll", handleScroll, { passive: true });
+        return () => {
+            scrollElement.removeEventListener("scroll", handleScroll);
+        };
+    }, [effectiveDisplayMode, viewRef, initialContentPresented, isReadingMode]);
+
+    useEffect(() => {
         if (
             effectiveDisplayMode !== "edit" ||
             !isActiveEditor ||
@@ -745,6 +815,14 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
 
         if (commandId === "editor.toggleInlineCode") {
             return toggleInlineCode(view);
+        }
+
+        if (commandId === "editor.toggleInlineLatex") {
+            return toggleInlineLatex(view);
+        }
+
+        if (commandId === "editor.toggleBlockLatex") {
+            return toggleBlockLatex(view);
         }
 
         if (commandId === "editor.toggleHighlight") {
@@ -930,7 +1008,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         <EditorErrorBoundary>
             <div
                 ref={tabRootRef}
-                className={`cm-tab ${isReadingMode ? "cm-tab-reading" : "cm-tab-editing"}`}
+                className={`cm-tab ${isReadingMode ? "cm-tab-reading" : "cm-tab-editing"} ${tabHeaderCollapsed ? "cm-tab--header-collapsed" : ""}`}
                 style={sharedTypographyVariables}
             >
                 <div className="cm-tab-header">

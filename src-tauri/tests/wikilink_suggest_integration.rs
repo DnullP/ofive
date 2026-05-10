@@ -115,3 +115,22 @@ fn suggest_wikilink_keyword_match_takes_priority() {
         first_path
     );
 }
+
+#[test]
+fn suggest_wikilink_should_match_frontmatter_alias() {
+    let vault = TestVault::new();
+    vault.write_markdown(
+        "memory/context.md",
+        "---\nalias:\n  - Memory Service\n---\n# Context\n",
+    );
+
+    let results =
+        suggest_wikilink_targets_in_root(&vault.root, "memory service".to_string(), Some(10))
+            .expect("alias 建议查询应成功");
+
+    let first_value = serde_json::to_value(&results[0]).unwrap_or_default();
+    assert_eq!(
+        first_value.get("relativePath").and_then(Value::as_str),
+        Some("memory/context.md")
+    );
+}

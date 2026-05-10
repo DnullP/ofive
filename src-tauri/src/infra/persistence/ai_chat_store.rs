@@ -517,17 +517,20 @@ fn sanitize_ai_chat_settings(settings: AiChatSettings) -> AiChatSettings {
     });
 
     let mut next_tool_approval_policy = HashMap::new();
-    settings.tool_approval_policy.iter().for_each(|(tool_id, mode)| {
-        let normalized_tool_id = tool_id.trim();
-        let normalized_mode = mode.trim().to_lowercase();
-        if normalized_tool_id.is_empty() {
-            return;
-        }
+    settings
+        .tool_approval_policy
+        .iter()
+        .for_each(|(tool_id, mode)| {
+            let normalized_tool_id = tool_id.trim();
+            let normalized_mode = mode.trim().to_lowercase();
+            if normalized_tool_id.is_empty() {
+                return;
+            }
 
-        if normalized_mode == "require" || normalized_mode == "auto" {
-            next_tool_approval_policy.insert(normalized_tool_id.to_string(), normalized_mode);
-        }
-    });
+            if normalized_mode == "require" || normalized_mode == "auto" {
+                next_tool_approval_policy.insert(normalized_tool_id.to_string(), normalized_mode);
+            }
+        });
 
     AiChatSettings {
         vendor_id: vendor.id,

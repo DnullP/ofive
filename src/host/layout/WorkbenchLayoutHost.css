@@ -192,7 +192,7 @@
     min-height: var(--shell-titlebar-height);
 }
 
-.app-titlebar--mac ~ .app-content .workbench-layout-v2:not(:has([data-testid='sidebar-left'])) .layout-v2-tab-section__strip {
+.app-titlebar--mac ~ .app-content .workbench-layout-v2:not(:has([data-testid='sidebar-left'])) .layout-v2-tab-section__strip[data-workbench-titlebar-offset='mac-left'] {
     padding-left: var(--shell-window-control-width);
 }
 

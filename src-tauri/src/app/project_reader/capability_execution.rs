@@ -19,16 +19,13 @@ pub(crate) fn execute_project_reader_capability(
 ) -> Option<Result<Value, String>> {
     match request.capability_id.as_str() {
         "project_reader.list_projects" => Some(execute_list_projects()),
-        "project_reader.get_project_tree" => {
-            Some(execute_get_project_tree(request.input.clone()))
-        }
+        "project_reader.get_project_tree" => Some(execute_get_project_tree(request.input.clone())),
         "project_reader.read_project_file" => {
             Some(execute_read_project_file(request.input.clone()))
         }
-        "project_reader.get_code_references" => Some(execute_get_code_references(
-            request.input.clone(),
-            context,
-        )),
+        "project_reader.get_code_references" => {
+            Some(execute_get_code_references(request.input.clone(), context))
+        }
         "project_reader.resolve_symbol" => Some(execute_resolve_symbol(request.input.clone())),
         _ => None,
     }
@@ -104,22 +101,26 @@ fn execute_get_code_references(
 
 fn execute_resolve_symbol(input: Value) -> Result<Value, String> {
     let input: ProjectSymbolInput = parse_input(input, "project_reader.resolve_symbol")?;
-    let context = input.context.map(|context| ProjectReaderSymbolResolveContext {
-        current_file_path: context.current_file_path,
-        current_line_number: context.current_line_number,
-        current_column_number: context.current_column_number,
-        current_line_text: context.current_line_text,
-        current_file_content: context.current_file_content,
-    });
+    let context = input
+        .context
+        .map(|context| ProjectReaderSymbolResolveContext {
+            current_file_path: context.current_file_path,
+            current_line_number: context.current_line_number,
+            current_column_number: context.current_column_number,
+            current_line_text: context.current_line_text,
+            current_file_content: context.current_file_content,
+        });
     serialize_output(
         project_reader_app_service::resolve_symbol(input.project_id, input.symbol, context)?,
         "project_reader.resolve_symbol",
     )
 }
 
-fn parse_input<T: for<'de> Deserialize<'de>>(input: Value, capability_id: &str) -> Result<T, String> {
-    serde_json::from_value(input)
-        .map_err(|error| format!("解析 {capability_id} 输入失败: {error}"))
+fn parse_input<T: for<'de> Deserialize<'de>>(
+    input: Value,
+    capability_id: &str,
+) -> Result<T, String> {
+    serde_json::from_value(input).map_err(|error| format!("解析 {capability_id} 输入失败: {error}"))
 }
 
 fn serialize_output<T: serde::Serialize>(output: T, capability_id: &str) -> Result<Value, String> {

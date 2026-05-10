@@ -116,6 +116,7 @@ describe("configStore defaults", () => {
                 notificationsEnabled: DEFAULT_FEATURE_SETTINGS.notificationsEnabled,
                 notificationsMaxVisible: DEFAULT_FEATURE_SETTINGS.notificationsMaxVisible,
                 frontmatterTemplate: DEFAULT_FEATURE_SETTINGS.frontmatterTemplate,
+                frontmatterAutoInsertOnCreate: DEFAULT_FEATURE_SETTINGS.frontmatterAutoInsertOnCreate,
                 restoreWorkspaceLayout: DEFAULT_FEATURE_SETTINGS.restoreWorkspaceLayout,
             },
         });
@@ -193,7 +194,28 @@ describe("configStore defaults", () => {
                 notificationsEnabled: DEFAULT_FEATURE_SETTINGS.notificationsEnabled,
                 notificationsMaxVisible: DEFAULT_FEATURE_SETTINGS.notificationsMaxVisible,
                 frontmatterTemplate: DEFAULT_FEATURE_SETTINGS.frontmatterTemplate,
+                frontmatterAutoInsertOnCreate: DEFAULT_FEATURE_SETTINGS.frontmatterAutoInsertOnCreate,
                 restoreWorkspaceLayout: DEFAULT_FEATURE_SETTINGS.restoreWorkspaceLayout,
+            },
+        });
+    });
+
+    it("应归一化创建新笔记时自动插入 frontmatter 的配置项", async () => {
+        currentVaultConfig = {
+            schemaVersion: 1,
+            entries: {
+                features: {
+                    frontmatterAutoInsertOnCreate: true,
+                },
+            },
+        };
+
+        await syncConfigStateForVault("/tmp/frontmatter-auto-create-vault", true);
+
+        expect(getConfigSnapshot().featureSettings.frontmatterAutoInsertOnCreate).toBe(true);
+        expect(savedVaultConfigs[savedVaultConfigs.length - 1]?.entries).toMatchObject({
+            features: {
+                frontmatterAutoInsertOnCreate: true,
             },
         });
     });

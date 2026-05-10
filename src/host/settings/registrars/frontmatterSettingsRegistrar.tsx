@@ -60,9 +60,20 @@ export function registerFrontmatterSettingsSection(): () => void {
 
     const unregisterItems = registerSettingsItems([
         {
-            id: "frontmatter-template-editor",
+            id: "frontmatter-auto-insert-on-create",
             sectionId: "frontmatter-template",
             order: 10,
+            kind: "toggle",
+            title: "settings.frontmatterAutoInsertOnCreate",
+            description: "settings.frontmatterAutoInsertOnCreateDesc",
+            searchTerms: ["frontmatter", "create", "new note", "template", "新建", "自动插入", "元数据"],
+            useValue: () => useConfigState().featureSettings.frontmatterAutoInsertOnCreate,
+            updateValue: (nextValue) => updateFeatureSetting("frontmatterAutoInsertOnCreate", nextValue),
+        },
+        {
+            id: "frontmatter-template-editor",
+            sectionId: "frontmatter-template",
+            order: 20,
             kind: "custom",
             title: "settings.frontmatterTemplate",
             searchTerms: ["frontmatter", "template", "filename", "date", "directory", "模板", "日期", "文件名", "目录"],

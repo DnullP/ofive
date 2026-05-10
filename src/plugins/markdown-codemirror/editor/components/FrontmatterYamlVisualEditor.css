@@ -58,7 +58,7 @@
 /* Frontmatter 属性行：左侧属性名，右侧值与动作。 */
 .fmv-row {
     display: grid;
-    grid-template-columns: 230px minmax(0, 1fr);
+    grid-template-columns: 230px 1px minmax(0, 1fr);
     gap: 8px;
     align-items: center;
     padding: 6px 0;
@@ -146,6 +146,72 @@
 .fmv-field-copy {
     min-width: 0;
     display: block;
+    position: relative;
+}
+
+/* Frontmatter KV 分隔线：让字段名和值之间的边界更容易扫读。 */
+.fmv-kv-divider {
+    width: 1px;
+    align-self: stretch;
+    min-height: 22px;
+    background: color-mix(in srgb, var(--surface-chip-border) 72%, transparent);
+}
+
+/* Frontmatter 字段名建议弹层：列出受治理的特殊字段。 */
+.fmv-field-suggest-popup {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 6px);
+    left: 0;
+    width: min(240px, calc(100vw - 32px));
+    min-width: 180px;
+    display: grid;
+    gap: 2px;
+    padding: 5px;
+    border: 1px solid var(--floating-surface-border);
+    border-radius: 8px;
+    background: var(--floating-surface-bg-strong);
+    box-shadow: var(--floating-surface-shadow);
+    backdrop-filter: blur(12px);
+}
+
+/* Frontmatter 字段名建议项：保留 key 和类型两个扫描点。 */
+.fmv-field-suggest-item {
+    min-width: 0;
+    width: 100%;
+    height: 28px;
+    border: 0;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 8px;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.fmv-field-suggest-item:hover,
+.fmv-field-suggest-item:focus-visible {
+    outline: none;
+    background: color-mix(in srgb, var(--accent-primary-soft-weak) 72%, transparent);
+}
+
+.fmv-field-suggest-key {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.fmv-field-suggest-type {
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-transform: uppercase;
 }
 
 /* Frontmatter 单行文本壳层：承载镜像文本与真实 textarea，提供自绘选区的对齐基座。 */

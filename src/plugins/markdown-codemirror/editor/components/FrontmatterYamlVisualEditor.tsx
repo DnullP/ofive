@@ -145,6 +145,79 @@ type FrontmatterContextAction = FrontmatterFieldType | "remove";
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+export type GovernedFrontmatterFieldUsage =
+    | "calendar"
+    | "editor-title"
+    | "wikilink"
+    | "quick-switcher"
+    | "search";
+
+export interface GovernedFrontmatterField {
+    key: string;
+    fieldType: FrontmatterFieldType;
+    label: string;
+    description: string;
+    usedBy: GovernedFrontmatterFieldUsage[];
+}
+
+export const GOVERNED_FRONTMATTER_FIELDS: readonly GovernedFrontmatterField[] = [
+    {
+        key: "title",
+        fieldType: "string",
+        label: "Title",
+        description: "Primary display title used by editor and metadata surfaces.",
+        usedBy: ["editor-title", "search"],
+    },
+    {
+        key: "date",
+        fieldType: "date",
+        label: "Date",
+        description: "Calendar date used by date-based note workflows.",
+        usedBy: ["calendar", "search"],
+    },
+    {
+        key: "alias",
+        fieldType: "list",
+        label: "Alias",
+        description: "Alternative note names treated the same as the file name.",
+        usedBy: ["wikilink", "quick-switcher", "search"],
+    },
+];
+
+/**
+ * @function getGovernedFrontmatterField
+ * @description 按字段名读取受治理 frontmatter 字段定义。
+ */
+export function getGovernedFrontmatterField(key: string): GovernedFrontmatterField | null {
+    const normalizedKey = key.trim().toLowerCase();
+    return GOVERNED_FRONTMATTER_FIELDS.find((field) => field.key.toLowerCase() === normalizedKey) ?? null;
+}
+
+/**
+ * @function getFrontmatterFieldSuggestions
+ * @description 根据输入前缀返回可用的受治理字段建议。
+ */
+export function getFrontmatterFieldSuggestions(
+    query: string,
+    existingKeys: readonly string[],
+): GovernedFrontmatterField[] {
+    const normalizedQuery = query.trim().toLowerCase();
+    const existing = new Set(existingKeys.map((key) => key.trim().toLowerCase()));
+
+    return GOVERNED_FRONTMATTER_FIELDS.filter((field) => {
+        if (existing.has(field.key.toLowerCase())) {
+            return false;
+        }
+
+        if (!normalizedQuery) {
+            return true;
+        }
+
+        return field.key.toLowerCase().startsWith(normalizedQuery)
+            || field.label.toLowerCase().startsWith(normalizedQuery);
+    });
+}
+
 /**
  * @function formatLocalDate
  * @description 将日期对象格式化为本地 YYYY-MM-DD 字符串。
@@ -668,6 +741,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
         parseYamlToRecord(props.initialYamlText),
     );
     const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
+    const [activeKeySuggestionField, setActiveKeySuggestionField] = useState<string | null>(null);
     const [editingListItem, setEditingListItem] = useState<{ key: string; index: number } | null>(null);
     const [editingListDraft, setEditingListDraft] = useState<string>("");
     const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
@@ -972,6 +1046,34 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
             delete nextDrafts[fieldKey];
             return nextDrafts;
         });
+    };
+
+    /**
+     * @function applyGovernedFieldSuggestion
+     * @description 将字段名改为受治理字段，并按定义转换字段值类型。
+     */
+    const applyGovernedFieldSuggestion = (
+        previousKey: string,
+        field: GovernedFrontmatterField,
+    ): void => {
+        if (previousKey !== field.key && Object.prototype.hasOwnProperty.call(recordDraft, field.key)) {
+            return;
+        }
+
+        const currentValue = recordDraft[previousKey] ?? buildDefaultValueByFieldType(field.fieldType);
+        const nextValue = convertValueToFieldType(currentValue, field.fieldType);
+        const nextRecord = previousKey === field.key
+            ? {
+                ...recordDraft,
+                [field.key]: nextValue,
+            }
+            : renameRecordKey(recordDraft, previousKey, field.key);
+
+        nextRecord[field.key] = nextValue;
+        commitWithNextRecord(nextRecord);
+        clearKeyDraft(previousKey);
+        setActiveKeySuggestionField(null);
+        focusNavigationRow(field.key);
     };
 
     /**
@@ -1560,6 +1662,13 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                         ) : (
                             fieldEntries.map(([key, value]) => {
                                 const FieldIcon = resolveFieldIcon(value);
+                                const keyInputValue = keyDrafts[key] ?? key;
+                                const keySuggestions = activeKeySuggestionField === key
+                                    ? getFrontmatterFieldSuggestions(
+                                        keyInputValue,
+                                        Object.keys(recordDraft).filter((existingKey) => existingKey !== key),
+                                    )
+                                    : [];
 
                                 return (
                                     <div
@@ -1605,6 +1714,9 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                                                     data-frontmatter-focus-role="key"
                                                     value={keyDrafts[key] ?? key}
                                                     placeholder={t("frontmatter.keyPlaceholder")}
+                                                    onFocus={() => {
+                                                        setActiveKeySuggestionField(key);
+                                                    }}
                                                     onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
                                                         const nextDraftValue = event.target.value;
                                                         setKeyDrafts((previous) => ({
@@ -1620,13 +1732,47 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                                                         }
 
                                                         commitFieldKeyRename(key);
+                                                        window.setTimeout(() => {
+                                                            setActiveKeySuggestionField((previous) => previous === key ? null : previous);
+                                                        }, 0);
                                                     }}
                                                     onKeyDown={(event) => {
                                                         handleFieldKeyKeyDown(event, key);
                                                     }}
                                                 />
+                                                {keySuggestions.length > 0 ? (
+                                                    <div
+                                                        className="fmv-field-suggest-popup"
+                                                        role="listbox"
+                                                        aria-label={t("frontmatter.fieldSuggestions")}
+                                                    >
+                                                        {keySuggestions.map((field) => (
+                                                            <button
+                                                                key={field.key}
+                                                                type="button"
+                                                                className="fmv-field-suggest-item"
+                                                                role="option"
+                                                                aria-selected="false"
+                                                                onMouseDown={(event) => {
+                                                                    event.preventDefault();
+                                                                    event.stopPropagation();
+                                                                    applyGovernedFieldSuggestion(key, field);
+                                                                }}
+                                                                onClick={(event) => {
+                                                                    event.preventDefault();
+                                                                    event.stopPropagation();
+                                                                    applyGovernedFieldSuggestion(key, field);
+                                                                }}
+                                                            >
+                                                                <span className="fmv-field-suggest-key">{field.key}</span>
+                                                                <span className="fmv-field-suggest-type">{field.fieldType}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                ) : null}
                                             </div>
                                         </div>
+                                        <span className="fmv-kv-divider" aria-hidden="true" />
                                         <div className="fmv-control-shell">
                                             <div className="fmv-control">{renderValueControl(key, value)}</div>
                                         </div>

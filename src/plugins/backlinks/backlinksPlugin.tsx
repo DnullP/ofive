@@ -24,12 +24,66 @@ import { Link2 } from "lucide-react";
 import { registerCommand } from "../../host/commands/commandSystem";
 import { registerPanel } from "../../host/registry/panelRegistry";
 import type { PanelRenderContext } from "../../host/layout/workbenchContracts";
-import { useActiveEditor } from "../../host/editor/activeEditorStore";
-import { getBacklinksForFile, type BacklinkItem } from "../../api/vaultApi";
+import { useActiveBacklinkTarget, type ActiveBacklinkTarget } from "../../host/editor/activeBacklinkTargetStore";
+import { emitEditorRevealRequestedEvent } from "../../host/events/appEventBus";
+import { buildFileTabId, openFileInWorkbench } from "../../host/layout/openFileService";
+import { getProjectReaderCodeReferences, type ProjectReaderCodeReference } from "../../api/projectReaderApi";
+import { getBacklinksForFile, readVaultMarkdownFile, type BacklinkItem } from "../../api/vaultApi";
 import i18n from "../../i18n";
 import "./backlinksPlugin.css";
 
 const BACKLINKS_PANEL_ID = "backlinks";
+
+type BacklinksPanelItem =
+    | { kind: "markdown"; item: BacklinkItem }
+    | { kind: "project-source"; item: ProjectReaderCodeReference };
+
+interface BacklinksPanelSnapshot {
+    key: string;
+    title: string;
+    items: BacklinksPanelItem[];
+}
+
+function getTargetKey(target: ActiveBacklinkTarget): string {
+    if (target.kind === "markdown") {
+        return `markdown:${target.path}`;
+    }
+    return `project-source:${target.projectId}:${target.relativePath}`;
+}
+
+function isReferenceForProjectPath(reference: ProjectReaderCodeReference, relativePath: string): boolean {
+    const normalizedTargetPath = reference.target.relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+    return normalizedTargetPath === relativePath;
+}
+
+function getProjectReferenceKey(reference: ProjectReaderCodeReference): string {
+    return `${reference.sourcePath}:${String(reference.sourceLineNumber)}:${String(reference.sourceColumnNumber)}`;
+}
+
+function summarizeProjectReference(reference: ProjectReaderCodeReference): string {
+    const lineText = reference.target.lineNumber !== null && reference.target.lineNumber !== undefined
+        ? `:${String(reference.target.lineNumber)}`
+        : "";
+    return `${reference.linkText} -> ${reference.target.relativePath}${lineText}`;
+}
+
+function resolveReferenceInitialOffset(content: string, lineNumber: number, columnNumber: number): number {
+    const targetLine = Math.max(1, lineNumber);
+    const targetColumn = Math.max(1, columnNumber);
+    let offset = 0;
+    let currentLine = 1;
+
+    while (currentLine < targetLine && offset < content.length) {
+        const newlineIndex = content.indexOf("\n", offset);
+        if (newlineIndex < 0) {
+            return content.length;
+        }
+        offset = newlineIndex + 1;
+        currentLine += 1;
+    }
+
+    return Math.min(content.length, offset + targetColumn - 1);
+}
 
 /* ────────────────── React 组件 ────────────────── */
 
@@ -42,11 +96,10 @@ const BACKLINKS_PANEL_ID = "backlinks";
  * @returns 面板 ReactNode。
  */
 function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode {
-    const activeEditor = useActiveEditor();
-    const [backlinks, setBacklinks] = useState<BacklinkItem[]>([]);
+    const activeTarget = useActiveBacklinkTarget();
+    const [snapshot, setSnapshot] = useState<BacklinksPanelSnapshot | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [loadedPath, setLoadedPath] = useState<string | null>(null);
 
     /**
      * 翻译辅助函数，使用插件注册的 i18n 资源。
@@ -59,7 +112,7 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
      * 点击反向链接条目：通过中心化 opener 服务打开对应笔记。
      * @param item 反向链接条目
      */
-    const handleItemClick = useCallback(
+    const handleMarkdownItemClick = useCallback(
         async (item: BacklinkItem) => {
             console.info("[backlinksPlugin] navigating to backlink source", {
                 sourcePath: item.sourcePath,
@@ -78,6 +131,73 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
             }
         },
         [context],
+    );
+
+    const handleProjectSourceItemClick = useCallback(
+        async (reference: ProjectReaderCodeReference) => {
+            const sourcePath = reference.sourcePath;
+            const sourceLineNumber = Math.max(1, reference.sourceLineNumber);
+            const sourceColumnNumber = Math.max(1, reference.sourceColumnNumber);
+            let initialCursorOffset = 0;
+
+            try {
+                const sourceFile = await readVaultMarkdownFile(sourcePath);
+                initialCursorOffset = resolveReferenceInitialOffset(
+                    sourceFile.content,
+                    sourceLineNumber,
+                    sourceColumnNumber,
+                );
+            } catch (readError) {
+                console.warn("[backlinksPlugin] failed to preload project source reference", {
+                    sourcePath,
+                    error: readError instanceof Error ? readError.message : String(readError),
+                });
+            }
+
+            const tabId = buildFileTabId(sourcePath);
+            if (context.workbenchApi) {
+                const existingPanel = context.workbenchApi.getPanel(tabId);
+                if (existingPanel) {
+                    existingPanel.api.updateParameters?.({
+                        ...(existingPanel.params ?? {}),
+                        initialCursorOffset,
+                        autoFocus: true,
+                    });
+                    existingPanel.api.setActive();
+                } else {
+                    await openFileInWorkbench({
+                        containerApi: context.workbenchApi,
+                        relativePath: sourcePath,
+                        tabParams: {
+                            initialCursorOffset,
+                            autoFocus: true,
+                        },
+                    });
+                }
+            } else {
+                await context.openFile({ relativePath: sourcePath });
+            }
+
+            window.requestAnimationFrame(() => {
+                emitEditorRevealRequestedEvent({
+                    articleId: tabId,
+                    path: sourcePath,
+                    line: sourceLineNumber,
+                });
+            });
+        },
+        [context],
+    );
+
+    const handleItemClick = useCallback(
+        async (item: BacklinksPanelItem) => {
+            if (item.kind === "markdown") {
+                await handleMarkdownItemClick(item.item);
+                return;
+            }
+            await handleProjectSourceItemClick(item.item);
+        },
+        [handleMarkdownItemClick, handleProjectSourceItemClick],
     );
 
     /**
@@ -103,72 +223,71 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
         );
     };
 
-    /* 当聚焦文章变化时加载反向链接 */
+    /* 当关注目标变化时加载反向链接 */
     useEffect(() => {
-        if (!activeEditor) {
-            setBacklinks([]);
+        if (!activeTarget) {
+            setSnapshot(null);
             setError(null);
-            setLoadedPath(null);
-            return;
-        }
-
-        const path = activeEditor.path;
-        if (!path) {
-            console.warn("[backlinksPlugin] active editor has no path", {
-                articleId: activeEditor.articleId,
-            });
-            setBacklinks([]);
-            setLoadedPath(null);
+            setLoading(false);
             return;
         }
 
         let cancelled = false;
+        const targetKey = getTargetKey(activeTarget);
         setLoading(true);
         setError(null);
 
-        console.info("[backlinksPlugin] loading backlinks for", { path });
+        const loadPromise = activeTarget.kind === "markdown"
+            ? getBacklinksForFile(activeTarget.path).then((items): BacklinksPanelSnapshot => ({
+                key: targetKey,
+                title: activeTarget.title,
+                items: items.map((item) => ({ kind: "markdown", item })),
+            }))
+            : getProjectReaderCodeReferences(activeTarget.projectId).then((response): BacklinksPanelSnapshot => ({
+                key: targetKey,
+                title: activeTarget.title,
+                items: response.references
+                    .filter((reference) => isReferenceForProjectPath(reference, activeTarget.relativePath))
+                    .sort((left, right) =>
+                        left.sourcePath.localeCompare(right.sourcePath)
+                        || left.sourceLineNumber - right.sourceLineNumber
+                        || left.sourceColumnNumber - right.sourceColumnNumber,
+                    )
+                    .map((item) => ({ kind: "project-source", item })),
+            }));
 
-        getBacklinksForFile(path)
-            .then((items) => {
+        void loadPromise
+            .then((nextSnapshot) => {
                 if (!cancelled) {
-                    setBacklinks(items);
-                    setLoadedPath(path);
+                    setSnapshot(nextSnapshot);
                     setLoading(false);
-                    console.info("[backlinksPlugin] backlinks state updated", {
-                        path,
-                        count: items.length,
-                    });
                 }
             })
             .catch((err) => {
                 if (!cancelled) {
-                    const message = err instanceof Error ? err.message : String(err);
-                    setError(message);
+                    setSnapshot(null);
+                    setError(err instanceof Error ? err.message : String(err));
                     setLoading(false);
-                    console.error("[backlinksPlugin] failed to load backlinks", {
-                        path,
-                        error: message,
-                    });
                 }
             });
 
         return () => {
             cancelled = true;
         };
-    }, [activeEditor?.path]);
+    }, [activeTarget]);
 
     /* ── 未聚焦文章状态 ── */
-    if (!activeEditor) {
+    if (!activeTarget) {
         return renderInactiveEmptyState();
     }
 
-    const hasActivePathSnapshot = loadedPath === activeEditor.path;
+    const hasActivePathSnapshot = snapshot?.key === getTargetKey(activeTarget);
 
     /* ── 加载中状态 ── */
     if (loading && !hasActivePathSnapshot) {
         return (
             <div className="backlinks-panel">
-                <div className="backlinks-panel-header">{activeEditor.title}</div>
+                <div className="backlinks-panel-header">{activeTarget.title}</div>
                 <div className="backlinks-empty">{t("backlinks.loading")}</div>
             </div>
         );
@@ -178,7 +297,7 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
     if (error && !hasActivePathSnapshot) {
         return (
             <div className="backlinks-panel">
-                <div className="backlinks-panel-header">{activeEditor.title}</div>
+                <div className="backlinks-panel-header">{activeTarget.title}</div>
                 {/* backlinks-error: 错误提示文字 */}
                 <div className="backlinks-error">
                     {t("backlinks.loadFailed", { message: error })}
@@ -187,10 +306,10 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
         );
     }
 
-    if (!hasActivePathSnapshot) {
+    if (!hasActivePathSnapshot || !snapshot) {
         return (
             <div className="backlinks-panel">
-                <div className="backlinks-panel-header">{activeEditor.title}</div>
+                <div className="backlinks-panel-header">{activeTarget.title}</div>
                 <div className="backlinks-empty">{t("backlinks.loading")}</div>
             </div>
         );
@@ -200,39 +319,55 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
     return (
         <div className="backlinks-panel">
             <div className="backlinks-panel-header">
-                {activeEditor.title}
+                {snapshot.title}
                 {/* backlinks-count: 引用计数标签 */}
                 <span className="backlinks-count">
                     {loading
                         ? t("backlinks.loading")
-                        : t("backlinks.referencedBy", { count: backlinks.length })}
+                        : t("backlinks.referencedBy", { count: snapshot.items.length })}
                 </span>
             </div>
-            {backlinks.length === 0 ? (
+            {snapshot.items.length === 0 ? (
                 <div className="backlinks-empty">
                     {t("backlinks.noBacklinks")}
                 </div>
             ) : (
                 /* backlinks-list: 反向链接列表 */
                 <ul className="backlinks-list">
-                    {backlinks.map((item) => (
-                        <li key={item.sourcePath}>
+                    {snapshot.items.map((item) => (
+                        <li key={item.kind === "markdown" ? item.item.sourcePath : getProjectReferenceKey(item.item)}>
                             {/* backlinks-item: 单条反向链接按钮 */}
                             <button
                                 type="button"
                                 className="backlinks-item"
-                                title={item.sourcePath}
+                                title={item.kind === "markdown" ? item.item.sourcePath : item.item.sourcePath}
                                 onClick={() => handleItemClick(item)}
                             >
                                 {/* backlinks-item-title: 链接标题 */}
-                                <span className="backlinks-item-title">
-                                    {item.title}
-                                </span>
-                                {item.weight > 1 && (
-                                    /* backlinks-item-weight: 引用次数徽章 */
-                                    <span className="backlinks-item-weight">
-                                        ×{item.weight}
-                                    </span>
+                                {item.kind === "markdown" ? (
+                                    <>
+                                        <span className="backlinks-item-title">
+                                            {item.item.title}
+                                        </span>
+                                        {item.item.weight > 1 && (
+                                            /* backlinks-item-weight: 引用次数徽章 */
+                                            <span className="backlinks-item-weight">
+                                                ×{item.item.weight}
+                                            </span>
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="backlinks-item-title">
+                                            {item.item.title}
+                                        </span>
+                                        <span className="backlinks-item-detail">
+                                            {item.item.sourcePath}:{item.item.sourceLineNumber}
+                                        </span>
+                                        <span className="backlinks-item-preview">
+                                            {summarizeProjectReference(item.item)}
+                                        </span>
+                                    </>
                                 )}
                             </button>
                         </li>

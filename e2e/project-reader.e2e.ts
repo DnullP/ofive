@@ -56,6 +56,14 @@ async function waitForVisibleEditorTitle(page: Page, expectedTitle: string): Pro
     await expect.poll(async () => (await readVisibleEditorState(page)).title).toBe(expectedTitle);
 }
 
+async function openBacklinksPanel(page: Page) {
+    const rightSidebar = page.locator("[aria-label='Right Extension Panel']");
+    const backlinksPanelButton = rightSidebar.locator("[data-layout-panel-id='backlinks'][data-layout-role='panel']");
+    await expect(backlinksPanelButton).toBeVisible();
+    await backlinksPanelButton.click();
+    return rightSidebar.locator(".layout-v2-panel-section__pane-body");
+}
+
 async function clickTokenWithModifier(page: Page, locator: ReturnType<Page["locator"]>, modifier: "Meta" | "Control"): Promise<void> {
     const box = await locator.boundingBox();
     expect(box).not.toBeNull();
@@ -121,9 +129,12 @@ test.describe("project reader", () => {
         await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/main.ts");
         await expect(codeTab.locator(".project-reader-code-line").filter({ hasText: "createMainRuntime" })).toBeVisible();
         await expect(codeTab.locator(".project-reader-code-line.is-referenced").first()).toBeVisible();
-        await expect(codeTab.locator(".project-reader-code-reference").filter({ hasText: "note1.md" })).toBeVisible();
+        await expect(codeTab.locator(".project-reader-code-reference")).toHaveCount(0);
 
-        await codeTab.locator(".project-reader-code-reference").filter({ hasText: "note1.md" }).first().click();
+        let backlinksPaneBody = await openBacklinksPanel(page);
+        await expect(backlinksPaneBody.locator(".backlinks-panel-header")).toContainText("src/main.ts");
+        await expect(backlinksPaneBody.locator(".backlinks-item").filter({ hasText: "note1.md" })).toBeVisible();
+        await backlinksPaneBody.locator(".backlinks-item").filter({ hasText: "note1.md" }).first().click();
         await waitForVisibleEditorTitle(page, "note1");
         await expect(page.locator(".layout-v2-tab-section__tab-main", { hasText: "note1.md" })).toBeVisible();
         await expect(page.locator(".layout-v2-tab-section__card--active .cm-line", { hasText: "同一个Session" })).toBeVisible();
@@ -167,9 +178,11 @@ test.describe("project reader", () => {
 
         await page.locator(".tree-item[data-tree-path='src/alternate.ts']").click();
         await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/alternate.ts");
-        await expect(codeTab.locator(".project-reader-code-reference").filter({ hasText: "note2.md" })).toBeVisible();
 
-        await codeTab.locator(".project-reader-code-reference").filter({ hasText: "note2.md" }).first().click();
+        backlinksPaneBody = await openBacklinksPanel(page);
+        await expect(backlinksPaneBody.locator(".backlinks-panel-header")).toContainText("src/alternate.ts");
+        await expect(backlinksPaneBody.locator(".backlinks-item").filter({ hasText: "note2.md" })).toBeVisible();
+        await backlinksPaneBody.locator(".backlinks-item").filter({ hasText: "note2.md" }).first().click();
         await waitForVisibleEditorTitle(page, "note2");
         await expect(page.locator(".layout-v2-tab-section__tab-main", { hasText: "note2.md" })).toBeVisible();
         await expect(page.locator(".layout-v2-tab-section__card--active .cm-line", { hasText: "名为Session的结构" })).toBeVisible();
@@ -178,5 +191,30 @@ test.describe("project reader", () => {
         await clickTokenWithModifier(page, codeTab.getByText("AppRuntime", { exact: true }).first(), "Meta");
         await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/alternate.ts");
         await expect(codeTab.locator(".project-reader-code-line.is-target-line")).toBeVisible();
+    });
+
+    test("should show project source references in the backlinks panel", async ({ page }) => {
+        await gotoMockVaultPage(page, "project-reader-backlinks", "/web-mock/mock-tauri-test.html?showControls=0");
+        await waitForWorkbench(page);
+
+        await openProjectReaderPanel(page);
+        await page.locator(".tree-item[data-tree-path='src']").click();
+        await page.locator(".tree-item[data-tree-path='src/main.ts']").click();
+
+        const codeTab = page.locator(".project-reader-code-tab");
+        await expect(codeTab).toBeVisible();
+        await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/main.ts");
+        await expect(codeTab.locator(".project-reader-code-line.is-referenced").first()).toBeVisible();
+        await expect(codeTab.locator(".project-reader-code-reference")).toHaveCount(0);
+
+        const paneBody = await openBacklinksPanel(page);
+
+        await expect(paneBody.locator(".backlinks-panel-header")).toContainText("src/main.ts");
+        await expect(paneBody.locator(".backlinks-item").filter({ hasText: "note1.md" })).toBeVisible();
+        await expect(paneBody.locator(".backlinks-item").filter({ hasText: "createMainRuntime" })).toBeVisible();
+
+        await paneBody.locator(".backlinks-item").filter({ hasText: "note1.md" }).first().click();
+        await waitForVisibleEditorTitle(page, "note1");
+        await expect(page.locator(".layout-v2-tab-section__card--active .cm-line", { hasText: "同一个Session" })).toBeVisible();
     });
 });

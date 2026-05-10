@@ -50,10 +50,7 @@ pub(crate) fn get_ai_sidecar_tool_catalog(
         .collect()
 }
 
-fn resolve_tool_requires_confirmation(
-    tool: &AiToolDescriptor,
-    settings: &AiChatSettings,
-) -> bool {
+fn resolve_tool_requires_confirmation(tool: &AiToolDescriptor, settings: &AiChatSettings) -> bool {
     match settings
         .tool_approval_policy
         .get(&tool.capability_id)
@@ -78,9 +75,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    fn create_test_settings(
-        tool_approval_policy: HashMap<String, String>,
-    ) -> AiChatSettings {
+    fn create_test_settings(tool_approval_policy: HashMap<String, String>) -> AiChatSettings {
         AiChatSettings {
             vendor_id: "mock".to_string(),
             model: "mock-model".to_string(),
@@ -93,7 +88,10 @@ mod tests {
     fn sidecar_tool_catalog_should_apply_chat_tool_approval_policy() {
         let catalog = get_ai_sidecar_tool_catalog(&create_test_settings(HashMap::from([
             ("vault.apply_markdown_patch".to_string(), "auto".to_string()),
-            ("vault.read_markdown_file".to_string(), "require".to_string()),
+            (
+                "vault.read_markdown_file".to_string(),
+                "require".to_string(),
+            ),
         ])))
         .expect("tool catalog should serialize");
 

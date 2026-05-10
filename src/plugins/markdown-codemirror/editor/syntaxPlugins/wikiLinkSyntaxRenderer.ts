@@ -9,6 +9,7 @@ import type { WorkbenchContainerApi } from "../../../../host/layout/workbenchCon
 import type { EditorState } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType } from "@codemirror/view";
 import i18n from "../../../../i18n";
+import { detectExcludedLineRanges } from "../../../../utils/markdownBlockDetector";
 import {
     addDelimitedInlineSyntaxDecoration,
     pushSyntaxDecorationRange,
@@ -42,6 +43,14 @@ function isInsideInlineCode(lineText: string, startInLine: number, endInLine: nu
         }
     }
     return false;
+}
+
+function isLineInsideCodeFence(state: EditorState, lineNumber: number): boolean {
+    return detectExcludedLineRanges(state.doc.toString()).some((range) =>
+        range.type === "code-fence"
+        && lineNumber >= range.fromLine
+        && lineNumber <= range.toLine,
+    );
 }
 
 /**
@@ -197,6 +206,10 @@ export async function openWikiLinkTarget(
  */
 export function findWikiLinkAtPosition(state: EditorState, position: number): WikiLinkMatch | null {
     const line = state.doc.lineAt(position);
+    if (isLineInsideCodeFence(state, line.number)) {
+        return null;
+    }
+
     const lineText = line.text;
     const matches = Array.from(lineText.matchAll(WIKI_LINK_PATTERN));
 

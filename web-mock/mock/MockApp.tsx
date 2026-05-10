@@ -10,7 +10,7 @@
  */
 
 import React, { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
-import { Bot, CalendarDays, CheckSquare, Compass, FolderOpen, Hand, Link2, Orbit, Plus, Search, Workflow } from "lucide-react";
+import { CalendarDays, CheckSquare, Compass, FolderOpen, Hand, Orbit, Plus, Workflow } from "lucide-react";
 import {
     WorkbenchLayoutHost,
     type TabInstanceDefinition,
@@ -23,8 +23,11 @@ import { ImageViewerTab } from "../../src/plugins/image-viewer/tab/ImageViewerTa
 import { CalendarPanel } from "../../src/plugins/calendar/CalendarPanel";
 import { CalendarTab } from "../../src/plugins/calendar/CalendarTab";
 import { activatePlugin as activateCommandPalettePlugin } from "../../src/plugins/command-palette/commandPalettePlugin";
+import { activatePlugin as activateQuickSwitcherPlugin } from "../../src/plugins/quick-switcher/quickSwitcherPlugin";
+import { activatePlugin as activateSearchPlugin } from "../../src/plugins/search/searchPlugin";
 import { activatePlugin as activateAiChatPlugin } from "../../src/plugins/ai-chat/aiChatPlugin";
 import { activatePlugin as activateProjectReaderPlugin } from "../../src/plugins/project-reader/projectReaderPlugin";
+import { activatePlugin as activateBacklinksPlugin } from "../../src/plugins/backlinks/backlinksPlugin";
 import { SettingsTab } from "../../src/host/layout/SettingsTab";
 import { useConfigSync } from "../../src/host/config/configStore";
 import { useVaultTreeSync } from "../../src/host/vault/vaultStore";
@@ -52,7 +55,6 @@ import "../../src/plugins/outline/outlinePlugin.css";
 import "../../src/App.css";
 
 const MOCK_VAULT_PATH = "/mock/notes";
-const SEARCH_SURFACE_ID = "search";
 const CALENDAR_ACTIVITY_ID = "calendar";
 const CALENDAR_PANEL_ID = "calendar-panel";
 const MOCK_CALENDAR_TAB_COMPONENT_ID = "calendar-tab";
@@ -216,121 +218,6 @@ function MockOutlinePanel(): ReactNode {
                     <button type="button" className="outline-item">## Section Two</button>
                 </li>
             </ul>
-        </div>
-    );
-}
-
-function MockBacklinksPanel(): ReactNode {
-    return (
-        <div className="backlinks-panel">
-            <div className="backlinks-panel-header">
-                mock/article.md
-                <span className="backlinks-count">2 backlinks</span>
-            </div>
-            <ul className="backlinks-list">
-                <li>
-                    <button type="button" className="backlinks-item">
-                        <span className="backlinks-item-title">mock/ref-a.md</span>
-                        <span className="backlinks-item-weight">1</span>
-                    </button>
-                </li>
-                <li>
-                    <button type="button" className="backlinks-item">
-                        <span className="backlinks-item-title">mock/ref-b.md</span>
-                        <span className="backlinks-item-weight">3</span>
-                    </button>
-                </li>
-            </ul>
-        </div>
-    );
-}
-
-function MockAiChatPanel(): ReactNode {
-    return (
-        <div className="ai-chat-panel">
-            <div className="ai-chat-header">
-                <div className="ai-chat-header-main">
-                    <div className="ai-chat-title">AI Chat</div>
-                    <div className="ai-chat-header-badges">
-                        <span className="ai-chat-vendor-badge">
-                            Mock Vendor
-                            <strong>Glass QA</strong>
-                        </span>
-                        <span className="ai-chat-status-chip">Ready</span>
-                    </div>
-                </div>
-
-                <div className="ai-chat-conversation-bar">
-                    <div className="ai-chat-conversation-bar-header">
-                        <span className="ai-chat-section-label">Conversations</span>
-                        <button type="button" className="ai-chat-conversation-create">
-                            <Plus size={13} strokeWidth={2} />
-                            <span>New</span>
-                        </button>
-                    </div>
-                    <div className="ai-chat-conversation-list">
-                        <button type="button" className="ai-chat-conversation-item active">
-                            <span className="ai-chat-conversation-title">Glass validation</span>
-                            <span className="ai-chat-conversation-time">09:41</span>
-                        </button>
-                        <button type="button" className="ai-chat-conversation-item">
-                            <span className="ai-chat-conversation-title">Theme comparison</span>
-                            <span className="ai-chat-conversation-time">Yesterday</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div className="ai-chat-thread-shell">
-                <div className="ai-chat-welcome-card">
-                    <div className="ai-chat-welcome-title">Glass validation card</div>
-                    <div className="ai-chat-welcome-body">This card should stay translucent instead of becoming a solid dark block.</div>
-                </div>
-                <div className="ai-chat-status">
-                    <span className="ai-chat-status-title">Mock status</span>
-                    <div className="ai-chat-status-detail">Sidebar plugin surfaces should inherit the frosted shell instead of covering it.</div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function MockSearchPanel(): ReactNode {
-    return (
-        <div className="outline-panel">
-            <div className="outline-panel-header">
-                全局搜索
-                <span className="outline-persisted-hint">Mock</span>
-            </div>
-            <div style={{ padding: 12, display: "grid", gap: 10 }}>
-                <input
-                    type="search"
-                    value="scroll state"
-                    readOnly
-                    aria-label="Mock search query"
-                    style={{
-                        width: "100%",
-                        borderRadius: 10,
-                        border: "1px solid rgba(255, 255, 255, 0.14)",
-                        background: "rgba(15, 23, 42, 0.28)",
-                        color: "var(--text-primary)",
-                        padding: "10px 12px",
-                    }}
-                />
-                <ul className="backlinks-list">
-                    <li>
-                        <button type="button" className="backlinks-item">
-                            <span className="backlinks-item-title">test-resources/notes/scroll-regression.md</span>
-                            <span className="backlinks-item-weight">3</span>
-                        </button>
-                    </li>
-                    <li>
-                        <button type="button" className="backlinks-item">
-                            <span className="backlinks-item-title">docs/testing-handbook.md</span>
-                            <span className="backlinks-item-weight">1</span>
-                        </button>
-                    </li>
-                </ul>
-            </div>
         </div>
     );
 }
@@ -742,8 +629,11 @@ function ensureMockComponentsRegistered(): void {
     mockRegistered = true;
 
     activateCommandPalettePlugin();
+    activateQuickSwitcherPlugin();
+    activateSearchPlugin();
     activateAiChatPlugin();
     activateProjectReaderPlugin();
+    activateBacklinksPlugin();
     registerCommands([
         {
             id: "fileTree.deleteSelected",
@@ -775,7 +665,6 @@ function ensureMockComponentsRegistered(): void {
     ]);
 
     const filesIcon = React.createElement(FolderOpen, { size: 18, strokeWidth: 1.8 });
-    const searchIcon = React.createElement(Search, { size: 18, strokeWidth: 1.8 });
     const outlineIcon = React.createElement(Compass, { size: 18, strokeWidth: 1.8 });
     const knowledgeGraphIcon = React.createElement(Orbit, { size: 18, strokeWidth: 1.8 });
     const calendarIcon = React.createElement(CalendarDays, { size: 18, strokeWidth: 1.8 });
@@ -791,15 +680,6 @@ function ensureMockComponentsRegistered(): void {
         defaultSection: "top",
         defaultBar: "left",
         defaultOrder: 1,
-    });
-    registerActivity({
-        type: "panel-container",
-        id: SEARCH_SURFACE_ID,
-        title: () => "搜索",
-        icon: searchIcon,
-        defaultSection: "top",
-        defaultBar: "left",
-        defaultOrder: 2,
     });
     registerActivity({
         type: "panel-container",
@@ -896,28 +776,12 @@ function ensureMockComponentsRegistered(): void {
         render: (ctx) => React.createElement(MockVaultPanel, { openTab: ctx.openTab }),
     });
     registerPanel({
-        id: SEARCH_SURFACE_ID,
-        title: () => "搜索",
-        activityId: SEARCH_SURFACE_ID,
-        defaultPosition: "left",
-        defaultOrder: 2,
-        render: () => React.createElement(MockSearchPanel),
-    });
-    registerPanel({
         id: "outline",
         title: () => "大纲",
         activityId: "outline",
         defaultPosition: "right",
         defaultOrder: 1,
         render: () => React.createElement(MockOutlinePanel),
-    });
-    registerPanel({
-        id: "backlinks",
-        title: () => "反向链接",
-        activityId: "outline",
-        defaultPosition: "right",
-        defaultOrder: 2,
-        render: () => React.createElement(MockBacklinksPanel),
     });
     registerPanel({
         id: CALENDAR_PANEL_ID,

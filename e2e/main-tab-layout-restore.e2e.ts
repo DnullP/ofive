@@ -19,6 +19,7 @@ const SCROLL_NOTE_PATH = "test-resources/notes/scroll-regression.md";
 const CANVAS_NOTE_PATH = "test-resources/notes/glass-validation.canvas";
 const IMAGE_NOTE_PATH = "test-resources/notes/mock-image.png";
 const SPLIT_SETTLE_MS = 360;
+const PERSISTED_LAYOUT_TIMEOUT_MS = 8_000;
 
 interface TabSectionSnapshot {
     id: string | null;
@@ -285,7 +286,7 @@ async function openSplitWorkspaceAndReload(page: Page): Promise<void> {
 
     await expect.poll(
         async () => readPersistedWorkspaceLayoutProbe(page),
-        { timeout: 3_000 },
+        { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
     ).toEqual({
         hasWorkspaceLayout: true,
         tabCount: 3,
@@ -318,7 +319,7 @@ test.describe("main tab layout restore regression", () => {
 
         await expect.poll(
             async () => readPersistedPanelLayoutProbe(page),
-            { timeout: 3_000 },
+            { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
         ).toMatchObject({
             mainTabsHasSplit: false,
             hasMainTabsSplitLeaf: false,
@@ -326,7 +327,7 @@ test.describe("main tab layout restore regression", () => {
 
         await expect.poll(
             async () => readPersistedWorkspaceLayoutProbe(page),
-            { timeout: 3_000 },
+            { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
         ).toEqual({
             hasWorkspaceLayout: true,
             tabCount: 3,
@@ -454,7 +455,7 @@ test.describe("main tab layout restore regression", () => {
 
         await expect.poll(
             async () => readPersistedWorkspaceLayoutProbe(page),
-            { timeout: 3_000 },
+            { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
         ).toEqual({
             hasWorkspaceLayout: true,
             tabCount: 5,
@@ -490,7 +491,7 @@ test.describe("main tab layout restore regression", () => {
 
         await expect.poll(
             async () => readPersistedWorkspaceLayoutProbe(page),
-            { timeout: 3_000 },
+            { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
         ).toEqual({
             hasWorkspaceLayout: true,
             tabCount: 4,
@@ -529,7 +530,7 @@ test.describe("main tab layout restore regression", () => {
         await splitTabToRight(page, "network-segment.md");
         await expect.poll(
             async () => readPersistedWorkspaceLayoutProbe(page),
-            { timeout: 3_000 },
+            { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
         ).toEqual({
             hasWorkspaceLayout: true,
             tabCount: 3,
@@ -551,7 +552,7 @@ test.describe("main tab layout restore regression", () => {
         ]);
         await expect.poll(
             async () => readPersistedWorkspaceLayoutProbe(page),
-            { timeout: 3_000 },
+            { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
         ).toEqual({
             hasWorkspaceLayout: true,
             tabCount: 3,

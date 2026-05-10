@@ -380,12 +380,22 @@ fn rebuild_file_index(project: &ProjectReaderProject) -> Result<(), String> {
         "DELETE FROM project_files WHERE project_id = ?1",
         params![project.id],
     )
-    .map_err(|error| format!("清理外部项目旧文件索引失败 project_id={}: {error}", project.id))?;
+    .map_err(|error| {
+        format!(
+            "清理外部项目旧文件索引失败 project_id={}: {error}",
+            project.id
+        )
+    })?;
     tx.execute(
         "DELETE FROM project_symbols WHERE project_id = ?1",
         params![project.id],
     )
-    .map_err(|error| format!("清理外部项目旧符号索引失败 project_id={}: {error}", project.id))?;
+    .map_err(|error| {
+        format!(
+            "清理外部项目旧符号索引失败 project_id={}: {error}",
+            project.id
+        )
+    })?;
 
     {
         let mut file_stmt = tx
@@ -416,7 +426,10 @@ fn rebuild_file_index(project: &ProjectReaderProject) -> Result<(), String> {
                     entry.language,
                 ])
                 .map_err(|error| {
-                    format!("写入外部项目文件索引失败 project_id={}: {error}", project.id)
+                    format!(
+                        "写入外部项目文件索引失败 project_id={}: {error}",
+                        project.id
+                    )
                 })?;
         }
     }
@@ -456,7 +469,10 @@ fn rebuild_file_index(project: &ProjectReaderProject) -> Result<(), String> {
                     symbol.preview,
                 ])
                 .map_err(|error| {
-                    format!("写入外部项目符号索引失败 project_id={}: {error}", project.id)
+                    format!(
+                        "写入外部项目符号索引失败 project_id={}: {error}",
+                        project.id
+                    )
                 })?;
         }
     }
@@ -585,7 +601,9 @@ fn collect_project_symbols(
         }
 
         let language = match entry.language.as_deref() {
-            Some(language) if tree_sitter_language_for_entry(language, &entry.relative_path).is_some() => {
+            Some(language)
+                if tree_sitter_language_for_entry(language, &entry.relative_path).is_some() =>
+            {
                 language
             }
             _ => continue,
@@ -658,17 +676,14 @@ fn visit_symbol_nodes(
     symbols: &mut Vec<ProjectSymbolIndexEntry>,
 ) {
     match language {
-        "typescript" | "javascript" => collect_ecmascript_symbol(
-            node,
-            project_id,
-            relative_path,
-            language,
-            source,
-            symbols,
-        ),
+        "typescript" | "javascript" => {
+            collect_ecmascript_symbol(node, project_id, relative_path, language, source, symbols)
+        }
         "rust" => collect_rust_symbol(node, project_id, relative_path, language, source, symbols),
         "go" => collect_go_symbol(node, project_id, relative_path, language, source, symbols),
-        "python" => collect_python_symbol(node, project_id, relative_path, language, source, symbols),
+        "python" => {
+            collect_python_symbol(node, project_id, relative_path, language, source, symbols)
+        }
         _ => {}
     }
 
@@ -969,19 +984,22 @@ fn load_symbol_locations_from_index(
         .map_err(|error| format!("准备读取外部项目符号索引失败: {error}"))?;
 
     let rows = stmt
-        .query_map(params![project_id, symbol, MAX_SYMBOL_LOCATIONS as i64], |row| {
-            Ok(ProjectReaderSymbolLocation {
-                project_id: project_id.to_string(),
-                relative_path: row.get(0)?,
-                line_number: row.get::<_, i64>(1)? as usize,
-                column_number: row.get::<_, i64>(2)? as usize,
-                end_line_number: row.get::<_, i64>(6)? as usize,
-                end_column_number: row.get::<_, i64>(7)? as usize,
-                symbol_name: row.get(3)?,
-                kind: row.get(4)?,
-                preview: row.get(5)?,
-            })
-        })
+        .query_map(
+            params![project_id, symbol, MAX_SYMBOL_LOCATIONS as i64],
+            |row| {
+                Ok(ProjectReaderSymbolLocation {
+                    project_id: project_id.to_string(),
+                    relative_path: row.get(0)?,
+                    line_number: row.get::<_, i64>(1)? as usize,
+                    column_number: row.get::<_, i64>(2)? as usize,
+                    end_line_number: row.get::<_, i64>(6)? as usize,
+                    end_column_number: row.get::<_, i64>(7)? as usize,
+                    symbol_name: row.get(3)?,
+                    kind: row.get(4)?,
+                    preview: row.get(5)?,
+                })
+            },
+        )
         .map_err(|error| format!("读取外部项目符号索引失败 project_id={project_id}: {error}"))?;
 
     rows.collect::<Result<Vec<_>, _>>()
@@ -999,8 +1017,12 @@ fn rank_symbol_locations(
     let qualifier = resolve_qualified_symbol_prefix(context);
     let symbol_context = resolve_symbol_context_for_current_position(context);
 
-    if let (Some(current_file_path), Some(qualifier)) = (current_file_path.as_deref(), qualifier.as_deref()) {
-        if let Some(package_segment) = resolve_go_imported_package_segment(current_file_path, qualifier) {
+    if let (Some(current_file_path), Some(qualifier)) =
+        (current_file_path.as_deref(), qualifier.as_deref())
+    {
+        if let Some(package_segment) =
+            resolve_go_imported_package_segment(current_file_path, qualifier)
+        {
             let qualified_locations = locations
                 .iter()
                 .filter(|location| is_location_in_package_segment(location, &package_segment))
@@ -1036,7 +1058,11 @@ fn rank_symbol_locations(
 
     locations.sort_by(|left, right| {
         symbol_location_rank(left, current_file_path.as_deref(), current_line_number)
-            .cmp(&symbol_location_rank(right, current_file_path.as_deref(), current_line_number))
+            .cmp(&symbol_location_rank(
+                right,
+                current_file_path.as_deref(),
+                current_line_number,
+            ))
             .then_with(|| left.relative_path.cmp(&right.relative_path))
             .then_with(|| left.line_number.cmp(&right.line_number))
             .then_with(|| left.column_number.cmp(&right.column_number))
@@ -1085,11 +1111,11 @@ fn resolve_symbol_context_for_current_position(
     let point = point_for_line_and_column(file_content, line_number, column_number)?;
 
     let mut parser = Parser::new();
-    parser
-        .set_language(&tree_sitter_go::LANGUAGE.into())
-        .ok()?;
+    parser.set_language(&tree_sitter_go::LANGUAGE.into()).ok()?;
     let tree = parser.parse(file_content, None)?;
-    let node = tree.root_node().named_descendant_for_point_range(point, point)?;
+    let node = tree
+        .root_node()
+        .named_descendant_for_point_range(point, point)?;
     let mut current = Some(node);
     while let Some(node) = current {
         match node.kind() {
@@ -1107,7 +1133,11 @@ fn resolve_symbol_context_for_current_position(
     None
 }
 
-fn point_for_line_and_column(source: &str, line_number: usize, column_number: usize) -> Option<Point> {
+fn point_for_line_and_column(
+    source: &str,
+    line_number: usize,
+    column_number: usize,
+) -> Option<Point> {
     if line_number == 0 || column_number == 0 {
         return None;
     }
@@ -1174,7 +1204,9 @@ fn resolve_qualified_symbol_prefix(
 }
 
 fn resolve_go_imported_package_segment(current_file_path: &str, qualifier: &str) -> Option<String> {
-    let current_directory = current_file_path.rsplit_once('/').map(|(directory, _)| directory)?;
+    let current_directory = current_file_path
+        .rsplit_once('/')
+        .map(|(directory, _)| directory)?;
     let qualifier_suffix = format!("/{qualifier}");
     let local_candidate = if current_directory == qualifier {
         Some(current_directory.to_string())
@@ -1192,7 +1224,9 @@ fn is_location_in_package_segment(
     package_segment: &str,
 ) -> bool {
     location.relative_path == format!("{package_segment}.go")
-        || location.relative_path.starts_with(&format!("{package_segment}/"))
+        || location
+            .relative_path
+            .starts_with(&format!("{package_segment}/"))
 }
 
 fn collect_code_references(
@@ -1277,17 +1311,32 @@ fn collect_code_references_from_markdown(
             continue;
         }
 
-        let line_number = content[..match_start].chars().filter(|character| *character == '\n').count() + 1;
-        let line_start = content[..match_start].rfind('\n').map(|index| index + 1).unwrap_or(0);
+        let line_number = content[..match_start]
+            .chars()
+            .filter(|character| *character == '\n')
+            .count()
+            + 1;
+        let line_start = content[..match_start]
+            .rfind('\n')
+            .map(|index| index + 1)
+            .unwrap_or(0);
         let column_number = content[line_start..match_start].chars().count() + 1;
-        let display_text = raw_target.split('|').nth(1).map(str::trim).filter(|text| !text.is_empty());
+        let display_text = raw_target
+            .split('|')
+            .nth(1)
+            .map(str::trim)
+            .filter(|text| !text.is_empty());
         let link_text = display_text
             .map(ToString::to_string)
             .unwrap_or_else(|| target_text.to_string());
 
         output.push(ProjectReaderCodeReference {
             source_path: source_path.to_string(),
-            title: source_path.split('/').last().unwrap_or(source_path).to_string(),
+            title: source_path
+                .split('/')
+                .last()
+                .unwrap_or(source_path)
+                .to_string(),
             source_line_number: line_number,
             source_column_number: column_number,
             link_text,
@@ -1317,7 +1366,9 @@ fn detect_project_reader_markdown_excluded_byte_ranges(
     let mut fence_marker: Option<char> = None;
 
     for line_with_ending in content.split_inclusive('\n') {
-        let line = line_with_ending.strip_suffix('\n').unwrap_or(line_with_ending);
+        let line = line_with_ending
+            .strip_suffix('\n')
+            .unwrap_or(line_with_ending);
         let trimmed = line.trim_start();
 
         if line_index == 0 && line.trim() == "---" {
@@ -1365,10 +1416,7 @@ fn opens_project_reader_markdown_fence(trimmed_line: &str) -> Option<char> {
     None
 }
 
-fn closes_project_reader_markdown_fence(
-    trimmed_line: &str,
-    marker: Option<char>,
-) -> bool {
+fn closes_project_reader_markdown_fence(trimmed_line: &str, marker: Option<char>) -> bool {
     match marker {
         Some('`') => trimmed_line.starts_with("```"),
         Some('~') => trimmed_line.starts_with("~~~"),
@@ -1392,7 +1440,9 @@ fn parse_project_reader_link_target(raw_target: &str) -> Option<ProjectReaderLin
         return None;
     }
 
-    let project_name = normalized_target[..project_separator_index].trim().to_string();
+    let project_name = normalized_target[..project_separator_index]
+        .trim()
+        .to_string();
     let raw_path_and_range = normalized_target[project_separator_index + 1..].trim();
     if project_name.is_empty() || !raw_path_and_range.starts_with('/') {
         return None;
@@ -1423,7 +1473,9 @@ struct ParsedProjectReaderTarget {
     end_column_number: Option<usize>,
 }
 
-fn parse_project_reader_link_target_impl(raw_path_and_range: &str) -> Result<ParsedProjectReaderTarget, String> {
+fn parse_project_reader_link_target_impl(
+    raw_path_and_range: &str,
+) -> Result<ParsedProjectReaderTarget, String> {
     let pattern = raw_path_and_range
         .trim()
         .strip_prefix('/')
@@ -1451,8 +1503,12 @@ fn parse_project_reader_link_target_impl(raw_path_and_range: &str) -> Result<Par
         relative_path: normalized_relative_path,
         line_number: parsed_range.as_ref().and_then(|range| range.line_number),
         column_number: parsed_range.as_ref().and_then(|range| range.column_number),
-        end_line_number: parsed_range.as_ref().and_then(|range| range.end_line_number),
-        end_column_number: parsed_range.as_ref().and_then(|range| range.end_column_number),
+        end_line_number: parsed_range
+            .as_ref()
+            .and_then(|range| range.end_line_number),
+        end_column_number: parsed_range
+            .as_ref()
+            .and_then(|range| range.end_column_number),
     })
 }
 
@@ -1464,7 +1520,9 @@ struct ParsedProjectReaderTargetRange {
     end_column_number: Option<usize>,
 }
 
-fn parse_project_reader_link_target_range(range_text: &str) -> Option<ParsedProjectReaderTargetRange> {
+fn parse_project_reader_link_target_range(
+    range_text: &str,
+) -> Option<ParsedProjectReaderTargetRange> {
     let trimmed = range_text.trim();
     if trimmed.is_empty() {
         return None;
@@ -1475,12 +1533,16 @@ fn parse_project_reader_link_target_range(range_text: &str) -> Option<ParsedProj
     let end = split_range.next().map(str::trim);
     let mut start_parts = start.split(':');
     let line_number = start_parts.next()?.parse::<usize>().ok()?;
-    let column_number = start_parts.next().and_then(|value| value.parse::<usize>().ok());
+    let column_number = start_parts
+        .next()
+        .and_then(|value| value.parse::<usize>().ok());
     let (end_line_number, end_column_number) = match end {
         Some(end_text) if !end_text.is_empty() => {
             let mut end_parts = end_text.split(':');
             let line = end_parts.next()?.parse::<usize>().ok()?;
-            let column = end_parts.next().and_then(|value| value.parse::<usize>().ok());
+            let column = end_parts
+                .next()
+                .and_then(|value| value.parse::<usize>().ok());
             (Some(line), column)
         }
         _ => (None, None),
@@ -1730,7 +1792,8 @@ mod tests {
             "```",
             "[[mock-ofive:/src/fenced.ts:1]]",
             "```",
-        ].join("\n");
+        ]
+        .join("\n");
         let excluded_ranges = detect_project_reader_markdown_excluded_byte_ranges(&content);
         let mut references = Vec::new();
 
@@ -1843,7 +1906,9 @@ mod tests {
                 current_line_number: Some(2),
                 current_column_number: Some(23),
                 current_line_text: Some("\tMemoryService memory.Service".to_string()),
-                current_file_content: Some("type Config struct {\n\tMemoryService memory.Service\n}".to_string()),
+                current_file_content: Some(
+                    "type Config struct {\n\tMemoryService memory.Service\n}".to_string(),
+                ),
             }),
         );
 
@@ -1885,7 +1950,9 @@ mod tests {
                 current_line_number: Some(2),
                 current_column_number: Some(24),
                 current_line_text: Some("\trootAgent       agent.Agent".to_string()),
-                current_file_content: Some("type Runner struct {\n\trootAgent       agent.Agent\n}".to_string()),
+                current_file_content: Some(
+                    "type Runner struct {\n\trootAgent       agent.Agent\n}".to_string(),
+                ),
             }),
         );
 
@@ -1913,10 +1980,18 @@ export function createRuntime() {
         let symbols = parse_symbols_from_source("project", "src/runtime.ts", "typescript", source)
             .expect("typescript symbols should parse");
 
-        assert!(symbols.iter().any(|symbol| symbol.name == "Service" && symbol.kind == "interface"));
-        assert!(symbols.iter().any(|symbol| symbol.name == "Runtime" && symbol.kind == "class"));
-        assert!(symbols.iter().any(|symbol| symbol.name == "Service" && symbol.kind == "implementation"));
-        assert!(symbols.iter().any(|symbol| symbol.name == "createRuntime" && symbol.kind == "function"));
+        assert!(symbols
+            .iter()
+            .any(|symbol| symbol.name == "Service" && symbol.kind == "interface"));
+        assert!(symbols
+            .iter()
+            .any(|symbol| symbol.name == "Runtime" && symbol.kind == "class"));
+        assert!(symbols
+            .iter()
+            .any(|symbol| symbol.name == "Service" && symbol.kind == "implementation"));
+        assert!(symbols
+            .iter()
+            .any(|symbol| symbol.name == "createRuntime" && symbol.kind == "function"));
     }
 
     #[test]
@@ -1933,11 +2008,17 @@ impl Store for SqlStore {
 }
 "#;
 
-        let symbols =
-            parse_symbols_from_source("project", "src/lib.rs", "rust", source).expect("rust symbols should parse");
+        let symbols = parse_symbols_from_source("project", "src/lib.rs", "rust", source)
+            .expect("rust symbols should parse");
 
-        assert!(symbols.iter().any(|symbol| symbol.name == "Store" && symbol.kind == "trait"));
-        assert!(symbols.iter().any(|symbol| symbol.name == "SqlStore" && symbol.kind == "struct"));
-        assert!(symbols.iter().any(|symbol| symbol.name == "Store" && symbol.kind == "implementation"));
+        assert!(symbols
+            .iter()
+            .any(|symbol| symbol.name == "Store" && symbol.kind == "trait"));
+        assert!(symbols
+            .iter()
+            .any(|symbol| symbol.name == "SqlStore" && symbol.kind == "struct"));
+        assert!(symbols
+            .iter()
+            .any(|symbol| symbol.name == "Store" && symbol.kind == "implementation"));
     }
 }

@@ -3,6 +3,7 @@
 //! 提供 Markdown 文件快速切换搜索、全文搜索与 WikiLink 自动补全能力。
 //! 该模块只依赖索引、文件系统与路径评分逻辑，不直接依赖 Tauri `State`。
 
+use crate::infra::query::frontmatter_alias::extract_frontmatter_aliases;
 use crate::infra::query::markdown_block_detector::{
     detect_excluded_byte_ranges, is_byte_offset_excluded,
 };
@@ -101,6 +102,34 @@ fn score_quick_switch_match(relative_path: &str, query: &str) -> Option<usize> {
     }
 
     Some(total_score)
+}
+
+fn score_note_name_match(relative_path: &str, aliases: &[String], query: &str) -> Option<usize> {
+    let path_score = score_quick_switch_match(relative_path, query);
+    let alias_score = aliases
+        .iter()
+        .filter_map(|alias| score_quick_switch_match(alias, query).map(|score| score + 110))
+        .max();
+
+    match (path_score, alias_score) {
+        (Some(left), Some(right)) => Some(left.max(right)),
+        (Some(score), None) | (None, Some(score)) => Some(score),
+        (None, None) => None,
+    }
+}
+
+fn read_frontmatter_aliases_for_path(
+    vault_root: &Path,
+    relative_path: &str,
+) -> Result<Vec<String>, String> {
+    let absolute_path = vault_root.join(relative_path);
+    let content = fs::read_to_string(&absolute_path).map_err(|error| {
+        format!(
+            "读取 Markdown 文件失败 {}: {error}",
+            absolute_path.display()
+        )
+    })?;
+    Ok(extract_frontmatter_aliases(&content))
 }
 
 /// 规范化标签值，统一移除 `#` 前缀并转为小写。
@@ -417,7 +446,16 @@ pub(crate) fn search_vault_markdown_files_in_root(
     let mut scored = indexed_files
         .into_iter()
         .filter_map(|item| {
-            let score = score_quick_switch_match(&item.relative_path, trimmed_query)?;
+            let aliases = read_frontmatter_aliases_for_path(vault_root, &item.relative_path)
+                .unwrap_or_else(|error| {
+                    log::warn!(
+                        "[vault-search] alias read failed during quick switch path={} error={}",
+                        item.relative_path,
+                        error
+                    );
+                    Vec::new()
+                });
+            let score = score_note_name_match(&item.relative_path, &aliases, trimmed_query)?;
             Some(VaultQuickSwitchItem {
                 relative_path: item.relative_path,
                 title: item.title,
@@ -610,7 +648,16 @@ pub(crate) fn search_vault_markdown_in_root(
         let matched_file_name = if matches!(scope, VaultSearchScope::Content) || query_is_empty {
             false
         } else {
-            score_quick_switch_match(&item.relative_path, &trimmed_query).is_some()
+            let aliases = read_frontmatter_aliases_for_path(vault_root, &item.relative_path)
+                .unwrap_or_else(|error| {
+                    log::warn!(
+                        "[vault-search] alias read failed during file-name match path={} error={}",
+                        item.relative_path,
+                        error
+                    );
+                    Vec::new()
+                });
+            score_note_name_match(&item.relative_path, &aliases, &trimmed_query).is_some()
         };
 
         let mut matched_content = false;
@@ -621,7 +668,17 @@ pub(crate) fn search_vault_markdown_in_root(
         let mut score = 0usize;
 
         if matched_file_name {
-            score += score_quick_switch_match(&item.relative_path, &trimmed_query).unwrap_or(0);
+            let aliases = read_frontmatter_aliases_for_path(vault_root, &item.relative_path)
+                .unwrap_or_else(|error| {
+                    log::warn!(
+                        "[vault-search] alias read failed during file-name score path={} error={}",
+                        item.relative_path,
+                        error
+                    );
+                    Vec::new()
+                });
+            score +=
+                score_note_name_match(&item.relative_path, &aliases, &trimmed_query).unwrap_or(0);
         }
 
         if needs_content_scan {
@@ -743,7 +800,16 @@ pub(crate) fn suggest_wikilink_targets_in_root(
         files_with_counts
             .into_iter()
             .filter_map(|(relative_path, ref_count)| {
-                let keyword_score = score_quick_switch_match(&relative_path, trimmed_query)?;
+                let aliases = read_frontmatter_aliases_for_path(vault_root, &relative_path)
+                    .unwrap_or_else(|error| {
+                        log::warn!(
+                            "[vault-search] alias read failed during wikilink suggest path={} error={}",
+                            relative_path,
+                            error
+                        );
+                        Vec::new()
+                    });
+                let keyword_score = score_note_name_match(&relative_path, &aliases, trimmed_query)?;
                 let title = Path::new(&relative_path)
                     .file_stem()
                     .and_then(|stem| stem.to_str())

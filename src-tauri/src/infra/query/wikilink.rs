@@ -7,6 +7,7 @@ use crate::infra::fs::fs_helpers::{
     is_supported_image_file, relative_path_from_vault_root, with_markdown_extension_candidates,
     with_supported_image_extension_candidates,
 };
+use crate::infra::query::frontmatter_alias::extract_frontmatter_aliases;
 use crate::infra::query::markdown_block_detector::{
     detect_excluded_byte_ranges, is_byte_offset_excluded,
 };
@@ -14,6 +15,7 @@ use crate::infra::query::query_index;
 use crate::shared::vault_contracts::{
     ResolveMediaEmbedTargetResponse, ResolveWikiLinkTargetResponse,
 };
+use std::fs;
 use std::path::{Path, PathBuf};
 
 fn normalize_wikilink_target(target: &str) -> String {
@@ -312,8 +314,15 @@ fn resolve_wikilink_target_path_in_vault_internal(
         scanned
     };
     if candidates.is_empty() {
+        let mut alias_candidates =
+            collect_alias_candidates_by_target(&canonical_vault_root, &normalized_target)?;
+        candidates.append(&mut alias_candidates);
+    }
+    if candidates.is_empty() {
         return Ok(None);
     }
+    candidates.sort();
+    candidates.dedup();
 
     candidates.sort_by(|left, right| {
         let left_parent = left.parent().unwrap_or(&canonical_vault_root);
@@ -328,6 +337,52 @@ fn resolve_wikilink_target_path_in_vault_internal(
     });
 
     Ok(candidates.into_iter().next())
+}
+
+fn normalize_alias_match_text(value: &str) -> String {
+    value.trim().replace('\\', "/").to_lowercase()
+}
+
+fn collect_alias_candidates_by_target(
+    vault_root: &Path,
+    normalized_target: &str,
+) -> Result<Vec<PathBuf>, String> {
+    let target = normalize_alias_match_text(normalized_target);
+    if target.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut relative_paths = Vec::new();
+    crate::infra::fs::fs_helpers::collect_markdown_relative_paths(
+        vault_root,
+        vault_root,
+        &mut relative_paths,
+    )?;
+
+    let mut output = Vec::new();
+    for relative_path in relative_paths {
+        let absolute_path = vault_root.join(&relative_path);
+        let content = match fs::read_to_string(&absolute_path) {
+            Ok(content) => content,
+            Err(error) => {
+                log::warn!(
+                    "[vault] skip alias match for unreadable file path={} error={}",
+                    relative_path,
+                    error
+                );
+                continue;
+            }
+        };
+
+        let matched = extract_frontmatter_aliases(&content)
+            .into_iter()
+            .any(|alias| normalize_alias_match_text(&alias) == target);
+        if matched {
+            output.push(absolute_path);
+        }
+    }
+
+    Ok(output)
 }
 
 pub(crate) fn resolve_media_embed_target_path_in_vault(
@@ -598,6 +653,28 @@ mod tests {
                 .expect("应命中文件");
 
         assert!(result.ends_with(Path::new("notes/topic/Information-Science.md")));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn resolve_wikilink_target_should_match_frontmatter_alias() {
+        let root = create_test_root();
+        let target = root.join("memory/context.md");
+        fs::create_dir_all(target.parent().expect("应有父目录")).expect("应成功创建父目录");
+        fs::write(
+            &target,
+            "---\nalias:\n  - Memory Service\n  - memory.Service\n---\n# Context\n",
+        )
+        .expect("应成功写入测试文件");
+        fs::create_dir_all(root.join("notes")).expect("应成功创建当前目录");
+
+        ensure_query_index_current(&root).expect("构建索引应成功");
+
+        let result = resolve_wikilink_target_path_in_vault(&root, "notes", "Memory Service")
+            .expect("解析应成功")
+            .expect("应通过 alias 命中文件");
+
+        assert!(result.ends_with(Path::new("memory/context.md")));
         let _ = fs::remove_dir_all(root);
     }
 

@@ -49,9 +49,7 @@ pub fn list_project_reader_projects() -> Result<ProjectReaderProjectListResponse
 
 /// 添加外部项目并建立基础 SQL 文件索引。
 #[tauri::command]
-pub async fn add_project_reader_project(
-    root_path: String,
-) -> Result<ProjectReaderProject, String> {
+pub async fn add_project_reader_project(root_path: String) -> Result<ProjectReaderProject, String> {
     timed_command!(
         "add_project_reader_project",
         async_runtime::spawn_blocking(move || project_reader_app_service::add_project(root_path))

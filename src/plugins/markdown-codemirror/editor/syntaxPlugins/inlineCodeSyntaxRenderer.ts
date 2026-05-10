@@ -5,7 +5,11 @@
  *  - ../syntaxRenderRegistry
  */
 
-import { addDelimitedInlineSyntaxDecoration, registerLineSyntaxRenderer } from "../syntaxRenderRegistry";
+import {
+    addDelimitedInlineSyntaxDecoration,
+    rangeIntersectsSelection,
+    registerLineSyntaxRenderer,
+} from "../syntaxRenderRegistry";
 
 const INLINE_CODE_PATTERN = /(`)([^`\n]+?)\1/g;
 
@@ -17,6 +21,12 @@ export function registerInlineCodeSyntaxRenderer(): void {
     registerLineSyntaxRenderer({
         id: "inline-code",
         applyLineDecorations(context) {
+            const lineTo = context.lineFrom + context.lineText.length;
+            const isEditingLine = rangeIntersectsSelection(context.view, context.lineFrom, lineTo);
+            if (isEditingLine) {
+                return;
+            }
+
             const matches = Array.from(context.lineText.matchAll(INLINE_CODE_PATTERN));
             matches.forEach((match) => {
                 const fullText = match[0] ?? "";

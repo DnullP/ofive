@@ -56,8 +56,25 @@
 /* 编辑器标题头部：承载顶部标题输入栏和视图模式切换按钮。 */
 .cm-tab-header {
     flex-shrink: 0;
+    max-height: 56px;
     padding: 8px 32px 0;
     background: inherit;
+    overflow: hidden;
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+        max-height 160ms ease,
+        padding-top 160ms ease,
+        opacity 120ms ease,
+        transform 160ms ease;
+}
+
+.cm-tab--header-collapsed .cm-tab-header {
+    max-height: 0;
+    padding-top: 0;
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
 }
 
 /* 编辑器标题头部内层：与正文保持统一版心宽度，并将标题与切换按钮横向排布。 */

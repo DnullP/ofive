@@ -25,12 +25,12 @@
   本地优先的桌面知识工作台，面向 Markdown 笔记、插件化工作流、语义检索和 AI 辅助写作。
 </p>
 
-<table>
+<table align="center">
   <tr>
-    <td><strong>Project phase</strong><br />Active development</td>
-    <td><strong>Runtime</strong><br />Tauri 2 desktop host</td>
-    <td><strong>Knowledge model</strong><br />Local-first Markdown vault</td>
-    <td><strong>Quality gate</strong><br />Unit, Rust, Go sidecar, E2E, build</td>
+    <td align="center"><strong>开发阶段</strong><br /><code>Active development</code></td>
+    <td align="center"><strong>桌面运行时</strong><br /><code>Tauri 2</code></td>
+    <td align="center"><strong>知识模型</strong><br /><code>Markdown vault</code></td>
+    <td align="center"><strong>质量门禁</strong><br /><code>Unit · Rust · Go · E2E</code></td>
   </tr>
 </table>
 
@@ -41,7 +41,7 @@
   <a href="#项目文档">项目文档</a>
 </p>
 
-![](./assets/dark.png)
+![ofive desktop interface](./assets/dark.png)
 
 ## 项目定位
 
