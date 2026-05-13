@@ -11,6 +11,7 @@ use crate::app::ai::{
     persistence_callback_app_service, plugin_app_service, tool_app_service,
     tool_callback_app_service,
 };
+use crate::app::vault::agent_skill_app_service;
 use crate::host::events::ai_events;
 use crate::infra::ai::{grpc_client, sidecar_manager};
 use crate::infra::persistence::ai_chat_store;
@@ -166,7 +167,10 @@ pub(crate) async fn start_ai_chat_stream(
     let ai_settings = ai_chat_store::validate_ai_chat_settings_for_chat(
         ai_chat_store::load_ai_chat_settings(&state)?,
     )?;
+    let active_provider = ai_chat_store::resolve_active_ai_provider(&ai_settings);
     let vault_root = get_vault_root(&state)?;
+    let agent_skill_files =
+        agent_skill_app_service::collect_agent_skill_sidecar_files_in_root(&vault_root)?;
     let sidecar_tools = tool_app_service::get_ai_sidecar_tool_catalog(&ai_settings)?;
     let capability_callback_handle =
         tool_callback_app_service::start_sidecar_capability_callback_server(
@@ -213,9 +217,9 @@ pub(crate) async fn start_ai_chat_stream(
             session_id: resolved_session_id.clone(),
             user_id: resolved_user_id,
             message: trimmed_message,
-            vendor_config: ai_settings.field_values.clone(),
-            vendor_id: ai_settings.vendor_id.clone(),
-            model: ai_settings.model.clone(),
+            vendor_config: active_provider.field_values.clone(),
+            vendor_id: active_provider.vendor_id.clone(),
+            model: active_provider.model.clone(),
             tools: sidecar_tools,
             capability_callback_url: capability_callback_handle.callback_url.clone(),
             capability_callback_token: capability_callback_handle.callback_token.clone(),
@@ -224,6 +228,14 @@ pub(crate) async fn start_ai_chat_stream(
             persistence_callback_url: persistence_callback_handle.callback_url.clone(),
             persistence_callback_token: persistence_callback_handle.callback_token.clone(),
             context_snapshot_json: resolved_context_snapshot_json,
+            agent_skill_files: agent_skill_files
+                .into_iter()
+                .map(|item| pb::AgentSkillFile {
+                    skill_name: item.skill_name,
+                    relative_path: item.relative_path,
+                    content: item.content,
+                })
+                .collect(),
             history: history
                 .clone()
                 .unwrap_or_default()
@@ -484,7 +496,10 @@ pub(crate) async fn submit_ai_chat_confirmation(
     let ai_settings = ai_chat_store::validate_ai_chat_settings_for_chat(
         ai_chat_store::load_ai_chat_settings(&state)?,
     )?;
+    let active_provider = ai_chat_store::resolve_active_ai_provider(&ai_settings);
     let vault_root = get_vault_root(&state)?;
+    let agent_skill_files =
+        agent_skill_app_service::collect_agent_skill_sidecar_files_in_root(&vault_root)?;
     let sidecar_tools = tool_app_service::get_ai_sidecar_tool_catalog(&ai_settings)?;
     let capability_callback_handle =
         tool_callback_app_service::start_sidecar_capability_callback_server(
@@ -532,9 +547,9 @@ pub(crate) async fn submit_ai_chat_confirmation(
             user_id: resolved_user_id,
             confirmation_id: trimmed_confirmation_id,
             confirmed,
-            vendor_config: ai_settings.field_values.clone(),
-            vendor_id: ai_settings.vendor_id.clone(),
-            model: ai_settings.model.clone(),
+            vendor_config: active_provider.field_values.clone(),
+            vendor_id: active_provider.vendor_id.clone(),
+            model: active_provider.model.clone(),
             tools: sidecar_tools,
             mcp_server_url: String::new(),
             mcp_auth_token: String::new(),
@@ -542,6 +557,14 @@ pub(crate) async fn submit_ai_chat_confirmation(
             capability_callback_token: capability_callback_handle.callback_token.clone(),
             persistence_callback_url: persistence_callback_handle.callback_url.clone(),
             persistence_callback_token: persistence_callback_handle.callback_token.clone(),
+            agent_skill_files: agent_skill_files
+                .into_iter()
+                .map(|item| pb::AgentSkillFile {
+                    skill_name: item.skill_name,
+                    relative_path: item.relative_path,
+                    content: item.content,
+                })
+                .collect(),
         };
 
         let stream_result = async {

@@ -80,6 +80,8 @@ mod tests {
             vendor_id: "mock".to_string(),
             model: "mock-model".to_string(),
             field_values: HashMap::new(),
+            active_provider_id: None,
+            providers: Vec::new(),
             tool_approval_policy,
         }
     }

@@ -1,4 +1,6 @@
 .workbench-layout-v2 {
+    --workbench-left-activity-bar-width: 48px;
+    --workbench-mac-left-tabstrip-padding: max(0px, calc(var(--shell-window-control-width) - var(--workbench-left-activity-bar-width)));
     display: flex;
     width: 100%;
     height: 100%;
@@ -193,7 +195,15 @@
 }
 
 .app-titlebar--mac ~ .app-content .workbench-layout-v2:not(:has([data-testid='sidebar-left'])) .layout-v2-tab-section__strip[data-workbench-titlebar-offset='mac-left'] {
-    padding-left: var(--shell-window-control-width);
+    padding-left: var(--workbench-mac-left-tabstrip-padding);
+}
+
+.app-titlebar--mac ~ .app-content .workbench-layout-v2:not(:has([data-testid='sidebar-left'])) .layout-v2-tab-section__strip:not([data-workbench-titlebar-offset='mac-left']) {
+    padding-left: 0;
+}
+
+.app-titlebar--mac ~ .app-content .workbench-layout-v2:not(:has([data-testid='sidebar-left'])) .layout-v2-tab-section__strip {
+    background: var(--chrome-activity-bar-bg);
 }
 
 .app-titlebar--windows ~ .app-content .workbench-layout-v2:not(:has([data-testid='sidebar-right'])) .layout-v2-tab-section__strip {

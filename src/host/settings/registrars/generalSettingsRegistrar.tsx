@@ -98,6 +98,25 @@ export function registerGeneralSettingsSection(): () => void {
             updateValue: (nextValue) => updateFeatureSetting("restoreWorkspaceLayout", nextValue),
         },
         {
+            id: "file-open-mode",
+            sectionId: "general-global",
+            order: 70,
+            kind: "select",
+            title: "settings.fileOpenMode",
+            description: "settings.fileOpenModeDesc",
+            searchTerms: ["file open", "wikilink", "tab", "文件打开", "双链", "标签"],
+            useValue: () => useConfigState().featureSettings.fileOpenMode,
+            updateValue: (nextValue) => updateFeatureSetting(
+                "fileOpenMode",
+                nextValue as "new-tab" | "replace-active-tab",
+            ),
+            presentation: "buttons",
+            options: [
+                { value: "new-tab", label: "settings.fileOpenModeNewTab", description: "settings.fileOpenModeNewTabDesc" },
+                { value: "replace-active-tab", label: "settings.fileOpenModeReplaceActive", description: "settings.fileOpenModeReplaceActiveDesc" },
+            ],
+        },
+        {
             id: "config-error",
             sectionId: "general-global",
             order: 999,

@@ -43,8 +43,8 @@ use tauri::State;
 use crate::infra::persistence::extension_private_store;
 use crate::infra::persistence::vault_config_store::{load_vault_config, save_vault_config};
 use crate::shared::ai_service::{
-    AiChatConversationRecord, AiChatHistoryMessage, AiChatHistoryState, AiChatSettings,
-    AiVendorDefinition, AiVendorFieldDefinition,
+    AiChatConversationRecord, AiChatHistoryMessage, AiChatHistoryState, AiChatProviderConfig,
+    AiChatSettings, AiVendorDefinition, AiVendorFieldDefinition,
 };
 use crate::shared::vault_contracts::VaultConfig;
 use crate::state::{get_vault_root, AppState};
@@ -54,7 +54,7 @@ const AI_CHAT_SETTINGS_STATE_KEY: &str = "settings";
 const AI_CHAT_HISTORY_STATE_KEY: &str = "history";
 const AI_CHAT_SETTINGS_CONFIG_KEY: &str = "aiChatSettings";
 const AI_CHAT_HISTORY_CONFIG_KEY: &str = "aiChatHistory";
-const DEFAULT_AI_VENDOR_ID: &str = "minimax-anthropic";
+const DEFAULT_AI_VENDOR_ID: &str = "anthropic-compatible";
 
 /// 返回当前宿主支持的 AI vendor 目录。
 ///
@@ -67,8 +67,69 @@ pub(crate) fn get_ai_vendor_catalog() -> Vec<AiVendorDefinition> {
     vec![
         AiVendorDefinition {
             id: DEFAULT_AI_VENDOR_ID.to_string(),
+            title: "Anthropic Compatible".to_string(),
+            description: "Use Anthropic Messages-compatible providers such as Anthropic, Claude-compatible gateways, or MiniMax.".to_string(),
+            default_model: "claude-sonnet-4-5".to_string(),
+            fields: vec![
+                AiVendorFieldDefinition {
+                    key: "apiKey".to_string(),
+                    label: "API Key".to_string(),
+                    description: "API key sent as x-api-key for Anthropic-compatible requests.".to_string(),
+                    field_type: "password".to_string(),
+                    required: true,
+                    placeholder: Some("Anthropic or compatible API key".to_string()),
+                    default_value: None,
+                },
+                AiVendorFieldDefinition {
+                    key: "endpoint".to_string(),
+                    label: "Endpoint".to_string(),
+                    description: "Anthropic-compatible base URL. The sidecar appends /v1/messages when needed.".to_string(),
+                    field_type: "text".to_string(),
+                    required: false,
+                    placeholder: Some("https://api.anthropic.com".to_string()),
+                    default_value: Some("https://api.anthropic.com".to_string()),
+                },
+                AiVendorFieldDefinition {
+                    key: "anthropicVersion".to_string(),
+                    label: "Anthropic Version".to_string(),
+                    description: "anthropic-version header for Messages API requests.".to_string(),
+                    field_type: "text".to_string(),
+                    required: false,
+                    placeholder: Some("2023-06-01".to_string()),
+                    default_value: Some("2023-06-01".to_string()),
+                },
+            ],
+        },
+        AiVendorDefinition {
+            id: "openai-compatible".to_string(),
+            title: "OpenAI Compatible".to_string(),
+            description: "Use OpenAI Chat Completions-compatible providers through the official OpenAI Go SDK.".to_string(),
+            default_model: "gpt-4.1".to_string(),
+            fields: vec![
+                AiVendorFieldDefinition {
+                    key: "apiKey".to_string(),
+                    label: "API Key".to_string(),
+                    description: "API key sent as a Bearer token.".to_string(),
+                    field_type: "password".to_string(),
+                    required: true,
+                    placeholder: Some("OpenAI or compatible API key".to_string()),
+                    default_value: None,
+                },
+                AiVendorFieldDefinition {
+                    key: "baseUrl".to_string(),
+                    label: "Base URL".to_string(),
+                    description: "Optional OpenAI-compatible API base URL. Leave empty for OpenAI.".to_string(),
+                    field_type: "text".to_string(),
+                    required: false,
+                    placeholder: Some("https://api.openai.com/v1".to_string()),
+                    default_value: Some("https://api.openai.com/v1".to_string()),
+                },
+            ],
+        },
+        AiVendorDefinition {
+            id: "minimax-anthropic".to_string(),
             title: "MiniMax (Anthropic Compatible)".to_string(),
-            description: "Use MiniMax text generation through the Anthropic-compatible API.".to_string(),
+            description: "Preset for MiniMax text generation through its Anthropic-compatible API.".to_string(),
             default_model: "MiniMax-M2.7".to_string(),
             fields: vec![
                 AiVendorFieldDefinition {
@@ -88,6 +149,15 @@ pub(crate) fn get_ai_vendor_catalog() -> Vec<AiVendorDefinition> {
                     required: false,
                     placeholder: Some("https://api.minimaxi.com/anthropic".to_string()),
                     default_value: Some("https://api.minimaxi.com/anthropic".to_string()),
+                },
+                AiVendorFieldDefinition {
+                    key: "anthropicVersion".to_string(),
+                    label: "Anthropic Version".to_string(),
+                    description: "anthropic-version header for MiniMax-compatible requests.".to_string(),
+                    field_type: "text".to_string(),
+                    required: false,
+                    placeholder: Some("2023-06-01".to_string()),
+                    default_value: Some("2023-06-01".to_string()),
                 },
             ],
         },
@@ -235,7 +305,8 @@ pub(crate) fn validate_ai_chat_settings_for_chat(
     settings: AiChatSettings,
 ) -> Result<AiChatSettings, String> {
     let sanitized = sanitize_ai_chat_settings(settings);
-    let Some(vendor) = find_ai_vendor(&sanitized.vendor_id) else {
+    let active_provider = resolve_active_ai_provider(&sanitized);
+    let Some(vendor) = find_ai_vendor(&active_provider.vendor_id) else {
         return Err("当前 AI vendor 不受支持".to_string());
     };
 
@@ -244,7 +315,7 @@ pub(crate) fn validate_ai_chat_settings_for_chat(
         .iter()
         .filter(|field| field.required)
         .filter(|field| {
-            sanitized
+            active_provider
                 .field_values
                 .get(&field.key)
                 .map(|value| value.trim().is_empty())
@@ -261,6 +332,29 @@ pub(crate) fn validate_ai_chat_settings_for_chat(
     }
 
     Ok(sanitized)
+}
+
+/// 解析当前设置中真正生效的 provider。
+pub(crate) fn resolve_active_ai_provider(settings: &AiChatSettings) -> AiChatProviderConfig {
+    if let Some(active_provider) = settings
+        .providers
+        .iter()
+        .find(|provider| Some(provider.id.as_str()) == settings.active_provider_id.as_deref())
+        .or_else(|| settings.providers.first())
+    {
+        return active_provider.clone();
+    }
+
+    AiChatProviderConfig {
+        id: settings
+            .active_provider_id
+            .clone()
+            .unwrap_or_else(|| format!("provider-{}", settings.vendor_id.trim())),
+        vendor_id: settings.vendor_id.clone(),
+        title: settings.vendor_id.clone(),
+        model: settings.model.clone(),
+        field_values: settings.field_values.clone(),
+    }
 }
 
 /// 在指定 vault 根目录下读取 AI 设置。
@@ -426,8 +520,8 @@ fn default_ai_chat_settings() -> AiChatSettings {
         .find(|vendor| vendor.id == DEFAULT_AI_VENDOR_ID)
         .unwrap_or_else(|| AiVendorDefinition {
             id: DEFAULT_AI_VENDOR_ID.to_string(),
-            title: "MiniMax (Anthropic Compatible)".to_string(),
-            description: "MiniMax text generation via Anthropic-compatible sidecar.".to_string(),
+            title: "Anthropic Compatible".to_string(),
+            description: "Anthropic-compatible text generation via sidecar.".to_string(),
             default_model: String::new(),
             fields: Vec::new(),
         });
@@ -439,10 +533,20 @@ fn default_ai_chat_settings() -> AiChatSettings {
         }
     });
 
-    AiChatSettings {
+    let provider = AiChatProviderConfig {
+        id: "provider-default-anthropic".to_string(),
         vendor_id: default_vendor.id,
+        title: default_vendor.title,
         model: default_vendor.default_model,
         field_values,
+    };
+
+    AiChatSettings {
+        vendor_id: provider.vendor_id.clone(),
+        model: provider.model.clone(),
+        field_values: provider.field_values.clone(),
+        active_provider_id: Some(provider.id.clone()),
+        providers: vec![provider],
         tool_approval_policy: HashMap::new(),
     }
 }
@@ -467,25 +571,75 @@ fn find_ai_vendor(vendor_id: &str) -> Option<AiVendorDefinition> {
         .find(|vendor| vendor.id == vendor_id)
 }
 
-/// 从 vault config 条目中读取并清洗 AI 设置。
-///
-/// 配置不存在时返回默认设置；反序列化失败时记录告警日志并回退到默认设置。
-/// 清洗 AI 设置，确保后续保存与聊天校验使用统一格式。
-///
-/// 处理内容包括：回退未知 vendor、裁剪空白、移除未声明字段、补齐字段默认值，
-/// 以及在模型名为空时回退到 vendor 默认模型。
-fn sanitize_ai_chat_settings(settings: AiChatSettings) -> AiChatSettings {
-    let fallback = default_ai_chat_settings();
-    let vendor = find_ai_vendor(settings.vendor_id.trim()).unwrap_or_else(|| {
-        find_ai_vendor(&fallback.vendor_id).unwrap_or_else(|| AiVendorDefinition {
-            id: fallback.vendor_id.clone(),
-            title: "MiniMax (Anthropic Compatible)".to_string(),
-            description: "Use MiniMax text generation through the Anthropic-compatible sidecar."
-                .to_string(),
-            default_model: fallback.model.clone(),
-            fields: Vec::new(),
-        })
+fn build_default_provider_for_vendor(
+    vendor: &AiVendorDefinition,
+    existing_count: usize,
+) -> AiChatProviderConfig {
+    let mut field_values = HashMap::new();
+    vendor.fields.iter().for_each(|field| {
+        if let Some(default_value) = field.default_value.clone() {
+            field_values.insert(field.key.clone(), default_value);
+        }
     });
+
+    AiChatProviderConfig {
+        id: format!(
+            "provider-{}-{}",
+            vendor
+                .id
+                .chars()
+                .map(|character| if character.is_ascii_alphanumeric() {
+                    character
+                } else {
+                    '-'
+                })
+                .collect::<String>(),
+            existing_count + 1
+        ),
+        vendor_id: vendor.id.clone(),
+        title: if existing_count == 0 {
+            vendor.title.clone()
+        } else {
+            format!("{} {}", vendor.title, existing_count + 1)
+        },
+        model: vendor.default_model.clone(),
+        field_values,
+    }
+}
+
+fn sanitize_ai_chat_provider(
+    provider: AiChatProviderConfig,
+    fallback_vendor: &AiVendorDefinition,
+    index: usize,
+) -> Option<AiChatProviderConfig> {
+    let vendor =
+        find_ai_vendor(provider.vendor_id.trim()).unwrap_or_else(|| fallback_vendor.clone());
+    let id = provider.id.trim();
+    let provider_id = if id.is_empty() {
+        format!(
+            "provider-{}-{}",
+            vendor
+                .id
+                .chars()
+                .map(|character| if character.is_ascii_alphanumeric() {
+                    character
+                } else {
+                    '-'
+                })
+                .collect::<String>(),
+            index + 1
+        )
+    } else {
+        id.to_string()
+    };
+    let title = {
+        let trimmed = provider.title.trim();
+        if trimmed.is_empty() {
+            vendor.title.clone()
+        } else {
+            trimmed.to_string()
+        }
+    };
 
     let allowed_field_keys = vendor
         .fields
@@ -495,7 +649,7 @@ fn sanitize_ai_chat_settings(settings: AiChatSettings) -> AiChatSettings {
 
     let mut next_field_values = HashMap::new();
     vendor.fields.iter().for_each(|field| {
-        let value = settings
+        let value = provider
             .field_values
             .get(&field.key)
             .map(|raw| raw.trim().to_string())
@@ -507,7 +661,7 @@ fn sanitize_ai_chat_settings(settings: AiChatSettings) -> AiChatSettings {
         }
     });
 
-    settings.field_values.iter().for_each(|(key, value)| {
+    provider.field_values.iter().for_each(|(key, value)| {
         if allowed_field_keys.contains(&key.as_str()) {
             let trimmed = value.trim();
             if !trimmed.is_empty() {
@@ -515,6 +669,88 @@ fn sanitize_ai_chat_settings(settings: AiChatSettings) -> AiChatSettings {
             }
         }
     });
+
+    Some(AiChatProviderConfig {
+        id: provider_id,
+        vendor_id: vendor.id,
+        title,
+        model: {
+            let trimmed = provider.model.trim();
+            if trimmed.is_empty() {
+                vendor.default_model
+            } else {
+                trimmed.to_string()
+            }
+        },
+        field_values: next_field_values,
+    })
+}
+
+/// 从 vault config 条目中读取并清洗 AI 设置。
+///
+/// 配置不存在时返回默认设置；反序列化失败时记录告警日志并回退到默认设置。
+/// 清洗 AI 设置，确保后续保存与聊天校验使用统一格式。
+///
+/// 处理内容包括：回退未知 vendor、裁剪空白、移除未声明字段、补齐字段默认值，
+/// 以及在模型名为空时回退到 vendor 默认模型。
+fn sanitize_ai_chat_settings(settings: AiChatSettings) -> AiChatSettings {
+    let fallback = default_ai_chat_settings();
+    let fallback_vendor =
+        find_ai_vendor(&fallback.vendor_id).unwrap_or_else(|| AiVendorDefinition {
+            id: fallback.vendor_id.clone(),
+            title: "Anthropic Compatible".to_string(),
+            description: "Use Anthropic-compatible text generation through the sidecar."
+                .to_string(),
+            default_model: fallback.model.clone(),
+            fields: Vec::new(),
+        });
+
+    let mut providers = settings
+        .providers
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, provider)| {
+            sanitize_ai_chat_provider(provider, &fallback_vendor, index)
+        })
+        .collect::<Vec<_>>();
+
+    if providers.is_empty() {
+        let legacy_vendor =
+            find_ai_vendor(settings.vendor_id.trim()).unwrap_or_else(|| fallback_vendor.clone());
+        providers.push(
+            sanitize_ai_chat_provider(
+                AiChatProviderConfig {
+                    id: settings
+                        .active_provider_id
+                        .clone()
+                        .filter(|value| !value.trim().is_empty())
+                        .unwrap_or_else(|| format!("provider-{}", legacy_vendor.id)),
+                    vendor_id: legacy_vendor.id.clone(),
+                    title: legacy_vendor.title.clone(),
+                    model: settings.model,
+                    field_values: settings.field_values,
+                },
+                &fallback_vendor,
+                0,
+            )
+            .unwrap_or_else(|| build_default_provider_for_vendor(&fallback_vendor, 0)),
+        );
+    }
+
+    let active_provider_id = settings.active_provider_id.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+    let active_provider = providers
+        .iter()
+        .find(|provider| Some(provider.id.as_str()) == active_provider_id.as_deref())
+        .cloned()
+        .or_else(|| providers.first().cloned())
+        .unwrap_or_else(|| build_default_provider_for_vendor(&fallback_vendor, 0));
 
     let mut next_tool_approval_policy = HashMap::new();
     settings
@@ -533,16 +769,11 @@ fn sanitize_ai_chat_settings(settings: AiChatSettings) -> AiChatSettings {
         });
 
     AiChatSettings {
-        vendor_id: vendor.id,
-        model: {
-            let trimmed = settings.model.trim();
-            if trimmed.is_empty() {
-                vendor.default_model
-            } else {
-                trimmed.to_string()
-            }
-        },
-        field_values: next_field_values,
+        vendor_id: active_provider.vendor_id.clone(),
+        model: active_provider.model.clone(),
+        field_values: active_provider.field_values.clone(),
+        active_provider_id: Some(active_provider.id.clone()),
+        providers,
         tool_approval_policy: next_tool_approval_policy,
     }
 }
@@ -731,7 +962,8 @@ mod tests {
     };
     use crate::infra::persistence::vault_config_store::{load_vault_config, save_vault_config};
     use crate::shared::ai_service::{
-        AiChatConversationRecord, AiChatHistoryMessage, AiChatHistoryState, AiChatSettings,
+        AiChatConversationRecord, AiChatHistoryMessage, AiChatHistoryState, AiChatProviderConfig,
+        AiChatSettings,
     };
     use crate::shared::vault_contracts::VaultConfig;
     use serde_json::json;
@@ -774,6 +1006,11 @@ mod tests {
         let settings = load_ai_chat_settings_in_root(&root).expect("迁移旧版设置应成功");
 
         assert_eq!(settings.vendor_id, "baidu-qianfan");
+        assert_eq!(
+            settings.active_provider_id.as_deref(),
+            Some("provider-baidu-qianfan")
+        );
+        assert_eq!(settings.providers.len(), 1);
         assert_eq!(
             settings.field_values.get("authToken").map(String::as_str),
             Some("token")
@@ -956,6 +1193,8 @@ mod tests {
             vendor_id: "baidu-qianfan".to_string(),
             model: "extension-model".to_string(),
             field_values: HashMap::from([("authToken".to_string(), "extension-token".to_string())]),
+            active_provider_id: None,
+            providers: Vec::new(),
             tool_approval_policy: HashMap::new(),
         };
         crate::infra::persistence::extension_private_store::save_extension_private_state(
@@ -974,15 +1213,82 @@ mod tests {
     }
 
     #[test]
-    fn default_ai_chat_settings_should_use_minimax_vendor_and_defaults() {
+    fn default_ai_chat_settings_should_use_anthropic_compatible_vendor_and_defaults() {
         let settings = default_ai_chat_settings();
 
-        assert_eq!(settings.vendor_id, "minimax-anthropic");
-        assert_eq!(settings.model, "MiniMax-M2.7");
+        assert_eq!(settings.vendor_id, "anthropic-compatible");
+        assert_eq!(settings.model, "claude-sonnet-4-5");
+        assert_eq!(
+            settings.active_provider_id.as_deref(),
+            Some("provider-default-anthropic")
+        );
+        assert_eq!(settings.providers.len(), 1);
         assert_eq!(
             settings.field_values.get("endpoint").map(String::as_str),
-            Some("https://api.minimaxi.com/anthropic")
+            Some("https://api.anthropic.com")
         );
+        assert_eq!(
+            settings
+                .field_values
+                .get("anthropicVersion")
+                .map(String::as_str),
+            Some("2023-06-01")
+        );
+    }
+
+    #[test]
+    fn sanitize_ai_chat_settings_should_mirror_active_provider_from_provider_list() {
+        let settings = sanitize_ai_chat_settings(AiChatSettings {
+            vendor_id: "anthropic-compatible".to_string(),
+            model: "stale-model".to_string(),
+            field_values: HashMap::new(),
+            active_provider_id: Some("provider-openai".to_string()),
+            providers: vec![
+                AiChatProviderConfig {
+                    id: "provider-anthropic".to_string(),
+                    vendor_id: "anthropic-compatible".to_string(),
+                    title: "Anthropic".to_string(),
+                    model: "claude-sonnet-4-5".to_string(),
+                    field_values: HashMap::from([
+                        ("apiKey".to_string(), "anthropic-key".to_string()),
+                        (
+                            "endpoint".to_string(),
+                            "https://api.anthropic.com".to_string(),
+                        ),
+                    ]),
+                },
+                AiChatProviderConfig {
+                    id: "provider-openai".to_string(),
+                    vendor_id: "openai-compatible".to_string(),
+                    title: "OpenAI".to_string(),
+                    model: "gpt-4.1".to_string(),
+                    field_values: HashMap::from([
+                        ("apiKey".to_string(), " openai-key ".to_string()),
+                        (
+                            "baseUrl".to_string(),
+                            " https://api.openai.com/v1 ".to_string(),
+                        ),
+                    ]),
+                },
+            ],
+            tool_approval_policy: HashMap::new(),
+        });
+
+        assert_eq!(settings.vendor_id, "openai-compatible");
+        assert_eq!(settings.model, "gpt-4.1");
+        assert_eq!(
+            settings.field_values.get("apiKey").map(String::as_str),
+            Some("openai-key")
+        );
+        assert_eq!(
+            settings.field_values.get("baseUrl").map(String::as_str),
+            Some("https://api.openai.com/v1")
+        );
+        assert_eq!(
+            settings.active_provider_id.as_deref(),
+            Some("provider-openai")
+        );
+        assert_eq!(settings.providers.len(), 2);
     }
 
     #[test]
@@ -991,10 +1297,17 @@ mod tests {
             vendor_id: "minimax-anthropic".to_string(),
             model: "  ".to_string(),
             field_values: HashMap::from([("apiKey".to_string(), " test-key ".to_string())]),
+            active_provider_id: None,
+            providers: Vec::new(),
             tool_approval_policy: HashMap::new(),
         });
 
         assert_eq!(settings.vendor_id, "minimax-anthropic");
+        assert_eq!(
+            settings.active_provider_id.as_deref(),
+            Some("provider-minimax-anthropic")
+        );
+        assert_eq!(settings.providers.len(), 1);
         assert_eq!(settings.model, "MiniMax-M2.7");
         assert_eq!(
             settings.field_values.get("apiKey").map(String::as_str),

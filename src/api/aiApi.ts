@@ -84,6 +84,18 @@ export interface AiVendorModelDefinition {
 }
 
 /**
+ * @interface AiChatProviderConfig
+ * @description 用户保存的单个 AI provider 实例。vendorId 表示 provider 类型，id 表示用户配置实例。
+ */
+export interface AiChatProviderConfig {
+    id: string;
+    vendorId: string;
+    title: string;
+    model: string;
+    fieldValues: Record<string, string>;
+}
+
+/**
  * @type AiToolApprovalMode
  * @description 单个 AI 工具的审批策略。default 表示使用后端内置风险策略。
  */
@@ -112,6 +124,8 @@ export interface AiChatSettings {
     vendorId: string;
     model: string;
     fieldValues: Record<string, string>;
+    activeProviderId?: string;
+    providers?: AiChatProviderConfig[];
     toolApprovalPolicy?: Record<string, Exclude<AiToolApprovalMode, "default">>;
 }
 

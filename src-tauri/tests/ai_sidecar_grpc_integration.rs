@@ -558,6 +558,7 @@ async fn ai_sidecar_streams_chat_chunks() {
                 persistence_callback_url: String::new(),
                 persistence_callback_token: String::new(),
                 context_snapshot_json: String::new(),
+                agent_skill_files: Vec::new(),
             }))
             .await
             .expect("应成功建立聊天流");
@@ -625,6 +626,7 @@ async fn ai_sidecar_can_execute_explicit_capability_callback() {
                 persistence_callback_url: String::new(),
                 persistence_callback_token: String::new(),
                 context_snapshot_json: String::new(),
+                agent_skill_files: Vec::new(),
             }))
             .await
             .expect("应成功建立带 callback 的聊天流");
@@ -686,6 +688,7 @@ async fn ai_sidecar_can_execute_planned_capability_callback_from_natural_languag
                 persistence_callback_url: String::new(),
                 persistence_callback_token: String::new(),
                 context_snapshot_json: String::new(),
+                agent_skill_files: Vec::new(),
             }))
             .await
             .expect("应成功建立带规划 callback 的聊天流");
@@ -752,6 +755,7 @@ async fn ai_sidecar_streams_minimax_reasoning_and_tool_result_incrementally() {
                 persistence_callback_url: String::new(),
                 persistence_callback_token: String::new(),
                 context_snapshot_json: String::new(),
+                agent_skill_files: Vec::new(),
             }))
             .await
             .expect("应成功建立 minimax 聊天流");
@@ -879,6 +883,7 @@ async fn ai_sidecar_can_execute_explicit_persistence_callback() {
                 persistence_callback_url: callback_url.clone(),
                 persistence_callback_token: callback_token.clone(),
                 context_snapshot_json: String::new(),
+                agent_skill_files: Vec::new(),
             }))
             .await
             .expect("应成功建立 persistence save 聊天流");
@@ -911,6 +916,7 @@ async fn ai_sidecar_can_execute_explicit_persistence_callback() {
                 persistence_callback_url: callback_url,
                 persistence_callback_token: callback_token,
                 context_snapshot_json: String::new(),
+                agent_skill_files: Vec::new(),
             }))
             .await
             .expect("应成功建立 persistence load 聊天流");
@@ -963,6 +969,7 @@ async fn ai_sidecar_can_resume_confirmation_via_host_persistence() {
                 persistence_callback_url: callback_url.clone(),
                 persistence_callback_token: callback_token.clone(),
                 context_snapshot_json: String::new(),
+                agent_skill_files: Vec::new(),
             }))
             .await
             .expect("应成功建立 confirmation 聊天流");
@@ -995,6 +1002,7 @@ async fn ai_sidecar_can_resume_confirmation_via_host_persistence() {
                 capability_callback_token: String::new(),
                 persistence_callback_url: callback_url,
                 persistence_callback_token: callback_token,
+                agent_skill_files: Vec::new(),
             }))
             .await
             .expect("应成功提交 confirmation");

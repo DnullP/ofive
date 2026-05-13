@@ -48,6 +48,32 @@ export interface VaultTreeResponse {
     entries: VaultEntry[];
 }
 
+export interface AgentSkillFileEntry {
+    relativePath: string;
+    sizeBytes: number;
+}
+
+export interface AgentSkillSummary {
+    name: string;
+    description: string;
+    directoryRelativePath: string;
+    files: AgentSkillFileEntry[];
+    valid: boolean;
+    error?: string | null;
+}
+
+export interface ReadAgentSkillFileResponse {
+    skillName: string;
+    relativePath: string;
+    content: string;
+}
+
+export interface WriteAgentSkillFileResponse {
+    skillName: string;
+    relativePath: string;
+    created: boolean;
+}
+
 /**
  * @interface ReadMarkdownResponse
  * @description 读取 Markdown 接口响应。
@@ -427,6 +453,7 @@ import {
 let browserFallbackVaultPath = "";
 const BROWSER_FALLBACK_VAULT_CONFIG_STORAGE_KEY_PREFIX = "ofive:browser-fallback:vault-config:";
 let browserMockMarkdownContentsPromise: Promise<Record<string, string>> | null = null;
+const browserFallbackAgentSkillFiles = new Map<string, string>();
 
 function getBrowserFallbackConfigReadDelayMs(): number {
     if (typeof window === "undefined") {
@@ -1416,6 +1443,131 @@ export async function getCurrentVaultTree(): Promise<VaultTreeResponse> {
     }
 
     return invoke<VaultTreeResponse>("get_current_vault_tree");
+}
+
+function normalizeAgentSkillName(skillName: string): string {
+    return skillName.trim();
+}
+
+function buildBrowserAgentSkillKey(skillName: string, relativePath: string): string {
+    return `${normalizeAgentSkillName(skillName)}/${normalizeSlashPath(relativePath).replace(/^\/+/, "")}`;
+}
+
+function extractBrowserAgentSkillDescription(content: string): string {
+    const match = /^---\r?\n([\s\S]*?)\r?\n---/u.exec(content);
+    if (!match) {
+        return "";
+    }
+    const descriptionLine = match[1]
+        ?.split(/\r?\n/u)
+        .find((line) => line.trim().startsWith("description:"));
+    return descriptionLine?.replace(/^description:\s*/u, "").trim().replace(/^["']|["']$/g, "") ?? "";
+}
+
+/**
+ * @function listAgentSkills
+ * @description 列出当前仓库中的 Agent SKILL。
+ */
+export async function listAgentSkills(): Promise<AgentSkillSummary[]> {
+    if (!isTauriRuntime()) {
+        const bySkill = new Map<string, AgentSkillFileEntry[]>();
+        for (const [key, content] of browserFallbackAgentSkillFiles) {
+            const [skillName, ...rest] = key.split("/");
+            if (!skillName || rest.length === 0) {
+                continue;
+            }
+            const relativePath = rest.join("/");
+            const files = bySkill.get(skillName) ?? [];
+            files.push({
+                relativePath,
+                sizeBytes: new Blob([content]).size,
+            });
+            bySkill.set(skillName, files);
+        }
+        return Array.from(bySkill.entries())
+            .map(([name, files]) => {
+                const skillContent = browserFallbackAgentSkillFiles.get(buildBrowserAgentSkillKey(name, "SKILL.md")) ?? "";
+                return {
+                    name,
+                    description: extractBrowserAgentSkillDescription(skillContent),
+                    directoryRelativePath: `.ofive/skills/${name}`,
+                    files: files.sort((left, right) => left.relativePath.localeCompare(right.relativePath)),
+                    valid: Boolean(skillContent.trim()),
+                    error: skillContent.trim() ? null : "Missing SKILL.md",
+                };
+            })
+            .sort((left, right) => left.name.localeCompare(right.name));
+    }
+
+    return invoke<AgentSkillSummary[]>("list_agent_skills");
+}
+
+/**
+ * @function createAgentSkill
+ * @description 创建当前仓库中的 Agent SKILL。
+ */
+export async function createAgentSkill(skillName: string, description: string): Promise<AgentSkillSummary> {
+    if (!isTauriRuntime()) {
+        const normalizedName = normalizeAgentSkillName(skillName);
+        const content = `---\nname: ${normalizedName}\ndescription: ${description.trim()}\n---\n# ${normalizedName}\n\nUse this skill when ${description.trim()}\n`;
+        browserFallbackAgentSkillFiles.set(buildBrowserAgentSkillKey(normalizedName, "SKILL.md"), content);
+        const skills = await listAgentSkills();
+        return skills.find((item) => item.name === normalizedName)!;
+    }
+
+    return invoke<AgentSkillSummary>("create_agent_skill", {
+        skillName,
+        description,
+    });
+}
+
+/**
+ * @function readAgentSkillFile
+ * @description 读取 Agent SKILL 文件。
+ */
+export async function readAgentSkillFile(
+    skillName: string,
+    relativePath: string,
+): Promise<ReadAgentSkillFileResponse> {
+    if (!isTauriRuntime()) {
+        return {
+            skillName: normalizeAgentSkillName(skillName),
+            relativePath: normalizeSlashPath(relativePath).replace(/^\/+/, ""),
+            content: browserFallbackAgentSkillFiles.get(buildBrowserAgentSkillKey(skillName, relativePath)) ?? "",
+        };
+    }
+
+    return invoke<ReadAgentSkillFileResponse>("read_agent_skill_file", {
+        skillName,
+        relativePath,
+    });
+}
+
+/**
+ * @function writeAgentSkillFile
+ * @description 写入 Agent SKILL 文件。
+ */
+export async function writeAgentSkillFile(
+    skillName: string,
+    relativePath: string,
+    content: string,
+): Promise<WriteAgentSkillFileResponse> {
+    if (!isTauriRuntime()) {
+        const key = buildBrowserAgentSkillKey(skillName, relativePath);
+        const created = !browserFallbackAgentSkillFiles.has(key);
+        browserFallbackAgentSkillFiles.set(key, content);
+        return {
+            skillName: normalizeAgentSkillName(skillName),
+            relativePath: normalizeSlashPath(relativePath).replace(/^\/+/, ""),
+            created,
+        };
+    }
+
+    return invoke<WriteAgentSkillFileResponse>("write_agent_skill_file", {
+        skillName,
+        relativePath,
+        content,
+    });
 }
 
 /**

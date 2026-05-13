@@ -17,38 +17,104 @@ import (
 	"google.golang.org/genai"
 )
 
-const minimaxAnthropicVersion = "2023-06-01"
+const defaultAnthropicVersion = "2023-06-01"
+const minimaxAnthropicVersion = defaultAnthropicVersion
 
-// MinimaxLLM implements ADK's model.LLM backed by MiniMax's Anthropic-compatible Messages API.
+// MinimaxLLM implements ADK's model.LLM backed by an Anthropic-compatible Messages API.
+//
+// The historical name is kept because tests and callers already reference it,
+// but the adapter now supports both the MiniMax preset and generic Anthropic
+// Messages-compatible providers.
 type MinimaxLLM struct {
-	name     string
-	endpoint string
-	model    string
-	apiKey   string
-	client   *http.Client
-	trace    func(title string, text string) error
+	name             string
+	endpoint         string
+	model            string
+	apiKey           string
+	anthropicVersion string
+	defaultEndpoint  string
+	providerLabel    string
+	enableThinking   bool
+	client           *http.Client
+	trace            func(title string, text string) error
+}
+
+// NewAnthropicCompatibleLLM creates a generic Anthropic Messages-compatible adapter.
+func NewAnthropicCompatibleLLM(name, endpoint, modelName, apiKey, anthropicVersion string) *MinimaxLLM {
+	return newAnthropicCompatibleLLM(anthropicLLMConfig{
+		name:             ifEmpty(name, "anthropic-compatible"),
+		endpoint:         endpoint,
+		modelName:        modelName,
+		apiKey:           apiKey,
+		anthropicVersion: anthropicVersion,
+		defaultEndpoint:  "https://api.anthropic.com",
+		providerLabel:    "anthropic-compatible",
+		modelEnvKeys:     []string{"ANTHROPIC_MODEL"},
+		apiKeyEnvKeys:    []string{"ANTHROPIC_API_KEY"},
+	})
 }
 
 // NewMinimaxLLM creates a new MiniMax adapter using explicit values first and env defaults second.
 func NewMinimaxLLM(name, endpoint, modelName, apiKey string) *MinimaxLLM {
+	return NewMinimaxLLMWithAnthropicVersion(name, endpoint, modelName, apiKey, "")
+}
+
+// NewMinimaxLLMWithAnthropicVersion creates a MiniMax preset adapter with a configurable Anthropic version header.
+func NewMinimaxLLMWithAnthropicVersion(name, endpoint, modelName, apiKey, anthropicVersion string) *MinimaxLLM {
+	return newAnthropicCompatibleLLM(anthropicLLMConfig{
+		name:             ifEmpty(name, "minimax-anthropic"),
+		endpoint:         endpoint,
+		modelName:        modelName,
+		apiKey:           apiKey,
+		anthropicVersion: anthropicVersion,
+		defaultEndpoint:  "https://api.minimaxi.com/anthropic",
+		providerLabel:    "minimax",
+		modelEnvKeys:     []string{"MINIMAX_MODEL", "ANTHROPIC_MODEL"},
+		apiKeyEnvKeys:    []string{"MINIMAX_API_KEY", "ANTHROPIC_API_KEY"},
+		enableThinking:   true,
+	})
+}
+
+type anthropicLLMConfig struct {
+	name             string
+	endpoint         string
+	modelName        string
+	apiKey           string
+	anthropicVersion string
+	defaultEndpoint  string
+	providerLabel    string
+	modelEnvKeys     []string
+	apiKeyEnvKeys    []string
+	enableThinking   bool
+}
+
+func newAnthropicCompatibleLLM(config anthropicLLMConfig) *MinimaxLLM {
+	endpoint := strings.TrimSpace(config.endpoint)
 	if endpoint == "" {
-		endpoint = "https://api.minimaxi.com/anthropic"
+		endpoint = config.defaultEndpoint
 	}
+	modelName := strings.TrimSpace(config.modelName)
 	if modelName == "" {
-		if value := os.Getenv("MINIMAX_MODEL"); value != "" {
-			modelName = value
-		}
+		modelName = firstNonEmptyEnv(config.modelEnvKeys...)
 	}
+	apiKey := strings.TrimSpace(config.apiKey)
 	if apiKey == "" {
-		apiKey = firstNonEmpty(os.Getenv("MINIMAX_API_KEY"), os.Getenv("ANTHROPIC_API_KEY"))
+		apiKey = firstNonEmptyEnv(config.apiKeyEnvKeys...)
+	}
+	anthropicVersion := strings.TrimSpace(config.anthropicVersion)
+	if anthropicVersion == "" {
+		anthropicVersion = defaultAnthropicVersion
 	}
 
 	return &MinimaxLLM{
-		name:     ifEmpty(name, "minimax-anthropic"),
-		endpoint: endpoint,
-		model:    modelName,
-		apiKey:   apiKey,
-		client:   newStreamingHTTPClient(),
+		name:             config.name,
+		endpoint:         endpoint,
+		model:            modelName,
+		apiKey:           apiKey,
+		anthropicVersion: anthropicVersion,
+		defaultEndpoint:  config.defaultEndpoint,
+		providerLabel:    ifEmpty(config.providerLabel, "anthropic-compatible"),
+		enableThinking:   config.enableThinking,
+		client:           newStreamingHTTPClient(),
 	}
 }
 
@@ -83,7 +149,7 @@ func (m *MinimaxLLM) GenerateContent(
 		}
 
 		if strings.TrimSpace(payload.Model) == "" {
-			yield(nil, fmt.Errorf("minimax model is required; refresh the model list and save a supported model first"))
+			yield(nil, fmt.Errorf("%s model is required; refresh the model list and save a supported model first", m.providerLabel))
 			return
 		}
 
@@ -101,7 +167,9 @@ func (m *MinimaxLLM) GenerateContent(
 				payload.StopSequences = req.Config.StopSequences
 			}
 		}
-		payload.Thinking = buildMinimaxThinkingConfig(payload.Model, payload.MaxTokens)
+		if m.enableThinking {
+			payload.Thinking = buildMinimaxThinkingConfig(payload.Model, payload.MaxTokens)
+		}
 
 		body, err := json.Marshal(payload)
 		if err != nil {
@@ -116,7 +184,7 @@ func (m *MinimaxLLM) GenerateContent(
 		httpReq, err := http.NewRequestWithContext(
 			ctx,
 			http.MethodPost,
-			resolveMinimaxMessagesEndpoint(m.endpoint),
+			resolveAnthropicMessagesEndpoint(m.endpoint, m.defaultEndpoint),
 			bytes.NewReader(body),
 		)
 		if err != nil {
@@ -124,7 +192,7 @@ func (m *MinimaxLLM) GenerateContent(
 			return
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("anthropic-version", minimaxAnthropicVersion)
+		httpReq.Header.Set("anthropic-version", m.anthropicVersion)
 		if apiKey := strings.TrimSpace(m.apiKey); apiKey != "" {
 			httpReq.Header.Set("x-api-key", apiKey)
 		}
@@ -149,10 +217,10 @@ func (m *MinimaxLLM) GenerateContent(
 
 			var parsed minimaxChatResponse
 			if err := json.Unmarshal(raw, &parsed); err == nil && parsed.Error != nil {
-				yield(nil, fmt.Errorf("minimax api error: type=%s message=%s", parsed.Error.Type, parsed.Error.Message))
+				yield(nil, fmt.Errorf("%s api error: type=%s message=%s", m.providerLabel, parsed.Error.Type, parsed.Error.Message))
 				return
 			}
-			yield(nil, fmt.Errorf("minimax api error: status=%d body=%s", resp.StatusCode, string(raw)))
+			yield(nil, fmt.Errorf("%s api error: status=%d body=%s", m.providerLabel, resp.StatusCode, string(raw)))
 			return
 		}
 
@@ -184,7 +252,7 @@ func (m *MinimaxLLM) GenerateContent(
 			return
 		}
 		if parsed.Error != nil {
-			yield(nil, fmt.Errorf("minimax api error: type=%s message=%s", parsed.Error.Type, parsed.Error.Message))
+			yield(nil, fmt.Errorf("%s api error: type=%s message=%s", m.providerLabel, parsed.Error.Type, parsed.Error.Message))
 			return
 		}
 
@@ -322,7 +390,7 @@ func (m *MinimaxLLM) streamResponse(
 			if err := json.Unmarshal([]byte(data), &payload); err != nil {
 				return err
 			}
-			return fmt.Errorf("minimax api error: type=%s message=%s", payload.Error.Type, payload.Error.Message)
+			return fmt.Errorf("%s api error: type=%s message=%s", m.providerLabel, payload.Error.Type, payload.Error.Message)
 		case "message_stop":
 			state.finalizeAll()
 			if !yield(buildMinimaxLLMResponse(state.snapshot(), state.stopReason, state.inputTokens, state.outputTokens, true), nil) {
@@ -434,10 +502,23 @@ func (m *MinimaxLLM) resolveRequestModel(requestModel string) string {
 	return trimmedRequestModel
 }
 
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func resolveMinimaxMessagesEndpoint(endpoint string) string {
+	return resolveAnthropicMessagesEndpoint(endpoint, "https://api.minimaxi.com/anthropic")
+}
+
+func resolveAnthropicMessagesEndpoint(endpoint string, defaultEndpoint string) string {
 	trimmed := strings.TrimSpace(endpoint)
 	if trimmed == "" {
-		trimmed = "https://api.minimaxi.com/anthropic"
+		trimmed = defaultEndpoint
 	}
 	trimmed = strings.TrimRight(trimmed, "/")
 	if strings.HasSuffix(trimmed, "/v1/messages") {

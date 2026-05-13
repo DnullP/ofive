@@ -21,6 +21,8 @@ import {
 } from "./editorTabRestoreMode";
 import i18n from "../../i18n";
 
+export type FileOpenMode = "new-tab" | "replace-active-tab";
+
 /**
  * @constant DEFAULT_EDITOR_FONT_FAMILY
  * @description 编辑器默认字体族，使用 San Francisco 系统字体。
@@ -101,6 +103,7 @@ const LAST_VAULT_PATH_STORAGE_KEY = "ofive:last-vault-path";
  * @field frontmatterTemplate - Frontmatter 模板，支持 {{filename}} / {{date}} / {{directory}} 占位符
  * @field frontmatterAutoInsertOnCreate - 创建新 Markdown 笔记时是否自动插入 frontmatter 模板
  * @field restoreWorkspaceLayout - 重启时是否恢复上次的工作区布局和标签页
+ * @field fileOpenMode - 从 wikilink 或文件树打开文件时，是打开新标签还是替换当前文件标签
  */
 export interface FeatureSettings {
     /** 是否开启搜索功能（后端配置） */
@@ -173,6 +176,8 @@ export interface FeatureSettings {
     frontmatterAutoInsertOnCreate: boolean;
     /** 重启时是否恢复上次的工作区布局和标签页，默认 true */
     restoreWorkspaceLayout: boolean;
+    /** 从 wikilink 或文件树打开文件时的默认行为，默认打开新标签页 */
+    fileOpenMode: FileOpenMode;
 }
 
 /**
@@ -258,6 +263,7 @@ export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
     frontmatterTemplate: "---\ntitle: {{filename}}\ndate: {{date}}\n---",
     frontmatterAutoInsertOnCreate: false,
     restoreWorkspaceLayout: true,
+    fileOpenMode: "new-tab",
 };
 
 /**
@@ -312,6 +318,10 @@ function writeRememberLastVaultToLocal(value: boolean): void {
  */
 export function isRememberLastVaultEnabled(): boolean {
     return readRememberLastVaultFromLocal();
+}
+
+export function isFileOpenMode(value: unknown): value is FileOpenMode {
+    return value === "new-tab" || value === "replace-active-tab";
 }
 
 function normalizeByteFeature(
@@ -536,6 +546,9 @@ function normalizeBackendConfig(config: VaultConfig): {
         typeof featuresObj.restoreWorkspaceLayout === "boolean"
             ? featuresObj.restoreWorkspaceLayout
             : DEFAULT_FEATURE_SETTINGS.restoreWorkspaceLayout;
+    const fileOpenMode = isFileOpenMode(featuresObj.fileOpenMode)
+        ? featuresObj.fileOpenMode
+        : DEFAULT_FEATURE_SETTINGS.fileOpenMode;
 
     const nextFeatures = {
         ...featuresObj,
@@ -574,6 +587,7 @@ function normalizeBackendConfig(config: VaultConfig): {
         frontmatterTemplate,
         frontmatterAutoInsertOnCreate,
         restoreWorkspaceLayout,
+        fileOpenMode,
     };
 
     const nextConfig: VaultConfig = {
@@ -619,7 +633,8 @@ function normalizeBackendConfig(config: VaultConfig): {
         featuresObj.notificationsMaxVisible !== notificationsMaxVisible ||
         featuresObj.frontmatterTemplate !== frontmatterTemplate ||
         featuresObj.frontmatterAutoInsertOnCreate !== frontmatterAutoInsertOnCreate ||
-        featuresObj.restoreWorkspaceLayout !== restoreWorkspaceLayout;
+        featuresObj.restoreWorkspaceLayout !== restoreWorkspaceLayout ||
+        featuresObj.fileOpenMode !== fileOpenMode;
 
     return {
         nextConfig,
@@ -659,6 +674,7 @@ function normalizeBackendConfig(config: VaultConfig): {
             frontmatterTemplate,
             frontmatterAutoInsertOnCreate,
             restoreWorkspaceLayout,
+            fileOpenMode,
         },
         changed,
     };

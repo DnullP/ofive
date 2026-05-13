@@ -48,6 +48,13 @@ const markdownSymbolHighlightStyle = HighlightStyle.define([
  */
 export function createCodeMirrorThemeExtension() {
     return [
+        EditorView.scrollMargins.of((view) => {
+            const tabRoot = view.dom.closest(".cm-tab");
+            const header = tabRoot?.querySelector<HTMLElement>(".cm-tab-header");
+            return {
+                top: header?.getBoundingClientRect().height ?? 56,
+            };
+        }),
         EditorView.theme({
             "&": {
                 height: "100%",

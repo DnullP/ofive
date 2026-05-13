@@ -85,6 +85,7 @@ export function activatePlugin(): () => void {
         defaultOrder: 1,
         render: (context) => React.createElement(VaultPanel, {
             openTab: context.openTab,
+            openFile: context.openFile,
             closeTab: context.closeTab,
             requestMoveFileToDirectory: context.requestMoveFileToDirectory,
         }),

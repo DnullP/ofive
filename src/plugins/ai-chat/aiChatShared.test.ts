@@ -18,11 +18,13 @@ import {
     buildAiChatRuntimeContextSnapshot,
     buildPersistableHistory,
     deriveConversationTitle,
+    ensureSettingsProviderList,
     ensureHistoryState,
     filterConversations,
     formatAiChatDuration,
     formatAiPanelError,
     mergeSettingsForVendor,
+    resolveActiveProvider,
     resolveVendor,
     serializeAiChatRuntimeContextSnapshot,
 } from "./aiChatShared";
@@ -119,6 +121,9 @@ describe("aiChatShared", () => {
             token: "secret",
             endpoint: "https://example.test",
         });
+        expect(merged.activeProviderId).toBeTruthy();
+        expect(merged.providers).toHaveLength(1);
+        expect(merged.providers?.[0]?.model).toBe("model-a");
         expect(merged.toolApprovalPolicy).toEqual({
             "vault.apply_markdown_patch": "auto",
         });
@@ -139,6 +144,55 @@ describe("aiChatShared", () => {
         expect(merged.fieldValues).toEqual({
             endpoint: "https://vendor-b.test",
             apiKey: "",
+        });
+        expect(resolveActiveProvider(merged).vendorId).toBe("vendor-b");
+    });
+
+    it("应把旧版单 provider 设置迁移为 provider 列表并镜像激活项", () => {
+        const migrated = ensureSettingsProviderList(createSettings(), VENDORS);
+
+        expect(migrated.providers).toHaveLength(1);
+        expect(migrated.activeProviderId).toBe(migrated.providers?.[0]?.id);
+        expect(migrated.vendorId).toBe("vendor-a");
+        expect(migrated.fieldValues).toEqual({
+            token: "secret",
+            endpoint: "https://example.test",
+        });
+    });
+
+    it("运行上下文应读取 provider 列表中的激活 provider", () => {
+        const snapshot = buildAiChatRuntimeContextSnapshot({
+            vaultPath: "/vault",
+            activeFile: null,
+            openTabs: [],
+            files: [],
+            settings: {
+                vendorId: "vendor-a",
+                model: "stale-model",
+                fieldValues: {},
+                activeProviderId: "provider-b",
+                providers: [
+                    {
+                        id: "provider-a",
+                        vendorId: "vendor-a",
+                        title: "Provider A",
+                        model: "model-a",
+                        fieldValues: {},
+                    },
+                    {
+                        id: "provider-b",
+                        vendorId: "vendor-b",
+                        title: "Provider B",
+                        model: "model-b-custom",
+                        fieldValues: {},
+                    },
+                ],
+            },
+        });
+
+        expect(snapshot.ai).toEqual({
+            vendorId: "vendor-b",
+            model: "model-b-custom",
         });
     });
 

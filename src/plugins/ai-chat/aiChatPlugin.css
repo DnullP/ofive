@@ -753,6 +753,64 @@
     border-color: color-mix(in srgb, var(--accent-primary) 30%, var(--border-color));
 }
 
+.ai-chat-confirm-approve-split {
+    position: relative;
+    display: inline-flex;
+    align-items: stretch;
+}
+
+.ai-chat-confirm-approve-split .ai-chat-confirm-button.primary {
+    border-right-width: 0;
+}
+
+.ai-chat-confirm-approve-split .ai-chat-confirm-button.menu-trigger {
+    width: 30px;
+    padding: 7px 8px;
+    justify-content: center;
+}
+
+.ai-chat-confirm-approve-menu {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    z-index: 10;
+    display: none;
+    min-width: 148px;
+    padding: 4px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+}
+
+.ai-chat-confirm-approve-split:hover .ai-chat-confirm-approve-menu,
+.ai-chat-confirm-approve-split:focus-within .ai-chat-confirm-approve-menu {
+    display: flex;
+    flex-direction: column;
+}
+
+.ai-chat-confirm-menu-item {
+    width: 100%;
+    border: 0;
+    padding: 7px 8px;
+    color: var(--text-primary);
+    background: transparent;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.ai-chat-confirm-menu-item:hover,
+.ai-chat-confirm-menu-item:focus-visible {
+    outline: none;
+    background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-primary));
+}
+
+.ai-chat-confirm-menu-item:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 /* ai-chat-confirm-button.reject：拒绝按钮 */
 .ai-chat-confirm-button.reject {
     color: var(--error-color);
@@ -1405,6 +1463,37 @@
 /* ai-chat-settings-model-select：模型下拉 */
 .ai-chat-settings-model-select {
     min-width: 0;
+}
+
+.ai-chat-settings-provider-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.ai-chat-settings-mini-button {
+    min-height: 28px;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    padding: 5px 9px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ai-chat-settings-mini-button:hover,
+.ai-chat-settings-mini-button:focus-visible {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent-primary) 34%, var(--border-color));
+}
+
+.ai-chat-settings-mini-button.danger {
+    color: var(--error-color);
 }
 
 /* ai-chat-settings-tool-policy-header：工具审批设置说明行 */

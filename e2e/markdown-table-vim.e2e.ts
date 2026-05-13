@@ -10,10 +10,6 @@ function visibleEditor(page: Page) {
     return page.locator(".cm-editor:visible").first();
 }
 
-function visibleTableStatus(page: Page) {
-    return page.locator(".mtv-status-current:visible").first();
-}
-
 async function waitForMockWorkbench(page: Page): Promise<void> {
     await page.goto(MOCK_PAGE);
     await page.locator("[data-testid='main-dockview-host']").waitFor({ state: "visible" });
@@ -26,6 +22,16 @@ async function enableEditorVimMode(page: Page): Promise<void> {
         await configStoreModule.syncConfigStateForVault("/mock/notes", true);
         if (!configStoreModule.getConfigSnapshot().featureSettings.vimModeEnabled) {
             await configStoreModule.updateVimModeEnabled(true);
+        }
+    });
+}
+
+async function disableEditorVimMode(page: Page): Promise<void> {
+    await page.evaluate(async () => {
+        const configStoreModule = await import("/src/host/config/configStore.ts");
+        await configStoreModule.syncConfigStateForVault("/mock/notes", true);
+        if (configStoreModule.getConfigSnapshot().featureSettings.vimModeEnabled) {
+            await configStoreModule.updateVimModeEnabled(false);
         }
     });
 }
@@ -63,6 +69,51 @@ async function waitForEditorFrames(page: Page, frameCount = 2): Promise<void> {
 
 function activeTableNavigationCell(page: Page) {
     return page.locator("[data-vim-nav-active='true']:visible").first();
+}
+
+async function expectActiveTableCellPosition(
+    page: Page,
+    section: "header" | "body",
+    rowIndex: number,
+    columnIndex: number,
+): Promise<void> {
+    const activeCell = activeTableNavigationCell(page);
+    await expect(activeCell).toHaveAttribute("data-markdown-table-section", section);
+    await expect(activeCell).toHaveAttribute("data-markdown-table-row-index", String(rowIndex));
+    await expect(activeCell).toHaveAttribute("data-markdown-table-column-index", String(columnIndex));
+}
+
+async function dragLocatorToLocator(
+    page: Page,
+    source: ReturnType<Page["locator"]>,
+    target: ReturnType<Page["locator"]>,
+): Promise<void> {
+    const sourceBox = await source.boundingBox();
+    const targetBox = await target.boundingBox();
+    expect(sourceBox).not.toBeNull();
+    expect(targetBox).not.toBeNull();
+
+    await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, { steps: 12 });
+    await page.mouse.up();
+}
+
+async function dragLocatorBy(
+    page: Page,
+    locator: ReturnType<Page["locator"]>,
+    deltaX: number,
+    deltaY: number,
+): Promise<void> {
+    const box = await locator.boundingBox();
+    expect(box).not.toBeNull();
+
+    const startX = box!.x + box!.width / 2;
+    const startY = box!.y + box!.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + deltaX, startY + deltaY, { steps: 8 });
+    await page.mouse.up();
 }
 
 async function getActiveEditorState(page: Page): Promise<{
@@ -157,6 +208,29 @@ async function setImeCompositionWithChrome(page: Page, text: string): Promise<vo
     }
 }
 
+async function waitForActiveEditorVimAttached(page: Page): Promise<void> {
+    await expect.poll(async () => {
+        const state = await getActiveEditorState(page);
+        return state.vimInsertMode === null ? "missing" : "attached";
+    }).toBe("attached");
+}
+
+async function enterVimInsertModeAtCurrentSelection(page: Page): Promise<void> {
+    await waitForActiveEditorVimAttached(page);
+    await page.keyboard.press("Escape");
+    await waitForEditorFrames(page, 2);
+    await expect.poll(async () => {
+        const state = await getActiveEditorState(page);
+        return state.vimInsertMode;
+    }).toBe(false);
+    await page.keyboard.press("i");
+    await waitForEditorFrames(page, 4);
+    await expect.poll(async () => {
+        const state = await getActiveEditorState(page);
+        return state.vimInsertMode;
+    }).toBe(true);
+}
+
 async function setEditorSelectionToTextEnd(page: Page, text: string): Promise<void> {
     await page.evaluate((needle) => {
         const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as (HTMLElement & {
@@ -193,6 +267,7 @@ async function setEditorSelectionToTextEnd(page: Page, text: string): Promise<vo
 }
 
 async function replaceActiveEditorDoc(page: Page, markdown: string, cursorNeedle: string): Promise<void> {
+    await page.locator(".layout-v2-tab-section__card--active .cm-content").waitFor({ state: "visible" });
     await page.evaluate(({ nextMarkdown, needle }) => {
         const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as (HTMLElement & {
             cmTile?: {
@@ -274,6 +349,55 @@ async function simulateImeBackspaceSelectionDriftToLineStart(page: Page): Promis
     });
 }
 
+async function simulateImeInsertSelectionDriftToLineStart(page: Page, data: string): Promise<void> {
+    await page.evaluate((compositionData) => {
+        const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as (HTMLElement & {
+            cmTile?: {
+                view?: {
+                    contentDOM?: HTMLElement;
+                    dom: HTMLElement;
+                    dispatch: (spec: unknown) => void;
+                    focus: () => void;
+                    state: {
+                        doc: {
+                            lineAt(pos: number): { from: number };
+                        };
+                        selection: { main: { head: number } };
+                    };
+                };
+            };
+        }) | null;
+        const view = content?.cmTile?.view;
+        if (!view) {
+            throw new Error("EditorView not found.");
+        }
+
+        view.focus();
+        const eventTarget = view.contentDOM ?? content;
+
+        eventTarget.dispatchEvent(new CompositionEvent("compositionstart", {
+            bubbles: true,
+            data: compositionData,
+        }));
+
+        const line = view.state.doc.lineAt(view.state.selection.main.head);
+        view.dispatch({
+            selection: { anchor: line.from },
+            scrollIntoView: true,
+        });
+
+        const inputEvent = new InputEvent("beforeinput", {
+            bubbles: true,
+            cancelable: true,
+            data: compositionData,
+            inputType: "insertCompositionText",
+            isComposing: true,
+        });
+        Object.defineProperty(inputEvent, "inputType", { value: "insertCompositionText" });
+        eventTarget.dispatchEvent(inputEvent);
+    }, data);
+}
+
 test.describe("markdown table vim regression", () => {
     test.beforeEach(async ({ page }) => {
         await waitForMockWorkbench(page);
@@ -290,7 +414,7 @@ test.describe("markdown table vim regression", () => {
         const firstCell = activeTableNavigationCell(page);
         await expect(firstCell).toBeFocused();
         await expect(firstCell).toHaveText("**Bold**");
-        await expect(visibleTableStatus(page)).toContainText(/Selected: Row 1, Column 1|第 1 行第 1 列/u);
+        await expectActiveTableCellPosition(page, "body", 0, 0);
 
         await clickEditorLine(page, 8);
         await page.keyboard.press("Escape");
@@ -300,7 +424,7 @@ test.describe("markdown table vim regression", () => {
         const lastRowEntry = activeTableNavigationCell(page);
         await expect(lastRowEntry).toBeFocused();
         await expect(lastRowEntry).toHaveText("`inline code`");
-        await expect(visibleTableStatus(page)).toContainText(/Selected: Row 2, Column 1|第 2 行第 1 列/u);
+        await expectActiveTableCellPosition(page, "body", 1, 0);
     });
 
     test("Enter should enter editing and Escape or Enter should return to table navigation", async ({ page }) => {
@@ -482,9 +606,7 @@ test.describe("markdown table vim regression", () => {
         const userLine = "- 我可以创建特殊的wikilink `[[projectName:/path/to/file:linenumber]]` 来";
         await openMockNote(page, INLINE_CODE_WIKILINK_NOTE_PATH);
         await replaceActiveEditorDoc(page, [userLine, "", "---"].join("\n"), userLine);
-        await page.keyboard.press("Escape");
-        await page.keyboard.press("i");
-        await waitForEditorFrames(page, 4);
+        await enterVimInsertModeAtCurrentSelection(page);
 
         const initialState = await getActiveEditorState(page);
         expect(initialState.vimInsertMode).toBe(true);
@@ -504,9 +626,7 @@ test.describe("markdown table vim regression", () => {
         const userLine = "- 我可以创建特殊的wikilink `[[projectName:/path/to/file:linenumber]]` 来";
         await openMockNote(page, INLINE_CODE_WIKILINK_NOTE_PATH);
         await replaceActiveEditorDoc(page, [userLine, "", "---"].join("\n"), userLine);
-        await page.keyboard.press("Escape");
-        await page.keyboard.press("i");
-        await waitForEditorFrames(page, 4);
+        await enterVimInsertModeAtCurrentSelection(page);
 
         const initialState = await getActiveEditorState(page);
         expect(initialState.vimInsertMode).toBe(true);
@@ -531,9 +651,7 @@ test.describe("markdown table vim regression", () => {
         const userLine = "- 我可以创建特殊的wikilink `[[projectName:/path/to/file:linenumber]]` 来";
         await openMockNote(page, INLINE_CODE_WIKILINK_NOTE_PATH);
         await replaceActiveEditorDoc(page, [userLine, "", "---"].join("\n"), userLine);
-        await page.keyboard.press("Escape");
-        await page.keyboard.press("i");
-        await waitForEditorFrames(page, 4);
+        await enterVimInsertModeAtCurrentSelection(page);
 
         const initialState = await getActiveEditorState(page);
         expect(initialState.vimInsertMode).toBe(true);
@@ -558,9 +676,7 @@ test.describe("markdown table vim regression", () => {
         const userLine = "- 我可以创建特殊的wikilink `[[projectName:/path/to/file:linenumber]]` 来";
         await openMockNote(page, INLINE_CODE_WIKILINK_NOTE_PATH);
         await replaceActiveEditorDoc(page, [userLine, "", "---"].join("\n"), userLine);
-        await page.keyboard.press("Escape");
-        await page.keyboard.press("i");
-        await waitForEditorFrames(page, 4);
+        await enterVimInsertModeAtCurrentSelection(page);
 
         const initialState = await getActiveEditorState(page);
         expect(initialState.vimInsertMode).toBe(true);
@@ -584,6 +700,47 @@ test.describe("markdown table vim regression", () => {
         expect(afterInputState.docText).toBe(`${beforeCursor}d${afterCursor}`);
     });
 
+    test("IME insert selection drift should be restored on markdown list lines", async ({ page }) => {
+        const unorderedLine = "- xxx";
+        await openMockNote(page, INLINE_CODE_WIKILINK_NOTE_PATH);
+        await disableEditorVimMode(page);
+        await replaceActiveEditorDoc(page, [unorderedLine, "1. xxx", "---"].join("\n"), unorderedLine);
+
+        const unorderedInitialState = await getActiveEditorState(page);
+        await simulateImeInsertSelectionDriftToLineStart(page, "w");
+        await waitForEditorFrames(page, 4);
+
+        const unorderedPreeditState = await getActiveEditorState(page);
+        expect(unorderedPreeditState.head).toBe(unorderedInitialState.head);
+        expect(unorderedPreeditState.lineNumber).toBe(unorderedInitialState.lineNumber);
+
+        await page.keyboard.insertText("w");
+        await dispatchEditorCompositionEvent(page, "compositionend", "w");
+        await waitForEditorFrames(page, 4);
+
+        const unorderedCommittedState = await getActiveEditorState(page);
+        expect(unorderedCommittedState.head).toBe(unorderedInitialState.head + 1);
+        expect(unorderedCommittedState.docText).toContain("- xxxw");
+
+        await replaceActiveEditorDoc(page, [unorderedLine, "1. xxx", "---"].join("\n"), "1. xxx");
+
+        const orderedInitialState = await getActiveEditorState(page);
+        await simulateImeInsertSelectionDriftToLineStart(page, "w");
+        await waitForEditorFrames(page, 4);
+
+        const orderedPreeditState = await getActiveEditorState(page);
+        expect(orderedPreeditState.head).toBe(orderedInitialState.head);
+        expect(orderedPreeditState.lineNumber).toBe(orderedInitialState.lineNumber);
+
+        await page.keyboard.insertText("w");
+        await dispatchEditorCompositionEvent(page, "compositionend", "w");
+        await waitForEditorFrames(page, 4);
+
+        const orderedCommittedState = await getActiveEditorState(page);
+        expect(orderedCommittedState.head).toBe(orderedInitialState.head + 1);
+        expect(orderedCommittedState.docText).toContain("1. xxxw");
+    });
+
     test("modified cell should return to the same navigation target after Escape or Enter", async ({ page }) => {
         await openMockNote(page, TABLE_BOUNDARY_NOTE_PATH);
         await clickEditorLine(page, 2);
@@ -599,7 +756,7 @@ test.describe("markdown table vim regression", () => {
         const input = page.locator(".mtv-cell-input:visible").first();
 
         await expect(activeCell).toHaveText("决定不同区域里展示什么容器");
-        await expect(visibleTableStatus(page)).toContainText(/Selected: Row 2, Column 2|第 2 行第 2 列/u);
+        await expectActiveTableCellPosition(page, "body", 1, 1);
 
         await page.keyboard.press("Enter");
         await waitForEditorFrames(page);
@@ -610,12 +767,12 @@ test.describe("markdown table vim regression", () => {
         await waitForEditorFrames(page, 4);
         await expect(activeCell).toBeFocused();
         await expect(activeCell).toHaveText("决定不同区域里展示什么容器X");
-        await expect(visibleTableStatus(page)).toContainText(/Selected: Row 2, Column 2|第 2 行第 2 列/u);
+        await expectActiveTableCellPosition(page, "body", 1, 1);
 
         await page.keyboard.press("j");
         await waitForEditorFrames(page);
         await expect(activeCell).toHaveText("把业务数据投影到布局引擎");
-        await expect(visibleTableStatus(page)).toContainText(/Selected: Row 3, Column 2|第 3 行第 2 列/u);
+        await expectActiveTableCellPosition(page, "body", 2, 1);
 
         await page.keyboard.press("k");
         await waitForEditorFrames(page);
@@ -634,11 +791,82 @@ test.describe("markdown table vim regression", () => {
         await waitForEditorFrames(page, 4);
         await expect(activeCell).toBeFocused();
         await expect(activeCell).toHaveText("决定区域如何切分和嵌套Y");
-        await expect(visibleTableStatus(page)).toContainText(/Selected: Row 1, Column 2|第 1 行第 2 列/u);
+        await expectActiveTableCellPosition(page, "body", 0, 1);
 
         await page.keyboard.press("j");
         await waitForEditorFrames(page);
         await expect(activeCell).toHaveText("决定不同区域里展示什么容器X");
-        await expect(visibleTableStatus(page)).toContainText(/Selected: Row 2, Column 2|第 2 行第 2 列/u);
+        await expectActiveTableCellPosition(page, "body", 1, 1);
+    });
+
+    test("edge handles should select, reorder, open context actions, and resize the table @mouse-drag", async ({ page }) => {
+        await openMockNote(page, TABLE_BOUNDARY_NOTE_PATH);
+        await expect(page.locator(".mtv-table:visible")).toBeVisible();
+
+        const firstColumnHandle = page.locator("[data-table-edge-kind='column'][data-table-edge-index='0']").first();
+        const thirdColumnHandle = page.locator("[data-table-edge-kind='column'][data-table-edge-index='2']").first();
+        const firstBodyCell = page
+            .locator(".mtv-table-body-cell:has([data-markdown-table-section='body'][data-markdown-table-row-index='0'][data-markdown-table-column-index='0'])")
+            .first();
+        const firstHeaderCell = page.locator(".mtv-table-head-cell").first();
+        const firstColumnResizeHandle = page.locator("[data-table-resize-kind='column'][data-table-resize-index='0']").first();
+        const firstRowResizeHandle = page.locator("[data-table-resize-kind='row'][data-table-resize-index='0']").first();
+
+        await firstColumnHandle.click();
+        await expect(firstColumnHandle).toHaveAttribute("data-selected", "true");
+        await expect(firstHeaderCell).toHaveAttribute("data-edge-selected", "true");
+        await expect(firstBodyCell).toHaveAttribute("data-edge-selected", "true");
+
+        const initialHeaderWidth = await firstHeaderCell.evaluate((element) => element.getBoundingClientRect().width);
+        await dragLocatorBy(page, firstColumnResizeHandle, 44, 0);
+        await expect.poll(async () => firstHeaderCell.evaluate((element) =>
+            Math.round(element.getBoundingClientRect().width),
+        )).toBeGreaterThan(Math.round(initialHeaderWidth + 20));
+
+        const firstRowCell = page.locator(".mtv-table-body-cell").first();
+        const initialRowHeight = await firstRowCell.evaluate((element) => element.getBoundingClientRect().height);
+        await dragLocatorBy(page, firstRowResizeHandle, 0, 28);
+        await expect.poll(async () => firstRowCell.evaluate((element) =>
+            Math.round(element.getBoundingClientRect().height),
+        )).toBeGreaterThan(Math.round(initialRowHeight + 12));
+
+        await dragLocatorToLocator(page, firstColumnHandle, thirdColumnHandle);
+        await waitForEditorFrames(page, 4);
+        await expect(page.locator("[data-markdown-table-section='header'][data-markdown-table-column-index='2']").first())
+            .toHaveText("层级");
+        await expect(page.locator("[data-markdown-table-section='body'][data-markdown-table-row-index='0'][data-markdown-table-column-index='2']").first())
+            .toHaveText("布局骨架层");
+
+        const firstRowHandle = page.locator("[data-table-edge-kind='row'][data-table-edge-index='0']").first();
+        const thirdRowHandle = page.locator("[data-table-edge-kind='row'][data-table-edge-index='2']").first();
+        await dragLocatorToLocator(page, firstRowHandle, thirdRowHandle);
+        await waitForEditorFrames(page, 4);
+        await expect(page.locator("[data-markdown-table-section='body'][data-markdown-table-row-index='2'][data-markdown-table-column-index='2']").first())
+            .toHaveText("布局骨架层");
+
+        const secondColumnHandle = page.locator("[data-table-edge-kind='column'][data-table-edge-index='1']").first();
+        await secondColumnHandle.click({ button: "right" });
+        await expect(page.locator(".mtv-context-menu:visible")).toBeVisible();
+        await page.getByRole("menuitem", { name: "Insert Column Right" }).click();
+        await waitForEditorFrames(page, 4);
+        await expect(page.locator("[data-table-edge-kind='column']")).toHaveCount(4);
+
+        const fourthColumnHandle = page.locator("[data-table-edge-kind='column'][data-table-edge-index='3']").first();
+        await fourthColumnHandle.click({ button: "right" });
+        await page.getByRole("menuitem", { name: "Delete Current Column" }).click();
+        await waitForEditorFrames(page, 4);
+        await expect(page.locator("[data-table-edge-kind='column']")).toHaveCount(3);
+
+        const secondRowHandle = page.locator("[data-table-edge-kind='row'][data-table-edge-index='1']").first();
+        await secondRowHandle.click({ button: "right" });
+        await page.getByRole("menuitem", { name: "Insert Row Below" }).click();
+        await waitForEditorFrames(page, 4);
+        await expect(page.locator("[data-table-edge-kind='row']")).toHaveCount(4);
+
+        const fourthRowHandle = page.locator("[data-table-edge-kind='row'][data-table-edge-index='3']").first();
+        await fourthRowHandle.click({ button: "right" });
+        await page.getByRole("menuitem", { name: "Delete Current Row" }).click();
+        await waitForEditorFrames(page, 4);
+        await expect(page.locator("[data-table-edge-kind='row']")).toHaveCount(3);
     });
 });

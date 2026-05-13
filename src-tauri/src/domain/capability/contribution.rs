@@ -12,7 +12,7 @@ pub(crate) fn builtin_capability_catalog_contributions(
     builtin_backend_module_contributions()
         .into_iter()
         .filter_map(|contribution| {
-            log::debug!(
+            log::trace!(
                 "[module] catalog contribution scan: module={} commands={} events={} persistence_owners={}"
                 , contribution.module_id
                 , contribution.command_ids.len()

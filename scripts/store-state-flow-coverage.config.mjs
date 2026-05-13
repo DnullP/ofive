@@ -367,6 +367,10 @@ export const storeConsumerCoverage = {
         "e2e/custom-activity.e2e.ts",
         "e2e/vault-switch-regression.e2e.ts",
     ],
+    "src/host/layout/openFileService.ts": [
+        "src/host/layout/openFileService.test.ts",
+        "e2e/file-open-mode.e2e.ts",
+    ],
     "src/plugins/knowledge-graph/knowledgeGraphPlugin.tsx": [
         "src/plugins/knowledge-graph/tab/knowledgeGraphSettings.test.ts",
         "tests/knowledgeGraphInteractions.test.ts",

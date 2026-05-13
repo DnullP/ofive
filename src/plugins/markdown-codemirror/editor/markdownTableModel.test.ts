@@ -10,9 +10,12 @@ import {
     deleteMarkdownTableRowAt,
     insertMarkdownTableColumnAt,
     insertMarkdownTableRowAt,
+    moveMarkdownTableColumn,
+    moveMarkdownTableRow,
     parseMarkdownTableLines,
     serializeMarkdownTable,
     splitMarkdownTableCells,
+    type MarkdownTableModel,
     updateMarkdownTableCell,
 } from "./markdownTableModel";
 
@@ -88,5 +91,34 @@ describe("markdown table operations", () => {
         const deletedModel = deleteMarkdownTableColumnAt(insertedModel, 1);
         expect(deletedModel.headers).toHaveLength(2);
         expect(deletedModel.rows[0]).toEqual(["Cell 1", "Cell 2"]);
+    });
+
+    test("should move body rows", () => {
+        const nextModel = moveMarkdownTableRow(createDefaultMarkdownTableModel(), 0, 1);
+
+        expect(nextModel.rows).toEqual([
+            ["Cell 3", "Cell 4"],
+            ["Cell 1", "Cell 2"],
+        ]);
+    });
+
+    test("should move columns with headers, alignments, and cells", () => {
+        const model: MarkdownTableModel = {
+            headers: ["Name", "Status", "Owner"],
+            alignments: ["left", "center", "right"],
+            rows: [
+                ["Docs", "Open", "Kai"],
+                ["Tests", "Done", "Lin"],
+            ],
+        };
+
+        const nextModel = moveMarkdownTableColumn(model, 2, 0);
+
+        expect(nextModel.headers).toEqual(["Owner", "Name", "Status"]);
+        expect(nextModel.alignments).toEqual(["right", "left", "center"]);
+        expect(nextModel.rows).toEqual([
+            ["Kai", "Docs", "Open"],
+            ["Lin", "Tests", "Done"],
+        ]);
     });
 });

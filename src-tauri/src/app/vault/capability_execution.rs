@@ -9,7 +9,8 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::app::vault::{
-    canvas_app_service, markdown_patch_app_service, query_app_service, vault_app_service,
+    agent_skill_app_service, canvas_app_service, markdown_patch_app_service, query_app_service,
+    vault_app_service,
 };
 use crate::domain::capability::{CapabilityExecutionContext, CapabilityExecutionRequest};
 use crate::shared::vault_contracts::VaultCanvasDocument;
@@ -52,6 +53,16 @@ pub(crate) fn execute_vault_capability(
         "vault.get_canvas_document" => {
             Some(execute_get_canvas_document(request.input.clone(), context))
         }
+        "agent_skill.list" => Some(execute_list_agent_skills(context)),
+        "agent_skill.read_file" => Some(execute_read_agent_skill_file(
+            request.input.clone(),
+            context,
+        )),
+        "agent_skill.create" => Some(execute_create_agent_skill(request.input.clone(), context)),
+        "agent_skill.write_file" => Some(execute_write_agent_skill_file(
+            request.input.clone(),
+            context,
+        )),
         "vault.create_markdown_file" => {
             Some(execute_create_markdown_file(request.input.clone(), context))
         }
@@ -115,6 +126,28 @@ struct RelativePathWithContentInput {
 struct RelativePathWithCanvasDocumentInput {
     relative_path: String,
     document: VaultCanvasDocument,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentSkillCreateInput {
+    skill_name: String,
+    description: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentSkillFileInput {
+    skill_name: String,
+    relative_path: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentSkillFileWithContentInput {
+    skill_name: String,
+    relative_path: String,
+    content: String,
 }
 
 #[derive(Deserialize)]
@@ -249,6 +282,55 @@ fn execute_get_canvas_document(
         input.relative_path,
     )?;
     serialize_output(output, "vault.get_canvas_document")
+}
+
+/// 执行“列出 Agent SKILL”能力。
+fn execute_list_agent_skills(context: &CapabilityExecutionContext<'_>) -> Result<Value, String> {
+    let output = agent_skill_app_service::list_agent_skills_in_root(context.vault_root)?;
+    serialize_output(output, "agent_skill.list")
+}
+
+/// 执行“读取 Agent SKILL 文件”能力。
+fn execute_read_agent_skill_file(
+    input: Value,
+    context: &CapabilityExecutionContext<'_>,
+) -> Result<Value, String> {
+    let input: AgentSkillFileInput = parse_input(input, "agent_skill.read_file")?;
+    let output = agent_skill_app_service::read_agent_skill_file_in_root(
+        context.vault_root,
+        input.skill_name,
+        input.relative_path,
+    )?;
+    serialize_output(output, "agent_skill.read_file")
+}
+
+/// 执行“创建 Agent SKILL”能力。
+fn execute_create_agent_skill(
+    input: Value,
+    context: &CapabilityExecutionContext<'_>,
+) -> Result<Value, String> {
+    let input: AgentSkillCreateInput = parse_input(input, "agent_skill.create")?;
+    let output = agent_skill_app_service::create_agent_skill_in_root(
+        context.vault_root,
+        input.skill_name,
+        input.description,
+    )?;
+    serialize_output(output, "agent_skill.create")
+}
+
+/// 执行“写入 Agent SKILL 文件”能力。
+fn execute_write_agent_skill_file(
+    input: Value,
+    context: &CapabilityExecutionContext<'_>,
+) -> Result<Value, String> {
+    let input: AgentSkillFileWithContentInput = parse_input(input, "agent_skill.write_file")?;
+    let output = agent_skill_app_service::write_agent_skill_file_in_root(
+        context.vault_root,
+        input.skill_name,
+        input.relative_path,
+        input.content,
+    )?;
+    serialize_output(output, "agent_skill.write_file")
 }
 
 /// 执行“创建 Markdown 文件”能力。
@@ -479,6 +561,18 @@ mod tests {
         fs::write(file_path, content).expect("应成功写入 Canvas 文件");
     }
 
+    fn write_agent_skill_file(root: &Path, skill_name: &str, relative_path: &str, content: &str) {
+        let file_path = root
+            .join(".ofive")
+            .join("skills")
+            .join(skill_name)
+            .join(relative_path);
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).expect("应成功创建测试 skill 目录");
+        }
+        fs::write(file_path, content).expect("应成功写入测试 skill 文件");
+    }
+
     #[test]
     fn execute_vault_capability_should_resolve_wikilink_target() {
         let root = create_test_root();
@@ -526,6 +620,66 @@ mod tests {
                 .and_then(|value| value.as_str()),
             Some("notes/topic.md")
         );
+    }
+
+    #[test]
+    fn execute_vault_capability_should_list_agent_skills() {
+        let root = create_test_root();
+        write_agent_skill_file(
+            &root,
+            "research-helper",
+            "SKILL.md",
+            "---\nname: research-helper\ndescription: Research local notes.\n---\n# Research\n",
+        );
+
+        let request = CapabilityExecutionRequest {
+            capability_id: "agent_skill.list".to_string(),
+            consumer: crate::domain::capability::CapabilityConsumer::AiTool,
+            input: json!({}),
+        };
+        let context = CapabilityExecutionContext { vault_root: &root };
+
+        let result = execute_vault_capability(&request, &context)
+            .expect("应由 Vault 模块接管该能力")
+            .expect("列出 Agent SKILL 应成功");
+
+        let items = result.as_array().expect("输出应为数组");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].get("name").and_then(|value| value.as_str()),
+            Some("research-helper")
+        );
+    }
+
+    #[test]
+    fn execute_vault_capability_should_read_agent_skill_file() {
+        let root = create_test_root();
+        write_agent_skill_file(
+            &root,
+            "research-helper",
+            "SKILL.md",
+            "---\nname: research-helper\ndescription: Research local notes.\n---\n# Research\n",
+        );
+
+        let request = CapabilityExecutionRequest {
+            capability_id: "agent_skill.read_file".to_string(),
+            consumer: crate::domain::capability::CapabilityConsumer::AiTool,
+            input: json!({"skillName": "research-helper", "relativePath": "SKILL.md"}),
+        };
+        let context = CapabilityExecutionContext { vault_root: &root };
+
+        let result = execute_vault_capability(&request, &context)
+            .expect("应由 Vault 模块接管该能力")
+            .expect("读取 Agent SKILL 文件应成功");
+
+        assert_eq!(
+            result.get("skillName").and_then(|value| value.as_str()),
+            Some("research-helper")
+        );
+        assert!(result
+            .get("content")
+            .and_then(|value| value.as_str())
+            .is_some_and(|content| content.contains("# Research")));
     }
 
     #[test]

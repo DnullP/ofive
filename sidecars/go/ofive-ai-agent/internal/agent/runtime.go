@@ -49,6 +49,13 @@ type ToolDescriptor struct {
 	APIVersion           string
 }
 
+// AgentSkillFile contains one user-created skill file supplied by the Rust host.
+type AgentSkillFile struct {
+	SkillName    string
+	RelativePath string
+	Content      string
+}
+
 // HistoryEntry contains one persisted user/assistant text message used to restore context.
 type HistoryEntry struct {
 	Role              string
@@ -78,6 +85,7 @@ type CapabilityBridgeConfig struct {
 	MCPServerURL             string
 	MCPAuthToken             string
 	Tools                    []ToolDescriptor
+	AgentSkillFiles          []AgentSkillFile
 }
 
 // Runtime wraps shared ADK session state for requests handled by the sidecar.
@@ -1044,6 +1052,15 @@ func splitIntoChunks(value string, chunkSize int) []string {
 	return chunks
 }
 
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 func (r *Runtime) buildAgent(
 	ctx context.Context,
 	vendorConfig VendorConfig,
@@ -1051,103 +1068,104 @@ func (r *Runtime) buildAgent(
 	extraInstruction string,
 	trace func(DebugTraceEvent) error,
 ) (agent.Agent, string, error) {
+	var llm traceableLLM
+	var providerLabel string
+
 	switch strings.TrimSpace(vendorConfig.VendorID) {
+	case "anthropic-compatible":
+		llm = llms.NewAnthropicCompatibleLLM(
+			"anthropic-compatible",
+			vendorConfig.FieldValues["endpoint"],
+			vendorConfig.Model,
+			vendorConfig.FieldValues["apiKey"],
+			vendorConfig.FieldValues["anthropicVersion"],
+		)
+		providerLabel = "anthropic-compatible"
 	case "minimax-anthropic":
-		llm := llms.NewMinimaxLLM(
+		llm = llms.NewMinimaxLLMWithAnthropicVersion(
 			"minimax-anthropic",
 			vendorConfig.FieldValues["endpoint"],
 			vendorConfig.Model,
 			vendorConfig.FieldValues["apiKey"],
+			vendorConfig.FieldValues["anthropicVersion"],
 		)
-		llm.SetTraceEmitter(func(title string, text string) error {
-			return emitDebugTrace(trace, DebugTraceEvent{
-				Level: inferLLMTraceLevel(title, text),
-				Title: title,
-				Text:  text,
-			})
-		})
-
-		toolsets, err := buildAgentToolsets(ctx, bridgeConfig)
-		if err != nil {
-			return nil, "", err
-		}
-
-		var modelRequestSequence atomic.Int32
-
-		adkAgent, err := llmagent.New(llmagent.Config{
-			Name:        agentName,
-			Description: "AI assistant for ofive desktop notes.",
-			Instruction: buildAgentInstruction(bridgeConfig, extraInstruction),
-			Model:       llm,
-			Toolsets:    toolsets,
-			BeforeModelCallbacks: []llmagent.BeforeModelCallback{
-				func(_ agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error) {
-					requestIndex := modelRequestSequence.Add(1)
-					if err := emitDebugTrace(trace, DebugTraceEvent{
-						Title: fmt.Sprintf("Model request #%d", requestIndex),
-						Text:  formatModelRequest(llmRequest),
-					}); err != nil {
-						return nil, err
-					}
-					return nil, nil
-				},
-			},
-		})
-		if err != nil {
-			return nil, "", fmt.Errorf("create minimax llm agent: %w", err)
-		}
-
-		return adkAgent, llm.Name(), nil
+		providerLabel = "minimax"
+	case "openai-compatible":
+		llm = llms.NewOpenAICompatibleLLM(
+			"openai-compatible",
+			firstNonEmptyString(vendorConfig.FieldValues["baseUrl"], vendorConfig.FieldValues["endpoint"]),
+			vendorConfig.Model,
+			vendorConfig.FieldValues["apiKey"],
+		)
+		providerLabel = "openai-compatible"
 	case "baidu-qianfan":
-		llm := llms.NewBaiduLLM(
+		llm = llms.NewBaiduLLM(
 			"baidu-qianfan",
 			vendorConfig.FieldValues["endpoint"],
 			vendorConfig.Model,
 			vendorConfig.FieldValues["appId"],
 			vendorConfig.FieldValues["authToken"],
 		)
-		llm.SetTraceEmitter(func(title string, text string) error {
-			return emitDebugTrace(trace, DebugTraceEvent{
-				Level: inferLLMTraceLevel(title, text),
-				Title: title,
-				Text:  text,
-			})
-		})
-
-		toolsets, err := buildAgentToolsets(ctx, bridgeConfig)
-		if err != nil {
-			return nil, "", err
-		}
-
-		var modelRequestSequence atomic.Int32
-
-		adkAgent, err := llmagent.New(llmagent.Config{
-			Name:        agentName,
-			Description: "AI assistant for ofive desktop notes.",
-			Instruction: buildAgentInstruction(bridgeConfig, extraInstruction),
-			Model:       llm,
-			Toolsets:    toolsets,
-			BeforeModelCallbacks: []llmagent.BeforeModelCallback{
-				func(_ agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error) {
-					requestIndex := modelRequestSequence.Add(1)
-					if err := emitDebugTrace(trace, DebugTraceEvent{
-						Title: fmt.Sprintf("Model request #%d", requestIndex),
-						Text:  formatModelRequest(llmRequest),
-					}); err != nil {
-						return nil, err
-					}
-					return nil, nil
-				},
-			},
-		})
-		if err != nil {
-			return nil, "", fmt.Errorf("create baidu llm agent: %w", err)
-		}
-
-		return adkAgent, llm.Name(), nil
+		providerLabel = "baidu"
 	default:
 		return nil, "", fmt.Errorf("unsupported vendor: %s", vendorConfig.VendorID)
 	}
+
+	return r.buildADKAgent(ctx, llm, providerLabel, bridgeConfig, extraInstruction, trace)
+}
+
+type traceableLLM interface {
+	model.LLM
+	SetTraceEmitter(func(title string, text string) error)
+}
+
+func (r *Runtime) buildADKAgent(
+	ctx context.Context,
+	llm traceableLLM,
+	providerLabel string,
+	bridgeConfig CapabilityBridgeConfig,
+	extraInstruction string,
+	trace func(DebugTraceEvent) error,
+) (agent.Agent, string, error) {
+	llm.SetTraceEmitter(func(title string, text string) error {
+		return emitDebugTrace(trace, DebugTraceEvent{
+			Level: inferLLMTraceLevel(title, text),
+			Title: title,
+			Text:  text,
+		})
+	})
+
+	toolsets, err := buildAgentToolsets(ctx, bridgeConfig)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var modelRequestSequence atomic.Int32
+
+	adkAgent, err := llmagent.New(llmagent.Config{
+		Name:        agentName,
+		Description: "AI assistant for ofive desktop notes.",
+		Instruction: buildAgentInstruction(bridgeConfig, extraInstruction),
+		Model:       llm,
+		Toolsets:    toolsets,
+		BeforeModelCallbacks: []llmagent.BeforeModelCallback{
+			func(_ agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error) {
+				requestIndex := modelRequestSequence.Add(1)
+				if err := emitDebugTrace(trace, DebugTraceEvent{
+					Title: fmt.Sprintf("Model request #%d", requestIndex),
+					Text:  formatModelRequest(llmRequest),
+				}); err != nil {
+					return nil, err
+				}
+				return nil, nil
+			},
+		},
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("create %s llm agent: %w", providerLabel, err)
+	}
+
+	return adkAgent, llm.Name(), nil
 }
 
 func mockEchoResponse(message string) string {
@@ -1199,7 +1217,7 @@ func buildAgentToolsets(
 		return nil, nil
 	}
 
-	skillToolsets, err := buildSkillToolsets(ctx)
+	skillToolsets, err := buildSkillToolsets(ctx, bridgeConfig.AgentSkillFiles)
 	if err != nil {
 		return nil, err
 	}

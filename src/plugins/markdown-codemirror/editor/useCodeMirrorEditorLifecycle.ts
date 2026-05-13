@@ -549,6 +549,28 @@ function resolveSelectionForDocumentReplace(
     };
 }
 
+function restoreCompositionAnchorIfSelectionDrifted(
+    view: EditorView,
+    compositionAnchor: number,
+): void {
+    const anchor = Math.max(0, Math.min(compositionAnchor, view.state.doc.length));
+    const selection = view.state.selection.main;
+    if (!selection.empty || selection.head >= anchor) {
+        return;
+    }
+
+    const anchorLine = view.state.doc.lineAt(anchor);
+    const selectionLine = view.state.doc.lineAt(selection.head);
+    if (selectionLine.number !== anchorLine.number) {
+        return;
+    }
+
+    view.dispatch({
+        selection: { anchor },
+        scrollIntoView: true,
+    });
+}
+
 /**
  * @function useCodeMirrorEditorLifecycle
  * @description 管理 EditorView 的创建、更新、gutter 补偿同步与清理。
@@ -732,6 +754,12 @@ export function useCodeMirrorEditorLifecycle(
                 beforeinput(event, view) {
                     if (event.inputType === "insertCompositionText") {
                         editorImeCompositionAnchorRef.current ??= view.state.selection.main.head;
+                        if (typeof editorImeCompositionAnchorRef.current === "number") {
+                            restoreCompositionAnchorIfSelectionDrifted(
+                                view,
+                                editorImeCompositionAnchorRef.current,
+                            );
+                        }
                         setLineSyntaxImeCompositionActive(view, true);
                     }
                     if (
@@ -744,22 +772,7 @@ export function useCodeMirrorEditorLifecycle(
                             // selection at the start of the active line. Keep the next commit at
                             // the original composition anchor instead of letting Vim see a jump.
                             window.requestAnimationFrame(() => {
-                                const anchor = Math.max(0, Math.min(compositionAnchor, view.state.doc.length));
-                                const selection = view.state.selection.main;
-                                if (!selection.empty || selection.head >= anchor) {
-                                    return;
-                                }
-
-                                const anchorLine = view.state.doc.lineAt(anchor);
-                                const selectionLine = view.state.doc.lineAt(selection.head);
-                                if (selectionLine.number !== anchorLine.number) {
-                                    return;
-                                }
-
-                                view.dispatch({
-                                    selection: { anchor },
-                                    scrollIntoView: true,
-                                });
+                                restoreCompositionAnchorIfSelectionDrifted(view, compositionAnchor);
                             });
                         }
                     }

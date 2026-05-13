@@ -89,11 +89,30 @@ interface ClosestCapableTarget extends EventTarget {
     closest: (selector: string) => unknown;
 }
 
-function isClosestCapableTarget(value: EventTarget | null): value is ClosestCapableTarget {
+interface ParentElementTarget extends EventTarget {
+    parentElement?: unknown;
+}
+
+function isClosestCapableTarget(value: unknown): value is ClosestCapableTarget {
     return typeof value === "object"
         && value !== null
         && "closest" in value
         && typeof value.closest === "function";
+}
+
+function closestFromEventTarget(eventTarget: EventTarget | null, selector: string): unknown {
+    if (isClosestCapableTarget(eventTarget)) {
+        return eventTarget.closest(selector);
+    }
+
+    const parentElement = typeof eventTarget === "object" && eventTarget !== null
+        ? (eventTarget as ParentElementTarget).parentElement
+        : null;
+    if (isClosestCapableTarget(parentElement)) {
+        return parentElement.closest(selector);
+    }
+
+    return null;
 }
 
 /**
@@ -250,11 +269,7 @@ export function findWikiLinkAtPosition(state: EditorState, position: number): Wi
  * @returns 命中渲染态返回 true。
  */
 export function isRenderedWikiLinkTarget(eventTarget: EventTarget | null): boolean {
-    if (!isClosestCapableTarget(eventTarget)) {
-        return false;
-    }
-
-    return eventTarget.closest(".cm-rendered-wikilink, .cm-rendered-wikilink-display") !== null;
+    return closestFromEventTarget(eventTarget, ".cm-rendered-wikilink, .cm-rendered-wikilink-display") !== null;
 }
 
 /**
@@ -264,11 +279,7 @@ export function isRenderedWikiLinkTarget(eventTarget: EventTarget | null): boole
  * @returns 命中 alias widget 时返回目标文本。
  */
 export function extractWidgetWikiLinkTarget(eventTarget: EventTarget | null): string | null {
-    if (!isClosestCapableTarget(eventTarget)) {
-        return null;
-    }
-
-    const widgetTarget = eventTarget.closest(".cm-rendered-wikilink-display") as {
+    const widgetTarget = closestFromEventTarget(eventTarget, ".cm-rendered-wikilink-display") as {
         dataset?: { wikiLinkTarget?: string };
     } | null;
 

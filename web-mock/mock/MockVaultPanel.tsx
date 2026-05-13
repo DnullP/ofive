@@ -262,12 +262,34 @@ function resolveShouldIncludeBulkEditorPerfFiles(): boolean {
     return new URLSearchParams(window.location.search).get("bulkEditorPerf") === "1";
 }
 
+/**
+ * @function resolveMockRenameRequest
+ * @description 读取 mock 页面测试用的文件树重命名目标，便于验证内联输入框样式。
+ * @returns FileTree 支持的 renameRequest；未指定时返回 null。
+ */
+function resolveMockRenameRequest(): { eventId: string; path: string } | null {
+    if (typeof window === "undefined") {
+        return null;
+    }
+
+    const targetPath = new URLSearchParams(window.location.search).get("mockFileTreeRenamePath");
+    if (!targetPath) {
+        return null;
+    }
+
+    return {
+        eventId: `mock-file-tree-rename:${targetPath}`,
+        path: targetPath,
+    };
+}
+
 const MOCK_FILE_CONTENTS: Record<string, string> = {
     "test-resources/notes/code-block-test.md": CODE_BLOCK_TEST_SAMPLE,
     "test-resources/notes/network-segment.md": NETWORK_SEGMENT_SAMPLE,
     "test-resources/notes/latex-test.md": LATEX_TEST_SAMPLE,
     "test-resources/notes/header-wikilink-regression.md": "# [[Plain Note]] [[Target Note|Alias Note]]\n\nbody\n",
     "test-resources/notes/project-reader-preview.md": "# Project Reader Preview\n\n[[mock-ofive:/src/main.ts:7:1-9:1|createMainRuntime]]\n",
+    "test-resources/notes/open-mode-source.md": "# Open Mode Source\n\n[[network-segment]]\n",
     "test-resources/notes/scroll-regression.md": SCROLL_REGRESSION_SAMPLE,
     "test-resources/notes/scroll-regression-alt.md": SCROLL_REGRESSION_ALT_SAMPLE,
     "test-resources/notes/table-editor.md": TABLE_EDITOR_SAMPLE,
@@ -299,6 +321,11 @@ function createCurrentMockFileContents(): Record<string, string> {
 
 interface MockVaultPanelProps {
     openTab: (tab: TabInstanceDefinition) => void;
+    openFile?: (options: {
+        relativePath: string;
+        contentOverride?: string;
+        preferredOpenerId?: string;
+    }) => Promise<void>;
 }
 
 function createFileTab(item: FileTreeItem, content: string): TabInstanceDefinition {
@@ -331,8 +358,9 @@ async function primeBrowserMockContents(fileContents: Record<string, string>): P
 }
 
 export function MockVaultPanel(props: MockVaultPanelProps): ReactNode {
-    const { openTab } = props;
+    const { openFile, openTab } = props;
     const fileContents = useMemo(() => createCurrentMockFileContents(), []);
+    const renameRequest = useMemo(() => resolveMockRenameRequest(), []);
 
     useEffect(() => {
         void primeBrowserMockContents(fileContents);
@@ -360,8 +388,14 @@ export function MockVaultPanel(props: MockVaultPanelProps): ReactNode {
 
             <FileTree
                 items={files}
+                renameRequest={renameRequest}
                 onOpenFile={(item) => {
                     const content = fileContents[item.path] ?? `# ${item.path}`;
+                    if (openFile) {
+                        void openFile({ relativePath: item.path, contentOverride: content });
+                        return;
+                    }
+
                     openTab(createFileTab(item, content));
                 }}
             />

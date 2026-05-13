@@ -30,6 +30,7 @@ import {
 import {
     type PanelRenderContext,
     type TabInstanceDefinition,
+    type WorkbenchContainerApi,
     type WorkbenchTabProps,
 } from "./workbenchContracts";
 import {
@@ -46,13 +47,18 @@ import {
     useContextMenuProvider,
     type NativeContextMenuItem,
 } from "./contextMenuCenter";
-import { emitCustomActivityRemovalRequestedEvent, emitEditorCommandRequestedEvent } from "../events/appEventBus";
+import {
+    emitCustomActivityRemovalRequestedEvent,
+    emitEditorCommandRequestedEvent,
+    subscribeVaultBeforeChangeEvent,
+} from "../events/appEventBus";
 import { clearActiveEditor, getActiveEditorSnapshot, reportActiveEditor } from "../editor/activeEditorStore";
 import {
     clearActiveBacklinkTarget,
     reportMarkdownBacklinkTarget,
     reportProjectSourceBacklinkTarget,
 } from "../editor/activeBacklinkTargetStore";
+import { resetEditorContext } from "../editor/editorContextStore";
 import { requestApplicationQuit } from "../commands/systemShortcutSubsystem";
 import {
     getSidebarLayoutFromVaultConfig,
@@ -63,7 +69,7 @@ import {
     setRightSidebarVisibilitySnapshot,
     subscribeRightSidebarToggleRequest,
 } from "./rightSidebarVisibilityBridge";
-import { openFileWithResolver, resolveFileTabDefinition } from "./openFileService";
+import { openFileInWorkbench, resolveFileTabDefinition } from "./openFileService";
 import { useConfigState } from "../config/configStore";
 import {
     buildWorkspaceLayoutConfigValue,
@@ -81,6 +87,7 @@ import {
     useTabComponents,
     type ActivityDescriptor,
     type PanelDescriptor,
+    type TabComponentDescriptor,
 } from "../registry";
 import { useVaultState } from "../vault/vaultStore";
 import {
@@ -91,6 +98,10 @@ import {
     type CommandId,
 } from "../commands/commandSystem";
 import { requestVaultDeleteConfirmation } from "../commands/deleteConfirmation";
+import {
+    decorateTabParamsWithLifecycle,
+    shouldCloseTabOnVaultChange,
+} from "./vaultTabScope";
 
 const WORKBENCH_ACTIVITY_ITEM_CONTEXT_MENU_ID = "workbench-v2.activity.item";
 const WORKBENCH_ACTIVITY_BACKGROUND_CONTEXT_MENU_ID = "workbench-v2.activity.background";
@@ -263,14 +274,80 @@ function mapPanelsToDefinitions(panels: PanelDescriptor[]): WorkbenchPanelDefini
     }));
 }
 
-function mapInitialTabs(initialTabs?: TabInstanceDefinition[]): WorkbenchTabDefinition[] | undefined {
+type DecorateWorkbenchTabDefinition = (tab: WorkbenchTabDefinition) => WorkbenchTabDefinition;
+
+function mapInitialTabs(
+    initialTabs: TabInstanceDefinition[] | undefined,
+    decorateTabDefinition: DecorateWorkbenchTabDefinition,
+): WorkbenchTabDefinition[] | undefined {
     if (!initialTabs || initialTabs.length === 0) return undefined;
-    return initialTabs.map((tab) => ({
+    return initialTabs.map((tab) => decorateTabDefinition({
         id: tab.id,
         title: tab.title,
         component: tab.component,
         params: tab.params,
     }));
+}
+
+function createWorkbenchContainerApi(
+    workbenchApi: WorkbenchApi,
+    getActivePanelId: () => string | null,
+    decorateTabDefinition: DecorateWorkbenchTabDefinition,
+): WorkbenchContainerApi {
+    const buildPanelHandle = (tabId: string) => {
+        const tab = workbenchApi.getTab(tabId);
+        if (!tab) return null;
+        return {
+            id: tab.id,
+            params: tab.params,
+            api: {
+                close: () => workbenchApi.closeTab(tab.id),
+                setActive: () => workbenchApi.setActiveTab(tab.id),
+                setTitle: (title: string) => workbenchApi.updateTab(tab.id, { title }),
+                updateParameters: (params: Record<string, unknown>) => {
+                    workbenchApi.updateTab(tab.id, { params });
+                },
+            },
+        };
+    };
+
+    return {
+        get activePanelId() {
+            return getActivePanelId();
+        },
+        getPanel: buildPanelHandle,
+        get panels() {
+            return workbenchApi.getTabs().map((tab) => ({
+                id: tab.id,
+                params: tab.params,
+                api: {
+                    close: () => workbenchApi.closeTab(tab.id),
+                    setActive: () => workbenchApi.setActiveTab(tab.id),
+                    setTitle: (title: string) => workbenchApi.updateTab(tab.id, { title }),
+                    updateParameters: (params: Record<string, unknown>) => {
+                        workbenchApi.updateTab(tab.id, { params });
+                    },
+                },
+            }));
+        },
+        addPanel: (options) => {
+            workbenchApi.openTab(decorateTabDefinition({
+                id: options.id,
+                title: options.title,
+                component: options.component,
+                params: options.params,
+            }));
+        },
+        replacePanel: (panelId, options) => {
+            workbenchApi.updateTab(panelId, decorateTabDefinition({
+                id: options.id,
+                title: options.title,
+                component: options.component,
+                params: options.params,
+            }));
+            workbenchApi.setActiveTab(options.id);
+        },
+    };
 }
 
 function buildPanelRenderContext(
@@ -282,49 +359,11 @@ function buildPanelRenderContext(
         preferredOpenerId?: string;
     }) => Promise<void>,
     buildCommandContext: () => CommandContext,
+    decorateTabDefinition: DecorateWorkbenchTabDefinition,
 ): PanelRenderContext {
     const workbenchApi = workbenchApiRef.current;
     const workbenchContainerApi = workbenchApi
-        ? {
-            getPanel: (panelId: string) => {
-                const tab = workbenchApi.getTab(panelId);
-                if (!tab) return null;
-                return {
-                    id: tab.id,
-                    params: tab.params,
-                    api: {
-                        close: () => workbenchApi.closeTab(tab.id),
-                        setActive: () => workbenchApi.setActiveTab(tab.id),
-                        setTitle: (title: string) => workbenchApi.updateTab(tab.id, { title }),
-                        updateParameters: (params: Record<string, unknown>) => {
-                            workbenchApi.updateTab(tab.id, { params });
-                        },
-                    },
-                };
-            },
-            get panels() {
-                return workbenchApi.getTabs().map((tab) => ({
-                    id: tab.id,
-                    params: tab.params,
-                    api: {
-                        close: () => workbenchApi.closeTab(tab.id),
-                        setActive: () => workbenchApi.setActiveTab(tab.id),
-                        setTitle: (title: string) => workbenchApi.updateTab(tab.id, { title }),
-                        updateParameters: (params: Record<string, unknown>) => {
-                            workbenchApi.updateTab(tab.id, { params });
-                        },
-                    },
-                }));
-            },
-            addPanel: (options: { id: string; title: string; component: string; params?: Record<string, unknown> }) => {
-                workbenchApi.openTab({
-                    id: options.id,
-                    title: options.title,
-                    component: options.component,
-                    params: options.params,
-                });
-            },
-        }
+        ? createWorkbenchContainerApi(workbenchApi, () => workbenchContext.activeTabId, decorateTabDefinition)
         : null;
 
     return {
@@ -333,12 +372,12 @@ function buildPanelRenderContext(
         hostPanelId: workbenchContext.hostPanelId,
         convertibleView: null,
         openTab: (tab: TabInstanceDefinition) => {
-            workbenchContext.openTab({
+            workbenchContext.openTab(decorateTabDefinition({
                 id: tab.id,
                 title: tab.title,
                 component: tab.component,
                 params: tab.params,
-            });
+            }));
         },
         openFile: openFileHelper,
         closeTab: workbenchContext.closeTab,
@@ -367,8 +406,9 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
     params: Record<string, unknown>;
     api: { id: string; close: () => void; setActive: () => void; markContentReady?: () => void };
     workbenchApiRef: MutableRefObject<WorkbenchApi | null>;
+    decorateTabDefinition: DecorateWorkbenchTabDefinition;
 }): ReactNode {
-    const { Component, params, api, workbenchApiRef } = props;
+    const { Component, params, api, workbenchApiRef, decorateTabDefinition } = props;
 
     const stableApi = useMemo(() => ({
         id: api.id,
@@ -379,44 +419,35 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
     }), [api.id, api.close, api.setActive, api.markContentReady]);
 
     const containerApi = useMemo(() => ({
+        get activePanelId() {
+            return api.id;
+        },
         getPanel: (tabId: string) => {
-            const tab = workbenchApiRef.current?.getTab(tabId);
-            if (!tab) return null;
-            return {
-                id: tab.id,
-                params: tab.params,
-                api: {
-                    close: () => workbenchApiRef.current?.closeTab(tabId),
-                    setActive: () => workbenchApiRef.current?.setActiveTab(tabId),
-                    setTitle: (title: string) => workbenchApiRef.current?.updateTab(tabId, { title }),
-                    updateParameters: (params: Record<string, unknown>) => {
-                        workbenchApiRef.current?.updateTab(tabId, { params });
-                    },
-                },
-            };
+            const workbenchApi = workbenchApiRef.current;
+            return workbenchApi ? createWorkbenchContainerApi(workbenchApi, () => api.id, decorateTabDefinition).getPanel(tabId) : null;
         },
         get panels() {
-            return (workbenchApiRef.current?.getTabs() ?? []).map((t) => ({
-                id: t.id,
-                params: t.params,
-                api: {
-                    setActive: () => workbenchApiRef.current?.setActiveTab(t.id),
-                    setTitle: (title: string) => workbenchApiRef.current?.updateTab(t.id, { title }),
-                    updateParameters: (params: Record<string, unknown>) => {
-                        workbenchApiRef.current?.updateTab(t.id, { params });
-                    },
-                },
-            }));
+            const workbenchApi = workbenchApiRef.current;
+            return workbenchApi ? createWorkbenchContainerApi(workbenchApi, () => api.id, decorateTabDefinition).panels : [];
         },
         addPanel: (options: { id: string; title: string; component: string; params?: Record<string, unknown> }) => {
-            workbenchApiRef.current?.openTab({
+            workbenchApiRef.current?.openTab(decorateTabDefinition({
                 id: options.id,
                 title: options.title,
                 component: options.component,
                 params: options.params,
-            });
+            }));
         },
-    }), [workbenchApiRef]);
+        replacePanel: (panelId: string, options: { id: string; title: string; component: string; params?: Record<string, unknown> }) => {
+            workbenchApiRef.current?.updateTab(panelId, decorateTabDefinition({
+                id: options.id,
+                title: options.title,
+                component: options.component,
+                params: options.params,
+            }));
+            workbenchApiRef.current?.setActiveTab(options.id);
+        },
+    }), [api.id, workbenchApiRef, decorateTabDefinition]);
 
     return <Component {...({ params, api: stableApi, containerApi } satisfies WorkbenchTabProps<Record<string, unknown>>)} />;
 });
@@ -510,6 +541,25 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         [registeredPanels],
     );
 
+    const tabComponentsById = useMemo(
+        () => new Map<string, TabComponentDescriptor>(
+            registeredTabComponents.map((descriptor) => [descriptor.id, descriptor]),
+        ),
+        [registeredTabComponents],
+    );
+
+    const decorateTabDefinition = useCallback((tab: WorkbenchTabDefinition): WorkbenchTabDefinition => {
+        const descriptor = tabComponentsById.get(tab.component);
+        return {
+            ...tab,
+            params: decorateTabParamsWithLifecycle({
+                componentId: tab.component,
+                lifecycleScope: descriptor?.lifecycleScope ?? "global",
+                params: tab.params,
+            }),
+        };
+    }, [tabComponentsById]);
+
     const tabComponents = useMemo(() => {
         const result: Record<string, (props: { params: Record<string, unknown>; api: { id: string; close: () => void; setActive: () => void; markContentReady?: () => void } }) => ReactNode> = {};
         for (const descriptor of registeredTabComponents) {
@@ -524,14 +574,18 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                         params={params}
                         api={api}
                         workbenchApiRef={workbenchApiRef}
+                        decorateTabDefinition={decorateTabDefinition}
                     />
                 </div>
             );
         }
         return result;
-    }, [registeredTabComponents]);
+    }, [decorateTabDefinition, registeredTabComponents]);
 
-    const initialTabs = useMemo(() => mapInitialTabs(props.initialTabs), [props.initialTabs]);
+    const initialTabs = useMemo(
+        () => mapInitialTabs(props.initialTabs, decorateTabDefinition),
+        [decorateTabDefinition, props.initialTabs],
+    );
 
     /* ── Initial sidebar state from persisted snapshot ── */
 
@@ -630,22 +684,15 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         async (options: { relativePath: string; contentOverride?: string; preferredOpenerId?: string }) => {
             const api = workbenchApiRef.current;
             if (!api) return;
-            await openFileWithResolver({
+            await openFileInWorkbench({
                 relativePath: options.relativePath,
                 currentVaultPath: vaultState.currentVaultPath || configState.loadedVaultPath || undefined,
                 contentOverride: options.contentOverride,
                 preferredOpenerId: options.preferredOpenerId,
-                openTab: (tab: TabInstanceDefinition) => {
-                    api.openTab({
-                        id: tab.id,
-                        title: tab.title,
-                        component: tab.component,
-                        params: tab.params,
-                    });
-                },
+                containerApi: createWorkbenchContainerApi(api, () => activeTabIdRef.current, decorateTabDefinition),
             });
         },
-        [vaultState.currentVaultPath, configState.loadedVaultPath],
+        [configState.loadedVaultPath, decorateTabDefinition, vaultState.currentVaultPath],
     );
 
     useEffect(() => {
@@ -794,12 +841,12 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             void openFileHelper({ relativePath, contentOverride: content, ...tabParams });
         },
         openTab: (tab) => {
-            workbenchApiRef.current?.openTab({
+            workbenchApiRef.current?.openTab(decorateTabDefinition({
                 id: tab.id,
                 title: tab.title,
                 component: tab.component,
                 params: tab.params,
-            });
+            }));
         },
         getExistingMarkdownPaths: () => [],
         activatePanel: (panelId: string) => workbenchApiRef.current?.activatePanel(panelId),
@@ -823,7 +870,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         getFileTreePasteTargetDirectory: resolveFocusedFileTreePasteTargetDirectory,
         requestDeleteConfirmation: requestVaultDeleteConfirmation,
         requestCreateEntryDraft,
-    }), [openFileHelper, requestCreateEntryDraft]);
+    }), [decorateTabDefinition, openFileHelper, requestCreateEntryDraft]);
 
     /* ── Active tab → active editor sync ── */
 
@@ -921,12 +968,12 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         hostPanelId: null,
         convertibleView: null,
         openTab: (tab: TabInstanceDefinition) => {
-            workbenchApiRef.current?.openTab({
+            workbenchApiRef.current?.openTab(decorateTabDefinition({
                 id: tab.id,
                 title: tab.title,
                 component: tab.component,
                 params: tab.params,
-            });
+            }));
         },
         openFile: openFileHelper,
         closeTab: (tabId: string) => workbenchApiRef.current?.closeTab(tabId),
@@ -939,7 +986,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         requestMoveFileToDirectory: (_relativePath: string) => {
             /* not wired yet */
         },
-    }), [buildCommandContext, openFileHelper]);
+    }), [buildCommandContext, decorateTabDefinition, openFileHelper]);
 
     /* ── Right sidebar toggle bridge ── */
 
@@ -1007,19 +1054,61 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     const panelLayoutPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const workspaceLayoutPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    const clearLayoutPersistTimers = useCallback((): void => {
+        if (sectionRatioPersistTimerRef.current) {
+            clearTimeout(sectionRatioPersistTimerRef.current);
+            sectionRatioPersistTimerRef.current = null;
+        }
+        if (panelLayoutPersistTimerRef.current) {
+            clearTimeout(panelLayoutPersistTimerRef.current);
+            panelLayoutPersistTimerRef.current = null;
+        }
+        if (workspaceLayoutPersistTimerRef.current) {
+            clearTimeout(workspaceLayoutPersistTimerRef.current);
+            workspaceLayoutPersistTimerRef.current = null;
+        }
+    }, []);
+
     useEffect(() => {
         return () => {
-            if (sectionRatioPersistTimerRef.current) {
-                clearTimeout(sectionRatioPersistTimerRef.current);
-            }
-            if (panelLayoutPersistTimerRef.current) {
-                clearTimeout(panelLayoutPersistTimerRef.current);
-            }
-            if (workspaceLayoutPersistTimerRef.current) {
-                clearTimeout(workspaceLayoutPersistTimerRef.current);
-            }
+            clearLayoutPersistTimers();
         };
-    }, []);
+    }, [clearLayoutPersistTimers]);
+
+    useEffect(() => {
+        return subscribeVaultBeforeChangeEvent(async (payload) => {
+            clearLayoutPersistTimers();
+            settleCreateEntryDraftRequest(null);
+
+            const api = workbenchApiRef.current;
+            if (api) {
+                const tabs = api.getTabs();
+                tabs.forEach((tab) => {
+                    if (shouldCloseTabOnVaultChange({ panelId: tab.id, panelParams: tab.params })) {
+                        api.closeTab(tab.id);
+                    }
+                });
+            }
+
+            activeTabIdRef.current = null;
+            clearActiveEditor();
+            clearActiveBacklinkTarget();
+            resetEditorContext();
+
+            workspaceLayoutRestorePendingRef.current = false;
+            workspaceLayoutInitialDecisionVaultPathRef.current = null;
+            persistedWorkspaceLayoutRef.current = null;
+            persistedSnapshotRef.current = null;
+            setWorkspaceLayoutHydrationComplete(false);
+            setHydratedWorkspaceSnapshot(null);
+
+            console.info("[workbench-layout-host] cleared vault scoped runtime before vault switch", {
+                eventId: payload.eventId,
+                currentVaultPath: payload.currentVaultPath,
+                nextVaultPath: payload.nextVaultPath,
+            });
+        });
+    }, [clearLayoutPersistTimers, settleCreateEntryDraftRequest]);
 
     const handleSectionRatioChange = useCallback(
         (ratios: Record<string, number>) => {
@@ -1171,19 +1260,19 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
             // Settings icon opens a settings tab directly
             if (activityId === SETTINGS_ACTIVITY_ID) {
-                workbenchApiRef.current?.openTab({
+                workbenchApiRef.current?.openTab(decorateTabDefinition({
                     id: "settings",
                     title: i18n.t("workbenchLayout.settingsTooltip"),
                     component: "settings",
-                });
+                }));
                 return;
             }
 
             const activity = activitiesById.get(activityId);
             if (!activity || activity.type !== "callback") return;
-            activity.onActivate(buildPanelRenderContext(context, workbenchApiRef, openFileHelper, buildCommandContext));
+            activity.onActivate(buildPanelRenderContext(context, workbenchApiRef, openFileHelper, buildCommandContext, decorateTabDefinition));
         },
-        [activitiesById, openFileHelper, buildCommandContext],
+        [activitiesById, decorateTabDefinition, openFileHelper, buildCommandContext],
     );
 
     const renderPanelContent = useCallback(
@@ -1203,11 +1292,11 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                     className="workbench-layout-v2__panel-focus-scope"
                     {...{ [PANEL_ID_DATA_ATTR]: panelId }}
                 >
-                    {panel.render(buildPanelRenderContext(context, workbenchApiRef, openFileHelper, buildCommandContext))}
+                    {panel.render(buildPanelRenderContext(context, workbenchApiRef, openFileHelper, buildCommandContext, decorateTabDefinition))}
                 </div>
             );
         },
-        [panelsById, openFileHelper, buildCommandContext],
+        [panelsById, openFileHelper, buildCommandContext, decorateTabDefinition],
     );
 
     const renderActivityIcon = useCallback(

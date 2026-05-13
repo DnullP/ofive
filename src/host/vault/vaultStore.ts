@@ -19,7 +19,10 @@ import {
     type VaultEntry,
     type VaultFsEventPayload,
 } from "../../api/vaultApi";
-import { subscribeVaultFsBusEvent } from "../events/appEventBus";
+import {
+    emitVaultBeforeChangeEvent,
+    subscribeVaultFsBusEvent,
+} from "../events/appEventBus";
 import type { FileTreeItem } from "../../plugins/file-tree";
 import { isRememberLastVaultEnabled } from "../config/configStore";
 import i18n from "../../i18n";
@@ -165,6 +168,7 @@ class VaultStore {
 
     private listeners = new Set<() => void>();
     private requestVersion = 0;
+    private switchVersion = 0;
 
     /**
      * @function subscribe
@@ -201,9 +205,29 @@ class VaultStore {
      * @description 更新当前目录路径。
      * @param nextPath 新目录路径。
      */
-    setCurrentVaultPath(nextPath: string): void {
+    async setCurrentVaultPath(nextPath: string): Promise<void> {
         if (!nextPath || nextPath.trim().length === 0) {
             console.warn("[vault-store] setCurrentVaultPath skipped: empty path");
+            return;
+        }
+
+        const currentVaultPath = this.state.currentVaultPath;
+        if (nextPath === currentVaultPath) {
+            return;
+        }
+
+        const switchRequestId = ++this.switchVersion;
+        await emitVaultBeforeChangeEvent({
+            currentVaultPath,
+            nextVaultPath: nextPath,
+        });
+
+        if (switchRequestId !== this.switchVersion) {
+            console.warn("[vault-store] setCurrentVaultPath skipped outdated switch", {
+                from: currentVaultPath,
+                to: nextPath,
+                switchRequestId,
+            });
             return;
         }
 
@@ -212,10 +236,11 @@ class VaultStore {
         }
 
         console.info("[vault-store] currentVaultPath changed", {
-            from: this.state.currentVaultPath,
+            from: currentVaultPath,
             to: nextPath,
         });
 
+        this.requestVersion += 1;
         this.state = {
             ...this.state,
             currentVaultPath: nextPath,
@@ -413,8 +438,8 @@ const vaultStore = new VaultStore();
  * @description 对外更新当前目录路径。
  * @param nextPath 新路径。
  */
-export function setCurrentVaultPath(nextPath: string): void {
-    vaultStore.setCurrentVaultPath(nextPath);
+export function setCurrentVaultPath(nextPath: string): Promise<void> {
+    return vaultStore.setCurrentVaultPath(nextPath);
 }
 
 /**

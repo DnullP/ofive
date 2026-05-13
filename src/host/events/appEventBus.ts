@@ -27,6 +27,8 @@
  *  - subscribeFileTreeRenameRequestedEvent: 订阅文件树重命名请求事件
  *  - emitCustomActivityRemovalRequestedEvent: 发布删除自定义 activity 的请求事件
  *  - subscribeCustomActivityRemovalRequestedEvent: 订阅删除自定义 activity 的请求事件
+ *  - emitVaultBeforeChangeEvent: 发布仓库切换前清理事件，并等待订阅方完成
+ *  - subscribeVaultBeforeChangeEvent: 订阅仓库切换前清理事件
  *  - emitPersistedContentUpdatedEvent: 发布持久态内容更新事件
  *  - subscribePersistedContentUpdatedEvent: 订阅持久态内容更新事件
  */
@@ -127,6 +129,17 @@ export interface PersistedContentUpdatedBusEvent {
     source: "save" | "external";
 }
 
+/**
+ * @interface VaultBeforeChangeBusEvent
+ * @description 仓库切换前事件。发布方会等待所有订阅方完成清理后再切换当前仓库。
+ */
+export interface VaultBeforeChangeBusEvent {
+    eventId: string;
+    currentVaultPath: string;
+    nextVaultPath: string;
+    updatedAt: number;
+}
+
 type AppBusEventMap = {
     "vault.fs": VaultFsEventPayload;
     "vault.config": VaultConfigEventPayload;
@@ -141,6 +154,10 @@ type AppBusEventMap = {
 
 const appEventTarget = new EventTarget();
 let frontendEventSeq = 1;
+
+type VaultBeforeChangeListener = (payload: VaultBeforeChangeBusEvent) => void | Promise<void>;
+const vaultBeforeChangeListeners = new Set<VaultBeforeChangeListener>();
+let vaultBeforeChangeDispatchDepth = 0;
 
 let backendBridgeMountedCount = 0;
 let backendFsUnlisten: (() => void) | null = null;
@@ -408,6 +425,80 @@ export function subscribeCustomActivityRemovalRequestedEvent(
     listener: (payload: CustomActivityRemovalRequestedBusEvent) => void,
 ): () => void {
     return subscribeBusEvent("customActivity.removal.requested", listener);
+}
+
+/**
+ * @function emitVaultBeforeChangeEvent
+ * @description 发布仓库切换前事件，并等待所有订阅者完成清理。
+ * @param payload 当前仓库与目标仓库路径。
+ * @returns 带 eventId 的事件 payload。
+ */
+export async function emitVaultBeforeChangeEvent(payload: {
+    currentVaultPath: string;
+    nextVaultPath: string;
+    updatedAt?: number;
+}): Promise<VaultBeforeChangeBusEvent> {
+    const eventPayload: VaultBeforeChangeBusEvent = {
+        eventId: nextFrontendEventId(),
+        currentVaultPath: payload.currentVaultPath,
+        nextVaultPath: payload.nextVaultPath,
+        updatedAt: payload.updatedAt ?? Date.now(),
+    };
+
+    const listeners = Array.from(vaultBeforeChangeListeners);
+    if (listeners.length === 0) {
+        return eventPayload;
+    }
+
+    vaultBeforeChangeDispatchDepth += 1;
+    let results: PromiseSettledResult<void>[] = [];
+    try {
+        results = await Promise.allSettled(
+            listeners.map(async (listener) => {
+                await listener(eventPayload);
+            }),
+        );
+    } finally {
+        vaultBeforeChangeDispatchDepth = Math.max(0, vaultBeforeChangeDispatchDepth - 1);
+    }
+
+    results.forEach((result) => {
+        if (result.status === "fulfilled") {
+            return;
+        }
+
+        console.error("[app-event-bus] vault before-change listener failed", {
+            eventId: eventPayload.eventId,
+            currentVaultPath: eventPayload.currentVaultPath,
+            nextVaultPath: eventPayload.nextVaultPath,
+            message: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        });
+    });
+
+    return eventPayload;
+}
+
+/**
+ * @function subscribeVaultBeforeChangeEvent
+ * @description 订阅仓库切换前事件。监听器可返回 Promise，切换方会等待其完成。
+ * @param listener 监听函数。
+ * @returns 取消订阅函数。
+ */
+export function subscribeVaultBeforeChangeEvent(
+    listener: VaultBeforeChangeListener,
+): () => void {
+    vaultBeforeChangeListeners.add(listener);
+    return () => {
+        vaultBeforeChangeListeners.delete(listener);
+    };
+}
+
+/**
+ * @function isVaultBeforeChangeEventActive
+ * @description 当前 JS runtime 是否正在分发仓库切换前清理事件。
+ */
+export function isVaultBeforeChangeEventActive(): boolean {
+    return vaultBeforeChangeDispatchDepth > 0;
 }
 
 /**

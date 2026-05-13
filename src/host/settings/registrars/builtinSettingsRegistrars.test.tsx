@@ -48,6 +48,7 @@ describe("builtin settings registrars", () => {
             "notifications-enabled",
             "notifications-max-visible",
             "restore-workspace-layout",
+            "file-open-mode",
             "config-error",
         ]);
         expect(snapshot.find((section) => section.id === "shortcut-system")?.items.map((item) => item.id)).toEqual([

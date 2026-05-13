@@ -7,10 +7,11 @@ import { expect, test, type Page } from "@playwright/test";
 import { gotoMockVaultPage } from "./helpers/mockVault";
 
 const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
+const LIGHT_THEME_MOCK_PAGE = `${MOCK_PAGE}&theme=light`;
 const SCROLL_NOTE_PATH = "test-resources/notes/scroll-regression.md";
 
-async function waitForMockWorkbench(page: Page): Promise<void> {
-    await gotoMockVaultPage(page, "editor-tab-header-collapse", MOCK_PAGE);
+async function waitForMockWorkbench(page: Page, mockPage = MOCK_PAGE): Promise<void> {
+    await gotoMockVaultPage(page, "editor-tab-header-collapse", mockPage);
     await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
     await page.locator("[data-testid='sidebar-right']").waitFor({ state: "visible" });
 }
@@ -45,18 +46,44 @@ async function setActiveEditorScrollTop(page: Page, scrollTop: number): Promise<
     }, scrollTop);
 }
 
+async function readActiveEditorHostTop(page: Page): Promise<number> {
+    return page.evaluate(() => {
+        const host = document.querySelector<HTMLElement>(".layout-v2-tab-section__card--active .cm-tab-editor");
+        if (!host) {
+            throw new Error("CodeMirror host not found");
+        }
+
+        return host.getBoundingClientRect().top;
+    });
+}
+
 test.describe("editor tab header scroll behavior", () => {
-    test("向下滚动时收起，向上滚动时展开", async ({ page }) => {
+    test("标题输入框使用白色实底，避免与正文透底重叠", async ({ page }) => {
+        await waitForMockWorkbench(page, LIGHT_THEME_MOCK_PAGE);
+        await openScrollRegressionNote(page);
+
+        const titleInput = page.locator(".layout-v2-tab-section__card--active .cm-tab-title-input");
+        await expect(titleInput).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    });
+
+    test("超过阈值后防抖收起/展开，且不推动 editor 区域", async ({ page }) => {
         await waitForMockWorkbench(page);
         await openScrollRegressionNote(page);
 
         const activeTab = page.locator(".layout-v2-tab-section__card--active .cm-tab");
         await expect(activeTab).not.toHaveClass(/cm-tab--header-collapsed/);
+        const editorTopBeforeCollapse = await readActiveEditorHostTop(page);
+
+        await setActiveEditorScrollTop(page, 40);
+        await page.waitForTimeout(140);
+        await expect(activeTab).not.toHaveClass(/cm-tab--header-collapsed/);
 
         await setActiveEditorScrollTop(page, 420);
         await expect(activeTab).toHaveClass(/cm-tab--header-collapsed/);
+        const editorTopAfterCollapse = await readActiveEditorHostTop(page);
+        expect(Math.abs(editorTopAfterCollapse - editorTopBeforeCollapse)).toBeLessThanOrEqual(1);
 
-        await setActiveEditorScrollTop(page, 120);
+        await setActiveEditorScrollTop(page, 340);
         await expect(activeTab).not.toHaveClass(/cm-tab--header-collapsed/);
     });
 });

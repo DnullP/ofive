@@ -445,12 +445,16 @@ async function readTabStripMetrics(page: Page): Promise<Array<{
     stripTop: number;
     paddingLeft: number;
     tabOffsetLeft: number;
+    firstTabLeft: number;
+    stripBackground: string;
+    activityBarBackground: string | null;
 }>> {
     return page.evaluate(() => Array.from(
         document.querySelectorAll<HTMLElement>(".layout-v2-tab-section"),
     ).map((section) => {
         const strip = section.querySelector<HTMLElement>(".layout-v2-tab-section__strip");
         const firstTab = section.querySelector<HTMLElement>(".layout-v2-tab-section__tab-main");
+        const activityBar = document.querySelector<HTMLElement>("[data-layout-role='activity-bar'][data-layout-bar-id='left-activity-bar']");
         if (!strip || !firstTab) {
             throw new Error("tab section strip metric selectors missing");
         }
@@ -463,6 +467,15 @@ async function readTabStripMetrics(page: Page): Promise<Array<{
             stripTop: stripRect.top,
             paddingLeft: Number.parseFloat(getComputedStyle(strip).paddingLeft || "0"),
             tabOffsetLeft: firstTabRect.left - stripRect.left,
+            firstTabLeft: firstTabRect.left,
+            stripBackground: getComputedStyle(strip).backgroundImage !== "none"
+                ? getComputedStyle(strip).backgroundImage
+                : getComputedStyle(strip).backgroundColor,
+            activityBarBackground: activityBar
+                ? (getComputedStyle(activityBar).backgroundImage !== "none"
+                    ? getComputedStyle(activityBar).backgroundImage
+                    : getComputedStyle(activityBar).backgroundColor)
+                : null,
         };
     }));
 }
@@ -626,10 +639,17 @@ test.describe("sidebar titlebar integration", () => {
             .sort((left, right) => left.stripLeft - right.stripLeft);
 
         expect(stripMetrics).toHaveLength(2);
-        expect(stripMetrics[0].paddingLeft).toBeGreaterThanOrEqual(96);
-        expect(stripMetrics[0].tabOffsetLeft).toBeGreaterThanOrEqual(96);
+        expect(stripMetrics[0].paddingLeft).toBeGreaterThanOrEqual(48);
+        expect(stripMetrics[0].paddingLeft).toBeLessThanOrEqual(64);
+        expect(stripMetrics[0].tabOffsetLeft).toBeGreaterThanOrEqual(48);
+        expect(stripMetrics[0].tabOffsetLeft).toBeLessThanOrEqual(72);
+        expect(stripMetrics[0].firstTabLeft).toBeGreaterThanOrEqual(96);
+        expect(stripMetrics[0].firstTabLeft).toBeLessThanOrEqual(128);
+        expect(stripMetrics[0].activityBarBackground).not.toBeNull();
+        expect(stripMetrics[0].stripBackground).toBe(stripMetrics[0].activityBarBackground);
         expect(stripMetrics[1].paddingLeft).toBeLessThanOrEqual(1);
         expect(stripMetrics[1].tabOffsetLeft).toBeLessThan(24);
+        expect(stripMetrics[1].stripBackground).toBe(stripMetrics[0].activityBarBackground);
     });
 
     test("hidden left sidebar only pads the top-left tab strip inside nested splits", async ({ page }) => {
@@ -661,15 +681,19 @@ test.describe("sidebar titlebar integration", () => {
                 const topDelta = left.stripTop - right.stripTop;
                 return Math.abs(topDelta) > 2 ? topDelta : left.stripLeft - right.stripLeft;
             })[0];
-        const paddedStrips = stripMetrics.filter((metric) => metric.paddingLeft >= 96);
+        const paddedStrips = stripMetrics.filter((metric) => metric.paddingLeft >= 48);
 
         expect(stripMetrics).toHaveLength(3);
         expect(paddedStrips).toHaveLength(1);
         expect(paddedStrips[0].id).toBe(topLeftStrip.id);
-        expect(paddedStrips[0].tabOffsetLeft).toBeGreaterThanOrEqual(96);
+        expect(paddedStrips[0].paddingLeft).toBeLessThanOrEqual(64);
+        expect(paddedStrips[0].tabOffsetLeft).toBeGreaterThanOrEqual(48);
+        expect(paddedStrips[0].firstTabLeft).toBeGreaterThanOrEqual(96);
+        expect(paddedStrips[0].stripBackground).toBe(paddedStrips[0].activityBarBackground);
         for (const metric of stripMetrics.filter((item) => item.id !== paddedStrips[0].id)) {
             expect(metric.paddingLeft).toBeLessThanOrEqual(1);
             expect(metric.tabOffsetLeft).toBeLessThan(24);
+            expect(metric.stripBackground).toBe(paddedStrips[0].activityBarBackground);
         }
     });
 });

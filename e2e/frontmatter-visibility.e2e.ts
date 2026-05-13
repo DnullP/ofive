@@ -121,6 +121,15 @@ async function focusFrontmatterNavigationRow(page: Page, fieldKey: string): Prom
     }, fieldKey);
 }
 
+async function waitForFrontmatterNavigationRowFocus(page: Page, fieldKey: string): Promise<void> {
+    await page.waitForFunction((nextFieldKey) => {
+        const activeElement = document.activeElement as HTMLElement | null;
+        return activeElement?.matches?.(
+            `.layout-v2-tab-section__card--active [data-frontmatter-vim-nav="true"][data-frontmatter-field-key="${nextFieldKey}"]`,
+        ) === true;
+    }, fieldKey);
+}
+
 /**
  * @function focusFrontmatterKeyInput
  * @description 将焦点放到指定字段名输入框，并把光标移动到文本末尾。
@@ -323,6 +332,7 @@ test.describe("frontmatter 可见性", () => {
         await page.keyboard.press("Enter");
         await page.keyboard.type(" Updated");
         await page.keyboard.press("Enter");
+        await waitForFrontmatterNavigationRowFocus(page, "title");
         await page.keyboard.press("j");
 
         const navigationState = await page.evaluate(() => {

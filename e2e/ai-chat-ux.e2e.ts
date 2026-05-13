@@ -122,4 +122,65 @@ test.describe("ai chat ux", () => {
         await expect(toolCall.locator(".ai-chat-tool-call-detail-block", { hasText: "mock/article.md" })).toBeVisible();
         await expect(toolCall.locator(".ai-chat-tool-call-detail-block", { hasText: "mock content" })).toBeVisible();
     });
+
+    test("approval split menu should persist always-allow operation policy", async ({ page }) => {
+        await waitForAiChatReady(page);
+
+        await page.locator(".ai-chat-input").fill("approval menu");
+        await page.locator(".ai-chat-send-button").click();
+
+        const confirmation = page.locator(".ai-chat-confirmation-card", { hasText: "vault.apply_markdown_patch" });
+        await expect(confirmation).toBeVisible();
+        await confirmation.locator(".ai-chat-confirm-button.menu-trigger").hover();
+        await confirmation.locator(".ai-chat-confirm-menu-item", { hasText: /Always allow this operation|该操作均允许/ }).click();
+        await expect(confirmation).toHaveCount(0);
+
+        await page.getByTestId("activity-bar-item-__settings__").click();
+        await page.locator(".settings-tab-search-input").fill("AI");
+        await page.locator(".settings-tab-sidebar-item", { hasText: /AI Chat|AI 对话/ }).click();
+        const policyRow = page.locator(".ai-chat-settings-tool-policy-row", { hasText: "vault.apply_markdown_patch" });
+        await expect(policyRow).toBeVisible();
+        await expect(policyRow.locator(".ai-chat-settings-tool-policy-select")).toHaveValue("auto");
+    });
+
+    test("settings should add and configure multiple providers", async ({ page }) => {
+        await waitForAiChatReady(page);
+
+        await page.getByTestId("activity-bar-item-__settings__").click();
+        await page.locator(".settings-tab-search-input").fill("AI");
+        await page.locator(".settings-tab-sidebar-item", { hasText: /AI Chat|AI 对话/ }).click();
+
+        const providerRow = page.locator(".ai-chat-settings-row", {
+            hasText: /Saved provider instances|已保存的 provider 实例/,
+        });
+        const providerSelect = providerRow.locator("select");
+        await expect(providerSelect.locator("option")).toHaveCount(1);
+
+        await providerRow.locator("button", { hasText: /Add provider|添加 provider/ }).click();
+        await expect(providerSelect.locator("option")).toHaveCount(2);
+
+        const providerNameRow = page.locator(".ai-chat-settings-row", {
+            hasText: /Provider Name|Provider 名称/,
+        });
+        await providerNameRow.locator("input").fill("OpenAI Work");
+
+        const vendorRow = page.locator(".ai-chat-settings-row", {
+            hasText: /Choose the provider type|选择 provider 类型/,
+        });
+        await vendorRow.locator("select").selectOption("openai-compatible");
+        await expect(vendorRow.locator("select")).toHaveValue("openai-compatible");
+
+        await page.locator(".ai-chat-settings-row", { hasText: "API Key" }).locator("input").fill("test-key");
+        await page.locator(".ai-chat-settings-row", { hasText: /Base URL/ }).locator("input").fill("http://127.0.0.1:9999/v1");
+
+        const modelRow = page.locator(".ai-chat-settings-row", {
+            hasText: /Load vendor-supported models|通过后端按当前 vendor 凭证/,
+        });
+        await modelRow.locator("input").fill("gpt-4.1-mini");
+
+        await page.locator(".ai-chat-settings-save").click();
+        await expect(providerSelect.locator("option", { hasText: "OpenAI Work" })).toHaveCount(1);
+        await expect(providerSelect.locator("option:checked")).toHaveText("OpenAI Work");
+        await expect(vendorRow.locator("select")).toHaveValue("openai-compatible");
+    });
 });

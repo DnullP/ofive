@@ -27,10 +27,12 @@ import { activatePlugin as activateQuickSwitcherPlugin } from "../../src/plugins
 import { activatePlugin as activateSearchPlugin } from "../../src/plugins/search/searchPlugin";
 import { activatePlugin as activateAiChatPlugin } from "../../src/plugins/ai-chat/aiChatPlugin";
 import { activatePlugin as activateProjectReaderPlugin } from "../../src/plugins/project-reader/projectReaderPlugin";
+import { activatePlugin as activateAgentSkillsPlugin } from "../../src/plugins/agent-skills/agentSkillsPlugin";
 import { activatePlugin as activateBacklinksPlugin } from "../../src/plugins/backlinks/backlinksPlugin";
 import { SettingsTab } from "../../src/host/layout/SettingsTab";
 import { useConfigSync } from "../../src/host/config/configStore";
 import { useVaultTreeSync } from "../../src/host/vault/vaultStore";
+import { useAutoSaveLifecycle } from "../../src/host/editor/autoSaveService";
 import { registerCommands } from "../../src/host/commands/commandSystem";
 import { registerActivity } from "../../src/host/registry/activityRegistry";
 import { registerFileOpener } from "../../src/host/registry/fileOpenerRegistry";
@@ -327,6 +329,69 @@ const MOCK_AI_VENDOR: AiVendorDefinition = {
     ],
 };
 
+const MOCK_ANTHROPIC_VENDOR: AiVendorDefinition = {
+    id: "anthropic-compatible",
+    title: "Anthropic Compatible",
+    description: "Mock Anthropic-compatible provider for settings tests.",
+    defaultModel: "claude-sonnet-4-5",
+    fields: [
+        {
+            key: "apiKey",
+            label: "API Key",
+            description: "Mock Anthropic-compatible API key.",
+            fieldType: "password",
+            required: true,
+            placeholder: "mock-anthropic-key",
+            defaultValue: null,
+        },
+        {
+            key: "endpoint",
+            label: "Endpoint",
+            description: "Mock Anthropic-compatible endpoint.",
+            fieldType: "text",
+            required: false,
+            placeholder: "https://api.anthropic.com",
+            defaultValue: "https://api.anthropic.com",
+        },
+        {
+            key: "anthropicVersion",
+            label: "Anthropic Version",
+            description: "Mock anthropic-version header.",
+            fieldType: "text",
+            required: false,
+            placeholder: "2023-06-01",
+            defaultValue: "2023-06-01",
+        },
+    ],
+};
+
+const MOCK_OPENAI_VENDOR: AiVendorDefinition = {
+    id: "openai-compatible",
+    title: "OpenAI Compatible",
+    description: "Mock OpenAI-compatible provider for settings tests.",
+    defaultModel: "gpt-4.1",
+    fields: [
+        {
+            key: "apiKey",
+            label: "API Key",
+            description: "Mock OpenAI-compatible API key.",
+            fieldType: "password",
+            required: true,
+            placeholder: "mock-openai-key",
+            defaultValue: null,
+        },
+        {
+            key: "baseUrl",
+            label: "Base URL",
+            description: "Mock OpenAI-compatible base URL.",
+            fieldType: "text",
+            required: false,
+            placeholder: "https://api.openai.com/v1",
+            defaultValue: "https://api.openai.com/v1",
+        },
+    ],
+};
+
 const MOCK_AI_TOOLS: AiToolDescriptor[] = [
     {
         capabilityId: "vault.read_markdown_file",
@@ -397,6 +462,16 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
         fieldValues: {
             token: "mock-token",
         },
+        activeProviderId: "mock-provider-default",
+        providers: [{
+            id: "mock-provider-default",
+            vendorId: MOCK_AI_VENDOR.id,
+            title: MOCK_AI_VENDOR.title,
+            model: MOCK_AI_VENDOR.defaultModel,
+            fieldValues: {
+                token: "mock-token",
+            },
+        }],
         toolApprovalPolicy: {},
     };
     let history: AiChatHistoryState = {
@@ -419,14 +494,32 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
     };
 
     return {
-        getAiVendorCatalog: () => [MOCK_AI_VENDOR],
+        getAiVendorCatalog: () => [MOCK_AI_VENDOR, MOCK_ANTHROPIC_VENDOR, MOCK_OPENAI_VENDOR],
         getAiToolCatalog: () => MOCK_AI_TOOLS,
         getAiChatSettings: () => settings,
         getAiChatHistory: () => history,
-        getAiVendorModels: () => [
-            { id: "mock-fast", object: "model", ownedBy: "ofive", created: null },
-            { id: "mock-deep", object: "model", ownedBy: "ofive", created: null },
-        ],
+        getAiVendorModels: (targetSettings) => {
+            const activeProvider = targetSettings.providers?.find((provider) => provider.id === targetSettings.activeProviderId)
+                ?? targetSettings.providers?.[0]
+                ?? null;
+            const vendorId = activeProvider?.vendorId ?? targetSettings.vendorId;
+            if (vendorId === "openai-compatible") {
+                return [
+                    { id: "gpt-4.1", object: "model", ownedBy: "openai", created: null },
+                    { id: "gpt-4o", object: "model", ownedBy: "openai", created: null },
+                ];
+            }
+            if (vendorId === "anthropic-compatible") {
+                return [
+                    { id: "claude-sonnet-4-5", object: "model", ownedBy: "anthropic", created: null },
+                    { id: "claude-opus-4-1", object: "model", ownedBy: "anthropic", created: null },
+                ];
+            }
+            return [
+                { id: "mock-fast", object: "model", ownedBy: "ofive", created: null },
+                { id: "mock-deep", object: "model", ownedBy: "ofive", created: null },
+            ];
+        },
         saveAiChatSettings: (nextSettings) => {
             settings = nextSettings;
             return settings;
@@ -439,6 +532,7 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
             const streamId = `mock-ai-stream-${streamSequence++}`;
             const sessionId = options.sessionId ?? "mock-session";
             const reply = `Mock response for: ${options.message}`;
+            const normalizedMessage = options.message.toLowerCase();
             const context = options.contextSnapshotJson
                 ? JSON.parse(options.contextSnapshotJson) as { openTabs?: unknown[]; activeFile?: { path?: string } | null }
                 : null;
@@ -446,9 +540,46 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
                 ? `\nContext active: ${context.activeFile?.path ?? "none"} tabs=${context.openTabs?.length ?? 0}`
                 : "";
             const accumulatedText = `${reply}${contextText}`;
-            const shouldEmitToolRecord = options.message.toLowerCase().includes("tool record");
+            const shouldEmitToolRecord = normalizedMessage.includes("tool record");
+            const shouldEmitConfirmation = normalizedMessage.includes("approval menu");
 
             await new Promise((resolve) => window.setTimeout(resolve, 40));
+
+            if (shouldEmitConfirmation) {
+                schedule(streamId, () => {
+                    emit({
+                        streamId,
+                        eventType: "confirmation",
+                        sessionId,
+                        agentName: "browser-mock-ai",
+                        deltaText: null,
+                        accumulatedText: null,
+                        reasoningDeltaText: null,
+                        reasoningAccumulatedText: "Waiting for approval.",
+                        historyContentBlocksJson: null,
+                        debugTitle: null,
+                        debugLevel: null,
+                        debugText: null,
+                        confirmationId: `confirm-${streamId}`,
+                        confirmationHint: "Approve mock markdown patch?",
+                        confirmationToolName: "vault.apply_markdown_patch",
+                        confirmationToolArgsJson: JSON.stringify({
+                            relativePath: "mock/article.md",
+                            unifiedDiff: [
+                                "--- a/mock/article.md",
+                                "+++ b/mock/article.md",
+                                "@@ -1,1 +1,1 @@",
+                                "-old",
+                                "+new",
+                            ].join("\n"),
+                        }),
+                        error: null,
+                        done: false,
+                    });
+                    timersByStreamId.delete(streamId);
+                }, 90);
+                return { streamId };
+            }
 
             if (shouldEmitToolRecord) {
                 schedule(streamId, () => {
@@ -577,7 +708,36 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
             });
             return true;
         },
-        submitAiChatConfirmation: () => ({ streamId: `mock-ai-stream-${streamSequence++}` }),
+        submitAiChatConfirmation: (options) => {
+            const streamId = `mock-ai-stream-${streamSequence++}`;
+            const sessionId = options.sessionId ?? "mock-session";
+            schedule(streamId, () => {
+                emit({
+                    streamId,
+                    eventType: "done",
+                    sessionId,
+                    agentName: "browser-mock-ai",
+                    deltaText: null,
+                    accumulatedText: `Mock confirmation ${options.confirmed ? "approved" : "rejected"}.`,
+                    reasoningDeltaText: null,
+                    reasoningAccumulatedText: null,
+                    historyContentBlocksJson: JSON.stringify([
+                        { kind: "text", text: `Mock confirmation ${options.confirmed ? "approved" : "rejected"}.` },
+                    ]),
+                    debugTitle: null,
+                    debugLevel: null,
+                    debugText: null,
+                    confirmationId: null,
+                    confirmationHint: null,
+                    confirmationToolName: null,
+                    confirmationToolArgsJson: null,
+                    error: null,
+                    done: true,
+                });
+                timersByStreamId.delete(streamId);
+            }, 80);
+            return { streamId };
+        },
         subscribeAiChatStreamEvents: (handler) => {
             listeners.add(handler);
             return () => {
@@ -633,6 +793,7 @@ function ensureMockComponentsRegistered(): void {
     activateSearchPlugin();
     activateAiChatPlugin();
     activateProjectReaderPlugin();
+    activateAgentSkillsPlugin();
     activateBacklinksPlugin();
     registerCommands([
         {
@@ -773,7 +934,7 @@ function ensureMockComponentsRegistered(): void {
         activityId: "files",
         defaultPosition: "left",
         defaultOrder: 1,
-        render: (ctx) => React.createElement(MockVaultPanel, { openTab: ctx.openTab }),
+        render: (ctx) => React.createElement(MockVaultPanel, { openFile: ctx.openFile, openTab: ctx.openTab }),
     });
     registerPanel({
         id: "outline",
@@ -791,19 +952,20 @@ function ensureMockComponentsRegistered(): void {
         defaultOrder: 2,
         render: (context) => React.createElement(CalendarPanel, context),
     });
-    registerTabComponent({ id: "home", component: MockHomeTab as never });
+    registerTabComponent({ id: "home", component: MockHomeTab as never, lifecycleScope: "global" });
     registerTabComponent({
         id: "codemirror",
         component: CodeMirrorEditorTab as never,
+        lifecycleScope: "vault",
         deferPresentationUntilReady: true,
     });
-    registerTabComponent({ id: "canvas", component: CanvasTab as never });
-    registerTabComponent({ id: "imageviewer", component: ImageViewerTab as never });
-    registerTabComponent({ id: MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID, component: KnowledgeGraphTab as never });
-    registerTabComponent({ id: MOCK_CALENDAR_TAB_COMPONENT_ID, component: CalendarTab as never });
-    registerTabComponent({ id: MOCK_ARCHITECTURE_COMPONENT_ID, component: MockArchitectureDevtoolsTab as never });
-    registerTabComponent({ id: MOCK_TASK_BOARD_COMPONENT_ID, component: MockTaskBoardTab as never });
-    registerTabComponent({ id: "settings", component: SettingsTab as never });
+    registerTabComponent({ id: "canvas", component: CanvasTab as never, lifecycleScope: "vault" });
+    registerTabComponent({ id: "imageviewer", component: ImageViewerTab as never, lifecycleScope: "vault" });
+    registerTabComponent({ id: MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID, component: KnowledgeGraphTab as never, lifecycleScope: "vault" });
+    registerTabComponent({ id: MOCK_CALENDAR_TAB_COMPONENT_ID, component: CalendarTab as never, lifecycleScope: "vault" });
+    registerTabComponent({ id: MOCK_ARCHITECTURE_COMPONENT_ID, component: MockArchitectureDevtoolsTab as never, lifecycleScope: "global" });
+    registerTabComponent({ id: MOCK_TASK_BOARD_COMPONENT_ID, component: MockTaskBoardTab as never, lifecycleScope: "vault" });
+    registerTabComponent({ id: "settings", component: SettingsTab as never, lifecycleScope: "global" });
     registerFileOpener({
         id: "mock.markdown.codemirror",
         label: "Mock CodeMirror Markdown Editor",
@@ -889,6 +1051,7 @@ export function MockApp(): ReactNode {
     seedMockVaultConfig(mockVaultPath);
     window.__OFIVE_BROWSER_MOCK_AI__ = mockAiRuntime;
     useVaultTreeSync();
+    useAutoSaveLifecycle();
 
     useEffect(() => {
         let cancelled = false;

@@ -42,6 +42,54 @@ pub struct VaultTreeResponse {
     pub entries: Vec<VaultEntry>,
 }
 
+/// Agent SKILL 目录内的 Markdown 文件条目。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSkillFileEntry {
+    pub relative_path: String,
+    pub size_bytes: u64,
+}
+
+/// 当前 vault 中一个用户自定义 Agent SKILL 的摘要。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSkillSummary {
+    pub name: String,
+    pub description: String,
+    pub directory_relative_path: String,
+    pub files: Vec<AgentSkillFileEntry>,
+    pub valid: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// 读取 Agent SKILL 文件的响应。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadAgentSkillFileResponse {
+    pub skill_name: String,
+    pub relative_path: String,
+    pub content: String,
+}
+
+/// 写入 Agent SKILL 文件的响应。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteAgentSkillFileResponse {
+    pub skill_name: String,
+    pub relative_path: String,
+    pub created: bool,
+}
+
+/// 传递给 Go sidecar 的 Agent SKILL 文件快照。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSkillSidecarFile {
+    pub skill_name: String,
+    pub relative_path: String,
+    pub content: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadMarkdownResponse {

@@ -28,6 +28,7 @@ import type {
     AiChatConversationRecord,
     AiChatHistoryContentBlock,
     AiChatHistoryMessage,
+    AiChatProviderConfig,
     AiChatHistoryState,
     AiChatSettings,
     AiVendorDefinition,
@@ -165,6 +166,134 @@ export function resolveVendor(
     return vendorCatalog.find((vendor) => vendor.id === vendorId) ?? null;
 }
 
+export function createAiChatProviderId(): string {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return `ai-provider-${crypto.randomUUID()}`;
+    }
+
+    const nextId = `ai-provider-${Date.now()}-${String(chatConversationSequence)}`;
+    chatConversationSequence += 1;
+    return nextId;
+}
+
+export function resolveActiveProvider(settings: AiChatSettings): AiChatProviderConfig {
+    const providers = settings.providers ?? [];
+    const activeProvider = providers.find((provider) => provider.id === settings.activeProviderId)
+        ?? providers[0]
+        ?? null;
+
+    if (activeProvider) {
+        return activeProvider;
+    }
+
+    return {
+        id: settings.activeProviderId?.trim() || createAiChatProviderId(),
+        vendorId: settings.vendorId,
+        title: settings.vendorId,
+        model: settings.model,
+        fieldValues: settings.fieldValues,
+    };
+}
+
+function buildProviderTitle(
+    vendor: AiVendorDefinition,
+    existingProviders: AiChatProviderConfig[],
+): string {
+    const sameVendorCount = existingProviders.filter((provider) => provider.vendorId === vendor.id).length;
+    return sameVendorCount === 0 ? vendor.title : `${vendor.title} ${sameVendorCount + 1}`;
+}
+
+export function createProviderForVendor(
+    vendor: AiVendorDefinition,
+    existingProviders: AiChatProviderConfig[] = [],
+): AiChatProviderConfig {
+    const fieldValues: Record<string, string> = {};
+    vendor.fields.forEach((field) => {
+        fieldValues[field.key] = field.defaultValue ?? "";
+    });
+
+    return {
+        id: createAiChatProviderId(),
+        vendorId: vendor.id,
+        title: buildProviderTitle(vendor, existingProviders),
+        model: vendor.defaultModel,
+        fieldValues,
+    };
+}
+
+export function mergeProviderForVendor(
+    provider: AiChatProviderConfig,
+    vendor: AiVendorDefinition,
+): AiChatProviderConfig {
+    const nextFieldValues: Record<string, string> = {};
+    vendor.fields.forEach((field) => {
+        nextFieldValues[field.key] = provider.fieldValues[field.key] ?? field.defaultValue ?? "";
+    });
+
+    return {
+        ...provider,
+        vendorId: vendor.id,
+        title: provider.title.trim() || vendor.title,
+        model: provider.model || vendor.defaultModel,
+        fieldValues: nextFieldValues,
+    };
+}
+
+export function withActiveProvider(
+    settings: AiChatSettings,
+    provider: AiChatProviderConfig,
+): AiChatSettings {
+    const providers = settings.providers ?? [];
+    const nextProviders = providers.some((item) => item.id === provider.id)
+        ? providers.map((item) => item.id === provider.id ? provider : item)
+        : [...providers, provider];
+
+    return {
+        ...settings,
+        vendorId: provider.vendorId,
+        model: provider.model,
+        fieldValues: provider.fieldValues,
+        activeProviderId: provider.id,
+        providers: nextProviders,
+    };
+}
+
+export function ensureSettingsProviderList(
+    settings: AiChatSettings,
+    vendorCatalog: AiVendorDefinition[],
+): AiChatSettings {
+    let providers = [...(settings.providers ?? [])];
+    if (providers.length === 0) {
+        providers = [{
+            id: settings.activeProviderId?.trim() || createAiChatProviderId(),
+            vendorId: settings.vendorId,
+            title: resolveVendor(vendorCatalog, settings.vendorId)?.title ?? settings.vendorId,
+            model: settings.model,
+            fieldValues: settings.fieldValues,
+        }];
+    }
+
+    providers = providers.map((provider) => {
+        const vendor = resolveVendor(vendorCatalog, provider.vendorId);
+        return vendor ? mergeProviderForVendor(provider, vendor) : provider;
+    });
+
+    const activeProvider = providers.find((provider) => provider.id === settings.activeProviderId)
+        ?? providers[0];
+    if (!activeProvider) {
+        return settings;
+    }
+
+    return {
+        ...settings,
+        vendorId: activeProvider.vendorId,
+        model: activeProvider.model,
+        fieldValues: activeProvider.fieldValues,
+        activeProviderId: activeProvider.id,
+        providers,
+    };
+}
+
 /**
  * @function mergeSettingsForVendor
  * @description 将当前设置与目标 vendor 的字段定义合并。
@@ -176,10 +305,11 @@ export function mergeSettingsForVendor(
     currentSettings: AiChatSettings,
     vendor: AiVendorDefinition,
 ): AiChatSettings {
-    const isSameVendor = currentSettings.vendorId === vendor.id;
+    const activeProvider = resolveActiveProvider(currentSettings);
+    const isSameVendor = activeProvider.vendorId === vendor.id;
     const nextFieldValues: Record<string, string> = {};
     vendor.fields.forEach((field) => {
-        const currentValue = currentSettings.fieldValues[field.key];
+        const currentValue = activeProvider.fieldValues[field.key];
         if (isSameVendor && currentValue !== undefined) {
             nextFieldValues[field.key] = currentValue;
             return;
@@ -188,14 +318,15 @@ export function mergeSettingsForVendor(
         nextFieldValues[field.key] = field.defaultValue ?? "";
     });
 
-    return {
+    return withActiveProvider(currentSettings, {
+        ...activeProvider,
         vendorId: vendor.id,
+        title: activeProvider.title.trim() || vendor.title,
         model: isSameVendor
-            ? currentSettings.model || vendor.defaultModel
+            ? activeProvider.model || vendor.defaultModel
             : vendor.defaultModel,
         fieldValues: nextFieldValues,
-        toolApprovalPolicy: currentSettings.toolApprovalPolicy,
-    };
+    });
 }
 
 /**
@@ -255,10 +386,15 @@ export function buildAiChatRuntimeContextSnapshot(
                 })),
             }
             : null,
-        ai: {
-            vendorId: input.settings?.vendorId?.trim() || null,
-            model: input.settings?.model?.trim() || null,
-        },
+        ai: input.settings
+            ? {
+                vendorId: resolveActiveProvider(input.settings).vendorId.trim() || null,
+                model: resolveActiveProvider(input.settings).model.trim() || null,
+            }
+            : {
+                vendorId: null,
+                model: null,
+            },
     };
 }
 

@@ -44,13 +44,31 @@ pub struct AiVendorModelDefinition {
     pub created: Option<i64>,
 }
 
+/// 用户保存的单个 AI provider 实例。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatProviderConfig {
+    pub id: String,
+    pub vendor_id: String,
+    pub title: String,
+    pub model: String,
+    pub field_values: HashMap<String, String>,
+}
+
 /// AI 聊天设置。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiChatSettings {
+    #[serde(default)]
     pub vendor_id: String,
+    #[serde(default)]
     pub model: String,
+    #[serde(default)]
     pub field_values: HashMap<String, String>,
+    #[serde(default)]
+    pub active_provider_id: Option<String>,
+    #[serde(default)]
+    pub providers: Vec<AiChatProviderConfig>,
     #[serde(default)]
     pub tool_approval_policy: HashMap<String, String>,
 }

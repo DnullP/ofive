@@ -121,6 +121,66 @@ func (x *ToolDescriptor) GetApiVersion() string {
 	return ""
 }
 
+type AgentSkillFile struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SkillName     string                 `protobuf:"bytes,1,opt,name=skill_name,json=skillName,proto3" json:"skill_name,omitempty"`
+	RelativePath  string                 `protobuf:"bytes,2,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`
+	Content       string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentSkillFile) Reset() {
+	*x = AgentSkillFile{}
+	mi := &file_ai_sidecar_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentSkillFile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentSkillFile) ProtoMessage() {}
+
+func (x *AgentSkillFile) ProtoReflect() protoreflect.Message {
+	mi := &file_ai_sidecar_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentSkillFile.ProtoReflect.Descriptor instead.
+func (*AgentSkillFile) Descriptor() ([]byte, []int) {
+	return file_ai_sidecar_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *AgentSkillFile) GetSkillName() string {
+	if x != nil {
+		return x.SkillName
+	}
+	return ""
+}
+
+func (x *AgentSkillFile) GetRelativePath() string {
+	if x != nil {
+		return x.RelativePath
+	}
+	return ""
+}
+
+func (x *AgentSkillFile) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
 type HealthRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -129,7 +189,7 @@ type HealthRequest struct {
 
 func (x *HealthRequest) Reset() {
 	*x = HealthRequest{}
-	mi := &file_ai_sidecar_proto_msgTypes[1]
+	mi := &file_ai_sidecar_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -141,7 +201,7 @@ func (x *HealthRequest) String() string {
 func (*HealthRequest) ProtoMessage() {}
 
 func (x *HealthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ai_sidecar_proto_msgTypes[1]
+	mi := &file_ai_sidecar_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -154,7 +214,7 @@ func (x *HealthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthRequest.ProtoReflect.Descriptor instead.
 func (*HealthRequest) Descriptor() ([]byte, []int) {
-	return file_ai_sidecar_proto_rawDescGZIP(), []int{1}
+	return file_ai_sidecar_proto_rawDescGZIP(), []int{2}
 }
 
 type HealthResponse struct {
@@ -169,7 +229,7 @@ type HealthResponse struct {
 
 func (x *HealthResponse) Reset() {
 	*x = HealthResponse{}
-	mi := &file_ai_sidecar_proto_msgTypes[2]
+	mi := &file_ai_sidecar_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -181,7 +241,7 @@ func (x *HealthResponse) String() string {
 func (*HealthResponse) ProtoMessage() {}
 
 func (x *HealthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ai_sidecar_proto_msgTypes[2]
+	mi := &file_ai_sidecar_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -194,7 +254,7 @@ func (x *HealthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthResponse.ProtoReflect.Descriptor instead.
 func (*HealthResponse) Descriptor() ([]byte, []int) {
-	return file_ai_sidecar_proto_rawDescGZIP(), []int{2}
+	return file_ai_sidecar_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *HealthResponse) GetStatus() string {
@@ -240,7 +300,7 @@ type ChatHistoryEntry struct {
 
 func (x *ChatHistoryEntry) Reset() {
 	*x = ChatHistoryEntry{}
-	mi := &file_ai_sidecar_proto_msgTypes[3]
+	mi := &file_ai_sidecar_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -252,7 +312,7 @@ func (x *ChatHistoryEntry) String() string {
 func (*ChatHistoryEntry) ProtoMessage() {}
 
 func (x *ChatHistoryEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_ai_sidecar_proto_msgTypes[3]
+	mi := &file_ai_sidecar_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -265,7 +325,7 @@ func (x *ChatHistoryEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatHistoryEntry.ProtoReflect.Descriptor instead.
 func (*ChatHistoryEntry) Descriptor() ([]byte, []int) {
-	return file_ai_sidecar_proto_rawDescGZIP(), []int{3}
+	return file_ai_sidecar_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ChatHistoryEntry) GetRole() string {
@@ -320,13 +380,14 @@ type ChatRequest struct {
 	PersistenceCallbackUrl   string                 `protobuf:"bytes,13,opt,name=persistence_callback_url,json=persistenceCallbackUrl,proto3" json:"persistence_callback_url,omitempty"`
 	PersistenceCallbackToken string                 `protobuf:"bytes,14,opt,name=persistence_callback_token,json=persistenceCallbackToken,proto3" json:"persistence_callback_token,omitempty"`
 	ContextSnapshotJson      string                 `protobuf:"bytes,15,opt,name=context_snapshot_json,json=contextSnapshotJson,proto3" json:"context_snapshot_json,omitempty"`
+	AgentSkillFiles          []*AgentSkillFile      `protobuf:"bytes,16,rep,name=agent_skill_files,json=agentSkillFiles,proto3" json:"agent_skill_files,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ChatRequest) Reset() {
 	*x = ChatRequest{}
-	mi := &file_ai_sidecar_proto_msgTypes[4]
+	mi := &file_ai_sidecar_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -338,7 +399,7 @@ func (x *ChatRequest) String() string {
 func (*ChatRequest) ProtoMessage() {}
 
 func (x *ChatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ai_sidecar_proto_msgTypes[4]
+	mi := &file_ai_sidecar_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -351,7 +412,7 @@ func (x *ChatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatRequest.ProtoReflect.Descriptor instead.
 func (*ChatRequest) Descriptor() ([]byte, []int) {
-	return file_ai_sidecar_proto_rawDescGZIP(), []int{4}
+	return file_ai_sidecar_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ChatRequest) GetSessionId() string {
@@ -459,6 +520,13 @@ func (x *ChatRequest) GetContextSnapshotJson() string {
 	return ""
 }
 
+func (x *ChatRequest) GetAgentSkillFiles() []*AgentSkillFile {
+	if x != nil {
+		return x.AgentSkillFiles
+	}
+	return nil
+}
+
 type ConfirmationRequest struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	SessionId                string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -475,13 +543,14 @@ type ConfirmationRequest struct {
 	CapabilityCallbackToken  string                 `protobuf:"bytes,12,opt,name=capability_callback_token,json=capabilityCallbackToken,proto3" json:"capability_callback_token,omitempty"`
 	PersistenceCallbackUrl   string                 `protobuf:"bytes,13,opt,name=persistence_callback_url,json=persistenceCallbackUrl,proto3" json:"persistence_callback_url,omitempty"`
 	PersistenceCallbackToken string                 `protobuf:"bytes,14,opt,name=persistence_callback_token,json=persistenceCallbackToken,proto3" json:"persistence_callback_token,omitempty"`
+	AgentSkillFiles          []*AgentSkillFile      `protobuf:"bytes,15,rep,name=agent_skill_files,json=agentSkillFiles,proto3" json:"agent_skill_files,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ConfirmationRequest) Reset() {
 	*x = ConfirmationRequest{}
-	mi := &file_ai_sidecar_proto_msgTypes[5]
+	mi := &file_ai_sidecar_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -493,7 +562,7 @@ func (x *ConfirmationRequest) String() string {
 func (*ConfirmationRequest) ProtoMessage() {}
 
 func (x *ConfirmationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ai_sidecar_proto_msgTypes[5]
+	mi := &file_ai_sidecar_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -506,7 +575,7 @@ func (x *ConfirmationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmationRequest.ProtoReflect.Descriptor instead.
 func (*ConfirmationRequest) Descriptor() ([]byte, []int) {
-	return file_ai_sidecar_proto_rawDescGZIP(), []int{5}
+	return file_ai_sidecar_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ConfirmationRequest) GetSessionId() string {
@@ -607,6 +676,13 @@ func (x *ConfirmationRequest) GetPersistenceCallbackToken() string {
 	return ""
 }
 
+func (x *ConfirmationRequest) GetAgentSkillFiles() []*AgentSkillFile {
+	if x != nil {
+		return x.AgentSkillFiles
+	}
+	return nil
+}
+
 type ChatChunk struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	SessionId                string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -632,7 +708,7 @@ type ChatChunk struct {
 
 func (x *ChatChunk) Reset() {
 	*x = ChatChunk{}
-	mi := &file_ai_sidecar_proto_msgTypes[6]
+	mi := &file_ai_sidecar_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -644,7 +720,7 @@ func (x *ChatChunk) String() string {
 func (*ChatChunk) ProtoMessage() {}
 
 func (x *ChatChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_ai_sidecar_proto_msgTypes[6]
+	mi := &file_ai_sidecar_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -657,7 +733,7 @@ func (x *ChatChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatChunk.ProtoReflect.Descriptor instead.
 func (*ChatChunk) Descriptor() ([]byte, []int) {
-	return file_ai_sidecar_proto_rawDescGZIP(), []int{6}
+	return file_ai_sidecar_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ChatChunk) GetSessionId() string {
@@ -794,7 +870,12 @@ const file_ai_sidecar_proto_rawDesc = "" +
 	"risk_level\x18\x06 \x01(\tR\triskLevel\x123\n" +
 	"\x15requires_confirmation\x18\a \x01(\bR\x14requiresConfirmation\x12\x1f\n" +
 	"\vapi_version\x18\b \x01(\tR\n" +
-	"apiVersion\"\x0f\n" +
+	"apiVersion\"n\n" +
+	"\x0eAgentSkillFile\x12\x1d\n" +
+	"\n" +
+	"skill_name\x18\x01 \x01(\tR\tskillName\x12#\n" +
+	"\rrelative_path\x18\x02 \x01(\tR\frelativePath\x12\x18\n" +
+	"\acontent\x18\x03 \x01(\tR\acontent\"\x0f\n" +
 	"\rHealthRequest\"s\n" +
 	"\x0eHealthResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x1d\n" +
@@ -807,7 +888,7 @@ const file_ai_sidecar_proto_rawDesc = "" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12.\n" +
 	"\x13interrupted_by_user\x18\x03 \x01(\bR\x11interruptedByUser\x12%\n" +
 	"\x0ereasoning_text\x18\x04 \x01(\tR\rreasoningText\x12.\n" +
-	"\x13content_blocks_json\x18\x05 \x01(\tR\x11contentBlocksJson\"\xfc\x05\n" +
+	"\x13content_blocks_json\x18\x05 \x01(\tR\x11contentBlocksJson\"\xc5\x06\n" +
 	"\vChatRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
@@ -825,10 +906,11 @@ const file_ai_sidecar_proto_rawDesc = "" +
 	"\ahistory\x18\f \x03(\v2\x1d.ofive.ai.v1.ChatHistoryEntryR\ahistory\x128\n" +
 	"\x18persistence_callback_url\x18\r \x01(\tR\x16persistenceCallbackUrl\x12<\n" +
 	"\x1apersistence_callback_token\x18\x0e \x01(\tR\x18persistenceCallbackToken\x122\n" +
-	"\x15context_snapshot_json\x18\x0f \x01(\tR\x13contextSnapshotJson\x1a?\n" +
+	"\x15context_snapshot_json\x18\x0f \x01(\tR\x13contextSnapshotJson\x12G\n" +
+	"\x11agent_skill_files\x18\x10 \x03(\v2\x1b.ofive.ai.v1.AgentSkillFileR\x0fagentSkillFiles\x1a?\n" +
 	"\x11VendorConfigEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xcc\x05\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x06\n" +
 	"\x13ConfirmationRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
@@ -845,7 +927,8 @@ const file_ai_sidecar_proto_rawDesc = "" +
 	"\x17capability_callback_url\x18\v \x01(\tR\x15capabilityCallbackUrl\x12:\n" +
 	"\x19capability_callback_token\x18\f \x01(\tR\x17capabilityCallbackToken\x128\n" +
 	"\x18persistence_callback_url\x18\r \x01(\tR\x16persistenceCallbackUrl\x12<\n" +
-	"\x1apersistence_callback_token\x18\x0e \x01(\tR\x18persistenceCallbackToken\x1a?\n" +
+	"\x1apersistence_callback_token\x18\x0e \x01(\tR\x18persistenceCallbackToken\x12G\n" +
+	"\x11agent_skill_files\x18\x0f \x03(\v2\x1b.ofive.ai.v1.AgentSkillFileR\x0fagentSkillFiles\x1a?\n" +
 	"\x11VendorConfigEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb7\x05\n" +
@@ -892,35 +975,38 @@ func file_ai_sidecar_proto_rawDescGZIP() []byte {
 	return file_ai_sidecar_proto_rawDescData
 }
 
-var file_ai_sidecar_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_ai_sidecar_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_ai_sidecar_proto_goTypes = []any{
 	(*ToolDescriptor)(nil),      // 0: ofive.ai.v1.ToolDescriptor
-	(*HealthRequest)(nil),       // 1: ofive.ai.v1.HealthRequest
-	(*HealthResponse)(nil),      // 2: ofive.ai.v1.HealthResponse
-	(*ChatHistoryEntry)(nil),    // 3: ofive.ai.v1.ChatHistoryEntry
-	(*ChatRequest)(nil),         // 4: ofive.ai.v1.ChatRequest
-	(*ConfirmationRequest)(nil), // 5: ofive.ai.v1.ConfirmationRequest
-	(*ChatChunk)(nil),           // 6: ofive.ai.v1.ChatChunk
-	nil,                         // 7: ofive.ai.v1.ChatRequest.VendorConfigEntry
-	nil,                         // 8: ofive.ai.v1.ConfirmationRequest.VendorConfigEntry
+	(*AgentSkillFile)(nil),      // 1: ofive.ai.v1.AgentSkillFile
+	(*HealthRequest)(nil),       // 2: ofive.ai.v1.HealthRequest
+	(*HealthResponse)(nil),      // 3: ofive.ai.v1.HealthResponse
+	(*ChatHistoryEntry)(nil),    // 4: ofive.ai.v1.ChatHistoryEntry
+	(*ChatRequest)(nil),         // 5: ofive.ai.v1.ChatRequest
+	(*ConfirmationRequest)(nil), // 6: ofive.ai.v1.ConfirmationRequest
+	(*ChatChunk)(nil),           // 7: ofive.ai.v1.ChatChunk
+	nil,                         // 8: ofive.ai.v1.ChatRequest.VendorConfigEntry
+	nil,                         // 9: ofive.ai.v1.ConfirmationRequest.VendorConfigEntry
 }
 var file_ai_sidecar_proto_depIdxs = []int32{
-	7, // 0: ofive.ai.v1.ChatRequest.vendor_config:type_name -> ofive.ai.v1.ChatRequest.VendorConfigEntry
-	0, // 1: ofive.ai.v1.ChatRequest.tools:type_name -> ofive.ai.v1.ToolDescriptor
-	3, // 2: ofive.ai.v1.ChatRequest.history:type_name -> ofive.ai.v1.ChatHistoryEntry
-	8, // 3: ofive.ai.v1.ConfirmationRequest.vendor_config:type_name -> ofive.ai.v1.ConfirmationRequest.VendorConfigEntry
-	0, // 4: ofive.ai.v1.ConfirmationRequest.tools:type_name -> ofive.ai.v1.ToolDescriptor
-	1, // 5: ofive.ai.v1.AiAgentService.Health:input_type -> ofive.ai.v1.HealthRequest
-	4, // 6: ofive.ai.v1.AiAgentService.Chat:input_type -> ofive.ai.v1.ChatRequest
-	5, // 7: ofive.ai.v1.AiAgentService.SubmitConfirmation:input_type -> ofive.ai.v1.ConfirmationRequest
-	2, // 8: ofive.ai.v1.AiAgentService.Health:output_type -> ofive.ai.v1.HealthResponse
-	6, // 9: ofive.ai.v1.AiAgentService.Chat:output_type -> ofive.ai.v1.ChatChunk
-	6, // 10: ofive.ai.v1.AiAgentService.SubmitConfirmation:output_type -> ofive.ai.v1.ChatChunk
-	8, // [8:11] is the sub-list for method output_type
-	5, // [5:8] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	8,  // 0: ofive.ai.v1.ChatRequest.vendor_config:type_name -> ofive.ai.v1.ChatRequest.VendorConfigEntry
+	0,  // 1: ofive.ai.v1.ChatRequest.tools:type_name -> ofive.ai.v1.ToolDescriptor
+	4,  // 2: ofive.ai.v1.ChatRequest.history:type_name -> ofive.ai.v1.ChatHistoryEntry
+	1,  // 3: ofive.ai.v1.ChatRequest.agent_skill_files:type_name -> ofive.ai.v1.AgentSkillFile
+	9,  // 4: ofive.ai.v1.ConfirmationRequest.vendor_config:type_name -> ofive.ai.v1.ConfirmationRequest.VendorConfigEntry
+	0,  // 5: ofive.ai.v1.ConfirmationRequest.tools:type_name -> ofive.ai.v1.ToolDescriptor
+	1,  // 6: ofive.ai.v1.ConfirmationRequest.agent_skill_files:type_name -> ofive.ai.v1.AgentSkillFile
+	2,  // 7: ofive.ai.v1.AiAgentService.Health:input_type -> ofive.ai.v1.HealthRequest
+	5,  // 8: ofive.ai.v1.AiAgentService.Chat:input_type -> ofive.ai.v1.ChatRequest
+	6,  // 9: ofive.ai.v1.AiAgentService.SubmitConfirmation:input_type -> ofive.ai.v1.ConfirmationRequest
+	3,  // 10: ofive.ai.v1.AiAgentService.Health:output_type -> ofive.ai.v1.HealthResponse
+	7,  // 11: ofive.ai.v1.AiAgentService.Chat:output_type -> ofive.ai.v1.ChatChunk
+	7,  // 12: ofive.ai.v1.AiAgentService.SubmitConfirmation:output_type -> ofive.ai.v1.ChatChunk
+	10, // [10:13] is the sub-list for method output_type
+	7,  // [7:10] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_ai_sidecar_proto_init() }
@@ -934,7 +1020,7 @@ func file_ai_sidecar_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ai_sidecar_proto_rawDesc), len(file_ai_sidecar_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

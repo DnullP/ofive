@@ -38,7 +38,11 @@ mock.module("../../api/vaultApi", () => createMockVaultApi({
     }),
 }));
 
-const { emitEditorContentChangedEvent } = await import("../events/appEventBus");
+const {
+    emitEditorContentChangedEvent,
+    emitVaultBeforeChangeEvent,
+    subscribeVaultBeforeChangeEvent,
+} = await import("../events/appEventBus");
 
 /**
  * 测试辅助：触发内容变化事件。
@@ -253,5 +257,94 @@ describe("autoSaveService", () => {
         markContentAsSaved("notes/p.md", "pending content");
 
         expect(getAutoSaveServiceState().pendingPaths).not.toContain("notes/p.md");
+    });
+
+    /**
+     * @description 仓库切换前应丢弃旧仓库待保存内容，不能 flush 到新仓库。
+     */
+    it("should drop pending autosaves before vault switch without saving", async () => {
+        startAutoSaveService();
+
+        triggerContentEvent({
+            eventId: "frontend-9",
+            sourceTraceId: null,
+            articleId: "file:notes/switch.md",
+            path: "notes/switch.md",
+            content: "dirty before switch",
+            updatedAt: Date.now(),
+        });
+
+        expect(getAutoSaveServiceState().pendingPaths).toContain("notes/switch.md");
+
+        await emitVaultBeforeChangeEvent({
+            currentVaultPath: "/vault-a",
+            nextVaultPath: "/vault-b",
+        });
+
+        expect(getAutoSaveServiceState().pendingPaths).toHaveLength(0);
+        expect(savedCalls).toHaveLength(0);
+
+        await flushAutoSave();
+        expect(savedCalls).toHaveLength(0);
+    });
+
+    /**
+     * @description 关闭旧仓库 tab 时若触发内容事件，也应被切换窗口抑制。
+     */
+    it("should ignore content events reported during vault switch cleanup", async () => {
+        const unlisten = subscribeVaultBeforeChangeEvent(() => {
+            triggerContentEvent({
+                eventId: "frontend-10",
+                sourceTraceId: null,
+                articleId: "file:notes/late.md",
+                path: "notes/late.md",
+                content: "reported while closing old tab",
+                updatedAt: Date.now(),
+            });
+        });
+
+        startAutoSaveService();
+
+        await emitVaultBeforeChangeEvent({
+            currentVaultPath: "/vault-a",
+            nextVaultPath: "/vault-b",
+        });
+
+        unlisten();
+
+        expect(getAutoSaveServiceState().pendingPaths).toHaveLength(0);
+        expect(savedCalls).toHaveLength(0);
+    });
+
+    /**
+     * @description 切仓库清理窗口内，旧 tab 卸载/失焦触发的按路径 flush 也不能写到新仓库。
+     */
+    it("should drop path flush requests during vault switch cleanup", async () => {
+        const unlisten = subscribeVaultBeforeChangeEvent(async () => {
+            await flushAutoSaveByPath("notes/blur.md");
+        });
+
+        startAutoSaveService();
+
+        triggerContentEvent({
+            eventId: "frontend-11",
+            sourceTraceId: null,
+            articleId: "file:notes/blur.md",
+            path: "notes/blur.md",
+            content: "dirty before blur",
+            updatedAt: Date.now(),
+        });
+
+        expect(getAutoSaveServiceState().pendingPaths).toContain("notes/blur.md");
+
+        await emitVaultBeforeChangeEvent({
+            currentVaultPath: "/vault-a",
+            nextVaultPath: "/vault-b",
+        });
+
+        unlisten();
+
+        expect(getAutoSaveServiceState().pendingPaths).toHaveLength(0);
+        expect(savedCalls).toHaveLength(0);
     });
 });

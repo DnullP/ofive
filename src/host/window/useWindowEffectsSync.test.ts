@@ -78,6 +78,7 @@ function createFeatureSettings(): FeatureSettings {
         frontmatterTemplate: "",
         frontmatterAutoInsertOnCreate: false,
         restoreWorkspaceLayout: true,
+        fileOpenMode: "new-tab",
     };
 }
 

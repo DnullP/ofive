@@ -77,6 +77,7 @@ func (s *AIService) Chat(req *aiv1.ChatRequest, stream aiv1.AiAgentService_ChatS
 		MCPServerURL:             strings.TrimSpace(req.GetMcpServerUrl()),
 		MCPAuthToken:             strings.TrimSpace(req.GetMcpAuthToken()),
 		Tools:                    mapToolDescriptors(req.GetTools()),
+		AgentSkillFiles:          mapAgentSkillFiles(req.GetAgentSkillFiles()),
 	}, strings.TrimSpace(req.GetContextSnapshotJson()), func(chunk agentruntime.StreamChunk) error {
 		return stream.Send(&aiv1.ChatChunk{
 			SessionId:                sessionID,
@@ -160,6 +161,7 @@ func (s *AIService) SubmitConfirmation(req *aiv1.ConfirmationRequest, stream aiv
 		MCPServerURL:             strings.TrimSpace(req.GetMcpServerUrl()),
 		MCPAuthToken:             strings.TrimSpace(req.GetMcpAuthToken()),
 		Tools:                    mapToolDescriptors(req.GetTools()),
+		AgentSkillFiles:          mapAgentSkillFiles(req.GetAgentSkillFiles()),
 	}, func(chunk agentruntime.StreamChunk) error {
 		return stream.Send(&aiv1.ChatChunk{
 			SessionId:                sessionID,
@@ -201,4 +203,19 @@ func mapToolDescriptors(items []*aiv1.ToolDescriptor) []agentruntime.ToolDescrip
 		})
 	}
 	return tools
+}
+
+func mapAgentSkillFiles(items []*aiv1.AgentSkillFile) []agentruntime.AgentSkillFile {
+	files := make([]agentruntime.AgentSkillFile, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		files = append(files, agentruntime.AgentSkillFile{
+			SkillName:    strings.TrimSpace(item.GetSkillName()),
+			RelativePath: strings.TrimSpace(item.GetRelativePath()),
+			Content:      item.GetContent(),
+		})
+	}
+	return files
 }

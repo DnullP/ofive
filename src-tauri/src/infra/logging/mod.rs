@@ -34,6 +34,16 @@ const WARN_NOTIFICATION_AUTO_CLOSE_MS: u64 = 6000;
 /// ERROR 日志默认自动关闭时间。
 const ERROR_NOTIFICATION_AUTO_CLOSE_MS: u64 = 9000;
 
+const ANSI_RESET: &str = "\x1b[0m";
+const ANSI_DIM_CYAN: &str = "\x1b[2;36m";
+const ANSI_DIM_BLUE: &str = "\x1b[2;34m";
+const ANSI_BOLD_BLUE: &str = "\x1b[1;34m";
+const ANSI_BOLD_GREEN: &str = "\x1b[1;32m";
+const ANSI_BOLD_MAGENTA: &str = "\x1b[1;35m";
+const ANSI_BOLD_RED: &str = "\x1b[1;31m";
+const ANSI_BOLD_YELLOW: &str = "\x1b[1;33m";
+const ANSI_BRIGHT_BLACK: &str = "\x1b[90m";
+
 /// 全局日志文件目录路径。
 static LOG_FILE_PATH: RwLock<Option<PathBuf>> = RwLock::new(None);
 
@@ -71,6 +81,16 @@ pub struct BackendLogNotificationEventPayload {
 /// 自定义日志记录器。
 struct OfiveLogger;
 
+#[derive(Debug, Eq, PartialEq)]
+struct LogEntryParts {
+    timestamp: String,
+    level: Level,
+    source: &'static str,
+    target: String,
+    kind: String,
+    message: String,
+}
+
 impl Log for OfiveLogger {
     fn enabled(&self, _metadata: &Metadata) -> bool {
         true
@@ -86,13 +106,15 @@ impl Log for OfiveLogger {
         let target = record.target();
         let raw_message = record.args().to_string();
 
-        let formatted = format!("{timestamp} [{level}] [{target}] {raw_message}");
+        let entry = build_log_entry(timestamp, level, target, &raw_message);
+        let console_line = format_console_log_line(&entry, console_colors_enabled());
+        let file_line = format_plain_log_line(&entry);
 
-        write_console_line(level, &formatted);
+        write_console_line(level, &console_line);
 
         if let Ok(guard) = LOG_FILE_PATH.read() {
             if let Some(ref dir) = *guard {
-                let _ = write_to_log_file(dir, &formatted);
+                let _ = write_to_log_file(dir, &file_line);
             }
         }
 
@@ -111,6 +133,139 @@ static LOGGER: OfiveLogger = OfiveLogger;
 /// 初始化全局日志记录器。
 pub fn init() {
     let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Debug));
+}
+
+fn build_log_entry(
+    timestamp: String,
+    level: Level,
+    target: &str,
+    raw_message: &str,
+) -> LogEntryParts {
+    let source = log_source_for_target(target);
+    let target = compact_log_target(target);
+    let (kind, message) = split_log_kind_and_message(raw_message, &target);
+
+    LogEntryParts {
+        timestamp,
+        level,
+        source,
+        target,
+        kind,
+        message,
+    }
+}
+
+fn log_source_for_target(target: &str) -> &'static str {
+    if target == "frontend" {
+        "frontend"
+    } else if target.starts_with("ai-sidecar.") {
+        "sidecar"
+    } else if target == "ofive-toolbox" {
+        "toolbox"
+    } else {
+        "backend"
+    }
+}
+
+fn compact_log_target(target: &str) -> String {
+    target
+        .strip_prefix("ofive_lib::")
+        .or_else(|| target.strip_prefix("ofive::"))
+        .unwrap_or(target)
+        .to_string()
+}
+
+fn split_log_kind_and_message(raw_message: &str, target: &str) -> (String, String) {
+    if let Some((kind, message)) = extract_leading_log_kind(raw_message) {
+        return (kind.to_string(), message.to_string());
+    }
+
+    (fallback_log_kind(target), raw_message.to_string())
+}
+
+fn extract_leading_log_kind(message: &str) -> Option<(&str, &str)> {
+    let rest = message.strip_prefix('[')?;
+    let closing_index = rest.find(']')?;
+    let kind = &rest[..closing_index];
+
+    if kind.is_empty()
+        || kind.len() > 64
+        || kind
+            .chars()
+            .any(|character| character.is_whitespace() || character == '[' || character == ']')
+    {
+        return None;
+    }
+
+    Some((kind, rest[closing_index + 1..].trim_start()))
+}
+
+fn fallback_log_kind(target: &str) -> String {
+    let last_module_segment = target.rsplit("::").next().unwrap_or(target);
+    last_module_segment
+        .rsplit('.')
+        .next()
+        .unwrap_or(last_module_segment)
+        .to_string()
+}
+
+fn format_plain_log_line(entry: &LogEntryParts) -> String {
+    format!(
+        "{} [{:<5}] source={} type={} target={} {}",
+        entry.timestamp, entry.level, entry.source, entry.kind, entry.target, entry.message
+    )
+}
+
+fn format_console_log_line(entry: &LogEntryParts, use_color: bool) -> String {
+    if !use_color {
+        return format_plain_log_line(entry);
+    }
+
+    let timestamp = colorize(&entry.timestamp, ANSI_DIM_CYAN);
+    let level = colorize(
+        &format!("[{:<5}]", entry.level),
+        console_level_color(entry.level),
+    );
+    let source = colorize(
+        &format!("source={}", entry.source),
+        console_source_color(entry.source),
+    );
+    let kind = colorize(&format!("type={}", entry.kind), ANSI_BOLD_YELLOW);
+    let target = colorize(&format!("target={}", entry.target), ANSI_DIM_BLUE);
+
+    format!(
+        "{timestamp} {level} {source} {kind} {target} {}",
+        entry.message
+    )
+}
+
+fn console_colors_enabled() -> bool {
+    std::env::var_os("NO_COLOR").is_none()
+        && std::env::var("CLICOLOR")
+            .map(|value| value != "0")
+            .unwrap_or(true)
+}
+
+fn console_level_color(level: Level) -> &'static str {
+    match level {
+        Level::Error => ANSI_BOLD_RED,
+        Level::Warn => ANSI_BOLD_YELLOW,
+        Level::Info => ANSI_BOLD_GREEN,
+        Level::Debug => ANSI_BOLD_BLUE,
+        Level::Trace => ANSI_BRIGHT_BLACK,
+    }
+}
+
+fn console_source_color(source: &str) -> &'static str {
+    match source {
+        "frontend" => ANSI_BOLD_MAGENTA,
+        "sidecar" | "toolbox" => ANSI_BOLD_BLUE,
+        _ => ANSI_BOLD_GREEN,
+    }
+}
+
+fn colorize(text: &str, style: &str) -> String {
+    format!("{style}{text}{ANSI_RESET}")
 }
 
 /// 设置日志文件持久化路径。
@@ -354,6 +509,77 @@ mod tests {
         assert_eq!(&ts[10..11], " ");
         assert_eq!(&ts[13..14], ":");
         assert_eq!(&ts[16..17], ":");
+    }
+
+    #[test]
+    fn build_log_entry_should_extract_source_kind_and_compact_target() {
+        let entry = build_log_entry(
+            "2026-05-13 10:20:30".to_string(),
+            Level::Info,
+            "ofive_lib::infra::fs::vault_runtime",
+            "[vault] set_current_vault start",
+        );
+
+        assert_eq!(entry.source, "backend");
+        assert_eq!(entry.target, "infra::fs::vault_runtime");
+        assert_eq!(entry.kind, "vault");
+        assert_eq!(entry.message, "set_current_vault start");
+    }
+
+    #[test]
+    fn build_log_entry_should_map_frontend_target_to_frontend_source() {
+        let entry = build_log_entry(
+            "2026-05-13 10:20:30".to_string(),
+            Level::Warn,
+            "frontend",
+            "render warning",
+        );
+
+        assert_eq!(entry.source, "frontend");
+        assert_eq!(entry.kind, "frontend");
+        assert_eq!(entry.message, "render warning");
+    }
+
+    #[test]
+    fn format_console_log_line_should_color_highlight_fields() {
+        let entry = LogEntryParts {
+            timestamp: "2026-05-13 10:20:30".to_string(),
+            level: Level::Error,
+            source: "backend",
+            target: "host::bootstrap".to_string(),
+            kind: "window".to_string(),
+            message: "setup warning".to_string(),
+        };
+
+        let line = format_console_log_line(&entry, true);
+
+        assert!(line.contains(ANSI_DIM_CYAN));
+        assert!(line.contains(ANSI_BOLD_RED));
+        assert!(line.contains(ANSI_BOLD_GREEN));
+        assert!(line.contains(ANSI_BOLD_YELLOW));
+        assert!(line.contains("source=backend"));
+        assert!(line.contains("type=window"));
+        assert!(line.contains("target=host::bootstrap"));
+    }
+
+    #[test]
+    fn format_plain_log_line_should_keep_file_logs_without_ansi_codes() {
+        let entry = LogEntryParts {
+            timestamp: "2026-05-13 10:20:30".to_string(),
+            level: Level::Warn,
+            source: "sidecar",
+            target: "ai-sidecar.stderr".to_string(),
+            kind: "stderr".to_string(),
+            message: "sidecar warning".to_string(),
+        };
+
+        let line = format_plain_log_line(&entry);
+
+        assert_eq!(
+            line,
+            "2026-05-13 10:20:30 [WARN ] source=sidecar type=stderr target=ai-sidecar.stderr sidecar warning"
+        );
+        assert!(!line.contains("\x1b["));
     }
 
     #[test]

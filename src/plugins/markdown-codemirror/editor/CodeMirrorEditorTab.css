@@ -1,6 +1,8 @@
 /* 编辑器根容器：保证 Tab 内垂直布局占满可用空间 */
 .cm-tab {
     --cm-tab-gutter-width: 0px;
+    --cm-tab-header-reserved-height: 56px;
+    --cm-tab-title-bg-color: var(--editor-title-input-bg-color);
     --cm-editor-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --cm-editor-font-size: 16px;
     position: relative;
@@ -55,23 +57,24 @@
 
 /* 编辑器标题头部：承载顶部标题输入栏和视图模式切换按钮。 */
 .cm-tab-header {
-    flex-shrink: 0;
-    max-height: 56px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    height: var(--cm-tab-header-reserved-height);
     padding: 8px 32px 0;
+    box-sizing: border-box;
     background: inherit;
     overflow: hidden;
     opacity: 1;
     transform: translateY(0);
     transition:
-        max-height 160ms ease,
-        padding-top 160ms ease,
         opacity 120ms ease,
         transform 160ms ease;
 }
 
 .cm-tab--header-collapsed .cm-tab-header {
-    max-height: 0;
-    padding-top: 0;
     opacity: 0;
     transform: translateY(-8px);
     pointer-events: none;
@@ -94,9 +97,9 @@
     min-width: 0;
     border: none;
     border-radius: 10px;
-    background: transparent;
+    background: var(--cm-tab-title-bg-color);
     color: var(--editor-panel-text-color);
-    padding: 2px 0 2px calc(var(--cm-tab-gutter-width) / 2);
+    padding: 2px 10px 2px max(10px, calc(var(--cm-tab-gutter-width) / 2));
     box-sizing: border-box;
     font-family: var(--font-display, inherit);
     font-size: clamp(1.2rem, 1.5vw, 1.55rem);
@@ -107,13 +110,13 @@
 
 /* 顶部标题输入栏悬浮态：提供轻微的可编辑提示，但不引入传统表单的强边框感。 */
 .cm-tab-title-input:hover {
-    background: color-mix(in srgb, var(--editor-panel-bg-soft-color) 68%, transparent);
+    background: color-mix(in srgb, var(--cm-tab-title-bg-color) 92%, var(--editor-panel-text-color) 8%);
 }
 
 /* 顶部标题输入栏聚焦态：使用更清晰的底色区分编辑状态，同时保持 Obsidian 式的简洁外观。 */
 .cm-tab-title-input:focus {
     outline: none;
-    background: color-mix(in srgb, var(--editor-panel-bg-soft-color) 92%, transparent);
+    background: color-mix(in srgb, var(--cm-tab-title-bg-color) 88%, var(--editor-panel-text-color) 12%);
 }
 
 /* 顶部标题输入栏禁用态：在重命名提交过程中降低交互强度，避免重复提交。 */
@@ -231,7 +234,7 @@
 /* 阅读态 guard 提示：当文档包含未对齐渲染特性时，明确阻止错误阅读态。 */
 .cm-tab-guard-banner {
     width: min(800px, calc(100% - 64px));
-    margin: 0 auto 12px;
+    margin: var(--cm-tab-header-reserved-height) auto 12px;
     padding: 10px 12px;
     border: 1px solid color-mix(in srgb, var(--editor-link-color) 28%, var(--editor-panel-border-color));
     border-radius: 10px;
@@ -270,7 +273,7 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 8px 32px 24px;
+    padding: calc(var(--cm-tab-header-reserved-height) + 8px) 32px 24px;
     color: var(--editor-text-color);
     background: var(--editor-bg-color);
     font-family: var(--cm-editor-font-family);
@@ -430,9 +433,10 @@
     line-height: 1.5;
 }
 
-/* 编辑器滚动容器：顶部预留切换按钮空间，避免正文与按钮重叠。 */
+/* 编辑器滚动容器：顶部固定预留标题栏等高空白，避免标题栏显隐时推动正文。 */
 .cm-tab-editor .cm-scroller {
-    padding-top: 0;
+    padding-top: var(--cm-tab-header-reserved-height);
+    box-sizing: border-box;
 }
 
 /* 文档居中布局：宽度足够时限制内容最大宽度并居中，营造 Word 文档编辑体验 */

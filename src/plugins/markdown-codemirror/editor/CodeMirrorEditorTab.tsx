@@ -110,8 +110,9 @@ const FRONTMATTER_VIM_ROW_SELECTOR = "[data-frontmatter-vim-nav='true'][data-fro
 const MARKDOWN_TABLE_SHELL_SELECTOR = "[data-markdown-table-block-from]";
 const MARKDOWN_TABLE_VIM_NAV_SELECTOR = "[data-markdown-table-vim-nav='true']";
 const MARKDOWN_TABLE_ENTRY_SELECTOR = `${MARKDOWN_TABLE_VIM_NAV_SELECTOR}[data-markdown-table-entry-anchor='true']`;
-const TAB_HEADER_SCROLL_DIRECTION_THRESHOLD_PX = 12;
-const TAB_HEADER_SCROLL_TOP_EXPAND_THRESHOLD_PX = 4;
+const TAB_HEADER_SCROLL_ACTIVATION_THRESHOLD_PX = 64;
+const TAB_HEADER_SCROLL_DEBOUNCE_MS = 90;
+const TAB_HEADER_SCROLL_TOP_EXPAND_THRESHOLD_PX = 8;
 
 function resolveReadModeScrollElement(tabRoot: HTMLElement | null): HTMLElement | null {
     if (!tabRoot) {
@@ -654,31 +655,77 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         }
 
         let lastScrollTop = scrollElement.scrollTop;
+        let accumulatedDelta = 0;
+        let lastDirection: -1 | 0 | 1 = 0;
+        let pendingCollapsedState: boolean | null = null;
+        let debounceTimer: number | null = null;
+
+        const clearPendingCollapsedState = (): void => {
+            pendingCollapsedState = null;
+            if (debounceTimer !== null) {
+                window.clearTimeout(debounceTimer);
+                debounceTimer = null;
+            }
+        };
+
+        const commitCollapsedState = (nextCollapsed: boolean): void => {
+            if (nextCollapsed && isTabHeaderFocused(tabRoot)) {
+                return;
+            }
+
+            setTabHeaderCollapsed(nextCollapsed);
+        };
+
+        const scheduleCollapsedState = (nextCollapsed: boolean): void => {
+            if (pendingCollapsedState === nextCollapsed) {
+                return;
+            }
+
+            clearPendingCollapsedState();
+            pendingCollapsedState = nextCollapsed;
+            debounceTimer = window.setTimeout(() => {
+                debounceTimer = null;
+                pendingCollapsedState = null;
+                commitCollapsedState(nextCollapsed);
+            }, TAB_HEADER_SCROLL_DEBOUNCE_MS);
+        };
 
         const handleScroll = (): void => {
             const nextScrollTop = scrollElement.scrollTop;
             const delta = nextScrollTop - lastScrollTop;
+            lastScrollTop = nextScrollTop;
 
             if (nextScrollTop <= TAB_HEADER_SCROLL_TOP_EXPAND_THRESHOLD_PX) {
-                setTabHeaderCollapsed(false);
-                lastScrollTop = nextScrollTop;
+                accumulatedDelta = 0;
+                lastDirection = 0;
+                clearPendingCollapsedState();
+                commitCollapsedState(false);
                 return;
             }
 
-            if (Math.abs(delta) < TAB_HEADER_SCROLL_DIRECTION_THRESHOLD_PX) {
+            const direction: -1 | 0 | 1 = delta > 0 ? 1 : delta < 0 ? -1 : 0;
+            if (direction === 0) {
                 return;
             }
 
-            if (delta > 0 && !isTabHeaderFocused(tabRoot)) {
-                setTabHeaderCollapsed(true);
-            } else if (delta < 0) {
-                setTabHeaderCollapsed(false);
+            if (direction !== lastDirection) {
+                accumulatedDelta = 0;
+                lastDirection = direction;
+                clearPendingCollapsedState();
             }
-            lastScrollTop = nextScrollTop;
+
+            accumulatedDelta += delta;
+            if (Math.abs(accumulatedDelta) < TAB_HEADER_SCROLL_ACTIVATION_THRESHOLD_PX) {
+                return;
+            }
+
+            scheduleCollapsedState(direction > 0);
+            accumulatedDelta = 0;
         };
 
         scrollElement.addEventListener("scroll", handleScroll, { passive: true });
         return () => {
+            clearPendingCollapsedState();
             scrollElement.removeEventListener("scroll", handleScroll);
         };
     }, [effectiveDisplayMode, viewRef, initialContentPresented, isReadingMode]);

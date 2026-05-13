@@ -24,6 +24,8 @@ pub(crate) fn vault_capability_descriptors() -> Vec<CapabilityDescriptor> {
         get_backlinks_capability(),
         get_graph_capability(),
         get_canvas_document_capability(),
+        list_agent_skills_capability(),
+        read_agent_skill_file_capability(),
         create_markdown_file_capability(),
         save_markdown_file_capability(),
         apply_markdown_patch_capability(),
@@ -31,6 +33,8 @@ pub(crate) fn vault_capability_descriptors() -> Vec<CapabilityDescriptor> {
         rename_markdown_file_capability(),
         delete_markdown_file_capability(),
         create_directory_capability(),
+        create_agent_skill_capability(),
+        write_agent_skill_file_capability(),
     ]
 }
 
@@ -344,6 +348,139 @@ fn get_canvas_document_capability() -> CapabilityDescriptor {
         risk_level: CapabilityRiskLevel::Low,
         requires_confirmation: false,
         required_permissions: vec!["vault.read".to_string()],
+        supported_consumers: vec![
+            CapabilityConsumer::Frontend,
+            CapabilityConsumer::AiTool,
+            CapabilityConsumer::Sidecar,
+        ],
+    }
+}
+
+/// 构建“列出 Agent SKILL”能力描述。
+fn list_agent_skills_capability() -> CapabilityDescriptor {
+    CapabilityDescriptor {
+        id: "agent_skill.list".to_string(),
+        api_version: CAPABILITY_API_VERSION.to_string(),
+        display_name: "List Agent Skills".to_string(),
+        description: "List user-created Agent skills stored in .ofive/skills in the current vault. Use this to discover workflow-specific SKILL.md instructions available to the agent.".to_string(),
+        kind: CapabilityKind::Read,
+        input_schema: json!({
+            "type": "object",
+            "properties": {}
+        }),
+        output_schema: json!({
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["name", "description", "directoryRelativePath", "files", "valid"]
+            }
+        }),
+        risk_level: CapabilityRiskLevel::Low,
+        requires_confirmation: false,
+        required_permissions: vec!["vault.read".to_string(), "agent-skill.read".to_string()],
+        supported_consumers: vec![
+            CapabilityConsumer::Frontend,
+            CapabilityConsumer::AiTool,
+            CapabilityConsumer::Sidecar,
+        ],
+    }
+}
+
+/// 构建“读取 Agent SKILL 文件”能力描述。
+fn read_agent_skill_file_capability() -> CapabilityDescriptor {
+    CapabilityDescriptor {
+        id: "agent_skill.read_file".to_string(),
+        api_version: CAPABILITY_API_VERSION.to_string(),
+        display_name: "Read Agent Skill File".to_string(),
+        description: "Read SKILL.md or a Markdown reference file from one user-created Agent skill under .ofive/skills/<skillName>. Valid resource paths are SKILL.md, references/**/*.md, assets/**/*.md, and scripts/**/*.md.".to_string(),
+        kind: CapabilityKind::Read,
+        input_schema: json!({
+            "type": "object",
+            "required": ["skillName", "relativePath"],
+            "properties": {
+                "skillName": {
+                    "type": "string",
+                    "description": "Skill directory name, e.g. research-helper."
+                },
+                "relativePath": {
+                    "type": "string",
+                    "description": "Path relative to the skill directory, e.g. SKILL.md or references/context.md."
+                }
+            }
+        }),
+        output_schema: json!({
+            "type": "object",
+            "required": ["skillName", "relativePath", "content"]
+        }),
+        risk_level: CapabilityRiskLevel::Low,
+        requires_confirmation: false,
+        required_permissions: vec!["vault.read".to_string(), "agent-skill.read".to_string()],
+        supported_consumers: vec![
+            CapabilityConsumer::Frontend,
+            CapabilityConsumer::AiTool,
+            CapabilityConsumer::Sidecar,
+        ],
+    }
+}
+
+/// 构建“创建 Agent SKILL”能力描述。
+fn create_agent_skill_capability() -> CapabilityDescriptor {
+    CapabilityDescriptor {
+        id: "agent_skill.create".to_string(),
+        api_version: CAPABILITY_API_VERSION.to_string(),
+        display_name: "Create Agent Skill".to_string(),
+        description: "Create one user-defined Agent skill directory under .ofive/skills, including an initial SKILL.md. Skill names must match ADK skill naming: lowercase letters, digits, and hyphens only.".to_string(),
+        kind: CapabilityKind::Write,
+        input_schema: json!({
+            "type": "object",
+            "required": ["skillName", "description"],
+            "properties": {
+                "skillName": {"type": "string"},
+                "description": {"type": "string"}
+            }
+        }),
+        output_schema: json!({
+            "type": "object",
+            "required": ["name", "description", "directoryRelativePath", "files", "valid"]
+        }),
+        risk_level: CapabilityRiskLevel::Medium,
+        requires_confirmation: true,
+        required_permissions: vec!["vault.write".to_string(), "agent-skill.write".to_string()],
+        supported_consumers: vec![
+            CapabilityConsumer::Frontend,
+            CapabilityConsumer::AiTool,
+            CapabilityConsumer::Sidecar,
+        ],
+    }
+}
+
+/// 构建“写入 Agent SKILL 文件”能力描述。
+fn write_agent_skill_file_capability() -> CapabilityDescriptor {
+    CapabilityDescriptor {
+        id: "agent_skill.write_file".to_string(),
+        api_version: CAPABILITY_API_VERSION.to_string(),
+        display_name: "Write Agent Skill File".to_string(),
+        description: "Create or overwrite SKILL.md or a Markdown reference file for one user-defined Agent skill under .ofive/skills/<skillName>. Keep SKILL.md frontmatter name equal to skillName so the Go ADK skill loader can preload it.".to_string(),
+        kind: CapabilityKind::Write,
+        input_schema: json!({
+            "type": "object",
+            "required": ["skillName", "relativePath", "content"],
+            "properties": {
+                "skillName": {"type": "string"},
+                "relativePath": {
+                    "type": "string",
+                    "description": "SKILL.md, references/**/*.md, assets/**/*.md, or scripts/**/*.md."
+                },
+                "content": {"type": "string"}
+            }
+        }),
+        output_schema: json!({
+            "type": "object",
+            "required": ["skillName", "relativePath", "created"]
+        }),
+        risk_level: CapabilityRiskLevel::Medium,
+        requires_confirmation: true,
+        required_permissions: vec!["vault.write".to_string(), "agent-skill.write".to_string()],
         supported_consumers: vec![
             CapabilityConsumer::Frontend,
             CapabilityConsumer::AiTool,

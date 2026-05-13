@@ -6,12 +6,14 @@ use std::path::Path;
 
 use tauri::{AppHandle, State};
 
+use crate::app::vault::agent_skill_app_service;
 use crate::infra::fs::{vault_runtime, write_runtime};
 use crate::shared::vault_contracts::{
-    CopyEntryResponse, ReadBinaryFileResponse, ReadMarkdownResponse, SetVaultResponse, VaultConfig,
-    VaultTreeResponse, WriteBinaryFileResponse, WriteMarkdownResponse,
+    AgentSkillSummary, CopyEntryResponse, ReadAgentSkillFileResponse, ReadBinaryFileResponse,
+    ReadMarkdownResponse, SetVaultResponse, VaultConfig, VaultTreeResponse,
+    WriteAgentSkillFileResponse, WriteBinaryFileResponse, WriteMarkdownResponse,
 };
-use crate::state::AppState;
+use crate::state::{get_vault_root, AppState};
 
 /// 设置当前仓库并初始化运行时依赖。
 pub(crate) fn set_current_vault(
@@ -27,6 +29,50 @@ pub(crate) fn get_current_vault_tree(
     state: State<'_, AppState>,
 ) -> Result<VaultTreeResponse, String> {
     vault_runtime::get_current_vault_tree(state)
+}
+
+/// 列出当前仓库的 Agent SKILL。
+pub(crate) fn list_agent_skills(
+    state: State<'_, AppState>,
+) -> Result<Vec<AgentSkillSummary>, String> {
+    let root = get_vault_root(&state)?;
+    agent_skill_app_service::list_agent_skills_in_root(&root)
+}
+
+/// 在当前仓库创建 Agent SKILL。
+pub(crate) fn create_agent_skill(
+    skill_name: String,
+    description: String,
+    state: State<'_, AppState>,
+) -> Result<AgentSkillSummary, String> {
+    let root = get_vault_root(&state)?;
+    agent_skill_app_service::create_agent_skill_in_root(&root, skill_name, description)
+}
+
+/// 读取当前仓库的 Agent SKILL 文件。
+pub(crate) fn read_agent_skill_file(
+    skill_name: String,
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<ReadAgentSkillFileResponse, String> {
+    let root = get_vault_root(&state)?;
+    agent_skill_app_service::read_agent_skill_file_in_root(&root, skill_name, relative_path)
+}
+
+/// 写入当前仓库的 Agent SKILL 文件。
+pub(crate) fn write_agent_skill_file(
+    skill_name: String,
+    relative_path: String,
+    content: String,
+    state: State<'_, AppState>,
+) -> Result<WriteAgentSkillFileResponse, String> {
+    let root = get_vault_root(&state)?;
+    agent_skill_app_service::write_agent_skill_file_in_root(
+        &root,
+        skill_name,
+        relative_path,
+        content,
+    )
 }
 
 /// 读取当前仓库中的 Markdown 文件。

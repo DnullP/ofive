@@ -51,6 +51,7 @@
     line-height: 1.4;
     padding: 10px 12px;
     outline: none;
+    transition: border-color 0.16s ease;
 }
 
 /* 输入框聚焦态：强调当前编辑状态。 */

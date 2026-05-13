@@ -57,6 +57,11 @@ import "./VaultPanel.css";
  */
 interface VaultPanelProps {
     openTab: (tab: TabInstanceDefinition) => void;
+    openFile?: (options: {
+        relativePath: string;
+        contentOverride?: string;
+        preferredOpenerId?: string;
+    }) => Promise<void>;
     closeTab?: (tabId: string) => void;
     requestMoveFileToDirectory?: (relativePath: string) => void;
 }
@@ -315,7 +320,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             }
 
             console.info("[vault-ui] openVault:dialog:selected", { selectedPath });
-            setCurrentVaultPath(selectedPath);
+            await setCurrentVaultPath(selectedPath);
         } catch (openError) {
             const message = openError instanceof Error ? openError.message : t("vault.openDirectoryFailed");
             console.error("[vault-ui] openVault:dialog:failed", { message });
@@ -333,6 +338,11 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
         }
 
         try {
+            if (props.openFile) {
+                await props.openFile({ relativePath: item.path });
+                return;
+            }
+
             const tab = await openFileWithResolver({
                 relativePath: item.path,
                 currentVaultPath,

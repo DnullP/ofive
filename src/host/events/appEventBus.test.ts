@@ -32,11 +32,13 @@ const {
     emitEditorFocusChangedEvent,
     emitEditorRevealRequestedEvent,
     emitFileTreeRenameRequestedEvent,
+    emitVaultBeforeChangeEvent,
     subscribeCustomActivityRemovalRequestedEvent,
     subscribeEditorContentBusEvent,
     subscribeEditorFocusBusEvent,
     subscribeEditorRevealRequestedEvent,
     subscribeFileTreeRenameRequestedEvent,
+    subscribeVaultBeforeChangeEvent,
 } = await import("./appEventBus");
 
 describe("appEventBus editor event flow", () => {
@@ -174,5 +176,54 @@ describe("appEventBus editor event flow", () => {
         expect(capturedEventId).not.toBeNull();
         expect((capturedEventId ?? "").startsWith("frontend-")).toBe(true);
         expect(capturedActivityConfigId).toBe("custom-calendar");
+    });
+
+    /**
+     * @function should_wait_for_async_vault_before_change_listeners
+     * @description 仓库切换前事件应等待异步监听方完成清理后再 resolve。
+     */
+    it("should wait for async vault before-change listeners", async () => {
+        const order: string[] = [];
+        const unlisten = subscribeVaultBeforeChangeEvent(async (payload) => {
+            order.push(`start:${payload.nextVaultPath}`);
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+            order.push(`end:${payload.nextVaultPath}`);
+        });
+
+        const emitPromise = emitVaultBeforeChangeEvent({
+            currentVaultPath: "/vault-a",
+            nextVaultPath: "/vault-b",
+        }).then((payload) => {
+            order.push(`resolved:${payload.nextVaultPath}`);
+            return payload;
+        });
+
+        await emitPromise;
+        unlisten();
+
+        expect(order).toEqual([
+            "start:/vault-b",
+            "end:/vault-b",
+            "resolved:/vault-b",
+        ]);
+    });
+
+    /**
+     * @function should_support_unsubscribing_vault_before_change_listeners
+     * @description 取消订阅后，仓库切换前监听方不应再收到事件。
+     */
+    it("should support unsubscribing vault before-change listeners", async () => {
+        let callCount = 0;
+        const unlisten = subscribeVaultBeforeChangeEvent(() => {
+            callCount += 1;
+        });
+
+        unlisten();
+        await emitVaultBeforeChangeEvent({
+            currentVaultPath: "/vault-a",
+            nextVaultPath: "/vault-b",
+        });
+
+        expect(callCount).toBe(0);
     });
 });

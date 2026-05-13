@@ -54,6 +54,15 @@ function createRenderTarget(options?: {
     } as unknown as EventTarget;
 }
 
+function createTextRenderTarget(options?: {
+    rendered?: boolean;
+    widgetTarget?: string;
+}): EventTarget {
+    return {
+        parentElement: createRenderTarget(options),
+    } as unknown as EventTarget;
+}
+
 describe("parseWikiLinkParts", () => {
     it("should use target as display text when alias is absent", () => {
         expect(parseWikiLinkParts("Network Segment")).toEqual({
@@ -106,12 +115,16 @@ describe("wikilink navigation interaction", () => {
 
     it("识别渲染态 wikilink DOM 命中", () => {
         expect(isRenderedWikiLinkTarget(createRenderTarget({ rendered: true }))).toBe(true);
+        expect(isRenderedWikiLinkTarget(createTextRenderTarget({ rendered: true }))).toBe(true);
         expect(isRenderedWikiLinkTarget(createRenderTarget())).toBe(false);
     });
 
     it("从 alias widget 中提取目标路径", () => {
         expect(
             extractWidgetWikiLinkTarget(createRenderTarget({ widgetTarget: "folder/note" })),
+        ).toBe("folder/note");
+        expect(
+            extractWidgetWikiLinkTarget(createTextRenderTarget({ widgetTarget: "folder/note" })),
         ).toBe("folder/note");
     });
 
@@ -127,6 +140,40 @@ describe("wikilink navigation interaction", () => {
             {
                 button: 0,
                 target: createRenderTarget({ rendered: true }),
+                clientX: 10,
+                clientY: 12,
+                preventDefault() {
+                    prevented = true;
+                },
+            },
+            {
+                state,
+                posAtCoords() {
+                    return 4;
+                },
+            },
+            (target) => {
+                openedTarget = target;
+            },
+        );
+
+        expect(handled).toBe(true);
+        expect(prevented).toBe(true);
+        expect(openedTarget).toBe("Target Note");
+    });
+
+    it("普通左键点击渲染态 wikilink 文本节点时也会打开目标", () => {
+        const state = EditorState.create({
+            doc: "[[Target Note]]",
+        });
+
+        let prevented = false;
+        let openedTarget = "";
+
+        const handled = handleWikiLinkMouseDown(
+            {
+                button: 0,
+                target: createTextRenderTarget({ rendered: true }),
                 clientX: 10,
                 clientY: 12,
                 preventDefault() {

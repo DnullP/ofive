@@ -327,6 +327,39 @@ export function deleteMarkdownTableRowAt(
 }
 
 /**
+ * @function moveMarkdownTableRow
+ * @description 将表体行移动到新位置。
+ * @param model 原始模型。
+ * @param fromIndex 原行索引。
+ * @param toIndex 目标行索引。
+ * @returns 更新后的模型。
+ */
+export function moveMarkdownTableRow(
+    model: MarkdownTableModel,
+    fromIndex: number,
+    toIndex: number,
+): MarkdownTableModel {
+    const nextModel = cloneMarkdownTableModel(model);
+    if (nextModel.rows.length <= 1) {
+        return nextModel;
+    }
+
+    const safeFromIndex = Math.max(0, Math.min(fromIndex, nextModel.rows.length - 1));
+    const safeToIndex = Math.max(0, Math.min(toIndex, nextModel.rows.length - 1));
+    if (safeFromIndex === safeToIndex) {
+        return nextModel;
+    }
+
+    const [movedRow] = nextModel.rows.splice(safeFromIndex, 1);
+    if (!movedRow) {
+        return nextModel;
+    }
+
+    nextModel.rows.splice(safeToIndex, 0, movedRow);
+    return nextModel;
+}
+
+/**
  * @function insertMarkdownTableColumnAt
  * @description 在指定列位置插入新列。
  * @param model 原始模型。
@@ -372,5 +405,42 @@ export function deleteMarkdownTableColumnAt(
     nextModel.headers.splice(safeIndex, 1);
     nextModel.alignments.splice(safeIndex, 1);
     nextModel.rows = nextModel.rows.map((row) => row.filter((_, index) => index !== safeIndex));
+    return nextModel;
+}
+
+/**
+ * @function moveMarkdownTableColumn
+ * @description 将列移动到新位置，保持表头、对齐与各行单元格同步。
+ * @param model 原始模型。
+ * @param fromIndex 原列索引。
+ * @param toIndex 目标列索引。
+ * @returns 更新后的模型。
+ */
+export function moveMarkdownTableColumn(
+    model: MarkdownTableModel,
+    fromIndex: number,
+    toIndex: number,
+): MarkdownTableModel {
+    const nextModel = cloneMarkdownTableModel(model);
+    if (nextModel.headers.length <= 1) {
+        return nextModel;
+    }
+
+    const safeFromIndex = Math.max(0, Math.min(fromIndex, nextModel.headers.length - 1));
+    const safeToIndex = Math.max(0, Math.min(toIndex, nextModel.headers.length - 1));
+    if (safeFromIndex === safeToIndex) {
+        return nextModel;
+    }
+
+    const [movedHeader] = nextModel.headers.splice(safeFromIndex, 1);
+    const [movedAlignment] = nextModel.alignments.splice(safeFromIndex, 1);
+    nextModel.headers.splice(safeToIndex, 0, movedHeader ?? "");
+    nextModel.alignments.splice(safeToIndex, 0, movedAlignment ?? "none");
+    nextModel.rows = nextModel.rows.map((row) => {
+        const nextRow = [...row];
+        const [movedCell] = nextRow.splice(safeFromIndex, 1);
+        nextRow.splice(safeToIndex, 0, movedCell ?? "");
+        return nextRow;
+    });
     return nextModel;
 }

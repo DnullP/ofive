@@ -198,6 +198,7 @@
   --editor-frontmatter-focus-bg: transparent;
   --editor-handle-highlight-border: rgba(255, 255, 255, 0.92);
   --editor-bg-color: #1f1f1f;
+  --editor-title-input-bg-color: #1f1f1f;
   --editor-text-color: #d4d4d4;
   --editor-gutter-bg-color: #252526;
   --editor-gutter-text-color: #9b9b9b;
@@ -363,6 +364,7 @@
   --editor-inline-code-bg: rgba(120, 120, 120, 0.2);
   --editor-link-color: var(--text-link-color);
   --editor-bg-color: #1f1f1f;
+  --editor-title-input-bg-color: #1f1f1f;
   --editor-text-color: #d4d4d4;
   --editor-gutter-bg-color: #252526;
   --editor-gutter-text-color: #9b9b9b;
@@ -527,6 +529,7 @@
   --editor-inline-code-bg: rgba(15, 23, 42, 0.08);
   --editor-link-color: var(--text-link-color);
   --editor-bg-color: #ffffff;
+  --editor-title-input-bg-color: #ffffff;
   --editor-text-color: #1f2937;
   --editor-gutter-bg-color: #f5f7fa;
   --editor-gutter-text-color: #6b7280;
@@ -693,6 +696,7 @@
   --editor-inline-code-bg: rgba(94, 66, 38, 0.08);
   --editor-link-color: var(--text-link-color);
   --editor-bg-color: #f7edd4;
+  --editor-title-input-bg-color: #f7edd4;
   --editor-text-color: #4e3d2b;
   --editor-gutter-bg-color: #efe2c3;
   --editor-gutter-text-color: #93785a;

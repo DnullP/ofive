@@ -29,16 +29,28 @@ pub(crate) async fn fetch_ai_vendor_models(
     settings: AiChatSettings,
 ) -> Result<Vec<AiVendorModelDefinition>, String> {
     let sanitized = ai_chat_store::validate_ai_chat_settings_for_chat(settings)?;
+    let active_provider = ai_chat_store::resolve_active_ai_provider(&sanitized);
+    let active_settings = AiChatSettings {
+        vendor_id: active_provider.vendor_id,
+        model: active_provider.model,
+        field_values: active_provider.field_values,
+        active_provider_id: None,
+        providers: Vec::new(),
+        tool_approval_policy: sanitized.tool_approval_policy,
+    };
 
-    match sanitized.vendor_id.as_str() {
-        "minimax-anthropic" => fetch_minimax_vendor_models(sanitized).await,
-        "baidu-qianfan" => fetch_baidu_vendor_models(sanitized).await,
+    match active_settings.vendor_id.as_str() {
+        "anthropic-compatible" | "minimax-anthropic" => {
+            fetch_anthropic_vendor_models(active_settings).await
+        }
+        "openai-compatible" => fetch_openai_vendor_models(active_settings).await,
+        "baidu-qianfan" => fetch_baidu_vendor_models(active_settings).await,
         other => Err(format!("当前 vendor 暂不支持获取模型列表: {other}")),
     }
 }
 
-/// 从 Anthropic-compatible MiniMax base URL 拉取模型列表。
-async fn fetch_minimax_vendor_models(
+/// 从 Anthropic-compatible base URL 拉取模型列表。
+async fn fetch_anthropic_vendor_models(
     settings: AiChatSettings,
 ) -> Result<Vec<AiVendorModelDefinition>, String> {
     let api_key = settings
@@ -46,22 +58,58 @@ async fn fetch_minimax_vendor_models(
         .get("apiKey")
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| "MiniMax 需要 API Key 才能获取模型列表".to_string())?;
+        .ok_or_else(|| "Anthropic-compatible provider 需要 API Key 才能获取模型列表".to_string())?;
 
     let endpoint = settings
         .field_values
         .get("endpoint")
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
-        .unwrap_or("https://api.minimaxi.com/anthropic");
+        .unwrap_or("https://api.anthropic.com");
     let list_endpoint = resolve_models_endpoint(endpoint);
     let mut headers = HeaderMap::new();
-    let api_key_header = HeaderValue::from_str(api_key)
-        .map_err(|error| format!("MiniMax API Key 不能作为 HTTP header 发送: {error}"))?;
+    let api_key_header = HeaderValue::from_str(api_key).map_err(|error| {
+        format!("Anthropic-compatible API Key 不能作为 HTTP header 发送: {error}")
+    })?;
+    let anthropic_version = settings
+        .field_values
+        .get("anthropicVersion")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("2023-06-01");
+    let anthropic_version_header = HeaderValue::from_str(anthropic_version)
+        .map_err(|error| format!("anthropic-version 不能作为 HTTP header 发送: {error}"))?;
     headers.insert("x-api-key", api_key_header);
-    headers.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
+    headers.insert("anthropic-version", anthropic_version_header);
 
-    fetch_openai_style_models(list_endpoint, headers, "MiniMax").await
+    fetch_openai_style_models(list_endpoint, headers, "Anthropic-compatible provider").await
+}
+
+/// 从 OpenAI-compatible base URL 拉取模型列表。
+async fn fetch_openai_vendor_models(
+    settings: AiChatSettings,
+) -> Result<Vec<AiVendorModelDefinition>, String> {
+    let api_key = settings
+        .field_values
+        .get("apiKey")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "OpenAI-compatible provider 需要 API Key 才能获取模型列表".to_string())?;
+
+    let endpoint = settings
+        .field_values
+        .get("baseUrl")
+        .or_else(|| settings.field_values.get("endpoint"))
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("https://api.openai.com/v1");
+    let list_endpoint = resolve_models_endpoint(endpoint);
+    let mut headers = HeaderMap::new();
+    let authorization_header = HeaderValue::from_str(&format!("Bearer {api_key}"))
+        .map_err(|error| format!("OpenAI-compatible API Key 不能作为 HTTP header 发送: {error}"))?;
+    headers.insert(AUTHORIZATION, authorization_header);
+
+    fetch_openai_style_models(list_endpoint, headers, "OpenAI-compatible provider").await
 }
 
 /// 从百度千帆接口拉取模型列表。
@@ -281,6 +329,8 @@ mod tests {
                     format!("http://{address}/anthropic"),
                 ),
             ]),
+            active_provider_id: None,
+            providers: Vec::new(),
             tool_approval_policy: HashMap::new(),
         })
         .await

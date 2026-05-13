@@ -118,6 +118,7 @@ describe("configStore defaults", () => {
                 frontmatterTemplate: DEFAULT_FEATURE_SETTINGS.frontmatterTemplate,
                 frontmatterAutoInsertOnCreate: DEFAULT_FEATURE_SETTINGS.frontmatterAutoInsertOnCreate,
                 restoreWorkspaceLayout: DEFAULT_FEATURE_SETTINGS.restoreWorkspaceLayout,
+                fileOpenMode: DEFAULT_FEATURE_SETTINGS.fileOpenMode,
             },
         });
     });
@@ -196,6 +197,7 @@ describe("configStore defaults", () => {
                 frontmatterTemplate: DEFAULT_FEATURE_SETTINGS.frontmatterTemplate,
                 frontmatterAutoInsertOnCreate: DEFAULT_FEATURE_SETTINGS.frontmatterAutoInsertOnCreate,
                 restoreWorkspaceLayout: DEFAULT_FEATURE_SETTINGS.restoreWorkspaceLayout,
+                fileOpenMode: DEFAULT_FEATURE_SETTINGS.fileOpenMode,
             },
         });
     });

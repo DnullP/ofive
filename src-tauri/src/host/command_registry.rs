@@ -148,6 +148,22 @@ define_app_commands![
         crate::host::commands::vault_commands::get_current_vault_tree
     ),
     (
+        "list_agent_skills",
+        crate::host::commands::vault_commands::list_agent_skills
+    ),
+    (
+        "create_agent_skill",
+        crate::host::commands::vault_commands::create_agent_skill
+    ),
+    (
+        "read_agent_skill_file",
+        crate::host::commands::vault_commands::read_agent_skill_file
+    ),
+    (
+        "write_agent_skill_file",
+        crate::host::commands::vault_commands::write_agent_skill_file
+    ),
+    (
         "read_vault_markdown_file",
         crate::host::commands::vault_commands::read_vault_markdown_file
     ),

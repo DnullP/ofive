@@ -43,6 +43,8 @@ import { useEffect } from "react";
 import {
     subscribeEditorContentBusEvent,
     emitPersistedContentUpdatedEvent,
+    isVaultBeforeChangeEventActive,
+    subscribeVaultBeforeChangeEvent,
     type EditorContentChangedBusEvent,
 } from "../events/appEventBus";
 import { saveVaultMarkdownFile } from "../../api/vaultApi";
@@ -92,6 +94,9 @@ let unsubscribeContentEvent: (() => void) | null = null;
 /** 配置变更取消订阅函数 */
 let unsubscribeConfigEvent: (() => void) | null = null;
 
+/** 仓库切换前事件取消订阅函数 */
+let unsubscribeVaultBeforeChangeEvent: (() => void) | null = null;
+
 /** 是否启用自动保存 */
 let autoSaveEnabled = true;
 
@@ -103,6 +108,9 @@ const pendingMap = new Map<string, PendingEntry>();
 
 /** 按路径索引的最后成功保存内容 */
 const lastSavedContentMap = new Map<string, string>();
+
+/** 仓库切换清理窗口内，忽略旧编辑器卸载/失焦带来的内容变更 */
+let vaultSwitchSuppressionDepth = 0;
 
 // ────────── 核心逻辑 ──────────
 
@@ -232,6 +240,13 @@ function scheduleSave(path: string, content: string): void {
  * @sideEffects 若自动保存已启用且路径为 Markdown 文件，则调度保存。
  */
 function handleContentChanged(event: EditorContentChangedBusEvent): void {
+    if (vaultSwitchSuppressionDepth > 0 || isVaultBeforeChangeEventActive()) {
+        console.debug("[auto-save] ignored content change during vault switch", {
+            path: event.path,
+        });
+        return;
+    }
+
     if (!autoSaveEnabled) {
         return;
     }
@@ -289,6 +304,22 @@ function clearAllPending(): void {
     pendingMap.clear();
 }
 
+async function handleVaultBeforeChange(): Promise<void> {
+    vaultSwitchSuppressionDepth += 1;
+    clearAllPending();
+    lastSavedContentMap.clear();
+
+    try {
+        await new Promise<void>((resolve) => {
+            setTimeout(resolve, 0);
+        });
+        clearAllPending();
+        console.info("[auto-save] dropped pending content before vault switch");
+    } finally {
+        vaultSwitchSuppressionDepth = Math.max(0, vaultSwitchSuppressionDepth - 1);
+    }
+}
+
 // ────────── 公开接口 ──────────
 
 /**
@@ -310,6 +341,8 @@ export function startAutoSaveService(): void {
     unsubscribeConfigEvent = subscribeConfigChanges((state) => {
         syncConfigState(state.featureSettings);
     });
+
+    unsubscribeVaultBeforeChangeEvent = subscribeVaultBeforeChangeEvent(handleVaultBeforeChange);
 
     console.info("[auto-save] service started", {
         autoSaveEnabled,
@@ -339,6 +372,11 @@ export function stopAutoSaveService(): void {
         unsubscribeConfigEvent = null;
     }
 
+    if (unsubscribeVaultBeforeChangeEvent) {
+        unsubscribeVaultBeforeChangeEvent();
+        unsubscribeVaultBeforeChangeEvent = null;
+    }
+
     // 停止前 flush 所有待保存内容
     const flushing = Array.from(pendingMap.keys()).map((path) => flushEntry(path));
     void Promise.all(flushing).then(() => {
@@ -361,6 +399,12 @@ export async function flushAutoSave(): Promise<void> {
         return;
     }
 
+    if (isVaultBeforeChangeEventActive()) {
+        clearAllPending();
+        console.info("[auto-save] flush ignored during vault switch", { pathCount: paths.length });
+        return;
+    }
+
     console.info("[auto-save] flush requested", { pathCount: paths.length });
     await Promise.all(paths.map((path) => flushEntry(path)));
 }
@@ -373,7 +417,15 @@ export async function flushAutoSave(): Promise<void> {
  * @sideEffects 从 pendingMap 中移除条目，调用后端保存。
  */
 export async function flushAutoSaveByPath(path: string): Promise<void> {
-    if (!pendingMap.has(path)) {
+    const pending = pendingMap.get(path);
+    if (!pending) {
+        return;
+    }
+
+    if (isVaultBeforeChangeEventActive()) {
+        clearPendingTimer(pending);
+        pendingMap.delete(path);
+        console.info("[auto-save] flush by path ignored during vault switch", { path });
         return;
     }
 

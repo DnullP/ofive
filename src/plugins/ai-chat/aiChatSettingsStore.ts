@@ -157,10 +157,13 @@ export function createAiChatSettingsStore(
                     isLoading: false,
                     error: null,
                 });
+                const providerCount = savedSettings.providers?.length ?? 0;
                 console.info("[ai-chat-settings-store] saved", {
                     vaultPath,
                     vendorId: savedSettings.vendorId,
                     model: savedSettings.model,
+                    activeProviderId: savedSettings.activeProviderId ?? null,
+                    providerCount,
                 });
                 return savedSettings;
             } catch (error) {

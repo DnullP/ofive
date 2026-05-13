@@ -13,6 +13,9 @@
 
 import type { TabInstanceDefinition, WorkbenchContainerApi, WorkbenchPanelHandle } from "./workbenchContracts";
 import { resolveFileOpener } from "../registry/fileOpenerRegistry";
+import { getTabComponentById } from "../registry/tabComponentRegistry";
+import { getConfigSnapshot, type FileOpenMode } from "../config/configStore";
+import { decorateTabParamsWithLifecycle } from "./vaultTabScope";
 
 /**
  * @interface ResolveFileTabOptions
@@ -47,6 +50,8 @@ export interface OpenFileWithResolverOptions extends ResolveFileTabOptions {
 export interface OpenFileInWorkbenchOptions extends ResolveFileTabOptions {
     /** Workbench 容器实例。 */
     containerApi: WorkbenchContainerApi;
+    /** 覆盖当前配置中的打开行为；未提供时读取 featureSettings.fileOpenMode。 */
+    openMode?: FileOpenMode;
 }
 
 /**
@@ -91,6 +96,43 @@ function findExistingFilePanelByPath(
     }) ?? null;
 }
 
+function isFilePanel(panel: WorkbenchPanelHandle | undefined | null): panel is WorkbenchPanelHandle {
+    return typeof panel?.params?.path === "string" && panel.params.path.length > 0;
+}
+
+function resolveOpenMode(explicitOpenMode?: FileOpenMode): FileOpenMode {
+    return explicitOpenMode ?? getConfigSnapshot().featureSettings.fileOpenMode;
+}
+
+function replaceActiveFilePanelIfRequested(
+    containerApi: WorkbenchContainerApi,
+    tab: TabInstanceDefinition,
+    openMode: FileOpenMode,
+): boolean {
+    if (openMode !== "replace-active-tab" || !containerApi.replacePanel) {
+        return false;
+    }
+
+    const activePanelId = containerApi.activePanelId;
+    if (!activePanelId) {
+        return false;
+    }
+
+    const activePanel = containerApi.getPanel(activePanelId);
+    if (!isFilePanel(activePanel)) {
+        return false;
+    }
+
+    containerApi.replacePanel(activePanel.id, {
+        id: tab.id,
+        title: tab.title,
+        component: tab.component,
+        params: tab.params,
+    });
+    containerApi.getPanel(tab.id)?.api.setActive();
+    return true;
+}
+
 /**
  * @function joinVaultAbsolutePath
  * @description 将仓库绝对路径与相对路径拼接为绝对文件路径。
@@ -106,6 +148,18 @@ export function joinVaultAbsolutePath(vaultPath: string | undefined, relativePat
     const normalizedVaultPath = vaultPath.replace(/[\\/]+$/, "");
     const normalizedRelativePath = normalizeRelativePath(relativePath).replace(/^[/]+/, "");
     return `${normalizedVaultPath}/${normalizedRelativePath}`;
+}
+
+function decorateResolvedFileTab(tab: TabInstanceDefinition): TabInstanceDefinition {
+    const descriptor = getTabComponentById(tab.component);
+    return {
+        ...tab,
+        params: decorateTabParamsWithLifecycle({
+            componentId: tab.component,
+            lifecycleScope: descriptor?.lifecycleScope ?? "global",
+            params: tab.params,
+        }),
+    };
 }
 
 /**
@@ -143,17 +197,22 @@ export async function resolveFileTabDefinition(
         contentOverride: options.contentOverride,
     });
 
-    if (!options.tabParams) {
-        return tab;
-    }
+    const mergedTab = options.tabParams
+        ? {
+            ...tab,
+            params: {
+                ...(tab.params ?? {}),
+                ...options.tabParams,
+            },
+        }
+        : tab;
 
-    return {
-        ...tab,
+    return decorateResolvedFileTab({
+        ...mergedTab,
         params: {
-            ...(tab.params ?? {}),
-            ...options.tabParams,
+            ...(mergedTab.params ?? {}),
         },
-    };
+    });
 }
 
 /**
@@ -190,6 +249,7 @@ export async function openFileInWorkbench(
 ): Promise<TabInstanceDefinition | null> {
     const normalizedPath = normalizeRelativePath(options.relativePath);
     const tabId = buildFileTabId(normalizedPath);
+    const openMode = resolveOpenMode(options.openMode);
     const existingPanel = options.containerApi.getPanel(tabId)
         ?? findExistingFilePanelByPath(options.containerApi, normalizedPath);
 
@@ -211,6 +271,16 @@ export async function openFileInWorkbench(
 
     if (!tab) {
         return null;
+    }
+
+    if (replaceActiveFilePanelIfRequested(options.containerApi, tab, openMode)) {
+        console.info("[openFileService] replaced active file tab", {
+            relativePath: normalizedPath,
+            tabId: tab.id,
+            component: tab.component,
+            openMode,
+        });
+        return tab;
     }
 
     options.containerApi.addPanel({

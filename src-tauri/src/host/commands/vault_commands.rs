@@ -13,6 +13,10 @@ use tauri::{AppHandle, State};
 pub(crate) const VAULT_COMMAND_IDS: &[&str] = &[
     "set_current_vault",
     "get_current_vault_tree",
+    "list_agent_skills",
+    "create_agent_skill",
+    "read_agent_skill_file",
+    "write_agent_skill_file",
     "read_vault_markdown_file",
     "read_vault_canvas_file",
     "read_vault_binary_file",
@@ -85,6 +89,55 @@ pub fn get_current_vault_tree(state: State<'_, AppState>) -> Result<VaultTreeRes
     timed_command!(
         "get_current_vault_tree",
         vault_app_service::get_current_vault_tree(state)
+    )
+}
+
+/// 列出当前仓库的 Agent SKILL。
+#[tauri::command]
+pub fn list_agent_skills(state: State<'_, AppState>) -> Result<Vec<AgentSkillSummary>, String> {
+    timed_command!(
+        "list_agent_skills",
+        vault_app_service::list_agent_skills(state)
+    )
+}
+
+/// 创建当前仓库中的 Agent SKILL。
+#[tauri::command]
+pub fn create_agent_skill(
+    skill_name: String,
+    description: String,
+    state: State<'_, AppState>,
+) -> Result<AgentSkillSummary, String> {
+    timed_command!(
+        "create_agent_skill",
+        vault_app_service::create_agent_skill(skill_name, description, state)
+    )
+}
+
+/// 读取当前仓库中的 Agent SKILL 文件。
+#[tauri::command]
+pub fn read_agent_skill_file(
+    skill_name: String,
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<ReadAgentSkillFileResponse, String> {
+    timed_command!(
+        "read_agent_skill_file",
+        vault_app_service::read_agent_skill_file(skill_name, relative_path, state)
+    )
+}
+
+/// 写入当前仓库中的 Agent SKILL 文件。
+#[tauri::command]
+pub fn write_agent_skill_file(
+    skill_name: String,
+    relative_path: String,
+    content: String,
+    state: State<'_, AppState>,
+) -> Result<WriteAgentSkillFileResponse, String> {
+    timed_command!(
+        "write_agent_skill_file",
+        vault_app_service::write_agent_skill_file(skill_name, relative_path, content, state)
     )
 }
 

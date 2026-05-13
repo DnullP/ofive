@@ -379,7 +379,7 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::{Mutex, MutexGuard, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -399,20 +399,44 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_nanos())
             .unwrap_or(0);
-        std::env::temp_dir().join(format!(
+        let temp_dir = std::env::temp_dir();
+        let root = temp_dir.canonicalize().unwrap_or(temp_dir);
+        root.join(format!(
             "ofive-app-private-store-test-{}-{}",
             unique, sequence
         ))
     }
 
-    #[test]
-    fn app_private_store_should_roundtrip_typed_state() {
-        let _lock = TEST_LOCK
+    fn lock_app_private_store_tests() -> MutexGuard<'static, ()> {
+        TEST_LOCK
             .get_or_init(|| Mutex::new(()))
             .lock()
-            .expect("test lock should succeed");
-        let root = create_test_root();
-        set_app_private_store_test_root(Some(root.clone())).expect("test root should set");
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    struct AppPrivateStoreTestRoot {
+        root: PathBuf,
+    }
+
+    impl AppPrivateStoreTestRoot {
+        fn install() -> Self {
+            let root = create_test_root();
+            set_app_private_store_test_root(Some(root.clone())).expect("test root should set");
+            Self { root }
+        }
+    }
+
+    impl Drop for AppPrivateStoreTestRoot {
+        fn drop(&mut self) {
+            let _ = set_app_private_store_test_root(None);
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn app_private_store_should_roundtrip_typed_state() {
+        let _lock = lock_app_private_store_tests();
+        let _test_root = AppPrivateStoreTestRoot::install();
 
         save_app_private_state(
             TEST_OWNER,
@@ -429,19 +453,12 @@ mod tests {
             .expect("state should exist");
 
         assert_eq!(loaded.value, "alpha");
-
-        set_app_private_store_test_root(None).expect("test root should reset");
-        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
     fn app_private_store_should_list_owner_states() {
-        let _lock = TEST_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .expect("test lock should succeed");
-        let root = create_test_root();
-        set_app_private_store_test_root(Some(root.clone())).expect("test root should set");
+        let _lock = lock_app_private_store_tests();
+        let test_root = AppPrivateStoreTestRoot::install();
 
         save_app_private_state(
             TEST_OWNER,
@@ -468,9 +485,6 @@ mod tests {
         assert_eq!(items[1].state_key, "settings");
 
         let owner_dir = app_private_owner_dir(TEST_OWNER).expect("owner dir should resolve");
-        assert!(owner_dir.starts_with(&root));
-
-        set_app_private_store_test_root(None).expect("test root should reset");
-        let _ = fs::remove_dir_all(root);
+        assert!(owner_dir.starts_with(&test_root.root));
     }
 }

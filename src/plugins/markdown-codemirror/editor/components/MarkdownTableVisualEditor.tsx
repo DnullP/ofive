@@ -21,11 +21,15 @@ import {
     useRef,
     useState,
     type ChangeEvent,
+    type CSSProperties,
+    type DragEvent,
     type FocusEvent,
     type KeyboardEvent,
     type MouseEvent,
+    type PointerEvent as ReactPointerEvent,
     type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import type { WorkbenchContainerApi } from "../../../../host/layout/workbenchContracts";
 import { useTranslation } from "react-i18next";
 import {
@@ -42,6 +46,8 @@ import {
     deleteMarkdownTableRowAt,
     insertMarkdownTableColumnAt,
     insertMarkdownTableRowAt,
+    moveMarkdownTableColumn,
+    moveMarkdownTableRow,
     serializeMarkdownTable,
     updateMarkdownTableCell,
     type MarkdownTableCellPosition,
@@ -124,6 +130,47 @@ interface PendingMarkdownTableNavigationRestore {
     position: MarkdownTableCellPosition;
 }
 
+type TableEdgeSelection =
+    | {
+        kind: "column";
+        index: number;
+    }
+    | {
+        kind: "row";
+        index: number;
+    };
+
+type TableContextMenuState = {
+    kind: "column";
+    index: number;
+    x: number;
+    y: number;
+} | {
+    kind: "row";
+    index: number;
+    x: number;
+    y: number;
+} | null;
+
+type TableDragState = {
+    kind: "column" | "row";
+    fromIndex: number;
+    overIndex: number;
+} | null;
+
+interface TableResizeDragState {
+    kind: "column" | "row";
+    index: number;
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    startSize: number;
+}
+
+const DEFAULT_TABLE_COLUMN_WIDTH = 164;
+const MIN_TABLE_COLUMN_WIDTH = 88;
+const MIN_TABLE_ROW_HEIGHT = 34;
+const TABLE_EDGE_DRAG_MIME_TYPE = "application/x-ofive-markdown-table-edge";
 const INACTIVE_WIKILINK_SUGGEST_STATE: TableWikiLinkSuggestState = {
     active: false,
     cellKey: null,
@@ -269,6 +316,69 @@ function getBodyRowCount(model: MarkdownTableModel): number {
     return Math.max(1, model.rows.length);
 }
 
+function buildColumnWidthStyle(columnWidths: number[]): CSSProperties {
+    return {
+        gridTemplateColumns: columnWidths
+            .map((width) => `${Math.max(MIN_TABLE_COLUMN_WIDTH, Math.round(width))}px`)
+            .join(" "),
+    };
+}
+
+function clampTableCellPosition(
+    position: MarkdownTableCellPosition,
+    model: MarkdownTableModel,
+): MarkdownTableCellPosition {
+    const safeColumnIndex = Math.max(0, Math.min(position.columnIndex, model.headers.length - 1));
+    if (position.section === "header") {
+        return {
+            section: "header",
+            rowIndex: 0,
+            columnIndex: safeColumnIndex,
+        };
+    }
+
+    return {
+        section: "body",
+        rowIndex: Math.max(0, Math.min(position.rowIndex, Math.max(0, model.rows.length - 1))),
+        columnIndex: safeColumnIndex,
+    };
+}
+
+function readTableEdgeDragPayload(dataTransfer: DataTransfer): TableEdgeSelection | null {
+    const rawPayload = dataTransfer.getData(TABLE_EDGE_DRAG_MIME_TYPE);
+    if (!rawPayload) {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(rawPayload) as Partial<TableEdgeSelection>;
+        const parsedIndex = parsed.index;
+        if (
+            (parsed.kind === "column" || parsed.kind === "row")
+            && typeof parsedIndex === "number"
+            && Number.isInteger(parsedIndex)
+        ) {
+            return {
+                kind: parsed.kind,
+                index: parsedIndex,
+            };
+        }
+    } catch {
+        return null;
+    }
+
+    return null;
+}
+
+function isNodeInsideMarkdownTableContextMenu(target: Node | null): boolean {
+    if (!target) {
+        return false;
+    }
+
+    return Array.from(document.querySelectorAll(".mtv-context-menu"))
+        .some((menuElement) => menuElement.contains(target));
+}
+
 /**
  * @function replaceFullWidthWikiLinkTrigger
  * @description 将输入中的全角 `【【` 归一化为 `[[`，保持光标位置稳定。
@@ -412,11 +522,21 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const pendingInputSelectionRef = useRef<PendingInputSelection | null>(null);
     const wikiLinkSuggestRequestSeqRef = useRef<number>(0);
     const wikiLinkSuggestDebounceTimerRef = useRef<number | null>(null);
+    const resizeDragStateRef = useRef<TableResizeDragState | null>(null);
     const [tableModel, setTableModel] = useState<MarkdownTableModel>(() => props.initialModel);
     const [activeCell, setActiveCell] = useState<MarkdownTableCellPosition>(() =>
         resolveDefaultActiveCell(props.initialModel),
     );
     const [interactionMode, setInteractionMode] = useState<"navigation" | "editing">("navigation");
+    const [edgeSelection, setEdgeSelection] = useState<TableEdgeSelection | null>(null);
+    const [contextMenuState, setContextMenuState] = useState<TableContextMenuState>(null);
+    const [dragState, setDragState] = useState<TableDragState>(null);
+    const [columnWidths, setColumnWidths] = useState<number[]>(() =>
+        Array.from({ length: props.initialModel.headers.length }, () => DEFAULT_TABLE_COLUMN_WIDTH),
+    );
+    const [rowHeights, setRowHeights] = useState<number[]>(() =>
+        Array.from({ length: props.initialModel.rows.length }, () => MIN_TABLE_ROW_HEIGHT),
+    );
     const [wikiLinkSuggestState, setWikiLinkSuggestState] = useState<TableWikiLinkSuggestState>(
         INACTIVE_WIKILINK_SUGGEST_STATE,
     );
@@ -424,18 +544,10 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const tableModelRef = useRef<MarkdownTableModel>(props.initialModel);
     const activeCellRef = useRef<MarkdownTableCellPosition>(resolveDefaultActiveCell(props.initialModel));
 
-    const currentSelectionLabel = useMemo(() => {
-        if (activeCell.section === "header") {
-            return t("markdownTable.headerSelection", {
-                column: activeCell.columnIndex + 1,
-            });
-        }
-
-        return t("markdownTable.bodySelection", {
-            row: activeCell.rowIndex + 1,
-            column: activeCell.columnIndex + 1,
-        });
-    }, [activeCell, t]);
+    const columnWidthStyle = useMemo<CSSProperties>(
+        () => buildColumnWidthStyle(columnWidths),
+        [columnWidths],
+    );
 
     useEffect(() => {
         tableModelRef.current = tableModel;
@@ -444,6 +556,27 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     useEffect(() => {
         activeCellRef.current = activeCell;
     }, [activeCell]);
+
+    useEffect(() => {
+        setColumnWidths((previous) => {
+            if (previous.length === tableModel.headers.length) {
+                return previous;
+            }
+
+            return Array.from({ length: tableModel.headers.length }, (_, index) =>
+                previous[index] ?? DEFAULT_TABLE_COLUMN_WIDTH,
+            );
+        });
+        setRowHeights((previous) => {
+            if (previous.length === tableModel.rows.length) {
+                return previous;
+            }
+
+            return Array.from({ length: tableModel.rows.length }, (_, index) =>
+                previous[index] ?? MIN_TABLE_ROW_HEIGHT,
+            );
+        });
+    }, [tableModel.headers.length, tableModel.rows.length]);
 
     useEffect(() => {
         const pendingSelection = pendingInputSelectionRef.current;
@@ -469,6 +602,76 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                 window.clearTimeout(wikiLinkSuggestDebounceTimerRef.current);
                 wikiLinkSuggestDebounceTimerRef.current = null;
             }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!contextMenuState) {
+            return;
+        }
+
+        const handlePointerDown = (event: globalThis.PointerEvent): void => {
+            const target = event.target as Node | null;
+            if (isNodeInsideMarkdownTableContextMenu(target)) {
+                return;
+            }
+
+            if (target && wrapperRef.current?.contains(target)) {
+                return;
+            }
+            setContextMenuState(null);
+        };
+
+        const handleKeyDown = (event: globalThis.KeyboardEvent): void => {
+            if (event.key === "Escape") {
+                setContextMenuState(null);
+            }
+        };
+
+        window.addEventListener("pointerdown", handlePointerDown, { capture: true });
+        window.addEventListener("keydown", handleKeyDown, { capture: true });
+        return () => {
+            window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+            window.removeEventListener("keydown", handleKeyDown, { capture: true });
+        };
+    }, [contextMenuState]);
+
+    useEffect(() => {
+        const handlePointerMove = (event: globalThis.PointerEvent): void => {
+            const resizeState = resizeDragStateRef.current;
+            if (!resizeState) {
+                return;
+            }
+
+            if (resizeState.kind === "column") {
+                const delta = event.clientX - resizeState.startClientX;
+                setColumnWidths((previous) => previous.map((width, index) =>
+                    index === resizeState.index
+                        ? Math.max(MIN_TABLE_COLUMN_WIDTH, resizeState.startSize + delta)
+                        : width,
+                ));
+                return;
+            }
+
+            const delta = event.clientY - resizeState.startClientY;
+            setRowHeights((previous) => previous.map((height, index) =>
+                index === resizeState.index
+                    ? Math.max(MIN_TABLE_ROW_HEIGHT, resizeState.startSize + delta)
+                    : height,
+            ));
+        };
+
+        const handlePointerEnd = (): void => {
+            resizeDragStateRef.current = null;
+        };
+
+        window.addEventListener("pointermove", handlePointerMove);
+        window.addEventListener("pointerup", handlePointerEnd);
+        window.addEventListener("pointercancel", handlePointerEnd);
+        return () => {
+            window.removeEventListener("pointermove", handlePointerMove);
+            window.removeEventListener("pointerup", handlePointerEnd);
+            window.removeEventListener("pointercancel", handlePointerEnd);
         };
     }, []);
 
@@ -712,6 +915,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
      * @param position 单元格位置。
      */
     const focusCell = (position: MarkdownTableCellPosition): void => {
+        setEdgeSelection(null);
         setInteractionMode("editing");
         setActiveCell(position);
         window.requestAnimationFrame(() => {
@@ -737,6 +941,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
 
     const handleNavigationTargetFocus = (position: MarkdownTableCellPosition): void => {
         clearPendingMarkdownTableNavigationRestore(props.blockFrom, position);
+        setEdgeSelection(null);
         setInteractionMode("navigation");
         setActiveCell((previous) => (isSameCellPosition(previous, position) ? previous : position));
     };
@@ -771,18 +976,19 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         nextCell: MarkdownTableCellPosition,
     ): void => {
         setTableModel(nextModel);
-        setActiveCell(nextCell);
+        const safeNextCell = clampTableCellPosition(nextCell, nextModel);
+        setActiveCell(safeNextCell);
         console.debug("[markdown-table-visual-editor] table model updated", {
             columns: nextModel.headers.length,
             rows: nextModel.rows.length,
-            selection: nextCell,
+            selection: safeNextCell,
         });
         if (interactionMode === "navigation") {
-            focusNavigationCell(nextCell);
+            focusNavigationCell(safeNextCell);
             return;
         }
 
-        focusCell(nextCell);
+        focusCell(safeNextCell);
     };
 
     /**
@@ -881,6 +1087,398 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             rowIndex: currentCell.section === "body" ? currentCell.rowIndex : 0,
             columnIndex: Math.max(0, Math.min(currentCell.columnIndex, nextModel.headers.length - 1)),
         });
+    };
+
+    const handleSelectColumn = (columnIndex: number): void => {
+        closeWikiLinkSuggest();
+        setContextMenuState(null);
+        setInteractionMode("navigation");
+        setEdgeSelection({ kind: "column", index: columnIndex });
+        setActiveCell({
+            section: "header",
+            rowIndex: 0,
+            columnIndex,
+        });
+    };
+
+    const handleSelectRow = (rowIndex: number): void => {
+        closeWikiLinkSuggest();
+        setContextMenuState(null);
+        setInteractionMode("navigation");
+        setEdgeSelection({ kind: "row", index: rowIndex });
+        setActiveCell({
+            section: "body",
+            rowIndex,
+            columnIndex: 0,
+        });
+    };
+
+    const handleInsertRowAtEdge = (rowIndex: number, side: "above" | "below"): void => {
+        const insertIndex = side === "above" ? rowIndex : rowIndex + 1;
+        const nextModel = insertMarkdownTableRowAt(tableModelRef.current, insertIndex);
+        setEdgeSelection(null);
+        setContextMenuState(null);
+        updateModelAndSelection(nextModel, {
+            section: "body",
+            rowIndex: Math.min(insertIndex, nextModel.rows.length - 1),
+            columnIndex: Math.min(activeCellRef.current.columnIndex, nextModel.headers.length - 1),
+        });
+    };
+
+    const handleDeleteRowAtEdge = (rowIndex: number): void => {
+        const nextModel = deleteMarkdownTableRowAt(tableModelRef.current, rowIndex);
+        setEdgeSelection(null);
+        setContextMenuState(null);
+        updateModelAndSelection(nextModel, {
+            section: "body",
+            rowIndex: Math.max(0, Math.min(rowIndex, nextModel.rows.length - 1)),
+            columnIndex: Math.min(activeCellRef.current.columnIndex, nextModel.headers.length - 1),
+        });
+    };
+
+    const handleInsertColumnAtEdge = (columnIndex: number, side: "left" | "right"): void => {
+        const insertIndex = side === "left" ? columnIndex : columnIndex + 1;
+        const nextModel = insertMarkdownTableColumnAt(tableModelRef.current, insertIndex);
+        setEdgeSelection(null);
+        setContextMenuState(null);
+        updateModelAndSelection(nextModel, {
+            section: activeCellRef.current.section,
+            rowIndex: activeCellRef.current.section === "body" ? activeCellRef.current.rowIndex : 0,
+            columnIndex: Math.min(insertIndex, nextModel.headers.length - 1),
+        });
+    };
+
+    const handleDeleteColumnAtEdge = (columnIndex: number): void => {
+        const nextModel = deleteMarkdownTableColumnAt(tableModelRef.current, columnIndex);
+        setEdgeSelection(null);
+        setContextMenuState(null);
+        updateModelAndSelection(nextModel, {
+            section: activeCellRef.current.section,
+            rowIndex: activeCellRef.current.section === "body" ? activeCellRef.current.rowIndex : 0,
+            columnIndex: Math.max(0, Math.min(columnIndex, nextModel.headers.length - 1)),
+        });
+    };
+
+    const openEdgeContextMenu = (
+        event: MouseEvent<HTMLButtonElement>,
+        selection: Exclude<TableEdgeSelection, null>,
+    ): void => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeWikiLinkSuggest();
+        setEdgeSelection(selection);
+        setContextMenuState({
+            ...selection,
+            x: event.clientX,
+            y: event.clientY,
+        });
+    };
+
+    const handleEdgeDragStart = (
+        event: DragEvent<HTMLButtonElement>,
+        selection: Exclude<TableEdgeSelection, null>,
+    ): void => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData(TABLE_EDGE_DRAG_MIME_TYPE, JSON.stringify(selection));
+        event.dataTransfer.setData("text/plain", `${selection.kind}:${selection.index}`);
+        setEdgeSelection(selection);
+        setDragState({
+            kind: selection.kind,
+            fromIndex: selection.index,
+            overIndex: selection.index,
+        });
+    };
+
+    const handleEdgeDragOver = (
+        event: DragEvent<HTMLButtonElement>,
+        selection: Exclude<TableEdgeSelection, null>,
+    ): void => {
+        if (!dragState || dragState.kind !== selection.kind) {
+            return;
+        }
+
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        setDragState((previous) => previous && previous.kind === selection.kind
+            ? { ...previous, overIndex: selection.index }
+            : previous);
+    };
+
+    const handleEdgeDrop = (
+        event: DragEvent<HTMLButtonElement>,
+        selection: Exclude<TableEdgeSelection, null>,
+    ): void => {
+        event.preventDefault();
+        const fallbackPayload = readTableEdgeDragPayload(event.dataTransfer);
+        const currentDragState = dragState ?? (fallbackPayload && fallbackPayload.kind === selection.kind
+            ? {
+                kind: fallbackPayload.kind,
+                fromIndex: fallbackPayload.index,
+                overIndex: selection.index,
+            }
+            : null);
+        setDragState(null);
+        if (!currentDragState || currentDragState.kind !== selection.kind) {
+            return;
+        }
+
+        if (selection.kind === "column") {
+            const nextModel = moveMarkdownTableColumn(tableModelRef.current, currentDragState.fromIndex, selection.index);
+            const nextWidths = [...columnWidths];
+            const [movedWidth] = nextWidths.splice(currentDragState.fromIndex, 1);
+            nextWidths.splice(selection.index, 0, movedWidth ?? DEFAULT_TABLE_COLUMN_WIDTH);
+            setColumnWidths(nextWidths);
+            setEdgeSelection({ kind: "column", index: selection.index });
+            updateModelAndSelection(nextModel, {
+                section: "header",
+                rowIndex: 0,
+                columnIndex: selection.index,
+            });
+            return;
+        }
+
+        const nextModel = moveMarkdownTableRow(tableModelRef.current, currentDragState.fromIndex, selection.index);
+        const nextHeights = [...rowHeights];
+        const [movedHeight] = nextHeights.splice(currentDragState.fromIndex, 1);
+        nextHeights.splice(selection.index, 0, movedHeight ?? MIN_TABLE_ROW_HEIGHT);
+        setRowHeights(nextHeights);
+        setEdgeSelection({ kind: "row", index: selection.index });
+        updateModelAndSelection(nextModel, {
+            section: "body",
+            rowIndex: selection.index,
+            columnIndex: Math.min(activeCellRef.current.columnIndex, nextModel.headers.length - 1),
+        });
+    };
+
+    const handleResizePointerDown = (
+        event: ReactPointerEvent<HTMLDivElement>,
+        resizeState: Omit<TableResizeDragState, "pointerId" | "startClientX" | "startClientY">,
+    ): void => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        const cellElement = event.currentTarget.closest<HTMLElement>(".mtv-table-head-cell, .mtv-table-body-cell");
+        const renderedSize = resizeState.kind === "column"
+            ? cellElement?.getBoundingClientRect().width
+            : cellElement?.getBoundingClientRect().height;
+        resizeDragStateRef.current = {
+            ...resizeState,
+            pointerId: event.pointerId,
+            startClientX: event.clientX,
+            startClientY: event.clientY,
+            startSize: renderedSize ?? resizeState.startSize,
+        };
+    };
+
+    const renderColumnEdgeHandle = (columnIndex: number): ReactNode => {
+        const selection: TableEdgeSelection = { kind: "column", index: columnIndex };
+        const isSelected = edgeSelection?.kind === "column" && edgeSelection.index === columnIndex;
+        const isDropTarget =
+            dragState?.kind === "column"
+            && dragState.overIndex === columnIndex
+            && dragState.fromIndex !== columnIndex;
+
+        return (
+            <button
+                key={`column-edge-${columnIndex}`}
+                type="button"
+                className="mtv-edge-handle mtv-edge-handle--column"
+                data-table-edge-kind="column"
+                data-table-edge-index={columnIndex}
+                data-selected={isSelected ? true : undefined}
+                data-drop-target={isDropTarget ? true : undefined}
+                draggable
+                title={t("markdownTable.columnHandleTitle")}
+                onClick={(event) => {
+                    event.preventDefault();
+                    handleSelectColumn(columnIndex);
+                }}
+                onContextMenu={(event) => {
+                    openEdgeContextMenu(event, selection);
+                }}
+                onDragStart={(event) => {
+                    handleEdgeDragStart(event, selection);
+                }}
+                onDragOver={(event) => {
+                    handleEdgeDragOver(event, selection);
+                }}
+                onDrop={(event) => {
+                    handleEdgeDrop(event, selection);
+                }}
+                onDragEnd={() => {
+                    setDragState(null);
+                }}
+            >
+                <span className="mtv-edge-handle-grip" aria-hidden="true" />
+            </button>
+        );
+    };
+
+    const renderRowEdgeHandle = (rowIndex: number): ReactNode => {
+        const selection: TableEdgeSelection = { kind: "row", index: rowIndex };
+        const isSelected = edgeSelection?.kind === "row" && edgeSelection.index === rowIndex;
+        const isDropTarget =
+            dragState?.kind === "row"
+            && dragState.overIndex === rowIndex
+            && dragState.fromIndex !== rowIndex;
+
+        return (
+            <button
+                key={`row-edge-${rowIndex}`}
+                type="button"
+                className="mtv-edge-handle mtv-edge-handle--row"
+                data-table-edge-kind="row"
+                data-table-edge-index={rowIndex}
+                data-selected={isSelected ? true : undefined}
+                data-drop-target={isDropTarget ? true : undefined}
+                draggable
+                title={t("markdownTable.rowHandleTitle")}
+                style={{
+                    minHeight: rowHeights[rowIndex] ?? MIN_TABLE_ROW_HEIGHT,
+                }}
+                onClick={(event) => {
+                    event.preventDefault();
+                    handleSelectRow(rowIndex);
+                }}
+                onContextMenu={(event) => {
+                    openEdgeContextMenu(event, selection);
+                }}
+                onDragStart={(event) => {
+                    handleEdgeDragStart(event, selection);
+                }}
+                onDragOver={(event) => {
+                    handleEdgeDragOver(event, selection);
+                }}
+                onDrop={(event) => {
+                    handleEdgeDrop(event, selection);
+                }}
+                onDragEnd={() => {
+                    setDragState(null);
+                }}
+            >
+                <span className="mtv-edge-handle-grip" aria-hidden="true" />
+            </button>
+        );
+    };
+
+    const renderColumnResizeHandle = (columnIndex: number): ReactNode => (
+        <div
+            className="mtv-resize-handle mtv-resize-handle--column"
+            data-table-resize-kind="column"
+            data-table-resize-index={columnIndex}
+            title={t("markdownTable.resizeColumnTitle")}
+            onPointerDown={(event) => {
+                handleResizePointerDown(event, {
+                    kind: "column",
+                    index: columnIndex,
+                    startSize: columnWidths[columnIndex] ?? DEFAULT_TABLE_COLUMN_WIDTH,
+                });
+            }}
+        />
+    );
+
+    const renderRowResizeHandle = (rowIndex: number): ReactNode => (
+        <div
+            className="mtv-resize-handle mtv-resize-handle--row"
+            data-table-resize-kind="row"
+            data-table-resize-index={rowIndex}
+            title={t("markdownTable.resizeRowTitle")}
+            onPointerDown={(event) => {
+                handleResizePointerDown(event, {
+                    kind: "row",
+                    index: rowIndex,
+                    startSize: rowHeights[rowIndex] ?? MIN_TABLE_ROW_HEIGHT,
+                });
+            }}
+        />
+    );
+
+    const runContextMenuAction = (
+        event: MouseEvent<HTMLButtonElement>,
+        action: () => void,
+    ): void => {
+        event.preventDefault();
+        event.stopPropagation();
+        action();
+    };
+
+    const renderContextMenu = (): ReactNode => {
+        if (!contextMenuState) {
+            return null;
+        }
+
+        const menuStyle: CSSProperties = {
+            left: contextMenuState.x,
+            top: contextMenuState.y,
+        };
+
+        if (contextMenuState.kind === "column") {
+            return createPortal(
+                <div className="mtv-context-menu" role="menu" style={menuStyle}>
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onMouseDown={(event) => runContextMenuAction(event, () =>
+                            handleInsertColumnAtEdge(contextMenuState.index, "left"),
+                        )}
+                    >
+                        {t("markdownTable.addColumnLeft")}
+                    </button>
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onMouseDown={(event) => runContextMenuAction(event, () =>
+                            handleInsertColumnAtEdge(contextMenuState.index, "right"),
+                        )}
+                    >
+                        {t("markdownTable.addColumnRight")}
+                    </button>
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onMouseDown={(event) => runContextMenuAction(event, () =>
+                            handleDeleteColumnAtEdge(contextMenuState.index),
+                        )}
+                    >
+                        {t("markdownTable.deleteColumn")}
+                    </button>
+                </div>,
+                document.body,
+            );
+        }
+
+        return createPortal(
+            <div className="mtv-context-menu" role="menu" style={menuStyle}>
+                <button
+                    type="button"
+                    role="menuitem"
+                    onMouseDown={(event) => runContextMenuAction(event, () =>
+                        handleInsertRowAtEdge(contextMenuState.index, "above"),
+                    )}
+                >
+                    {t("markdownTable.addRowAbove")}
+                </button>
+                <button
+                    type="button"
+                    role="menuitem"
+                    onMouseDown={(event) => runContextMenuAction(event, () =>
+                        handleInsertRowAtEdge(contextMenuState.index, "below"),
+                    )}
+                >
+                    {t("markdownTable.addRowBelow")}
+                </button>
+                <button
+                    type="button"
+                    role="menuitem"
+                    onMouseDown={(event) => runContextMenuAction(event, () =>
+                        handleDeleteRowAtEdge(contextMenuState.index),
+                    )}
+                >
+                    {t("markdownTable.deleteRow")}
+                </button>
+            </div>,
+            document.body,
+        );
     };
 
     /**
@@ -1311,6 +1909,9 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         if (nextTarget && wrapperRef.current?.contains(nextTarget)) {
             return;
         }
+        if (isNodeInsideMarkdownTableContextMenu(nextTarget)) {
+            return;
+        }
 
         commitDraftModel();
         closeWikiLinkSuggest();
@@ -1326,44 +1927,19 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             onFocusCapture={handleWrapperFocusCapture}
             onBlurCapture={handleWrapperBlurCapture}
         >
-            <div className="mtv-toolbar">
-                <div className="mtv-toolbar-group">
-                    <button type="button" className="mtv-toolbar-button" onClick={() => handleInsertRow("above")}>
-                        {t("markdownTable.addRowAbove")}
-                    </button>
-                    <button type="button" className="mtv-toolbar-button" onClick={() => handleInsertRow("below")}>
-                        {t("markdownTable.addRowBelow")}
-                    </button>
-                    <button type="button" className="mtv-toolbar-button" onClick={() => handleDeleteRow()}>
-                        {t("markdownTable.deleteRow")}
-                    </button>
-                </div>
-                <div className="mtv-toolbar-group">
-                    <button type="button" className="mtv-toolbar-button" onClick={() => handleInsertColumn("left")}>
-                        {t("markdownTable.addColumnLeft")}
-                    </button>
-                    <button type="button" className="mtv-toolbar-button" onClick={() => handleInsertColumn("right")}>
-                        {t("markdownTable.addColumnRight")}
-                    </button>
-                    <button type="button" className="mtv-toolbar-button" onClick={() => handleDeleteColumn()}>
-                        {t("markdownTable.deleteColumn")}
-                    </button>
-                </div>
-            </div>
-
-            <div className="mtv-status">
-                <span className="mtv-status-current">{currentSelectionLabel}</span>
-                <span className="mtv-shortcut-list">
-                    <span className="mtv-shortcut-chip">{t("markdownTable.shortcutTabNavigation")}</span>
-                    <span className="mtv-shortcut-chip">{t("markdownTable.shortcutReorder")}</span>
-                    <span className="mtv-shortcut-chip">{t("markdownTable.shortcutDeleteContent")}</span>
-                </span>
-            </div>
-
             <div className="mtv-table-scroll">
-                <table className="mtv-table">
-                    <thead>
-                        <tr>
+                <div className="mtv-table-grid-shell">
+                    <div className="mtv-corner-spacer" />
+                    <div className="mtv-column-edge-row" style={columnWidthStyle}>
+                        {tableModel.headers.map((_, columnIndex) => renderColumnEdgeHandle(columnIndex))}
+                    </div>
+                    <div className="mtv-row-edge-column">
+                        <div className="mtv-row-header-spacer" />
+                        {tableModel.rows.map((_, rowIndex) => renderRowEdgeHandle(rowIndex))}
+                    </div>
+                    <table className="mtv-table" style={columnWidthStyle}>
+                        <thead>
+                            <tr>
                             {tableModel.headers.map((header, columnIndex) => {
                                 const position: MarkdownTableCellPosition = {
                                     section: "header",
@@ -1372,10 +1948,15 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                 };
                                 const cellKey = buildCellKey(position);
                                 const isActiveCell = buildCellKey(activeCell) === cellKey;
+                                const isSelectedColumn = edgeSelection?.kind === "column" && edgeSelection.index === columnIndex;
                                 const isEditingCell = isActiveCell && interactionMode === "editing";
                                 const isNavigationTarget = isActiveCell && interactionMode === "navigation";
                                 return (
-                                    <th key={cellKey} className="mtv-table-head-cell">
+                                    <th
+                                        key={cellKey}
+                                        className="mtv-table-head-cell"
+                                        data-edge-selected={isSelectedColumn ? true : undefined}
+                                    >
                                         <div className="mtv-cell-frame">
                                             {isEditingCell ? (
                                                 <input
@@ -1422,15 +2003,23 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                                 isNavigationTarget,
                                             )}
                                         </div>
+                                        {renderColumnResizeHandle(columnIndex)}
                                         {renderWikiLinkSuggestPopup(cellKey)}
                                     </th>
                                 );
                             })}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {tableModel.rows.map((row, rowIndex) => (
-                            <tr key={`body-row-${rowIndex}`} className="mtv-table-body-row">
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {tableModel.rows.map((row, rowIndex) => (
+                            <tr
+                                key={`body-row-${rowIndex}`}
+                                className="mtv-table-body-row"
+                                data-edge-selected={edgeSelection?.kind === "row" && edgeSelection.index === rowIndex ? true : undefined}
+                                style={{
+                                    height: rowHeights[rowIndex] ?? MIN_TABLE_ROW_HEIGHT,
+                                }}
+                            >
                                 {row.map((cell, columnIndex) => {
                                     const position: MarkdownTableCellPosition = {
                                         section: "body",
@@ -1439,10 +2028,18 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                     };
                                     const cellKey = buildCellKey(position);
                                     const isActiveCell = buildCellKey(activeCell) === cellKey;
+                                    const isSelectedColumn = edgeSelection?.kind === "column" && edgeSelection.index === columnIndex;
                                     const isEditingCell = isActiveCell && interactionMode === "editing";
                                     const isNavigationTarget = isActiveCell && interactionMode === "navigation";
                                     return (
-                                        <td key={cellKey} className="mtv-table-body-cell">
+                                        <td
+                                            key={cellKey}
+                                            className="mtv-table-body-cell"
+                                            data-edge-selected={isSelectedColumn ? true : undefined}
+                                            style={{
+                                                minHeight: rowHeights[rowIndex] ?? MIN_TABLE_ROW_HEIGHT,
+                                            }}
+                                        >
                                             <div className="mtv-cell-frame">
                                                 {isEditingCell ? (
                                                     <input
@@ -1489,15 +2086,19 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                                     isNavigationTarget,
                                                 )}
                                             </div>
+                                            {renderRowResizeHandle(rowIndex)}
+                                            {renderColumnResizeHandle(columnIndex)}
                                             {renderWikiLinkSuggestPopup(cellKey)}
                                         </td>
                                     );
                                 })}
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
+            {renderContextMenu()}
         </div>
     );
 }

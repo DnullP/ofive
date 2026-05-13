@@ -18,9 +18,16 @@ export interface WorkbenchPanelHandle {
 }
 
 export interface WorkbenchContainerApi {
+    readonly activePanelId?: string | null;
     getPanel(panelId: string): WorkbenchPanelHandle | undefined | null;
     panels?: WorkbenchPanelHandle[];
     addPanel(options: {
+        id: string;
+        title: string;
+        component: string;
+        params?: Record<string, unknown>;
+    }): void;
+    replacePanel?(panelId: string, options: {
         id: string;
         title: string;
         component: string;

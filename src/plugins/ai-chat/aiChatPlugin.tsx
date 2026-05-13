@@ -33,6 +33,7 @@ import {
     type AiChatHistoryContentBlock,
     type AiChatHistoryMessage,
     type AiChatHistoryState,
+    type AiChatProviderConfig,
     type AiChatSettings,
     type AiToolApprovalMode,
     type AiToolDescriptor,
@@ -50,18 +51,22 @@ import {
 import {
     buildAiChatRuntimeContextSnapshot,
     buildPersistableHistory,
+    createProviderForVendor,
     createConversationSessionId,
     createConversationRecord,
     deriveConversationTitle,
+    ensureSettingsProviderList,
     ensureHistoryState,
     filterConversations,
     formatAiChatDuration,
     formatAiPanelError,
     formatConversationTime,
-    mergeSettingsForVendor,
+    mergeProviderForVendor,
+    resolveActiveProvider,
     resolveVendor,
     serializeAiChatRuntimeContextSnapshot,
     sortConversations,
+    withActiveProvider,
     type AiChatRuntimeOpenTabSnapshot,
 } from "./aiChatShared";
 import { resolveParentDirectory } from "../markdown-codemirror/editor/pathUtils";
@@ -133,6 +138,8 @@ const QUICK_PROMPTS: QuickPromptDefinition[] = [
     { id: "refine", translationKey: "aiChatPlugin.quickPromptRefine" },
     { id: "plan", translationKey: "aiChatPlugin.quickPromptPlan" },
 ];
+
+type ConfirmationApprovalScope = "once" | "conversation" | "operation";
 
 interface AiChatViewProps {
     panelContext?: PanelRenderContext | null;
@@ -311,9 +318,10 @@ function isVendorSettingsComplete(
         return false;
     }
 
+    const provider = resolveActiveProvider(settings);
     return vendor.fields
         .filter((field) => field.required)
-        .every((field) => (settings.fieldValues[field.key] ?? "").trim().length > 0);
+        .every((field) => (provider.fieldValues[field.key] ?? "").trim().length > 0);
 }
 
 /**
@@ -399,6 +407,34 @@ function parseHistoryContentBlocksJson(rawJson: string | null): AiChatHistoryCon
  */
 function shouldKeepAnimatingMessage(state: AiChatSmoothedMessageState): boolean {
     return state.active || !isAiChatSmoothedMessageSettled(state);
+}
+
+function resolveConfirmationCapabilityId(
+    toolName: string,
+    tools: AiToolDescriptor[],
+): string | null {
+    const normalizedToolName = toolName.trim();
+    if (!normalizedToolName) {
+        return null;
+    }
+
+    const matchingTool = tools.find((tool) => {
+        return tool.capabilityId === normalizedToolName || tool.name === normalizedToolName;
+    });
+    return matchingTool?.capabilityId ?? normalizedToolName;
+}
+
+function buildAutoApprovalSettings(
+    settings: AiChatSettings,
+    capabilityId: string,
+): AiChatSettings {
+    return {
+        ...settings,
+        toolApprovalPolicy: {
+            ...(settings.toolApprovalPolicy ?? {}),
+            [capabilityId]: "auto",
+        },
+    };
 }
 
 /**
@@ -491,6 +527,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     const [error, setError] = useState<string | null>(null);
     const [settings, setSettings] = useState<AiChatSettings | null>(null);
     const [vendorCatalog, setVendorCatalog] = useState<AiVendorDefinition[]>([]);
+    const [toolCatalog, setToolCatalog] = useState<AiToolDescriptor[]>([]);
     const [modelSwitcherOpen, setModelSwitcherOpen] = useState(false);
     const [modelSwitcherModels, setModelSwitcherModels] = useState<AiVendorModelDefinition[]>([]);
     const [isModelSwitcherLoading, setIsModelSwitcherLoading] = useState(false);
@@ -509,6 +546,8 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
     const modelSwitcherLoadKeyRef = useRef<string | null>(null);
     const modelSwitcherLoadRequestRef = useRef(0);
+    const vendorCatalogRef = useRef<AiVendorDefinition[]>([]);
+    const conversationAutoApprovalRef = useRef<Set<string>>(new Set());
 
     /**
      * @function commitBindings
@@ -788,7 +827,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         if (!settings) {
             return null;
         }
-        return resolveVendor(vendorCatalog, settings.vendorId);
+        return resolveVendor(vendorCatalog, resolveActiveProvider(settings).vendorId);
     }, [settings, vendorCatalog]);
 
     const isVendorConfigured = useMemo(() => {
@@ -850,7 +889,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     }, [error]);
 
     const composerModelLabel = useMemo(() => {
-        const configuredModel = settings?.model?.trim() ?? "";
+        const configuredModel = settings ? resolveActiveProvider(settings).model.trim() : "";
         if (configuredModel) {
             return configuredModel;
         }
@@ -858,7 +897,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             return i18n.t("aiChatPlugin.composerHintMissing");
         }
         return "-";
-    }, [currentVaultPath, isVendorConfigured, settings?.model]);
+    }, [currentVaultPath, isVendorConfigured, settings]);
 
     const composerHint = useMemo(() => {
         if (isActiveConversationStreaming) {
@@ -868,6 +907,10 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         }
         return "";
     }, [draft, isActiveConversationStreaming]);
+
+    useEffect(() => {
+        vendorCatalogRef.current = vendorCatalog;
+    }, [vendorCatalog]);
 
     const canSend = Boolean(
         currentVaultPath
@@ -930,6 +973,8 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             setPendingConfirmations({});
             setToolCallRecordsByMessageId({});
             setSettings(null);
+            setToolCatalog([]);
+            conversationAutoApprovalRef.current = new Set();
             historyLoadedRef.current = false;
             resetAiChatSettingsStore();
             return;
@@ -943,14 +988,17 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
 
         Promise.all([
             getAiVendorCatalog(),
+            getAiToolCatalog(),
             ensureAiChatSettingsLoaded(currentVaultPath),
             getAiChatHistory(),
         ])
-            .then(([catalog, nextSettings, history]) => {
+            .then(([catalog, tools, nextSettings, history]) => {
                 if (disposed) {
                     return;
                 }
+                vendorCatalogRef.current = catalog;
                 setVendorCatalog(catalog);
+                setToolCatalog(tools);
                 setSettings(nextSettings);
                 setHistoryState(ensureHistoryState(history));
                 setBindingsByConversation({});
@@ -960,6 +1008,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                 setDebugEntriesByConversation({});
                 setPendingConfirmations({});
                 setToolCallRecordsByMessageId({});
+                conversationAutoApprovalRef.current = new Set();
                 setDebugFilter("all");
                 setDebugCopyState("idle");
                 historyLoadedRef.current = true;
@@ -981,7 +1030,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                 return;
             }
 
-            setSettings(snapshot.settings);
+            setSettings(snapshot.settings ? ensureSettingsProviderList(snapshot.settings, vendorCatalogRef.current) : null);
         });
 
         return () => {
@@ -1360,8 +1409,9 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         }
 
         const loadKey = JSON.stringify({
-            vendorId: settings.vendorId,
-            fieldValues: settings.fieldValues,
+            providerId: settings.activeProviderId ?? null,
+            vendorId: resolveActiveProvider(settings).vendorId,
+            fieldValues: resolveActiveProvider(settings).fieldValues,
         });
         if (modelSwitcherLoadKeyRef.current === loadKey) {
             return;
@@ -1410,6 +1460,38 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         setError(null);
     };
 
+    const isConfirmationAllowedForConversation = (
+        confirmation: PendingToolConfirmation,
+    ): boolean => {
+        return conversationAutoApprovalRef.current.has(confirmation.conversationId);
+    };
+
+    const allowConfirmationForConversation = (
+        confirmation: PendingToolConfirmation,
+    ): void => {
+        conversationAutoApprovalRef.current = new Set([
+            ...conversationAutoApprovalRef.current,
+            confirmation.conversationId,
+        ]);
+    };
+
+    const allowConfirmationOperationAlways = async (
+        confirmation: PendingToolConfirmation,
+    ): Promise<void> => {
+        if (!settings || !currentVaultPath) {
+            throw new Error(i18n.t("aiChatPlugin.confirmAllowOperationUnavailable"));
+        }
+
+        const capabilityId = resolveConfirmationCapabilityId(confirmation.toolName, toolCatalog);
+        if (!capabilityId) {
+            throw new Error(i18n.t("aiChatPlugin.confirmAllowOperationUnavailable"));
+        }
+
+        const nextSettings = buildAutoApprovalSettings(settings, capabilityId);
+        const savedSettings = await saveAiChatSettingsToStore(currentVaultPath, nextSettings);
+        setSettings(savedSettings);
+    };
+
     /**
      * @function handleToolDecision
      * @description 在对话中批准或拒绝工具调用。
@@ -1419,6 +1501,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     const handleToolDecision = async (
         confirmation: PendingToolConfirmation,
         approved: boolean,
+        scope: ConfirmationApprovalScope = "once",
     ): Promise<void> => {
         setError(null);
         setPendingConfirmationState({
@@ -1432,6 +1515,13 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         ));
 
         try {
+            if (approved && scope === "conversation") {
+                allowConfirmationForConversation(confirmation);
+            }
+            if (approved && scope === "operation") {
+                await allowConfirmationOperationAlways(confirmation);
+            }
+
             const response = await submitAiChatConfirmation({
                 confirmationId: confirmation.confirmationId,
                 confirmed: approved,
@@ -1474,6 +1564,17 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             );
         }
     };
+
+    useEffect(() => {
+        const autoApprovedConfirmation = Object.values(pendingConfirmations).find((confirmation) => {
+            return !confirmation.isSubmitting && isConfirmationAllowedForConversation(confirmation);
+        });
+        if (!autoApprovedConfirmation) {
+            return;
+        }
+
+        void handleToolDecision(autoApprovedConfirmation, true);
+    }, [pendingConfirmations, toolCatalog]);
 
     /**
      * @function loadModelSwitcherModels
@@ -1529,7 +1630,8 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             return;
         }
 
-        if (modelId === settings.model) {
+        const activeProvider = resolveActiveProvider(settings);
+        if (modelId === activeProvider.model) {
             setModelSwitcherOpen(false);
             return;
         }
@@ -1538,12 +1640,14 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         setModelSwitcherFeedback(null);
         setModelSwitcherFeedbackIsError(false);
         try {
-            const savedSettings = await saveAiChatSettingsToStore(currentVaultPath, {
-                ...settings,
-                model: modelId,
-            });
-            const vendor = resolveVendor(vendorCatalog, savedSettings.vendorId);
-            const nextSettings = vendor ? mergeSettingsForVendor(savedSettings, vendor) : savedSettings;
+            const savedSettings = await saveAiChatSettingsToStore(
+                currentVaultPath,
+                withActiveProvider(settings, {
+                    ...activeProvider,
+                    model: modelId,
+                }),
+            );
+            const nextSettings = ensureSettingsProviderList(savedSettings, vendorCatalog);
             setSettings(nextSettings);
             setModelSwitcherOpen(false);
         } catch (saveError) {
@@ -1752,6 +1856,33 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         }
     };
 
+    const renderConfirmationApproveMenu = (
+        confirmation: PendingToolConfirmation,
+    ): ReactNode => (
+        <div className="ai-chat-confirm-approve-menu">
+            <button
+                type="button"
+                className="ai-chat-confirm-menu-item"
+                disabled={confirmation.isSubmitting}
+                onClick={() => {
+                    void handleToolDecision(confirmation, true, "conversation");
+                }}
+            >
+                {i18n.t("aiChatPlugin.confirmAllowConversation")}
+            </button>
+            <button
+                type="button"
+                className="ai-chat-confirm-menu-item"
+                disabled={confirmation.isSubmitting}
+                onClick={() => {
+                    void handleToolDecision(confirmation, true, "operation");
+                }}
+            >
+                {i18n.t("aiChatPlugin.confirmAllowOperation")}
+            </button>
+        </div>
+    );
+
     return (
         <div className="ai-chat-panel">
             {formattedError ? (
@@ -1939,19 +2070,31 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                                                             ? i18n.t("aiChatPlugin.confirmSubmitting")
                                                             : i18n.t("aiChatPlugin.confirmReject")}</span>
                                                     </button>
-                                                    <button
-                                                        type="button"
-                                                        className="ai-chat-confirm-button approve"
-                                                        disabled={confirmation.isSubmitting}
-                                                        onClick={() => {
-                                                            void handleToolDecision(confirmation, true);
-                                                        }}
-                                                    >
-                                                        <Check size={13} strokeWidth={2} />
-                                                        <span>{confirmation.isSubmitting
-                                                            ? i18n.t("aiChatPlugin.confirmSubmitting")
-                                                            : i18n.t("aiChatPlugin.confirmApprove")}</span>
-                                                    </button>
+                                                    <div className="ai-chat-confirm-approve-split">
+                                                        <button
+                                                            type="button"
+                                                            className="ai-chat-confirm-button approve primary"
+                                                            disabled={confirmation.isSubmitting}
+                                                            onClick={() => {
+                                                                void handleToolDecision(confirmation, true);
+                                                            }}
+                                                        >
+                                                            <Check size={13} strokeWidth={2} />
+                                                            <span>{confirmation.isSubmitting
+                                                                ? i18n.t("aiChatPlugin.confirmSubmitting")
+                                                                : i18n.t("aiChatPlugin.confirmApprove")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="ai-chat-confirm-button approve menu-trigger"
+                                                            disabled={confirmation.isSubmitting}
+                                                            aria-label={i18n.t("aiChatPlugin.confirmApproveMore")}
+                                                            title={i18n.t("aiChatPlugin.confirmApproveMore")}
+                                                        >
+                                                            <ChevronDown size={13} strokeWidth={2} />
+                                                        </button>
+                                                        {renderConfirmationApproveMenu(confirmation)}
+                                                    </div>
                                                 </div>
                                             </div>
                                         ) : null}
@@ -2057,7 +2200,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                                     {isModelSwitcherLoading ? (
                                         <div className="ai-chat-model-menu-status">{i18n.t("aiChatPlugin.refreshingModels")}</div>
                                     ) : modelSwitcherModels.map((model) => {
-                                        const selected = model.id === settings?.model;
+                                        const selected = settings ? model.id === resolveActiveProvider(settings).model : false;
                                         return (
                                             <button
                                                 key={model.id}
@@ -2163,8 +2306,12 @@ function AiChatSettingsSection(): ReactNode {
         if (!settings) {
             return null;
         }
-        return resolveVendor(vendorCatalog, settings.vendorId);
+        return resolveVendor(vendorCatalog, resolveActiveProvider(settings).vendorId);
     }, [settings, vendorCatalog]);
+
+    const activeProvider = useMemo(() => {
+        return settings ? resolveActiveProvider(settings) : null;
+    }, [settings]);
 
     const canLoadVendorModels = useMemo(() => {
         return isVendorSettingsComplete(settings, selectedVendor);
@@ -2197,10 +2344,9 @@ function AiChatSettingsSection(): ReactNode {
                 if (disposed) {
                     return;
                 }
-                const initialVendor = resolveVendor(catalog, currentSettings.vendorId) ?? catalog[0] ?? null;
                 setVendorCatalog(catalog);
                 setToolCatalog(tools);
-                setSettings(initialVendor ? mergeSettingsForVendor(currentSettings, initialVendor) : currentSettings);
+                setSettings(ensureSettingsProviderList(currentSettings, catalog));
                 setFeedback(null);
                 setFeedbackIsError(false);
             })
@@ -2238,10 +2384,7 @@ function AiChatSettingsSection(): ReactNode {
                 return;
             }
 
-            const nextVendor = resolveVendor(vendorCatalog, snapshot.settings.vendorId);
-            setSettings(nextVendor
-                ? mergeSettingsForVendor(snapshot.settings, nextVendor)
-                : snapshot.settings);
+            setSettings(ensureSettingsProviderList(snapshot.settings, vendorCatalog));
         });
 
         return () => {
@@ -2263,12 +2406,15 @@ function AiChatSettingsSection(): ReactNode {
             setFeedback(models.length === 0 ? i18n.t("aiChatPlugin.modelLoadEmpty") : null);
             setFeedbackIsError(false);
 
-            if (models.length > 0 && !models.some((model) => model.id === targetSettings.model)) {
+            const targetProvider = resolveActiveProvider(targetSettings);
+            if (models.length > 0 && !models.some((model) => model.id === targetProvider.model)) {
                 const nextModel = models[0].id;
-                setSettings((currentSettings) => currentSettings ? {
-                    ...currentSettings,
-                    model: nextModel,
-                } : currentSettings);
+                setSettings((currentSettings) => currentSettings
+                    ? withActiveProvider(currentSettings, {
+                        ...resolveActiveProvider(currentSettings),
+                        model: nextModel,
+                    })
+                    : currentSettings);
                 setFeedback(i18n.t("aiChatPlugin.modelUpdatedNeedsSave", { model: nextModel }));
             }
         } catch (loadError) {
@@ -2292,7 +2438,7 @@ function AiChatSettingsSection(): ReactNode {
         }
 
         void loadVendorModels(settings);
-    }, [canLoadVendorModels, selectedVendor?.id]);
+    }, [canLoadVendorModels, selectedVendor?.id, activeProvider?.id]);
 
     /**
      * @function updateFieldValue
@@ -2305,13 +2451,23 @@ function AiChatSettingsSection(): ReactNode {
             if (!currentSettings) {
                 return currentSettings;
             }
-            return {
-                ...currentSettings,
+            const provider = resolveActiveProvider(currentSettings);
+            return withActiveProvider(currentSettings, {
+                ...provider,
                 fieldValues: {
-                    ...currentSettings.fieldValues,
+                    ...provider.fieldValues,
                     [fieldKey]: value,
                 },
-            };
+            });
+        });
+    };
+
+    const updateActiveProvider = (updater: (provider: AiChatProviderConfig) => AiChatProviderConfig): void => {
+        setSettings((currentSettings) => {
+            if (!currentSettings) {
+                return currentSettings;
+            }
+            return withActiveProvider(currentSettings, updater(resolveActiveProvider(currentSettings)));
         });
     };
 
@@ -2344,22 +2500,76 @@ function AiChatSettingsSection(): ReactNode {
     };
 
     /**
-     * @function handleVendorChange
-     * @description 切换 vendor 并重建表单字段。
-     * @param event 选择事件。
+     * @function handleProviderChange
+     * @description 切换当前使用的 provider 实例。
      */
-    const handleVendorChange = (event: ChangeEvent<HTMLSelectElement>): void => {
+    const handleProviderChange = (event: ChangeEvent<HTMLSelectElement>): void => {
+        const providerId = event.target.value;
+        if (!settings) {
+            return;
+        }
+
+        setAvailableModels([]);
+        const nextProvider = settings.providers?.find((provider) => provider.id === providerId);
+        if (!nextProvider) {
+            return;
+        }
+        const vendor = resolveVendor(vendorCatalog, nextProvider.vendorId);
+        const mergedProvider = vendor ? mergeProviderForVendor(nextProvider, vendor) : nextProvider;
+        setSettings(withActiveProvider(settings, mergedProvider));
+    };
+
+    const handleProviderTypeChange = (event: ChangeEvent<HTMLSelectElement>): void => {
         const nextVendor = resolveVendor(vendorCatalog, event.target.value);
         if (!nextVendor) {
             return;
         }
 
         setAvailableModels([]);
-        setSettings((currentSettings) => mergeSettingsForVendor(currentSettings ?? {
+        updateActiveProvider((provider) => mergeProviderForVendor({
+            ...provider,
             vendorId: nextVendor.id,
-            model: nextVendor.defaultModel,
-            fieldValues: {},
+            model: provider.vendorId === nextVendor.id ? provider.model : nextVendor.defaultModel,
+            fieldValues: provider.vendorId === nextVendor.id ? provider.fieldValues : {},
         }, nextVendor));
+    };
+
+    const handleAddProvider = (): void => {
+        const vendor = selectedVendor ?? vendorCatalog[0] ?? null;
+        if (!settings || !vendor) {
+            return;
+        }
+
+        setAvailableModels([]);
+        const nextProvider = createProviderForVendor(vendor, settings.providers ?? []);
+        setSettings(withActiveProvider(settings, nextProvider));
+    };
+
+    const handleRemoveProvider = (): void => {
+        if (!settings || !activeProvider) {
+            return;
+        }
+
+        const providers = settings.providers ?? [];
+        if (providers.length <= 1) {
+            setFeedback(i18n.t("aiChatPlugin.providerRemoveLast"));
+            setFeedbackIsError(true);
+            return;
+        }
+
+        const nextProviders = providers.filter((provider) => provider.id !== activeProvider.id);
+        const nextProvider = nextProviders[0];
+        if (!nextProvider) {
+            return;
+        }
+        setAvailableModels([]);
+        setSettings({
+            ...withActiveProvider({
+                ...settings,
+                providers: nextProviders,
+            }, nextProvider),
+            providers: nextProviders,
+        });
     };
 
     /**
@@ -2377,14 +2587,13 @@ function AiChatSettingsSection(): ReactNode {
 
         try {
             const savedSettings = await saveAiChatSettingsToStore(currentVaultPath, settings);
-            const vendor = resolveVendor(vendorCatalog, savedSettings.vendorId);
-            const nextSettings = vendor ? mergeSettingsForVendor(savedSettings, vendor) : savedSettings;
+            const nextSettings = ensureSettingsProviderList(savedSettings, vendorCatalog);
+            const nextProvider = resolveActiveProvider(nextSettings);
+            const vendor = resolveVendor(vendorCatalog, nextProvider.vendorId);
             setSettings(nextSettings);
 
             if (vendor) {
-                const canRefreshModels = vendor.fields
-                    .filter((field) => field.required)
-                    .every((field) => (nextSettings.fieldValues[field.key] ?? "").trim().length > 0);
+                const canRefreshModels = isVendorSettingsComplete(nextSettings, vendor);
                 if (canRefreshModels) {
                     void loadVendorModels(nextSettings);
                 } else {
@@ -2435,12 +2644,60 @@ function AiChatSettingsSection(): ReactNode {
             </div>
 
             <div className="ai-chat-settings-row">
+                <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.providerLabel")}</div>
+                <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.providerDescription")}</div>
+                <select
+                    className="settings-compact-select"
+                    value={activeProvider?.id ?? ""}
+                    onChange={handleProviderChange}
+                >
+                    {(settings.providers ?? []).map((provider) => (
+                        <option key={provider.id} value={provider.id}>{provider.title}</option>
+                    ))}
+                </select>
+                <div className="ai-chat-settings-provider-actions">
+                    <button
+                        type="button"
+                        className="ai-chat-settings-mini-button"
+                        onClick={handleAddProvider}
+                    >
+                        <Plus size={13} strokeWidth={2} />
+                        <span>{i18n.t("aiChatPlugin.providerAdd")}</span>
+                    </button>
+                    <button
+                        type="button"
+                        className="ai-chat-settings-mini-button danger"
+                        onClick={handleRemoveProvider}
+                    >
+                        <X size={13} strokeWidth={2} />
+                        <span>{i18n.t("aiChatPlugin.providerRemove")}</span>
+                    </button>
+                </div>
+            </div>
+
+            <div className="ai-chat-settings-row">
+                <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.providerNameLabel")}</div>
+                <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.providerNameDescription")}</div>
+                <input
+                    className="ai-chat-settings-input"
+                    type="text"
+                    value={activeProvider?.title ?? ""}
+                    onChange={(event) => {
+                        updateActiveProvider((provider) => ({
+                            ...provider,
+                            title: event.target.value,
+                        }));
+                    }}
+                />
+            </div>
+
+            <div className="ai-chat-settings-row">
                 <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.vendorLabel")}</div>
                 <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.vendorDescription")}</div>
                 <select
                     className="settings-compact-select"
-                    value={settings.vendorId}
-                    onChange={handleVendorChange}
+                    value={activeProvider?.vendorId ?? ""}
+                    onChange={handleProviderTypeChange}
                 >
                     {vendorCatalog.map((vendor) => (
                         <option key={vendor.id} value={vendor.id}>{vendor.title}</option>
@@ -2453,17 +2710,17 @@ function AiChatSettingsSection(): ReactNode {
                 <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.modelDescription")}</div>
                 <select
                     className="settings-compact-select ai-chat-settings-model-select"
-                    value={settings.model}
+                    value={activeProvider?.model ?? ""}
                     disabled={isLoadingModels}
                     onChange={(event) => {
-                        setSettings((currentSettings) => currentSettings ? {
-                            ...currentSettings,
+                        updateActiveProvider((provider) => ({
+                            ...provider,
                             model: event.target.value,
-                        } : currentSettings);
+                        }));
                     }}
                 >
                     {availableModels.length === 0 ? (
-                        <option value={settings.model}>{settings.model || "-"}</option>
+                        <option value={activeProvider?.model ?? ""}>{activeProvider?.model || "-"}</option>
                     ) : availableModels.map((model) => (
                         <option key={model.id} value={model.id}>{model.id}</option>
                     ))}
@@ -2472,12 +2729,12 @@ function AiChatSettingsSection(): ReactNode {
                 <input
                     className="ai-chat-settings-input"
                     type="text"
-                    value={settings.model}
+                    value={activeProvider?.model ?? ""}
                     onChange={(event) => {
-                        setSettings((currentSettings) => currentSettings ? {
-                            ...currentSettings,
+                        updateActiveProvider((provider) => ({
+                            ...provider,
                             model: event.target.value,
-                        } : currentSettings);
+                        }));
                     }}
                 />
             </div>
@@ -2531,7 +2788,7 @@ function AiChatSettingsSection(): ReactNode {
                         type={field.fieldType}
                         required={field.required}
                         placeholder={field.placeholder ?? undefined}
-                        value={settings.fieldValues[field.key] ?? ""}
+                        value={activeProvider?.fieldValues[field.key] ?? ""}
                         onChange={(event) => {
                             updateFieldValue(field.key, event.target.value);
                         }}
@@ -2541,7 +2798,7 @@ function AiChatSettingsSection(): ReactNode {
 
             <div className="ai-chat-settings-actions">
                 <div className={`ai-chat-settings-feedback ${feedbackIsError ? "error" : ""}`}>
-                    {feedback ?? `${i18n.t("aiChatPlugin.configuredVendor")}: ${selectedVendor?.title ?? "-"}`}
+                    {feedback ?? `${i18n.t("aiChatPlugin.configuredVendor")}: ${activeProvider?.title ?? selectedVendor?.title ?? "-"}`}
                 </div>
                 <button
                     type="button"

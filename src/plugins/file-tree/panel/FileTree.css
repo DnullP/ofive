@@ -84,6 +84,13 @@
   font-size: 12px;
   line-height: 1.35;
   font-family: inherit;
+  outline: none;
+  transition: border-color 0.16s ease;
+}
+
+/* 文件树输入聚焦态：使用更深的 1px stroke，避免浏览器默认 outline 显得厚且发浅。 */
+.tree-rename-input:focus {
+  border-color: var(--accent-primary);
 }
 
 /* 拖拽源节点样式：在拖拽过程中降低源节点透明度。 */
