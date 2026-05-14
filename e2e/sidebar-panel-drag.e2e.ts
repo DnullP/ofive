@@ -412,6 +412,42 @@ async function splitPanelToBottom(
 }
 
 test.describe("layout-v2 panel icon split 持久化恢复", () => {
+    test("split divider pointercancel 应清理 resize 状态 @mouse-drag", async ({ page }) => {
+        const vaultPath = `/mock/split-divider-pointercancel-${Date.now()}`;
+        const storageKey = `${BROWSER_FALLBACK_CONFIG_PREFIX}${vaultPath}`;
+
+        await page.goto(`${MOCK_PAGE}?showControls=0&mockVaultPath=${encodeURIComponent(vaultPath)}`);
+        await page.evaluate((key) => window.localStorage.removeItem(key), storageKey);
+        await page.reload();
+        await page.locator("[data-layout-role='panel-section']").first().waitFor({ state: "visible" });
+
+        const divider = page
+            .locator(".layout-v2__divider--horizontal[aria-label='Resize sections']")
+            .nth(1);
+        await expect(divider).toBeVisible();
+
+        const box = await divider.boundingBox();
+        expect(box).not.toBeNull();
+
+        await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+        await page.mouse.down();
+        await expect(page.locator("html[data-layout-resizing='true']")).toHaveCount(1);
+        await expect(divider).toHaveClass(/layout-v2__divider--dragging/);
+
+        await page.evaluate(() => {
+            window.dispatchEvent(new PointerEvent("pointercancel", {
+                pointerId: 1,
+                pointerType: "mouse",
+                bubbles: true,
+                cancelable: true,
+            }));
+        });
+        await waitForNextFrame(page);
+
+        await expect(page.locator("html[data-layout-resizing='true']")).toHaveCount(0);
+        await expect(divider).not.toHaveClass(/layout-v2__divider--dragging/);
+    });
+
     test("panel icon split 后 reload 应恢复拓扑且不触发 React <fa> 错误", async ({ page }) => {
         const pageErrors: string[] = [];
         const reactWarnings: string[] = [];

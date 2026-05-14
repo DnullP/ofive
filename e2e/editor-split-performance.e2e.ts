@@ -207,4 +207,74 @@ test.describe("editor split performance", () => {
         await expect(page.locator(LIVE_EDITOR_SELECTOR)).toHaveCount(2);
         expect(pageErrors).toEqual([]);
     });
+
+    test(`leaving split zone before mouseup should not commit stale split ${MOUSE_DRAG_TAG}`, async ({ page }) => {
+        const pageErrors: string[] = [];
+        page.on("pageerror", (error) => {
+            pageErrors.push(error.message);
+        });
+
+        await waitForMockWorkbench(page);
+        await openMockNote(page, "test-resources/notes/table-vim-boundary.md");
+
+        const sourceTab = page.locator(".layout-v2-tab-section__tab-main", { hasText: "table-vim-boundary.md" }).first();
+        const targetContent = page.locator(".layout-v2-tab-section__content").first();
+        const sourceBounds = await sourceTab.boundingBox();
+        const targetBounds = await targetContent.boundingBox();
+        if (!sourceBounds || !targetBounds) {
+            throw new Error("leaving split zone: bounds missing");
+        }
+
+        await page.mouse.move(sourceBounds.x + sourceBounds.width / 2, sourceBounds.y + sourceBounds.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(targetBounds.x + targetBounds.width - 16, targetBounds.y + targetBounds.height / 2, { steps: 16 });
+        await page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+
+        await expect(page.locator("[data-layout-tab-preview-overlay='true']")).toBeVisible();
+
+        await page.mouse.move(targetBounds.x + targetBounds.width / 2, targetBounds.y + targetBounds.height / 2);
+        await page.mouse.up();
+        await page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+
+        await expect(page.locator("[data-layout-tab-preview-overlay='true']")).toHaveCount(0);
+        await expect(page.locator(".layout-v2-tab-section")).toHaveCount(1);
+        await expect(page.locator(".layout-v2-tab-section__tab-main", { hasText: "table-vim-boundary.md" })).toHaveCount(1);
+        expect(pageErrors).toEqual([]);
+    });
+
+    test(`moving from split zone to tab strip before mouseup should not commit stale split ${MOUSE_DRAG_TAG}`, async ({ page }) => {
+        const pageErrors: string[] = [];
+        page.on("pageerror", (error) => {
+            pageErrors.push(error.message);
+        });
+
+        await waitForMockWorkbench(page);
+        await openMockNote(page, "test-resources/notes/table-vim-boundary.md");
+
+        const sourceTab = page.locator(".layout-v2-tab-section__tab-main", { hasText: "table-vim-boundary.md" }).first();
+        const targetContent = page.locator(".layout-v2-tab-section__content").first();
+        const targetStrip = page.locator(".layout-v2-tab-section__strip").first();
+        const sourceBounds = await sourceTab.boundingBox();
+        const contentBounds = await targetContent.boundingBox();
+        const stripBounds = await targetStrip.boundingBox();
+        if (!sourceBounds || !contentBounds || !stripBounds) {
+            throw new Error("moving from split zone to strip: bounds missing");
+        }
+
+        await page.mouse.move(sourceBounds.x + sourceBounds.width / 2, sourceBounds.y + sourceBounds.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(contentBounds.x + contentBounds.width - 16, contentBounds.y + contentBounds.height / 2, { steps: 16 });
+        await page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+
+        await expect(page.locator("[data-layout-tab-preview-overlay='true']")).toBeVisible();
+
+        await page.mouse.move(stripBounds.x + stripBounds.width / 2, stripBounds.y + stripBounds.height / 2);
+        await page.mouse.up();
+        await page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+
+        await expect(page.locator("[data-layout-tab-preview-overlay='true']")).toHaveCount(0);
+        await expect(page.locator(".layout-v2-tab-section")).toHaveCount(1);
+        await expect(page.locator(".layout-v2-tab-section__tab-main", { hasText: "table-vim-boundary.md" })).toHaveCount(1);
+        expect(pageErrors).toEqual([]);
+    });
 });
