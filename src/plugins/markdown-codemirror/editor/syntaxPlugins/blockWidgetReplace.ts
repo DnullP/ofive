@@ -104,10 +104,10 @@ export function rangeTouchesBlock(
 ): boolean {
     return selections.some((selection) => {
         if (selection.empty) {
-            return selection.from >= range.from && selection.from <= range.to;
+            return selection.from >= range.from && selection.from < range.to;
         }
 
-        return selection.from <= range.to && selection.to >= range.from;
+        return selection.from < range.to && selection.to > range.from;
     });
 }
 

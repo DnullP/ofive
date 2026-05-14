@@ -18,20 +18,25 @@ async function openAgentSkillsPanel(page: Page): Promise<void> {
 }
 
 test.describe("agent skills panel", () => {
-    test("creates and edits a vault-backed Agent SKILL in mock web", async ({ page }) => {
+    test("creates a vault-backed Agent SKILL and opens its files in an editor tab", async ({ page }) => {
         await gotoMockVaultPage(page, "agent-skills", "/web-mock/mock-tauri-test.html?showControls=0");
         await waitForWorkbench(page);
         await openAgentSkillsPanel(page);
 
-        await page.locator(".agent-skills-create input").fill("research-helper");
-        await page.locator(".agent-skills-create textarea").fill("research local notes");
-        await page.locator(".agent-skills-create button").click();
+        await page.locator(".agent-skills-add-button").click();
+        await expect(page.locator(".agent-skills-create-modal")).toBeVisible();
+        await page.getByTestId("agent-skills-name-input").fill("research-helper");
+        await page.getByTestId("agent-skills-description-input").fill("research local notes");
+        await page.locator(".agent-skills-create-modal button[type='submit']").click();
 
-        await expect(page.locator(".agent-skills-list button", { hasText: "research-helper" })).toBeVisible();
-        await expect(page.locator(".agent-skills-editor")).toHaveValue(/name: research-helper/u);
+        await expect(page.locator(".agent-skills-create-modal")).toBeHidden();
+        await expect(page.locator(".agent-skills-skill-list [data-agent-skill-name='research-helper']")).toBeVisible();
+        await expect(page.locator(".agent-skills-file-tree [data-agent-skill-file-path='SKILL.md']")).toBeVisible();
 
-        await page.locator(".agent-skills-reference input").fill("references/context.md");
-        await page.locator(".agent-skills-reference button").click();
-        await expect(page.locator(".agent-skills-files button", { hasText: "references/context.md" })).toBeVisible();
+        await page.locator(".agent-skills-file-tree [data-agent-skill-file-path='SKILL.md']").click();
+
+        const activeEditor = page.locator(".layout-v2-tab-section__card--active");
+        await expect(activeEditor.locator(".cm-content")).toBeVisible();
+        await expect(activeEditor.locator(".cm-content")).toContainText("name: research-helper");
     });
 });

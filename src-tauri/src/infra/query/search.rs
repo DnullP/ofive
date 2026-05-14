@@ -290,7 +290,7 @@ fn extract_inline_tags(content: &str) -> Vec<String> {
 }
 
 /// 提取并去重 Markdown 文件中的所有标签。
-fn extract_search_tags(content: &str) -> Vec<String> {
+pub(crate) fn extract_search_tags(content: &str) -> Vec<String> {
     let mut tags = BTreeSet::new();
     for tag in extract_frontmatter_tags(content) {
         tags.insert(tag);

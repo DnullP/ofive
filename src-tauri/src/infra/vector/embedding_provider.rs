@@ -352,16 +352,13 @@ mod tests {
         available_embedding_providers, build_embedding_provider, semantic_index_embedding_cache_dir,
     };
     use crate::app::app_storage::storage_registry_facade::{
-        resolve_app_storage_owner_dir, set_app_storage_test_root,
+        lock_app_storage_test_root, resolve_app_storage_owner_dir, set_app_storage_test_root,
     };
     use crate::shared::semantic_index_contracts::EmbeddingProviderKind;
     use std::fs;
     use std::path::Path;
     use std::path::PathBuf;
-    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
-
-    static TEST_APP_STORAGE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     struct AppStorageTestGuard {
         _lock: std::sync::MutexGuard<'static, ()>,
@@ -370,10 +367,7 @@ mod tests {
 
     impl AppStorageTestGuard {
         fn new() -> Self {
-            let lock = TEST_APP_STORAGE_LOCK
-                .get_or_init(|| Mutex::new(()))
-                .lock()
-                .expect("app storage test lock should succeed");
+            let lock = lock_app_storage_test_root().expect("app storage test lock should succeed");
             let root = std::env::temp_dir().join(format!(
                 "ofive-fastembed-app-storage-{}",
                 SystemTime::now()

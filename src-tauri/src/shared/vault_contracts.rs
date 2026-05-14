@@ -257,6 +257,7 @@ pub struct ResolveMediaEmbedTargetResponse {
 pub struct VaultMarkdownGraphNode {
     pub path: String,
     pub title: String,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

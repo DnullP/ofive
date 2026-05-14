@@ -28,6 +28,9 @@ const APP_PRIVATE_STORE_APPLICATION: &str = "ofive";
 #[cfg(test)]
 static APP_PRIVATE_TEST_ROOT: std::sync::OnceLock<std::sync::Mutex<Option<PathBuf>>> =
     std::sync::OnceLock::new();
+#[cfg(test)]
+static APP_PRIVATE_TEST_ROOT_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
+    std::sync::OnceLock::new();
 
 /// 应用级私有状态文件 envelope。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -258,6 +261,15 @@ pub(crate) fn set_app_private_store_test_root(root: Option<PathBuf>) -> Result<(
     Ok(())
 }
 
+#[cfg(test)]
+pub(crate) fn lock_app_private_store_test_root(
+) -> Result<std::sync::MutexGuard<'static, ()>, String> {
+    APP_PRIVATE_TEST_ROOT_LOCK
+        .get_or_init(|| std::sync::Mutex::new(()))
+        .lock()
+        .map_err(|error| format!("app private store test root lock poisoned: {error}"))
+}
+
 fn app_private_state_file_path(owner: &str, state_key: &str) -> Result<PathBuf, String> {
     validate_app_private_store_segment(owner, "owner")?;
     validate_app_private_store_segment(state_key, "state_key")?;
@@ -373,17 +385,16 @@ fn app_private_store_test_root() -> Result<Option<PathBuf>, String> {
 mod tests {
     use super::{
         app_private_owner_dir, list_app_private_states, load_app_private_state,
-        save_app_private_state, set_app_private_store_test_root,
+        lock_app_private_store_test_root, save_app_private_state, set_app_private_store_test_root,
     };
     use serde::{Deserialize, Serialize};
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::{Mutex, MutexGuard, OnceLock};
+    use std::sync::MutexGuard;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(1);
-    static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     const TEST_OWNER: &str = "app-private-store-test-owner";
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -407,22 +418,17 @@ mod tests {
         ))
     }
 
-    fn lock_app_private_store_tests() -> MutexGuard<'static, ()> {
-        TEST_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
     struct AppPrivateStoreTestRoot {
+        _lock: MutexGuard<'static, ()>,
         root: PathBuf,
     }
 
     impl AppPrivateStoreTestRoot {
         fn install() -> Self {
+            let lock = lock_app_private_store_test_root().expect("test root lock should succeed");
             let root = create_test_root();
             set_app_private_store_test_root(Some(root.clone())).expect("test root should set");
-            Self { root }
+            Self { _lock: lock, root }
         }
     }
 
@@ -435,7 +441,6 @@ mod tests {
 
     #[test]
     fn app_private_store_should_roundtrip_typed_state() {
-        let _lock = lock_app_private_store_tests();
         let _test_root = AppPrivateStoreTestRoot::install();
 
         save_app_private_state(
@@ -457,7 +462,6 @@ mod tests {
 
     #[test]
     fn app_private_store_should_list_owner_states() {
-        let _lock = lock_app_private_store_tests();
         let test_root = AppPrivateStoreTestRoot::install();
 
         save_app_private_state(

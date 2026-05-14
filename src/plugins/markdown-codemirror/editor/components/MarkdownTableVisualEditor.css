@@ -8,8 +8,14 @@
 
 /* mtv-table-scroll: keeps resized tables usable inside the editor. */
 .mtv-table-scroll {
-    overflow: auto;
+    overflow: visible;
     padding: 16px 0 0 20px;
+}
+
+.mtv-table-x-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    width: 100%;
 }
 
 .mtv-table-grid-shell {
@@ -268,7 +274,7 @@
 .mtv-resize-handle--row {
     left: 0;
     right: 0;
-    bottom: -3px;
+    bottom: 0;
     height: 6px;
     cursor: row-resize;
 }

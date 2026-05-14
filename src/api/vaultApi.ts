@@ -186,6 +186,8 @@ export interface VaultMarkdownGraphNode {
     path: string;
     /** 节点标题 */
     title: string;
+    /** 节点标签，用于图谱染色等前端渲染规则 */
+    tags?: string[];
 }
 
 /**
@@ -837,6 +839,7 @@ function buildBrowserMockMarkdownGraph(markdownContents: Record<string, string>)
     const nodes: VaultMarkdownGraphNode[] = paths.map((path) => ({
         path,
         title: path.split("/").pop()?.replace(/\.(md|markdown)$/i, "") ?? path,
+        tags: extractBrowserFallbackSearchTags(markdownContents[path] ?? ""),
     }));
 
     const nodePathSet = new Set(paths);
@@ -1453,6 +1456,18 @@ function buildBrowserAgentSkillKey(skillName: string, relativePath: string): str
     return `${normalizeAgentSkillName(skillName)}/${normalizeSlashPath(relativePath).replace(/^\/+/, "")}`;
 }
 
+function parseAgentSkillVaultPath(relativePath: string): { skillName: string; filePath: string } | null {
+    const normalizedPath = normalizeSlashPath(relativePath).replace(/^\/+/, "");
+    const match = /^\.ofive\/skills\/([^/]+)\/(.+)$/u.exec(normalizedPath);
+    if (!match?.[1] || !match[2]) {
+        return null;
+    }
+    return {
+        skillName: match[1],
+        filePath: match[2],
+    };
+}
+
 function extractBrowserAgentSkillDescription(content: string): string {
     const match = /^---\r?\n([\s\S]*?)\r?\n---/u.exec(content);
     if (!match) {
@@ -1577,6 +1592,15 @@ export async function writeAgentSkillFile(
  * @returns 文件内容。
  */
 export async function readVaultMarkdownFile(relativePath: string): Promise<ReadMarkdownResponse> {
+    const agentSkillPath = parseAgentSkillVaultPath(relativePath);
+    if (agentSkillPath) {
+        const response = await readAgentSkillFile(agentSkillPath.skillName, agentSkillPath.filePath);
+        return {
+            relativePath: normalizeSlashPath(relativePath).replace(/^\/+/, ""),
+            content: response.content,
+        };
+    }
+
     if (!isTauriRuntime()) {
         const markdownContents = await getBrowserMockMarkdownContents();
         const mockContent = markdownContents[relativePath] ?? "";
@@ -2229,6 +2253,15 @@ export async function saveVaultMarkdownFile(
     relativePath: string,
     content: string,
 ): Promise<WriteMarkdownResponse> {
+    const agentSkillPath = parseAgentSkillVaultPath(relativePath);
+    if (agentSkillPath) {
+        const response = await writeAgentSkillFile(agentSkillPath.skillName, agentSkillPath.filePath, content);
+        return {
+            relativePath: normalizeSlashPath(relativePath).replace(/^\/+/, ""),
+            created: response.created,
+        };
+    }
+
     if (!isTauriRuntime()) {
         const markdownContents = await getBrowserMockMarkdownContents();
         markdownContents[normalizeSlashPath(relativePath)] = content;

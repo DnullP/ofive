@@ -21,4 +21,11 @@ describe("shouldKeepMarkdownTableSourceVisible", () => {
             [{ from: 60, to: 60, empty: true }],
         )).toBe(false);
     });
+
+    test("空光标位于表格开区间结尾时应视为已离开源码", () => {
+        expect(shouldKeepMarkdownTableSourceVisible(
+            { from: 12, to: 48 },
+            [{ from: 48, to: 48, empty: true }],
+        )).toBe(false);
+    });
 });

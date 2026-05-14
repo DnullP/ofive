@@ -36,6 +36,12 @@ const KNOWLEDGE_GRAPH_THEME_COLOR_TOKENS = {
  */
 type KnowledgeGraphThemeColorKey = keyof typeof KNOWLEDGE_GRAPH_THEME_COLOR_TOKENS;
 
+export interface KnowledgeGraphNodeColorGroup {
+    id: string;
+    query: string;
+    color: string;
+}
+
 /**
  * @function normalizeGraphCssColor
  * @description 将浏览器计算出的 CSS 颜色值规整为图引擎稳定可解析的 rgb/rgba 字符串。
@@ -158,7 +164,44 @@ function createKnowledgeGraphThemeConfig(): Pick<GraphConfigInterface, Knowledge
  *   仅包含允许持久化和用户调整的结构/交互参数。
  *   图谱配色完全由主题 token 控制，不暴露为 setting。
  */
-export const DEFAULT_KNOWLEDGE_GRAPH_SETTINGS = {
+export interface KnowledgeGraphSettings {
+    pointDefaultSize: number;
+    pointSizeScale: number;
+    pointOpacity: number;
+    renderHoveredPointRing: boolean;
+    linkDefaultWidth: number;
+    linkWidthScale: number;
+    linkOpacity: number;
+    simulationDecay: number;
+    simulationGravity: number;
+    simulationCenter: number;
+    simulationRepulsion: number;
+    simulationRepulsionTheta: number;
+    simulationLinkSpring: number;
+    simulationLinkDistance: number;
+    simulationRepulsionFromMouse: number;
+    simulationFriction: number;
+    simulationCluster: number;
+    enableRightClickRepulsion: boolean;
+    enableZoom: boolean;
+    enableDrag: boolean;
+    enableSimulationDuringZoom: boolean;
+    fitViewOnInit: boolean;
+    fitViewDelay: number;
+    fitViewPadding: number;
+    fitViewDuration: number;
+    pixelRatio: number;
+    scalePointsOnZoom: boolean;
+    scaleLinksOnZoom: boolean;
+    pointSamplingDistance: number;
+    showFPSMonitor: boolean;
+    spaceSize: number;
+    rescalePositions: boolean;
+    labelVisibleZoomLevel: number;
+    nodeColorGroups: KnowledgeGraphNodeColorGroup[];
+}
+
+export const DEFAULT_KNOWLEDGE_GRAPH_SETTINGS: KnowledgeGraphSettings = {
     pointDefaultSize: 2.5,
     pointSizeScale: 1,
     pointOpacity: 1,
@@ -192,14 +235,7 @@ export const DEFAULT_KNOWLEDGE_GRAPH_SETTINGS = {
     spaceSize: 2048,
     rescalePositions: false,
     labelVisibleZoomLevel: 3.8,
-} as const;
-
-/**
- * @type KnowledgeGraphSettings
- * @description 知识图谱设置对象类型。
- */
-export type KnowledgeGraphSettings = {
-    [K in keyof typeof DEFAULT_KNOWLEDGE_GRAPH_SETTINGS]: (typeof DEFAULT_KNOWLEDGE_GRAPH_SETTINGS)[K];
+    nodeColorGroups: [],
 };
 
 /**
@@ -306,7 +342,11 @@ export const KNOWLEDGE_GRAPH_SETTING_DEFINITIONS: KnowledgeGraphSettingDefinitio
  * @returns Graph 配置。
  */
 export function buildKnowledgeGraphConfig(settings: KnowledgeGraphSettings): GraphConfigInterface {
-    const { labelVisibleZoomLevel: _ignored, ...graphConfig } = settings;
+    const {
+        labelVisibleZoomLevel: _ignored,
+        nodeColorGroups: _ignoredNodeColorGroups,
+        ...graphConfig
+    } = settings;
 
     return {
         ...graphConfig,

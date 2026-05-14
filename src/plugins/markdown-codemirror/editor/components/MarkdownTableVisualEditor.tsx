@@ -1928,18 +1928,19 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             onBlurCapture={handleWrapperBlurCapture}
         >
             <div className="mtv-table-scroll">
-                <div className="mtv-table-grid-shell">
-                    <div className="mtv-corner-spacer" />
-                    <div className="mtv-column-edge-row" style={columnWidthStyle}>
-                        {tableModel.headers.map((_, columnIndex) => renderColumnEdgeHandle(columnIndex))}
-                    </div>
-                    <div className="mtv-row-edge-column">
-                        <div className="mtv-row-header-spacer" />
-                        {tableModel.rows.map((_, rowIndex) => renderRowEdgeHandle(rowIndex))}
-                    </div>
-                    <table className="mtv-table" style={columnWidthStyle}>
-                        <thead>
-                            <tr>
+                <div className="mtv-table-x-scroll">
+                    <div className="mtv-table-grid-shell">
+                        <div className="mtv-corner-spacer" />
+                        <div className="mtv-column-edge-row" style={columnWidthStyle}>
+                            {tableModel.headers.map((_, columnIndex) => renderColumnEdgeHandle(columnIndex))}
+                        </div>
+                        <div className="mtv-row-edge-column">
+                            <div className="mtv-row-header-spacer" />
+                            {tableModel.rows.map((_, rowIndex) => renderRowEdgeHandle(rowIndex))}
+                        </div>
+                        <table className="mtv-table" style={columnWidthStyle}>
+                            <thead>
+                                <tr>
                             {tableModel.headers.map((header, columnIndex) => {
                                 const position: MarkdownTableCellPosition = {
                                     section: "header",
@@ -2008,10 +2009,10 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                     </th>
                                 );
                             })}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {tableModel.rows.map((row, rowIndex) => (
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {tableModel.rows.map((row, rowIndex) => (
                             <tr
                                 key={`body-row-${rowIndex}`}
                                 className="mtv-table-body-row"
@@ -2093,9 +2094,10 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                     );
                                 })}
                             </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
             {renderContextMenu()}

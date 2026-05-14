@@ -14,7 +14,7 @@ export function activatePlugin(): () => void {
         activityId: "files",
         defaultPosition: "left",
         defaultOrder: 3,
-        render: () => React.createElement(AgentSkillsPanel),
+        render: (context) => React.createElement(AgentSkillsPanel, { context }),
     });
 
     console.info("[agentSkillsPlugin] registered agent skills panel");

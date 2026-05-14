@@ -29,6 +29,7 @@ mock.module("react-i18next", () => ({
 
 mock.module("lucide-react", () => ({
     Search: () => <span>{SETTINGS_TAB_TEST_SEARCH_ICON}</span>,
+    Settings: () => null,
     ArrowUp: () => null,
     Bot: () => null,
     Check: () => null,

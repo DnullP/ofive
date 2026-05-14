@@ -60,9 +60,9 @@ mod tests {
         write_markdown_file(
             &root,
             "A.md",
-            "[[B]] [[B|别名]] [[A]] [to-b](./B) [missing](./Missing)",
+            "---\ntags:\n  - project\n---\n[[B]] [[B|别名]] [[A]] [to-b](./B) [missing](./Missing)",
         );
-        write_markdown_file(&root, "B.md", "[[A]]");
+        write_markdown_file(&root, "B.md", "[[A]] #area");
         write_markdown_file(&root, "sub/C.md", "[[../B]]");
 
         ensure_query_index_current(&root).expect("构建索引应成功");
@@ -82,6 +82,14 @@ mod tests {
             .map(|node| node.title.as_str())
             .collect::<Vec<_>>();
         assert_eq!(node_titles, vec!["A", "B", "C"]);
+
+        let node_tags = graph
+            .nodes
+            .iter()
+            .map(|node| node.tags.iter().map(String::as_str).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        assert_eq!(node_tags[0], vec!["project"]);
+        assert_eq!(node_tags[1], vec!["area"]);
 
         let mut edge_weights = BTreeMap::<(String, String), usize>::new();
         for edge in graph.edges {

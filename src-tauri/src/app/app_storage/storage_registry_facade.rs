@@ -49,3 +49,8 @@ where
 pub(crate) fn set_app_storage_test_root(root: Option<PathBuf>) -> Result<(), String> {
     storage_registry_app_service::set_app_storage_test_root(root)
 }
+
+#[cfg(test)]
+pub(crate) fn lock_app_storage_test_root() -> Result<std::sync::MutexGuard<'static, ()>, String> {
+    storage_registry_app_service::lock_app_storage_test_root()
+}

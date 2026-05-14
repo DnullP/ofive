@@ -15,15 +15,26 @@
  */
 
 import { Graph, type GraphConfigInterface } from "@cosmos.gl/graph";
+import { Plus, Settings, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import type { WorkbenchTabProps } from "../../../host/layout/workbenchContracts";
-import { getCurrentVaultMarkdownGraph } from "../../../api/vaultApi";
+import { getCurrentVaultMarkdownGraph, type VaultMarkdownGraphNode } from "../../../api/vaultApi";
 import { createKnowledgeGraphInteractionCallbacksFor } from "./knowledgeGraphInteractions";
-import { buildKnowledgeGraphConfig } from "./knowledgeGraphSettings";
+import {
+    buildKnowledgeGraphColorQuerySuggestions,
+    type KnowledgeGraphColorQuerySuggestion,
+} from "./knowledgeGraphColorQuerySuggestions";
+import { buildKnowledgeGraphPointColors } from "./knowledgeGraphNodeColoring";
+import { buildKnowledgeGraphPointSizes } from "./knowledgeGraphNodeSizing";
+import {
+    buildKnowledgeGraphConfig,
+    type KnowledgeGraphNodeColorGroup,
+} from "./knowledgeGraphSettings";
 import type { GraphLabelItem, VisibleGraphLabel } from "./knowledgeGraphLabelSelector";
 import { KnowledgeGraphCanvasLabelRenderer } from "./knowledgeGraphCanvasLabelRenderer";
 import {
+    updateGraphSetting,
     useGraphSettingsState,
     useGraphSettingsSync,
 } from "../store/graphSettingsStore";
@@ -45,7 +56,7 @@ interface GraphTabState {
 
 /**
  * @interface KnowledgeGraphPerfTestHook
- * @description 图谱性能测试钩子：为前端 perf 场景提供缩放和标签状态读取能力。
+ * @description 图谱测试钩子：为前端 perf/e2e 场景提供缩放、标签和节点渲染采样能力。
  */
 interface KnowledgeGraphPerfTestHook {
     /** 获取当前缩放级别。 */
@@ -62,6 +73,42 @@ interface KnowledgeGraphPerfTestHook {
         swapCount: number;
         maxSwapCount: number;
     };
+    /** 读取节点当前图谱空间坐标。 */
+    getPointPositions: () => number[];
+    /** 读取节点当前屏幕坐标，用于交互和像素采样回归测试。 */
+    getPointScreenPositions: () => Array<{
+        index: number;
+        x: number;
+        y: number;
+        radius: number;
+    }>;
+    /** 读取图谱画布宿主区域，坐标为 viewport 坐标。 */
+    getHostRect: () => {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+    } | null;
+    /** 触发一次仿真补能，供节点动态效果测试采样。 */
+    startSimulation: (alpha?: number) => void;
+    /** 让图引擎重绘当前帧，供视觉采样前刷新。 */
+    renderFrame: (alpha?: number) => void;
+    /** 将指定节点设为聚焦点，稳定触发节点高亮环渲染。 */
+    focusPoint: (index: number | null) => void;
+    /** 采样指定节点附近画布像素能量，用于锁定节点/高亮环渲染是否发生。 */
+    samplePointPixelEnergy: (index: number, radius?: number) => {
+        alpha: number;
+        brightness: number;
+        sampleCount: number;
+    } | null;
+    /** 读取当前节点颜色数组，供染色规则 e2e 验证。 */
+    getPointColors: () => number[];
+    /** 读取当前图谱渲染设置摘要，供实时设置 e2e 验证。 */
+    getRenderSettings: () => {
+        linkDefaultWidth: number;
+        linkOpacity: number;
+        nodeColorGroups: KnowledgeGraphNodeColorGroup[];
+    };
 }
 
 interface SpaceBounds {
@@ -73,7 +120,7 @@ interface SpaceBounds {
 
 declare global {
     interface Window {
-        /** 知识图谱性能测试钩子，仅用于 perf 场景驱动连续缩放。 */
+        /** 知识图谱测试钩子，仅用于 perf/e2e 场景驱动缩放、仿真和渲染采样。 */
         __OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?: KnowledgeGraphPerfTestHook;
     }
 }
@@ -126,6 +173,179 @@ const LABEL_FADE_RANGE = 0.15;
  * @description fitView 后额外放大的缩放倍率。
  */
 const ZOOM_IN_SCALE_AFTER_FIT = 1.2;
+
+const DEFAULT_COLOR_GROUP_COLOR = "#ff5252";
+
+interface KnowledgeGraphColorQueryInputProps {
+    group: KnowledgeGraphNodeColorGroup;
+    index: number;
+    nodes: readonly VaultMarkdownGraphNode[];
+    placeholder: string;
+    tagScopeLabel: string;
+    directoryScopeLabel: string;
+    autoFocus: boolean;
+    onAutoFocusComplete: () => void;
+    onQueryChange: (query: string) => void;
+}
+
+function getSuggestionDisplayLabel(
+    suggestion: KnowledgeGraphColorQuerySuggestion,
+    tagScopeLabel: string,
+    directoryScopeLabel: string,
+): string {
+    if (suggestion.kind === "scope") {
+        return suggestion.value === "tag:" ? tagScopeLabel : directoryScopeLabel;
+    }
+
+    return suggestion.label;
+}
+
+/**
+ * @function KnowledgeGraphColorQueryInput
+ * @description 颜色组查询输入框，提供 tag / 目录查询补全与键盘选择。
+ */
+function KnowledgeGraphColorQueryInput(
+    props: KnowledgeGraphColorQueryInputProps,
+): ReactElement {
+    const {
+        group,
+        index,
+        nodes,
+        placeholder,
+        tagScopeLabel,
+        directoryScopeLabel,
+        autoFocus,
+        onAutoFocusComplete,
+        onQueryChange,
+    } = props;
+    const inputRef = useRef<HTMLInputElement | null>(null);
+    const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+    const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
+    const suggestions = useMemo(
+        () => buildKnowledgeGraphColorQuerySuggestions(nodes, group.query),
+        [nodes, group.query],
+    );
+    const listboxId = `knowledge-graph-color-query-suggestions-${group.id}`;
+    const activeSuggestion = suggestions[activeSuggestionIndex];
+
+    useEffect(() => {
+        if (suggestions.length === 0) {
+            setActiveSuggestionIndex(0);
+            return;
+        }
+
+        setActiveSuggestionIndex((current) => Math.min(current, suggestions.length - 1));
+    }, [suggestions.length]);
+
+    useEffect(() => {
+        if (!autoFocus) {
+            return;
+        }
+
+        inputRef.current?.focus();
+        setSuggestionsOpen(true);
+        onAutoFocusComplete();
+    }, [autoFocus, onAutoFocusComplete]);
+
+    const commitSuggestion = (suggestion: KnowledgeGraphColorQuerySuggestion): void => {
+        onQueryChange(suggestion.value);
+        setSuggestionsOpen(false);
+    };
+
+    return (
+        <div className="knowledge-graph-tab__color-query-combobox">
+            <input
+                ref={inputRef}
+                className="knowledge-graph-tab__color-query"
+                data-testid={`knowledge-graph-color-query-${index}`}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={suggestionsOpen && suggestions.length > 0}
+                aria-controls={listboxId}
+                aria-activedescendant={suggestionsOpen && activeSuggestion
+                    ? `${listboxId}-option-${activeSuggestionIndex}`
+                    : undefined}
+                value={group.query}
+                placeholder={placeholder}
+                onFocus={() => setSuggestionsOpen(true)}
+                onBlur={() => setSuggestionsOpen(false)}
+                onChange={(event) => {
+                    onQueryChange(event.target.value);
+                    setActiveSuggestionIndex(0);
+                    setSuggestionsOpen(true);
+                }}
+                onKeyDown={(event) => {
+                    if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        setSuggestionsOpen(true);
+                        setActiveSuggestionIndex((current) => (
+                            suggestions.length > 0 ? (current + 1) % suggestions.length : 0
+                        ));
+                        return;
+                    }
+
+                    if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        setSuggestionsOpen(true);
+                        setActiveSuggestionIndex((current) => (
+                            suggestions.length > 0
+                                ? (current - 1 + suggestions.length) % suggestions.length
+                                : 0
+                        ));
+                        return;
+                    }
+
+                    if (event.key === "Enter" && suggestionsOpen && activeSuggestion) {
+                        event.preventDefault();
+                        commitSuggestion(activeSuggestion);
+                        return;
+                    }
+
+                    if (event.key === "Escape") {
+                        event.preventDefault();
+                        setSuggestionsOpen(false);
+                    }
+                }}
+            />
+            {suggestionsOpen && suggestions.length > 0 && (
+                <div
+                    id={listboxId}
+                    className="knowledge-graph-tab__color-query-suggestions"
+                    data-testid={`knowledge-graph-color-query-suggestions-${index}`}
+                    role="listbox"
+                >
+                    {suggestions.map((suggestion, suggestionIndex) => (
+                        <button
+                            id={`${listboxId}-option-${suggestionIndex}`}
+                            key={suggestion.id}
+                            type="button"
+                            className={[
+                                "knowledge-graph-tab__color-query-suggestion",
+                                suggestionIndex === activeSuggestionIndex
+                                    ? "knowledge-graph-tab__color-query-suggestion--active"
+                                    : "",
+                            ].filter(Boolean).join(" ")}
+                            data-testid={`knowledge-graph-color-query-suggestion-${index}-${suggestionIndex}`}
+                            role="option"
+                            aria-selected={suggestionIndex === activeSuggestionIndex}
+                            onMouseDown={(event) => {
+                                event.preventDefault();
+                                commitSuggestion(suggestion);
+                            }}
+                        >
+                            <span className="knowledge-graph-tab__color-query-suggestion-kind">
+                                {getSuggestionDisplayLabel(suggestion, tagScopeLabel, directoryScopeLabel)}
+                            </span>
+                            <span className="knowledge-graph-tab__color-query-suggestion-value">
+                                {suggestion.value}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
 
 /**
  * @function createSeededRandom
@@ -259,9 +479,12 @@ export function KnowledgeGraphTab(
     const labelLayerRef = useRef<HTMLDivElement | null>(null);
     const labelRendererRef = useRef<KnowledgeGraphCanvasLabelRenderer | null>(null);
     const labelItemsRef = useRef<GraphLabelItem[]>([]);
+    const graphNodesRef = useRef<VaultMarkdownGraphNode[]>([]);
+    const graphLinksRef = useRef<number[]>([]);
     const dragTailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const labelRafRef = useRef<number | null>(null);
     const lastDragReheatTimeRef = useRef<number>(0);
+    const graphSettingsRef = useRef(graphSettings);
     /** 节点索引到相对路径的映射表，用于点击节点时打开对应笔记 */
     const nodePathsByIndexRef = useRef<Map<number, string>>(new Map());
     /** 标签显示缩放阈值引用，供交互回调闭包读取最新值 */
@@ -272,21 +495,133 @@ export function KnowledgeGraphTab(
         nodeCount: 0,
         edgeCount: 0,
     });
+    const [suggestionNodes, setSuggestionNodes] = useState<readonly VaultMarkdownGraphNode[]>([]);
+    const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
+    const [pendingFocusColorGroupId, setPendingFocusColorGroupId] = useState<string | null>(null);
 
     const graphConfig: GraphConfigInterface = useMemo(
         () => buildKnowledgeGraphConfig(graphSettings),
         [graphSettings, themeMode],
     );
 
+    useEffect(() => {
+        graphSettingsRef.current = graphSettings;
+    }, [graphSettings]);
+
     /**
      * @function registerPerfTestHook
-     * @description 注册图谱性能测试钩子，供 Playwright 场景驱动连续缩放。
+     * @description 注册图谱性能/交互测试钩子，供 Playwright 场景驱动连续缩放与节点渲染采样。
      * @param graph Graph 实例。
      */
     const registerPerfTestHook = (graph: Graph): void => {
         if (typeof window === "undefined") {
             return;
         }
+
+        const getPointScreenPositions = (): Array<{
+            index: number;
+            x: number;
+            y: number;
+            radius: number;
+        }> => {
+            const positions = graph.getPointPositions();
+            const screenPositions: Array<{
+                index: number;
+                x: number;
+                y: number;
+                radius: number;
+            }> = [];
+
+            for (let index = 0; index < positions.length / 2; index += 1) {
+                const x = positions[index * 2];
+                const y = positions[index * 2 + 1];
+                if (x === undefined || y === undefined) {
+                    continue;
+                }
+
+                const [screenX, screenY] = graph.spaceToScreenPosition([x, y]);
+                if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+                    continue;
+                }
+
+                screenPositions.push({
+                    index,
+                    x: screenX,
+                    y: screenY,
+                    radius: graph.getPointRadiusByIndex(index) ?? graphSettingsRef.current.pointDefaultSize,
+                });
+            }
+
+            return screenPositions;
+        };
+
+        const samplePointPixelEnergy = (index: number, radius = 8): {
+            alpha: number;
+            brightness: number;
+            sampleCount: number;
+        } | null => {
+            const hostElement = hostRef.current;
+            const sourceCanvas = hostElement?.querySelector("canvas");
+            if (!hostElement || !(sourceCanvas instanceof HTMLCanvasElement)) {
+                return null;
+            }
+
+            const point = getPointScreenPositions().find((item) => item.index === index);
+            if (!point) {
+                return null;
+            }
+
+            const width = Math.max(1, Math.floor(hostElement.clientWidth));
+            const height = Math.max(1, Math.floor(hostElement.clientHeight));
+            const sampleCanvas = document.createElement("canvas");
+            sampleCanvas.width = width;
+            sampleCanvas.height = height;
+            const context = sampleCanvas.getContext("2d", { willReadFrequently: true });
+            if (!context) {
+                return null;
+            }
+
+            try {
+                context.drawImage(sourceCanvas, 0, 0, width, height);
+            } catch (_error) {
+                return null;
+            }
+
+            const safeRadius = Math.max(1, Math.min(24, Math.floor(radius)));
+            const startX = Math.max(0, Math.floor(point.x - safeRadius));
+            const startY = Math.max(0, Math.floor(point.y - safeRadius));
+            const endX = Math.min(width - 1, Math.ceil(point.x + safeRadius));
+            const endY = Math.min(height - 1, Math.ceil(point.y + safeRadius));
+            if (endX <= startX || endY <= startY) {
+                return null;
+            }
+
+            const imageData = context.getImageData(
+                startX,
+                startY,
+                endX - startX + 1,
+                endY - startY + 1,
+            );
+            let alphaTotal = 0;
+            let brightnessTotal = 0;
+            const data = imageData.data;
+            for (let offset = 0; offset < data.length; offset += 4) {
+                const alpha = data[offset + 3] ?? 0;
+                alphaTotal += alpha;
+                brightnessTotal += (
+                    (data[offset] ?? 0)
+                    + (data[offset + 1] ?? 0)
+                    + (data[offset + 2] ?? 0)
+                ) / 3;
+            }
+
+            const sampleCount = data.length / 4;
+            return {
+                alpha: alphaTotal / sampleCount,
+                brightness: brightnessTotal / sampleCount,
+                sampleCount,
+            };
+        };
 
         window.__OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__ = {
             getZoomLevel: () => graph.getZoomLevel(),
@@ -301,6 +636,46 @@ export function KnowledgeGraphTab(
                 opacity: 0,
                 swapCount: 0,
                 maxSwapCount: 0,
+            },
+            getPointPositions: () => Array.from(graph.getPointPositions()),
+            getPointScreenPositions,
+            getHostRect: () => {
+                const rect = hostRef.current?.getBoundingClientRect();
+                if (!rect) {
+                    return null;
+                }
+
+                return {
+                    left: rect.left,
+                    top: rect.top,
+                    width: rect.width,
+                    height: rect.height,
+                };
+            },
+            startSimulation: (alpha = 0.18) => {
+                graph.start(alpha);
+                scheduleLabelLayoutUpdate(graph);
+            },
+            renderFrame: (alpha = 0) => {
+                graph.render(alpha);
+                scheduleLabelLayoutUpdate(graph);
+            },
+            focusPoint: (index: number | null) => {
+                graph.setConfig({
+                    focusedPointIndex: index ?? undefined,
+                });
+                graph.render(0);
+                scheduleLabelLayoutUpdate(graph);
+            },
+            samplePointPixelEnergy,
+            getPointColors: () => Array.from(graph.getPointColors()),
+            getRenderSettings: () => {
+                const currentSettings = graphSettingsRef.current;
+                return {
+                    linkDefaultWidth: currentSettings.linkDefaultWidth,
+                    linkOpacity: currentSettings.linkOpacity,
+                    nodeColorGroups: currentSettings.nodeColorGroups,
+                };
             },
         };
     };
@@ -446,6 +821,26 @@ export function KnowledgeGraphTab(
         }
     };
 
+    /**
+     * @function applyGraphNodeAppearance
+     * @description 按当前设置刷新节点尺寸与颜色，不重建布局。
+     * @param graph Graph 实例。
+     */
+    const applyGraphNodeAppearance = (graph: Graph): void => {
+        const currentSettings = graphSettingsRef.current;
+        graph.setPointSizes(buildKnowledgeGraphPointSizes(
+            graphNodesRef.current.length,
+            graphLinksRef.current,
+            currentSettings.pointDefaultSize,
+        ));
+        graph.setPointColors(buildKnowledgeGraphPointColors(
+            graphNodesRef.current,
+            currentSettings.nodeColorGroups,
+        ));
+        graph.render(0);
+        scheduleLabelLayoutUpdate(graph);
+    };
+
     useEffect(() => {
         const hostElement = hostRef.current;
         if (!hostElement) {
@@ -518,9 +913,52 @@ export function KnowledgeGraphTab(
         }
 
         graph.setConfig(graphConfig);
+        applyGraphNodeAppearance(graph);
+        registerPerfTestHook(graph);
         scheduleLabelLayoutUpdate(graph);
         console.info("[knowledge-graph] graph config updated by settings");
     }, [graphConfig]);
+
+    useEffect(() => {
+        const graph = graphRef.current;
+        if (!graph) {
+            return;
+        }
+
+        applyGraphNodeAppearance(graph);
+        registerPerfTestHook(graph);
+    }, [graphSettings.pointDefaultSize, graphSettings.nodeColorGroups]);
+
+    const updateColorGroups = (nextGroups: KnowledgeGraphNodeColorGroup[]): void => {
+        void updateGraphSetting("nodeColorGroups", nextGroups);
+    };
+
+    const updateColorGroup = (
+        id: string,
+        updater: (group: KnowledgeGraphNodeColorGroup) => KnowledgeGraphNodeColorGroup,
+    ): void => {
+        updateColorGroups(graphSettings.nodeColorGroups.map((group) => (
+            group.id === id ? updater(group) : group
+        )));
+    };
+
+    const addColorGroup = (): void => {
+        const nextIndex = graphSettings.nodeColorGroups.length + 1;
+        const nextId = `color-group-${Date.now().toString(36)}-${nextIndex.toString(36)}`;
+        updateColorGroups([
+            ...graphSettings.nodeColorGroups,
+            {
+                id: nextId,
+                query: "",
+                color: DEFAULT_COLOR_GROUP_COLOR,
+            },
+        ]);
+        setPendingFocusColorGroupId(nextId);
+    };
+
+    const removeColorGroup = (id: string): void => {
+        updateColorGroups(graphSettings.nodeColorGroups.filter((group) => group.id !== id));
+    };
 
     /* ── 标签阈值变化时同步 ref 并触发重绘 ── */
     useEffect(() => {
@@ -568,6 +1006,9 @@ export function KnowledgeGraphTab(
                     }
                     linksArray.push(sourceIndex, targetIndex);
                 });
+                graphNodesRef.current = response.nodes;
+                setSuggestionNodes(response.nodes);
+                graphLinksRef.current = linksArray;
 
                 const cameraCenter = graph.screenToSpacePosition([
                     hostElement.clientWidth / 2,
@@ -595,6 +1036,7 @@ export function KnowledgeGraphTab(
 
                 graph.stop();
                 graph.setPointPositions(positions);
+                applyGraphNodeAppearance(graph);
                 graph.setLinks(new Float32Array(linksArray));
                 graph.render(0.12);
                 graph.start(0.12);
@@ -630,6 +1072,8 @@ export function KnowledgeGraphTab(
                     return;
                 }
                 labelItemsRef.current = [];
+                graphNodesRef.current = [];
+                setSuggestionNodes([]);
                 labelRendererRef.current?.setTotalLabelCount(0);
                 labelRendererRef.current?.reset();
                 setState((previous) => ({
@@ -653,6 +1097,118 @@ export function KnowledgeGraphTab(
 
     return (
         <div className="knowledge-graph-tab">
+            <button
+                type="button"
+                className="knowledge-graph-tab__settings-button"
+                title={t("graph.renderSettings")}
+                aria-label={t("graph.renderSettings")}
+                aria-expanded={settingsPanelOpen}
+                onClick={() => setSettingsPanelOpen((open) => !open)}
+            >
+                <Settings size={14} aria-hidden="true" />
+            </button>
+            {settingsPanelOpen && (
+                <div className="knowledge-graph-tab__settings-panel" role="dialog" aria-label={t("graph.renderSettings")}>
+                    <label className="knowledge-graph-tab__settings-row">
+                        <span>{t("graph.linkDefaultWidth")}</span>
+                        <input
+                            data-testid="knowledge-graph-link-width-input"
+                            type="range"
+                            min="0.1"
+                            max="5"
+                            step="0.1"
+                            value={graphSettings.linkDefaultWidth}
+                            onChange={(event) => {
+                                void updateGraphSetting("linkDefaultWidth", Number(event.target.value));
+                            }}
+                        />
+                    </label>
+                    <label className="knowledge-graph-tab__settings-row">
+                        <span>{t("graph.linkOpacity")}</span>
+                        <input
+                            data-testid="knowledge-graph-link-opacity-input"
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={graphSettings.linkOpacity}
+                            onChange={(event) => {
+                                void updateGraphSetting("linkOpacity", Number(event.target.value));
+                            }}
+                        />
+                    </label>
+                    <div className="knowledge-graph-tab__settings-section">
+                        <div className="knowledge-graph-tab__settings-section-title">
+                            <span>{t("graph.colorGroups")}</span>
+                            <button
+                                type="button"
+                                className="knowledge-graph-tab__icon-button"
+                                data-testid="knowledge-graph-add-color-group"
+                                title={t("graph.addColorGroup")}
+                                aria-label={t("graph.addColorGroup")}
+                                onClick={addColorGroup}
+                            >
+                                <Plus size={14} aria-hidden="true" />
+                            </button>
+                        </div>
+                        <div className="knowledge-graph-tab__color-groups">
+                            {graphSettings.nodeColorGroups.map((group, index) => (
+                                <div className="knowledge-graph-tab__color-group-row" key={group.id}>
+                                    <KnowledgeGraphColorQueryInput
+                                        group={group}
+                                        index={index}
+                                        nodes={suggestionNodes}
+                                        placeholder={t("graph.colorGroupQueryPlaceholder")}
+                                        tagScopeLabel={t("graph.colorGroupScopeTag")}
+                                        directoryScopeLabel={t("graph.colorGroupScopeDirectory")}
+                                        autoFocus={pendingFocusColorGroupId === group.id}
+                                        onAutoFocusComplete={() => setPendingFocusColorGroupId(null)}
+                                        onQueryChange={(query) => {
+                                            updateColorGroup(group.id, (current) => ({
+                                                ...current,
+                                                query,
+                                            }));
+                                        }}
+                                    />
+                                    <input
+                                        className="knowledge-graph-tab__color-swatch"
+                                        data-testid={`knowledge-graph-color-swatch-${index}`}
+                                        type="color"
+                                        value={group.color}
+                                        aria-label={t("graph.colorGroupColor")}
+                                        onChange={(event) => {
+                                            const color = event.target.value;
+                                            updateColorGroup(group.id, (current) => ({
+                                                ...current,
+                                                color,
+                                            }));
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="knowledge-graph-tab__icon-button"
+                                        data-testid={`knowledge-graph-remove-color-group-${index}`}
+                                        title={t("common.remove")}
+                                        aria-label={t("common.delete")}
+                                        onClick={() => removeColorGroup(group.id)}
+                                    >
+                                        <X size={14} aria-hidden="true" />
+                                    </button>
+                                </div>
+                            ))}
+                            {graphSettings.nodeColorGroups.length === 0 && (
+                                <button
+                                    type="button"
+                                    className="knowledge-graph-tab__add-color-group-empty"
+                                    onClick={addColorGroup}
+                                >
+                                    {t("graph.addColorGroup")}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
             {/* 样式映射：stats 作为浮动摘要展示节点与边数量，不再占据独立工具栏高度。 */}
             {(state.nodeCount > 0 || state.edgeCount > 0) && (
                 <span className="knowledge-graph-tab__stats">

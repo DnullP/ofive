@@ -119,6 +119,7 @@ async function dragLocatorBy(
 async function getActiveEditorState(page: Page): Promise<{
     docText: string;
     head: number;
+    lineText: string;
     lineNumber: number;
     vimInsertMode: boolean | null;
     vimVisualMode: boolean | null;
@@ -137,7 +138,7 @@ async function getActiveEditorState(page: Page): Promise<{
                     };
                     state: {
                         doc: {
-                            lineAt(pos: number): { number: number };
+                            lineAt(pos: number): { number: number; text: string };
                             toString(): string;
                         };
                         selection: { main: { head: number } };
@@ -149,10 +150,12 @@ async function getActiveEditorState(page: Page): Promise<{
         if (!view) {
             throw new Error("EditorView not found.");
         }
+        const activeLine = view.state.doc.lineAt(view.state.selection.main.head);
         return {
             docText: view.state.doc.toString(),
             head: view.state.selection.main.head,
-            lineNumber: view.state.doc.lineAt(view.state.selection.main.head).number,
+            lineText: activeLine.text,
+            lineNumber: activeLine.number,
             vimInsertMode: typeof view.cm?.state?.vim?.insertMode === "boolean"
                 ? view.cm.state.vim.insertMode
                 : null,
@@ -161,6 +164,16 @@ async function getActiveEditorState(page: Page): Promise<{
                 : null,
         };
     });
+}
+
+async function expectActiveEditorLine(page: Page, lineNumber: number, lineText: string): Promise<void> {
+    await expect.poll(async () => {
+        const state = await getActiveEditorState(page);
+        return {
+            lineNumber: state.lineNumber,
+            lineText: state.lineText,
+        };
+    }).toEqual({ lineNumber, lineText });
 }
 
 async function dispatchEditorCompositionEvent(page: Page, eventName: "compositionstart" | "compositionend", data: string): Promise<void> {
@@ -497,6 +510,110 @@ test.describe("markdown table vim regression", () => {
         await page.keyboard.press("k");
         await waitForEditorFrames(page);
         await expect(activeCell).toHaveText("决定区域如何切分和嵌套");
+    });
+
+    test("table vim navigation should exit back to adjacent editor lines at table boundaries", async ({ page }) => {
+        const markdown = [
+            "# Table Vim Exit",
+            "before table",
+            "| A | B |",
+            "| --- | --- |",
+            "| one | two |",
+            "| three | four |",
+            "after table",
+        ].join("\n");
+
+        await replaceActiveEditorDoc(page, markdown, "before table");
+        await waitForEditorFrames(page, 4);
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("j");
+        await waitForEditorFrames(page, 4);
+
+        const activeCell = activeTableNavigationCell(page);
+        await expect(activeCell).toBeFocused();
+        await expect(activeCell).toHaveText("one");
+        await expectActiveTableCellPosition(page, "body", 0, 0);
+
+        await page.keyboard.press("k");
+        await waitForEditorFrames(page);
+        await expect(activeCell).toHaveText("A");
+        await expectActiveTableCellPosition(page, "header", 0, 0);
+
+        await page.keyboard.press("k");
+        await waitForEditorFrames(page, 4);
+        await expectActiveEditorLine(page, 2, "before table");
+
+        await page.keyboard.press("j");
+        await waitForEditorFrames(page, 4);
+        await expect(activeCell).toBeFocused();
+        await expect(activeCell).toHaveText("one");
+        await expectActiveTableCellPosition(page, "body", 0, 0);
+
+        await page.keyboard.press("j");
+        await waitForEditorFrames(page);
+        await expect(activeCell).toHaveText("three");
+        await expectActiveTableCellPosition(page, "body", 1, 0);
+
+        await page.keyboard.press("j");
+        await waitForEditorFrames(page, 4);
+        await expectActiveEditorLine(page, 7, "after table");
+
+        await setEditorSelectionToTextEnd(page, "before table");
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("j");
+        await waitForEditorFrames(page, 4);
+        await expect(activeCell).toBeFocused();
+        await expect(activeCell).toHaveText("one");
+        await expectActiveTableCellPosition(page, "body", 0, 0);
+
+        await page.keyboard.press("Escape");
+        await waitForEditorFrames(page, 4);
+        await expectActiveEditorLine(page, 7, "after table");
+    });
+
+    test("table vim navigation should not loop when exiting downward from a table at document end", async ({ page }) => {
+        const markdown = [
+            "# Table At EOF",
+            "before table",
+            "| A | B |",
+            "| --- | --- |",
+            "| one | two |",
+            "| three | four |",
+        ].join("\n");
+
+        await replaceActiveEditorDoc(page, markdown, "before table");
+        await waitForEditorFrames(page, 4);
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("j");
+        await waitForEditorFrames(page, 4);
+
+        const activeCell = activeTableNavigationCell(page);
+        await expect(activeCell).toBeFocused();
+        await expect(activeCell).toHaveText("one");
+        await expectActiveTableCellPosition(page, "body", 0, 0);
+
+        await page.keyboard.press("j");
+        await waitForEditorFrames(page);
+        await expect(activeCell).toHaveText("three");
+        await expectActiveTableCellPosition(page, "body", 1, 0);
+
+        await page.keyboard.press("j");
+        await waitForEditorFrames(page, 8);
+        await expectActiveEditorLine(page, 6, "| three | four |");
+
+        await page.keyboard.press("i");
+        await waitForEditorFrames(page, 4);
+        await expect.poll(async () => {
+            const state = await getActiveEditorState(page);
+            return state.vimInsertMode;
+        }).toBe(true);
+
+        await page.keyboard.insertText(" editable");
+        await waitForEditorFrames(page, 4);
+        await expect.poll(async () => {
+            const state = await getActiveEditorState(page);
+            return state.docText;
+        }).toContain("| three | four | editable");
     });
 
     test("IME text j should follow Vim command priority in editor body and widget handoffs", async ({ page }) => {
@@ -868,5 +985,35 @@ test.describe("markdown table vim regression", () => {
         await page.getByRole("menuitem", { name: "Delete Current Row" }).click();
         await waitForEditorFrames(page, 4);
         await expect(page.locator("[data-table-edge-kind='row']")).toHaveCount(3);
+    });
+
+    test("table widget should not create an independent vertical scrollbar", async ({ page }) => {
+        await openMockNote(page, TABLE_BOUNDARY_NOTE_PATH);
+        const tableScroll = page.locator(".mtv-table-scroll:visible").first();
+        await expect(tableScroll).toBeVisible();
+
+        const scrollMetrics = await tableScroll.evaluate((element) => {
+            const style = window.getComputedStyle(element);
+            const horizontalScroller = element.querySelector<HTMLElement>(".mtv-table-x-scroll");
+            const horizontalScrollerStyle = horizontalScroller
+                ? window.getComputedStyle(horizontalScroller)
+                : null;
+            return {
+                outerOverflowX: style.overflowX,
+                outerOverflowY: style.overflowY,
+                innerOverflowX: horizontalScrollerStyle?.overflowX ?? "",
+                innerOverflowY: horizontalScrollerStyle?.overflowY ?? "",
+                clientHeight: element.clientHeight,
+                scrollHeight: element.scrollHeight,
+                innerClientHeight: horizontalScroller?.clientHeight ?? 0,
+                innerScrollHeight: horizontalScroller?.scrollHeight ?? 0,
+            };
+        });
+
+        expect(scrollMetrics.outerOverflowX).toBe("visible");
+        expect(scrollMetrics.outerOverflowY).toBe("visible");
+        expect(scrollMetrics.innerOverflowX).toBe("auto");
+        expect(scrollMetrics.innerOverflowY).toBe("hidden");
+        expect(scrollMetrics.innerScrollHeight - scrollMetrics.innerClientHeight).toBeLessThanOrEqual(1);
     });
 });

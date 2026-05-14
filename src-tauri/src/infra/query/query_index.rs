@@ -28,6 +28,7 @@ use crate::infra::fs::fs_helpers::{
     collect_markdown_relative_paths, is_markdown_file, relative_path_from_vault_root,
     with_markdown_extension_candidates,
 };
+use crate::infra::query::search::extract_search_tags;
 use crate::infra::query::wikilink::{
     extract_markdown_inline_link_targets, extract_wikilink_targets, path_tree_distance,
     resolve_wikilink_target_path_in_vault_without_index,
@@ -788,9 +789,16 @@ pub fn load_markdown_graph(vault_root: &Path) -> Result<VaultMarkdownGraphRespon
 
     let node_rows = node_statement
         .query_map([], |row| {
+            let path: String = row.get(0)?;
+            let absolute_path = vault_root.join(&path);
+            let tags = fs::read_to_string(&absolute_path)
+                .map(|content| extract_search_tags(&content))
+                .unwrap_or_default();
+
             Ok(VaultMarkdownGraphNode {
-                path: row.get(0)?,
+                path,
                 title: row.get(1)?,
+                tags,
             })
         })
         .map_err(|error| format!("执行图谱节点查询失败: {error}"))?;

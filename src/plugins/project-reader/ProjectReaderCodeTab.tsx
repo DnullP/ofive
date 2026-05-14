@@ -674,6 +674,7 @@ export function ProjectReaderCodeTab(
     const scrollerRef = useRef<HTMLDivElement | null>(null);
     const hoveredTokenElementRef = useRef<HTMLElement | null>(null);
     const pointerTokenIdRef = useRef<string | null>(null);
+    const pendingContextSelectionRef = useRef<ProjectReaderCodeSelectionPayload | null>(null);
     const codeModifierPressedRef = useRef(false);
     const symbolPopupRef = useRef<HTMLDivElement | null>(null);
     const [state, setState] = useState<CodeTabState>({
@@ -1032,7 +1033,9 @@ export function ProjectReaderCodeTab(
     const handleCodeMouseDown = (event: MouseEvent<HTMLElement>): void => {
         if (event.button === 2) {
             const selection = event.currentTarget.ownerDocument.defaultView?.getSelection() ?? null;
-            if (resolveProjectReaderCodeSelection(event.currentTarget, selection)) {
+            const payload = resolveProjectReaderCodeSelection(event.currentTarget, selection);
+            pendingContextSelectionRef.current = payload;
+            if (payload) {
                 event.preventDefault();
                 event.stopPropagation();
             }
@@ -1106,14 +1109,17 @@ export function ProjectReaderCodeTab(
     const handleCodeContextMenu = async (event: MouseEvent<HTMLElement>): Promise<void> => {
         const scroller = event.currentTarget;
         const selection = scroller.ownerDocument.defaultView?.getSelection() ?? null;
-        const payload = resolveProjectReaderCodeSelection(scroller, selection);
+        const payload = resolveProjectReaderCodeSelection(scroller, selection)
+            ?? pendingContextSelectionRef.current;
         if (!payload) {
             event.preventDefault();
             event.stopPropagation();
             return;
         }
 
+        selectProjectReaderCodeRange(scroller, payload.range);
         await showRegisteredContextMenu(codeSelectionContextMenuId, event, payload);
+        pendingContextSelectionRef.current = null;
     };
 
     if (state.loading) {

@@ -142,6 +142,14 @@ const KEEP_ALIVE_INACTIVE_TAB_COMPONENT_IDS = new Set(["knowledgegraph"]);
 const WORKBENCH_TITLEBAR_OFFSET_ATTR = "data-workbench-titlebar-offset";
 const WORKBENCH_MAC_LEFT_TITLEBAR_OFFSET = "mac-left";
 
+function waitForWorkbenchLayoutCommit(): Promise<void> {
+    return new Promise((resolve) => {
+        window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => resolve());
+        });
+    });
+}
+
 function syncWorkbenchTitlebarOffsetTarget(root: HTMLElement): void {
     const strips = Array.from(root.querySelectorAll<HTMLElement>(".layout-v2-tab-section__strip"));
     for (const strip of strips) {
@@ -1107,6 +1115,8 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 currentVaultPath: payload.currentVaultPath,
                 nextVaultPath: payload.nextVaultPath,
             });
+
+            await waitForWorkbenchLayoutCommit();
         });
     }, [clearLayoutPersistTimers, settleCreateEntryDraftRequest]);
 

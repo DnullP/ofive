@@ -1004,7 +1004,9 @@ mod tests {
         save_semantic_index_settings_in_root, search_markdown_chunks_in_root,
         start_semantic_index_full_sync_in_root, upsert_indexed_markdown_document_in_root,
     };
-    use crate::app::app_storage::storage_registry_facade::set_app_storage_test_root;
+    use crate::app::app_storage::storage_registry_facade::{
+        lock_app_storage_test_root, set_app_storage_test_root,
+    };
     use crate::shared::semantic_index_contracts::{
         ChunkingStrategyKind, EmbeddingProviderKind, SemanticIndexModelInstallStatus,
         SemanticIndexSettings, SemanticSearchRequest, VectorStoreKind,
@@ -1014,25 +1016,21 @@ mod tests {
     use std::path::Path;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::MutexGuard;
     use std::thread;
     use std::time::Duration;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(1);
-    static TEST_APP_STORAGE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     struct AppStorageTestGuard {
-        _lock: std::sync::MutexGuard<'static, ()>,
+        _lock: MutexGuard<'static, ()>,
         root: PathBuf,
     }
 
     impl AppStorageTestGuard {
         fn new(test_root: &Path) -> Self {
-            let lock = TEST_APP_STORAGE_LOCK
-                .get_or_init(|| Mutex::new(()))
-                .lock()
-                .expect("app storage test lock should succeed");
+            let lock = lock_app_storage_test_root().expect("app storage test lock should succeed");
             let root = test_root.join(".app-storage-test");
             set_app_storage_test_root(Some(root.clone())).expect("test root should set");
             Self { _lock: lock, root }

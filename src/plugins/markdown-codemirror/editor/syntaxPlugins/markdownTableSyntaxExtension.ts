@@ -355,7 +355,7 @@ export function createMarkdownTableSyntaxExtension(
                     const selection = update.view.state.selection.main;
                     if (selection.empty) {
                         const touchedBlock = parseMarkdownTableBlocks(update.view)
-                            .find((block) => selection.head >= block.from && selection.head <= block.to);
+                            .find((block) => selection.head >= block.from && selection.head < block.to);
                         if (touchedBlock) {
                             queueMicrotask(() => {
                                 if (!isViewAlive(update.view)) {
@@ -368,7 +368,7 @@ export function createMarkdownTableSyntaxExtension(
                                 }
 
                                 const liveBlock = parseMarkdownTableBlocks(update.view)
-                                    .find((block) => liveSelection.head >= block.from && liveSelection.head <= block.to);
+                                    .find((block) => liveSelection.head >= block.from && liveSelection.head < block.to);
                                 if (!liveBlock) {
                                     return;
                                 }

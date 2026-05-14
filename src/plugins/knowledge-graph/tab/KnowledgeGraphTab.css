@@ -12,7 +12,7 @@
 .knowledge-graph-tab__stats {
     position: absolute;
     top: 12px;
-    right: 12px;
+    right: 48px;
     z-index: 2;
     padding: 5px 10px;
     border-radius: 999px;
@@ -22,6 +22,219 @@
     font-size: 11px;
     line-height: 1;
     box-shadow: 0 8px 20px color-mix(in srgb, var(--chrome-backdrop-shadow) 26%, transparent);
+}
+
+.knowledge-graph-tab__settings-button {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    z-index: 4;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--graph-text-color) 14%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--graph-bg-secondary) 86%, transparent);
+    color: var(--graph-text-color);
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--chrome-backdrop-shadow) 22%, transparent);
+    cursor: pointer;
+}
+
+.knowledge-graph-tab__settings-button:hover {
+    background: color-mix(in srgb, var(--graph-bg-secondary) 74%, var(--graph-text-color) 10%);
+}
+
+.knowledge-graph-tab__settings-panel {
+    position: absolute;
+    top: 46px;
+    right: 12px;
+    z-index: 4;
+    width: min(340px, calc(100% - 24px));
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, var(--graph-text-color) 12%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--graph-bg-secondary) 94%, transparent);
+    color: var(--graph-text-color);
+    box-shadow: 0 16px 36px color-mix(in srgb, var(--chrome-backdrop-shadow) 28%, transparent);
+}
+
+.knowledge-graph-tab__settings-row {
+    display: grid;
+    grid-template-columns: minmax(86px, 1fr) minmax(120px, 1.4fr);
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    font-size: 12px;
+}
+
+.knowledge-graph-tab__settings-row span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--graph-muted-text-color);
+}
+
+.knowledge-graph-tab__settings-row input,
+.knowledge-graph-tab__settings-row select {
+    width: 100%;
+    min-width: 0;
+    color: var(--graph-text-color);
+}
+
+.knowledge-graph-tab__settings-row select {
+    height: 26px;
+    border: 1px solid color-mix(in srgb, var(--graph-text-color) 14%, transparent);
+    border-radius: 6px;
+    background: var(--graph-bg-primary);
+}
+
+.knowledge-graph-tab__settings-section {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    padding-top: 4px;
+    border-top: 1px solid color-mix(in srgb, var(--graph-text-color) 10%, transparent);
+}
+
+.knowledge-graph-tab__settings-section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.knowledge-graph-tab__color-groups {
+    display: grid;
+    gap: 8px;
+}
+
+.knowledge-graph-tab__color-group-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28px 28px;
+    align-items: center;
+    gap: 8px;
+}
+
+.knowledge-graph-tab__color-query-combobox {
+    position: relative;
+    min-width: 0;
+}
+
+.knowledge-graph-tab__color-query {
+    width: 100%;
+    min-width: 0;
+    height: 30px;
+    padding: 0 9px;
+    border: 1px solid color-mix(in srgb, var(--graph-text-color) 14%, transparent);
+    border-radius: 6px;
+    background: var(--graph-bg-primary);
+    color: var(--graph-text-color);
+    font-size: 12px;
+}
+
+.knowledge-graph-tab__color-query-suggestions {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 6;
+    display: grid;
+    gap: 2px;
+    max-height: 180px;
+    padding: 4px;
+    border: 1px solid color-mix(in srgb, var(--graph-text-color) 16%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--graph-bg-secondary) 98%, var(--graph-bg-primary) 10%);
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--chrome-backdrop-shadow) 28%, transparent);
+    overflow-y: auto;
+}
+
+.knowledge-graph-tab__color-query-suggestion {
+    display: grid;
+    grid-template-columns: minmax(62px, 0.5fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    min-height: 26px;
+    padding: 4px 6px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--graph-text-color);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.knowledge-graph-tab__color-query-suggestion--active,
+.knowledge-graph-tab__color-query-suggestion:hover {
+    background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
+}
+
+.knowledge-graph-tab__color-query-suggestion-kind,
+.knowledge-graph-tab__color-query-suggestion-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.knowledge-graph-tab__color-query-suggestion-kind {
+    color: var(--graph-muted-text-color);
+}
+
+.knowledge-graph-tab__color-swatch {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--graph-text-color) 20%, transparent);
+    border-radius: 999px;
+    background: transparent;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.knowledge-graph-tab__color-swatch::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.knowledge-graph-tab__color-swatch::-webkit-color-swatch {
+    border: 0;
+    border-radius: 999px;
+}
+
+.knowledge-graph-tab__icon-button {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--graph-muted-text-color);
+    cursor: pointer;
+}
+
+.knowledge-graph-tab__icon-button:hover {
+    background: color-mix(in srgb, var(--graph-text-color) 10%, transparent);
+    color: var(--graph-text-color);
+}
+
+.knowledge-graph-tab__add-color-group-empty {
+    height: 30px;
+    border: 1px dashed color-mix(in srgb, var(--graph-text-color) 20%, transparent);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--graph-muted-text-color);
+    cursor: pointer;
 }
 
 /* 模块样式：画布承载容器。 */

@@ -1,115 +1,162 @@
 .agent-skills-panel {
+    position: relative;
     display: grid;
-    grid-template-rows: auto auto minmax(120px, 0.9fr) auto minmax(220px, 1.4fr) auto auto;
-    gap: 10px;
+    grid-template-rows: minmax(128px, 0.48fr) minmax(152px, 0.52fr) auto auto;
+    gap: 0;
     height: 100%;
     min-height: 0;
-    padding: 10px;
+    padding: 0;
     color: var(--text-primary);
     background: var(--chrome-sidebar-bg);
 }
 
-.agent-skills-toolbar,
-.agent-skills-reference {
+.agent-skills-section {
+    display: grid;
+    grid-template-rows: 28px minmax(0, 1fr);
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    overflow: hidden;
+}
+
+.agent-skills-top-section {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.agent-skills-section-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-}
-
-.agent-skills-toolbar {
-    justify-content: flex-end;
-}
-
-.agent-skills-icon-button,
-.agent-skills-reference button,
-.agent-skills-create button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
+    justify-content: space-between;
     min-height: 28px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    color: var(--text-primary);
-    background: color-mix(in srgb, var(--text-primary) 7%, transparent);
-    cursor: pointer;
+    padding: 0 6px 0 9px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
 }
 
 .agent-skills-icon-button {
-    width: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: var(--text-secondary);
+    background: transparent;
+    cursor: pointer;
 }
 
-.agent-skills-icon-button:disabled,
-.agent-skills-reference button:disabled,
-.agent-skills-create button:disabled {
+.agent-skills-icon-button:hover {
+    color: var(--text-primary);
+    border-color: var(--border-color);
+    background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+
+.agent-skills-icon-button:disabled {
     opacity: 0.55;
     cursor: default;
 }
 
-.agent-skills-create {
-    display: grid;
-    gap: 8px;
-}
-
-.agent-skills-create input,
-.agent-skills-create textarea,
-.agent-skills-reference input,
-.agent-skills-editor {
-    width: 100%;
-    min-width: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    color: var(--text-primary);
-    background: var(--surface-input-bg);
-    font: inherit;
-}
-
-.agent-skills-create input,
-.agent-skills-reference input {
-    height: 30px;
-    padding: 0 8px;
-}
-
-.agent-skills-create textarea {
-    resize: vertical;
-    min-height: 66px;
-    padding: 8px;
-    line-height: 1.45;
-}
-
-.agent-skills-browser {
-    display: grid;
-    grid-template-columns: minmax(104px, 0.9fr) minmax(126px, 1.1fr);
-    gap: 8px;
+.agent-skills-skill-list,
+.agent-skills-file-tree {
     min-height: 0;
-}
-
-.agent-skills-list,
-.agent-skills-files {
     overflow: auto;
-    min-height: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
 }
 
-.agent-skills-list button,
-.agent-skills-files button {
+.agent-skills-skill-row,
+.agent-skills-tree-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     width: 100%;
-    min-height: 28px;
-    padding: 5px 8px;
     border: 0;
     color: var(--text-primary);
     background: transparent;
     text-align: left;
+}
+
+.agent-skills-skill-row {
+    justify-content: space-between;
+    gap: 6px;
+    min-height: 30px;
+    padding: 4px 8px;
     cursor: pointer;
 }
 
-.agent-skills-list button.is-selected,
-.agent-skills-files button.is-selected {
+.agent-skills-skill-row:hover,
+.agent-skills-tree-row.is-file:hover {
+    background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+.agent-skills-skill-row.is-selected,
+.agent-skills-tree-row.is-active {
     background: var(--surface-list-active-bg);
+}
+
+.agent-skills-skill-copy {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+}
+
+.agent-skills-skill-name,
+.agent-skills-skill-description,
+.agent-skills-tree-row span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.agent-skills-skill-name {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.agent-skills-skill-description {
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.25;
+}
+
+.agent-skills-skill-row strong {
+    flex: 0 0 auto;
+    color: var(--text-warning);
+    font-size: 12px;
+}
+
+.agent-skills-tree-group {
+    min-width: 0;
+}
+
+.agent-skills-tree-row {
+    gap: 6px;
+    min-height: 26px;
+    padding: 3px 8px 3px var(--agent-skill-tree-indent, 8px);
+    font-size: 12px;
+}
+
+.agent-skills-tree-row svg {
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+}
+
+.agent-skills-tree-row.is-directory {
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.agent-skills-tree-row.is-file {
+    cursor: pointer;
+}
+
+.agent-skills-tree-row.is-file:disabled {
+    opacity: 0.6;
+    cursor: default;
 }
 
 .agent-skills-empty,
@@ -125,20 +172,99 @@
     color: var(--text-warning);
 }
 
-.agent-skills-reference input {
-    flex: 1 1 auto;
+.agent-skills-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 42px 12px 12px;
+    background: color-mix(in srgb, var(--chrome-sidebar-bg) 78%, transparent);
 }
 
-.agent-skills-reference button {
-    width: 30px;
-    flex: 0 0 auto;
+.agent-skills-create-modal {
+    display: grid;
+    gap: 12px;
+    width: min(360px, 100%);
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--surface-overlay-panel-bg);
+    box-shadow: var(--surface-overlay-panel-shadow);
 }
 
-.agent-skills-editor {
-    min-height: 0;
-    padding: 10px;
-    resize: none;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+.agent-skills-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 28px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.agent-skills-field {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+    color: var(--text-secondary);
     font-size: 12px;
-    line-height: 1.55;
+}
+
+.agent-skills-field input,
+.agent-skills-field textarea {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    background: var(--surface-input-bg);
+    font: inherit;
+}
+
+.agent-skills-field input {
+    height: 30px;
+    padding: 0 8px;
+}
+
+.agent-skills-field textarea {
+    min-height: 76px;
+    padding: 8px;
+    line-height: 1.45;
+    resize: vertical;
+}
+
+.agent-skills-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.agent-skills-primary-button,
+.agent-skills-secondary-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 0 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font: inherit;
+    cursor: pointer;
+}
+
+.agent-skills-primary-button {
+    border-color: color-mix(in srgb, var(--accent-primary) 72%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary) 28%, transparent);
+}
+
+.agent-skills-secondary-button {
+    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.agent-skills-primary-button:disabled {
+    opacity: 0.55;
+    cursor: default;
 }

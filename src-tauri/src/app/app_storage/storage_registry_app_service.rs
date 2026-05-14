@@ -109,18 +109,24 @@ pub(crate) fn set_app_storage_test_root(root: Option<PathBuf>) -> Result<(), Str
 }
 
 #[cfg(test)]
+pub(crate) fn lock_app_storage_test_root() -> Result<std::sync::MutexGuard<'static, ()>, String> {
+    app_private_store::lock_app_private_store_test_root()
+}
+
+#[cfg(test)]
 mod tests {
     use super::{load_app_storage_state, resolve_app_storage_owner_dir, save_app_storage_state};
-    use crate::infra::persistence::app_private_store::set_app_private_store_test_root;
+    use crate::infra::persistence::app_private_store::{
+        lock_app_private_store_test_root, set_app_private_store_test_root,
+    };
     use serde::{Deserialize, Serialize};
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::MutexGuard;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(1);
-    static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
     #[serde(rename_all = "camelCase")]
@@ -140,33 +146,41 @@ mod tests {
         ))
     }
 
+    struct AppStorageTestRoot {
+        _lock: MutexGuard<'static, ()>,
+        root: PathBuf,
+    }
+
+    impl AppStorageTestRoot {
+        fn install() -> Self {
+            let lock = lock_app_private_store_test_root().expect("test root lock should succeed");
+            let root = create_test_root();
+            set_app_private_store_test_root(Some(root.clone())).expect("test root should set");
+            Self { _lock: lock, root }
+        }
+    }
+
+    impl Drop for AppStorageTestRoot {
+        fn drop(&mut self) {
+            let _ = set_app_private_store_test_root(None);
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
     #[test]
     fn app_storage_should_resolve_registered_owner_dir() {
-        let _lock = TEST_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .expect("test lock should succeed");
-        let root = create_test_root();
-        set_app_private_store_test_root(Some(root.clone())).expect("test root should set");
+        let test_root = AppStorageTestRoot::install();
 
         let owner_dir = resolve_app_storage_owner_dir("semantic-index", "semantic-index")
             .expect("registered owner should resolve");
 
         assert!(owner_dir.exists());
-        assert!(owner_dir.starts_with(&root));
-
-        set_app_private_store_test_root(None).expect("test root should reset");
-        let _ = fs::remove_dir_all(root);
+        assert!(owner_dir.starts_with(&test_root.root));
     }
 
     #[test]
     fn app_storage_should_roundtrip_owner_state() {
-        let _lock = TEST_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .expect("test lock should succeed");
-        let root = create_test_root();
-        set_app_private_store_test_root(Some(root.clone())).expect("test root should set");
+        let _test_root = AppStorageTestRoot::install();
 
         save_app_storage_state(
             "semantic-index",
@@ -185,9 +199,6 @@ mod tests {
         .expect("state should exist");
 
         assert!(loaded.ready);
-
-        set_app_private_store_test_root(None).expect("test root should reset");
-        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

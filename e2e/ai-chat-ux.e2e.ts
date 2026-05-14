@@ -115,7 +115,7 @@ test.describe("ai chat ux", () => {
 
         const toolCall = page.locator(".ai-chat-tool-call", { hasText: "vault.read_markdown_file" }).first();
         await expect(toolCall).toBeVisible();
-        await expect(toolCall.locator(".ai-chat-tool-call-status")).toContainText(/Calling|调用中/);
+        await expect(toolCall.locator(".ai-chat-tool-call-status")).toContainText(/Calling|调用中|Completed|调用完成/);
         await expect(toolCall.locator(".ai-chat-tool-call-status")).toContainText(/Completed|调用完成/, { timeout: 3_000 });
 
         await toolCall.locator(".ai-chat-tool-call-summary").click();

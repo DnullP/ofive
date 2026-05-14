@@ -3,7 +3,7 @@
  * @description 外部项目阅读器基础链路回归测试。
  */
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { gotoMockVaultPage } from "./helpers/mockVault";
 
 async function waitForWorkbench(page: Page): Promise<void> {
@@ -83,6 +83,35 @@ async function clickTokenWithModifier(page: Page, locator: ReturnType<Page["loca
     }
 }
 
+async function selectTextInsideLocator(locator: Locator, text: string): Promise<void> {
+    await locator.evaluate((element, targetText) => {
+        const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        let node = walker.nextNode();
+        while (node) {
+            const value = node.textContent ?? "";
+            const offset = value.indexOf(targetText);
+            if (offset >= 0) {
+                const range = element.ownerDocument.createRange();
+                range.setStart(node, offset);
+                range.setEnd(node, offset + targetText.length);
+
+                const selection = element.ownerDocument.defaultView?.getSelection();
+                if (!selection) {
+                    throw new Error("Unable to access browser text selection.");
+                }
+
+                selection.removeAllRanges();
+                selection.addRange(range);
+                return;
+            }
+
+            node = walker.nextNode();
+        }
+
+        throw new Error(`Unable to find text "${targetText}" inside project reader code.`);
+    }, text);
+}
+
 test.describe("project reader", () => {
     test("should preview project source wikilink on modifier hover", async ({ page }) => {
         await gotoMockVaultPage(page, "project-reader-preview", "/web-mock/mock-tauri-test.html?showControls=0");
@@ -150,12 +179,7 @@ test.describe("project reader", () => {
             throw new Error("Project reader runtime line is missing a bounding box.");
         }
 
-        await page.mouse.move(runtimeLineBox.x + 1, runtimeLineBox.y + runtimeLineBox.height / 2);
-        await page.mouse.down();
-        await page.mouse.move(runtimeLineBox.x + Math.min(runtimeLineBox.width - 1, 320), runtimeLineBox.y + runtimeLineBox.height / 2, {
-            steps: 8,
-        });
-        await page.mouse.up();
+        await selectTextInsideLocator(runtimeLineText, "AppRuntime");
         await expect.poll(async () => page.evaluate(() => window.getSelection()?.toString() ?? ""))
             .toContain("AppRuntime");
         await runtimeLineText.click({ button: "right", position: { x: 12, y: Math.max(2, runtimeLineBox.height / 2) } });

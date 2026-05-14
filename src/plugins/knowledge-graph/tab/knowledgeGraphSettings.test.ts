@@ -36,6 +36,7 @@ describe("knowledgeGraphSettings", () => {
         expect("focusedPointRingColor" in DEFAULT_KNOWLEDGE_GRAPH_SETTINGS).toBe(false);
         expect("linkDefaultColor" in DEFAULT_KNOWLEDGE_GRAPH_SETTINGS).toBe(false);
         expect("hoveredLinkColor" in DEFAULT_KNOWLEDGE_GRAPH_SETTINGS).toBe(false);
+        expect(DEFAULT_KNOWLEDGE_GRAPH_SETTINGS.nodeColorGroups).toEqual([]);
     });
 
     it("合并设置时应丢弃旧版持久化颜色字段", () => {
@@ -149,5 +150,6 @@ describe("knowledgeGraphSettings", () => {
         expect(config.focusedPointRingColor).toBe("rgb(31, 41, 55)");
         expect(config.linkDefaultColor).toBe("rgb(107, 114, 128)");
         expect(config.hoveredLinkColor).toBe("rgb(11, 109, 255)");
+        expect("nodeColorGroups" in config).toBe(false);
     });
 });

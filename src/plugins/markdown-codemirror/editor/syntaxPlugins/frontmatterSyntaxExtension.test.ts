@@ -81,4 +81,11 @@ describe("shouldKeepFrontmatterSourceVisible", () => {
             [{ from: 24, to: 24, empty: true }],
         )).toBe(false);
     });
+
+    test("空光标位于 frontmatter 开区间结尾时应视为已离开源码", () => {
+        expect(shouldKeepFrontmatterSourceVisible(
+            { from: 0, to: 18 },
+            [{ from: 18, to: 18, empty: true }],
+        )).toBe(false);
+    });
 });
