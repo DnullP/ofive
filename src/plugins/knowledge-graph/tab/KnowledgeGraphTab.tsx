@@ -75,6 +75,8 @@ interface KnowledgeGraphPerfTestHook {
     };
     /** 读取节点当前图谱空间坐标。 */
     getPointPositions: () => number[];
+    /** 读取图谱仿真是否仍在运行，供设置变更回归测试确认不会误暂停。 */
+    getSimulationRunning: () => boolean;
     /** 读取节点当前屏幕坐标，用于交互和像素采样回归测试。 */
     getPointScreenPositions: () => Array<{
         index: number;
@@ -638,6 +640,7 @@ export function KnowledgeGraphTab(
                 maxSwapCount: 0,
             },
             getPointPositions: () => Array.from(graph.getPointPositions()),
+            getSimulationRunning: () => graph.isSimulationRunning,
             getPointScreenPositions,
             getHostRect: () => {
                 const rect = hostRef.current?.getBoundingClientRect();
@@ -837,7 +840,7 @@ export function KnowledgeGraphTab(
             graphNodesRef.current,
             currentSettings.nodeColorGroups,
         ));
-        graph.render(0);
+        graph.render(graph.isSimulationRunning ? undefined : 0);
         scheduleLabelLayoutUpdate(graph);
     };
 

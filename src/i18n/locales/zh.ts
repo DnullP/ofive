@@ -909,6 +909,9 @@ const zh = {
         mainArea: "工作区主区域",
         rightPanelArea: "右侧扩展面板区",
         noRegisteredPanel: "未注册的面板渲染器。",
+        tabNavigation: "Tab 浏览导航",
+        navigateBack: "上一个浏览",
+        navigateForward: "下一个浏览",
     },
 
     /* ==================== 图片 ==================== */

@@ -17,6 +17,20 @@ import { getTabComponentById } from "../registry/tabComponentRegistry";
 import { getConfigSnapshot, type FileOpenMode } from "../config/configStore";
 import { decorateTabParamsWithLifecycle } from "./vaultTabScope";
 
+export const TAB_NAVIGATION_HISTORY_PARAM = "__ofiveTabNavigationHistory";
+
+export interface TabNavigationHistoryEntry {
+    id: string;
+    title: string;
+    component: string;
+    params?: Record<string, unknown>;
+}
+
+export interface TabNavigationHistoryState {
+    entries: TabNavigationHistoryEntry[];
+    index: number;
+}
+
 /**
  * @interface ResolveFileTabOptions
  * @description 文件打开解析选项。
@@ -100,6 +114,92 @@ function isFilePanel(panel: WorkbenchPanelHandle | undefined | null): panel is W
     return typeof panel?.params?.path === "string" && panel.params.path.length > 0;
 }
 
+function stripTabNavigationHistory(params: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+    if (!params || !(TAB_NAVIGATION_HISTORY_PARAM in params)) {
+        return params;
+    }
+
+    const { [TAB_NAVIGATION_HISTORY_PARAM]: _history, ...rest } = params;
+    return rest;
+}
+
+function readTabNavigationHistory(params: Record<string, unknown> | undefined): TabNavigationHistoryState | null {
+    const raw = params?.[TAB_NAVIGATION_HISTORY_PARAM];
+    if (!raw || typeof raw !== "object") {
+        return null;
+    }
+
+    const state = raw as { entries?: unknown; index?: unknown };
+    if (!Array.isArray(state.entries) || typeof state.index !== "number") {
+        return null;
+    }
+
+    const entries = state.entries.filter((entry): entry is TabNavigationHistoryEntry => {
+        if (!entry || typeof entry !== "object") {
+            return false;
+        }
+        const candidate = entry as TabNavigationHistoryEntry;
+        return typeof candidate.id === "string" &&
+            typeof candidate.title === "string" &&
+            typeof candidate.component === "string";
+    });
+    if (entries.length === 0) {
+        return null;
+    }
+
+    const index = Math.min(Math.max(Math.trunc(state.index), 0), entries.length - 1);
+    return { entries, index };
+}
+
+function buildHistoryEntryFromPanel(panel: WorkbenchPanelHandle): TabNavigationHistoryEntry | null {
+    if (!panel.title || !panel.component) {
+        return null;
+    }
+
+    return {
+        id: panel.id,
+        title: panel.title,
+        component: panel.component,
+        params: stripTabNavigationHistory(panel.params),
+    };
+}
+
+function attachReplacementHistory(
+    targetTab: TabInstanceDefinition,
+    activePanel: WorkbenchPanelHandle,
+): TabInstanceDefinition {
+    const currentEntry = buildHistoryEntryFromPanel(activePanel);
+    if (!currentEntry) {
+        return targetTab;
+    }
+
+    const currentHistory = readTabNavigationHistory(activePanel.params);
+    const previousEntries = currentHistory
+        ? currentHistory.entries.slice(0, currentHistory.index)
+        : [];
+    const nextEntries: TabNavigationHistoryEntry[] = [
+        ...previousEntries,
+        currentEntry,
+        {
+            id: targetTab.id,
+            title: targetTab.title,
+            component: targetTab.component,
+            params: stripTabNavigationHistory(targetTab.params),
+        },
+    ];
+
+    return {
+        ...targetTab,
+        params: {
+            ...(targetTab.params ?? {}),
+            [TAB_NAVIGATION_HISTORY_PARAM]: {
+                entries: nextEntries,
+                index: nextEntries.length - 1,
+            } satisfies TabNavigationHistoryState,
+        },
+    };
+}
+
 function resolveOpenMode(explicitOpenMode?: FileOpenMode): FileOpenMode {
     return explicitOpenMode ?? getConfigSnapshot().featureSettings.fileOpenMode;
 }
@@ -123,13 +223,14 @@ function replaceActiveFilePanelIfRequested(
         return false;
     }
 
+    const nextTab = attachReplacementHistory(tab, activePanel);
     containerApi.replacePanel(activePanel.id, {
-        id: tab.id,
-        title: tab.title,
-        component: tab.component,
-        params: tab.params,
+        id: nextTab.id,
+        title: nextTab.title,
+        component: nextTab.component,
+        params: nextTab.params,
     });
-    containerApi.getPanel(tab.id)?.api.setActive();
+    containerApi.getPanel(nextTab.id)?.api.setActive();
     return true;
 }
 

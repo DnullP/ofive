@@ -225,7 +225,20 @@ test.describe("editor render surface contract", () => {
         await expect(activeEditor.locator(".cm-rendered-task-checkbox-unchecked")).toBeVisible();
         await expect(activeEditor.locator(".cm-rendered-horizontal-rule")).toBeVisible();
         await expect(activeEditor.locator(".cm-latex-inline-widget")).toBeVisible();
-        await expect(activeEditor.locator(".cm-image-embed-widget")).toBeVisible();
+        const imageEmbedWidget = activeEditor.locator(".cm-image-embed-widget").first();
+        await expect(imageEmbedWidget).toBeVisible();
+        await expect.poll(async () => imageEmbedWidget.evaluate((element) => {
+            const style = window.getComputedStyle(element);
+            return {
+                alignItems: style.alignItems,
+                background: style.backgroundColor,
+                borderTopWidth: style.borderTopWidth,
+            };
+        })).toEqual({
+            alignItems: "center",
+            background: "rgba(0, 0, 0, 0)",
+            borderTopWidth: "0px",
+        });
         await expect(activeEditor.locator(".cm-markdown-table-widget .mtv-shell")).toBeVisible();
         await expect(activeEditor.locator(".cm-markdown-table-widget .cm-rendered-wikilink", { hasText: "guide" })).toBeVisible();
         await expect(codeLine).toBeVisible();

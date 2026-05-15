@@ -1,6 +1,7 @@
 /* semantic-index-settings-form：语义索引设置卡片容器，承载开关、状态和模型列表。 */
 .semantic-index-settings-form {
     gap: 0;
+    margin-top: 18px;
 }
 
 /* semantic-index-settings-meta：右侧摘要信息，显示已安装模型数量或后端摘要。 */

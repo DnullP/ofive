@@ -460,7 +460,7 @@ fn write_agent_skill_file_capability() -> CapabilityDescriptor {
         id: "agent_skill.write_file".to_string(),
         api_version: CAPABILITY_API_VERSION.to_string(),
         display_name: "Write Agent Skill File".to_string(),
-        description: "Create or overwrite SKILL.md or a Markdown reference file for one user-defined Agent skill under .ofive/skills/<skillName>. Keep SKILL.md frontmatter name equal to skillName so the Go ADK skill loader can preload it.".to_string(),
+        description: "Create or overwrite SKILL.md or a Markdown reference file for one user-defined Agent skill under .ofive/skills/<skillName>. SKILL.md frontmatter must use the Go ADK skill schema only: name, description, optional license, compatibility, metadata, and allowed-tools. Keep name equal to skillName; do not add top-level type or version fields.".to_string(),
         kind: CapabilityKind::Write,
         input_schema: json!({
             "type": "object",
@@ -471,7 +471,10 @@ fn write_agent_skill_file_capability() -> CapabilityDescriptor {
                     "type": "string",
                     "description": "SKILL.md, references/**/*.md, assets/**/*.md, or scripts/**/*.md."
                 },
-                "content": {"type": "string"}
+                "content": {
+                    "type": "string",
+                    "description": "For SKILL.md, start with YAML frontmatter using only ADK fields: name, description, optional license, compatibility, metadata, allowed-tools. Put versions under metadata as string values if needed."
+                }
             }
         }),
         output_schema: json!({

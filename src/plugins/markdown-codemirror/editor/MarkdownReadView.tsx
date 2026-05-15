@@ -47,6 +47,7 @@ import {
 } from "../../project-reader/projectReaderLinks";
 import { resolveParentDirectory } from "./pathUtils";
 import { openWikiLinkTarget } from "./syntaxPlugins/wikiLinkSyntaxRenderer";
+import { isMermaidLanguage, renderMermaidToElement } from "./syntaxPlugins/mermaidRenderer";
 import {
     decodeReadModeBlockLatexHref,
     decodeReadModeHighlightHref,
@@ -817,6 +818,11 @@ export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
                 );
             }
 
+            const language = String(className ?? "").match(/language-([^\s]+)/)?.[1] ?? "";
+            if (isMermaidLanguage(language)) {
+                return <ReadModeMermaidDiagram source={String(children).replace(/\n$/, "")} />;
+            }
+
             return (
                 <code className={`cm-tab-reader-code ${className ?? ""}`.trim()} {...componentProps}>
                     {children}
@@ -1088,6 +1094,30 @@ interface ReadModeLatexProps {
     latex: string;
     /** 是否以 display 模式渲染。 */
     displayMode: boolean;
+}
+
+interface ReadModeMermaidDiagramProps {
+    /** Mermaid diagram source. */
+    source: string;
+}
+
+function ReadModeMermaidDiagram(props: ReadModeMermaidDiagramProps): ReactNode {
+    const containerRef = useRef<HTMLDivElement | null>(null);
+
+    useLayoutEffect(() => {
+        if (!containerRef.current) {
+            return;
+        }
+
+        renderMermaidToElement(containerRef.current, props.source);
+    }, [props.source]);
+
+    return (
+        <div
+            ref={containerRef}
+            className="cm-mermaid-widget cm-mermaid-widget-read"
+        />
+    );
 }
 
 interface ReadModeLatexRenderResult {

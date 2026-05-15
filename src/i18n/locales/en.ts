@@ -899,6 +899,9 @@ const en = {
         mainArea: "Workbench Main Area",
         rightPanelArea: "Right Extension Panel",
         noRegisteredPanel: "No registered panel renderer.",
+        tabNavigation: "Tab navigation",
+        navigateBack: "Previous browse",
+        navigateForward: "Next browse",
     },
 
     /* ==================== Image ==================== */

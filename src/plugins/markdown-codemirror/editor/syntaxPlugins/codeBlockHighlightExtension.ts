@@ -23,7 +23,7 @@
  *   - createCodeBlockHighlightExtension — 创建代码块内联高亮 CodeMirror 扩展
  */
 
-import { RangeSetBuilder } from "@codemirror/state";
+import { RangeSet, RangeSetBuilder } from "@codemirror/state";
 import type { Extension } from "@codemirror/state";
 import {
     Decoration,
@@ -44,11 +44,17 @@ import rustLanguage from "highlight.js/lib/languages/rust";
 import typescriptLanguage from "highlight.js/lib/languages/typescript";
 import xmlLanguage from "highlight.js/lib/languages/xml";
 import yamlLanguage from "highlight.js/lib/languages/yaml";
-import { hiddenBlockLineDecoration, rangeTouchesBlock } from "./blockWidgetReplace";
+import {
+    hiddenBlockLineDecoration,
+    hiddenBlockAnchorLineDecoration,
+    rangeTouchesBlock,
+    type BlockRange,
+} from "./blockWidgetReplace";
 import {
     setExclusionZones,
     isRangeInsideHigherPriorityZone,
 } from "../syntaxExclusionZones";
+import { isMermaidLanguage, renderMermaidToElement } from "./mermaidRenderer";
 
 hljs.registerLanguage("bash", bashLanguage);
 hljs.registerLanguage("sh", bashLanguage);
@@ -126,6 +132,8 @@ interface DecoRange {
     /** CodeMirror 装饰对象。 */
     decoration: Decoration;
 }
+
+const mermaidAtomicRangeMarker = Decoration.mark({});
 
 /* ================================================================== */
 /*  围栏代码块解析                                                     */
@@ -406,6 +414,35 @@ class CopyButtonWidget extends WidgetType {
     }
 }
 
+/**
+ * @class MermaidDiagramWidget
+ * @description Renders a fenced ```mermaid code block as an editable diagram preview.
+ */
+class MermaidDiagramWidget extends WidgetType {
+    private readonly source: string;
+
+    constructor(source: string) {
+        super();
+        this.source = source;
+    }
+
+    eq(other: MermaidDiagramWidget): boolean {
+        return this.source === other.source;
+    }
+
+    toDOM(): HTMLElement {
+        const wrapper = document.createElement("div");
+        wrapper.className = "cm-mermaid-widget";
+        wrapper.dataset.mermaidRendered = "pending";
+        renderMermaidToElement(wrapper, this.source);
+        return wrapper;
+    }
+
+    ignoreEvent(): boolean {
+        return false;
+    }
+}
+
 /* ================================================================== */
 /*  Decoration.line 常量                                               */
 /* ================================================================== */
@@ -453,14 +490,15 @@ function isViewAlive(view: EditorView): boolean {
  *   3. 通过 Decoration.mark 将 highlight.js Token 映射为行内着色 span。
  *   4. 围栏行在光标不在块内时通过 hiddenBlockLineDecoration 隐藏，进入时恢复。
  *   5. 首行通过 Decoration.widget 插入 float:right 的 Copy 按钮。
- *   6. 不使用 atomicRanges，光标可自由通过方向键进出代码块。
+ *   6. 普通代码块不使用 atomicRanges；Mermaid 预览折叠时使用原子范围配合 Vim handoff 进入源码。
  *
  * @returns CodeMirror Extension。
  */
 export function createCodeBlockHighlightExtension(): Extension {
-    return ViewPlugin.fromClass(
+    const plugin = ViewPlugin.fromClass(
         class {
             decorations: DecorationSet;
+            mermaidBlocks: BlockRange[] = [];
 
             constructor(view: EditorView) {
                 this.decorations = this.safeBuild(view);
@@ -487,6 +525,7 @@ export function createCodeBlockHighlightExtension(): Extension {
                                 ? error.message
                                 : String(error),
                     });
+                    this.mermaidBlocks = [];
                     return new RangeSetBuilder<Decoration>().finish();
                 }
             }
@@ -497,12 +536,14 @@ export function createCodeBlockHighlightExtension(): Extension {
              */
             private build(view: EditorView): DecorationSet {
                 if (!isViewAlive(view)) {
+                    this.mermaidBlocks = [];
                     return new RangeSetBuilder<Decoration>().finish();
                 }
 
                 const allBlocks = parseCodeBlocks(view.state);
                 if (allBlocks.length === 0) {
                     setExclusionZones(view, "code-fence", []);
+                    this.mermaidBlocks = [];
                     return new RangeSetBuilder<Decoration>().finish();
                 }
 
@@ -525,8 +566,13 @@ export function createCodeBlockHighlightExtension(): Extension {
                 );
 
                 if (blocks.length === 0) {
+                    this.mermaidBlocks = [];
                     return new RangeSetBuilder<Decoration>().finish();
                 }
+
+                this.mermaidBlocks = blocks
+                    .filter((block) => isMermaidLanguage(block.language))
+                    .map((block) => ({ from: block.from, to: block.to }));
 
                 const ranges: DecoRange[] = [];
                 const doc = view.state.doc;
@@ -537,6 +583,34 @@ export function createCodeBlockHighlightExtension(): Extension {
                     const closeLine = doc.line(block.endLine);
                     const firstContent = block.startLine + 1;
                     const lastContent = block.endLine - 1;
+                    const isMermaidBlock = isMermaidLanguage(block.language);
+
+                    if (isMermaidBlock && !cursorIn) {
+                        for (let lineNumber = block.startLine; lineNumber < block.endLine; lineNumber += 1) {
+                            const targetLine = doc.line(lineNumber);
+                            ranges.push({
+                                from: targetLine.from,
+                                to: targetLine.from,
+                                decoration: hiddenBlockLineDecoration,
+                            });
+                        }
+
+                        ranges.push({
+                            from: closeLine.from,
+                            to: closeLine.from,
+                            decoration: hiddenBlockAnchorLineDecoration,
+                        });
+                        ranges.push({
+                            from: closeLine.to,
+                            to: closeLine.to,
+                            decoration: Decoration.widget({
+                                widget: new MermaidDiagramWidget(block.code),
+                                block: false,
+                                side: -1,
+                            }),
+                        });
+                        continue;
+                    }
 
                     /* ---- 围栏行 ---- */
                     if (cursorIn) {
@@ -630,4 +704,22 @@ export function createCodeBlockHighlightExtension(): Extension {
         },
         { decorations: (p) => p.decorations },
     );
+
+    const mermaidAtomicRanges = EditorView.atomicRanges.of((view) => {
+        const pluginValue = view.plugin(plugin);
+        if (!pluginValue || pluginValue.mermaidBlocks.length === 0) {
+            return RangeSet.empty;
+        }
+
+        const hiddenRanges = pluginValue.mermaidBlocks.filter((range) =>
+            !rangeTouchesBlock(range, view.state.selection.ranges),
+        );
+        if (hiddenRanges.length === 0) {
+            return RangeSet.empty;
+        }
+
+        return RangeSet.of(hiddenRanges.map((range) => mermaidAtomicRangeMarker.range(range.from, range.to)));
+    });
+
+    return [plugin, mermaidAtomicRanges];
 }

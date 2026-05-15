@@ -64,20 +64,34 @@ async function openBacklinksPanel(page: Page) {
     return rightSidebar.locator(".layout-v2-panel-section__pane-body");
 }
 
-async function clickTokenWithModifier(page: Page, locator: ReturnType<Page["locator"]>, modifier: "Meta" | "Control"): Promise<void> {
-    const box = await locator.boundingBox();
-    expect(box).not.toBeNull();
-    if (!box) {
-        throw new Error("Project reader token is missing a bounding box.");
+async function resolveLocatorPoint(page: Page, locator: Locator, missingBoxMessage: string): Promise<{ x: number; y: number }> {
+    await expect(locator).toBeVisible();
+    let box: { x: number; y: number; width: number; height: number } | null = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        box = await locator.boundingBox();
+        if (box) {
+            break;
+        }
+        await page.waitForTimeout(50);
     }
 
-    const x = box.x + Math.min(box.width - 1, 4);
-    const y = box.y + box.height / 2;
+    expect(box).not.toBeNull();
+    if (!box) {
+        throw new Error(missingBoxMessage);
+    }
+
+    return {
+        x: box.x + Math.min(box.width - 1, 4),
+        y: box.y + box.height / 2,
+    };
+}
+
+async function clickTokenWithModifier(page: Page, locator: Locator, modifier: "Meta" | "Control"): Promise<void> {
+    const { x, y } = await resolveLocatorPoint(page, locator, "Project reader token is missing a bounding box.");
     await page.keyboard.down(modifier);
     try {
         await page.mouse.move(x, y);
-        await page.mouse.down();
-        await page.mouse.up();
+        await page.mouse.click(x, y);
     } finally {
         await page.keyboard.up(modifier);
     }
@@ -188,17 +202,19 @@ test.describe("project reader", () => {
         await page.keyboard.press("Escape");
         await page.evaluate(() => window.getSelection()?.removeAllRanges());
 
-        const runtimeToken = codeTab.locator(".project-reader-code-token", { hasText: "AppRuntime" }).first();
+        const appRuntimeToken = () => codeTab.locator(".project-reader-code-token", { hasText: "AppRuntime" }).first();
+        const runtimeToken = appRuntimeToken();
         await expect(runtimeToken).toBeVisible();
-        await page.keyboard.down("Control");
+        const hoverPoint = await resolveLocatorPoint(page, runtimeToken, "Project reader runtime token is missing a bounding box.");
+        await page.keyboard.down("Meta");
         try {
-            await runtimeToken.hover();
+            await page.mouse.move(hoverPoint.x, hoverPoint.y);
             await expect(runtimeToken).toHaveClass(/project-reader-code-token--hovered/);
         } finally {
-            await page.keyboard.up("Control");
+            await page.keyboard.up("Meta");
         }
 
-        await clickTokenWithModifier(page, codeTab.getByText("AppRuntime", { exact: true }).first(), "Meta");
+        await clickTokenWithModifier(page, appRuntimeToken(), "Meta");
 
         await page.locator(".tree-item[data-tree-path='src/alternate.ts']").click();
         await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/alternate.ts");
@@ -212,9 +228,39 @@ test.describe("project reader", () => {
         await expect(page.locator(".layout-v2-tab-section__card--active .cm-line", { hasText: "名为Session的结构" })).toBeVisible();
         await page.locator(".layout-v2-tab-section__tab-main", { hasText: "alternate.ts" }).first().click();
 
-        await clickTokenWithModifier(page, codeTab.getByText("AppRuntime", { exact: true }).first(), "Meta");
+        await clickTokenWithModifier(page, appRuntimeToken(), "Meta");
         await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/alternate.ts");
         await expect(codeTab.locator(".project-reader-code-line.is-target-line")).toBeVisible();
+    });
+
+    test("should keep long project source tabs vertically scrollable", async ({ page }) => {
+        await gotoMockVaultPage(page, "project-reader-scroll", "/web-mock/mock-tauri-test.html?showControls=0");
+        await waitForWorkbench(page);
+
+        await openProjectReaderPanel(page);
+        await page.locator(".tree-item[data-tree-path='src']").click();
+        await page.locator(".tree-item[data-tree-path='src/long-scroll.ts']").click();
+
+        const codeTab = page.locator(".project-reader-code-tab");
+        const scroller = codeTab.locator(".project-reader-code-scroller");
+        await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/long-scroll.ts");
+        await expect(scroller.locator(".project-reader-code-line").filter({ hasText: "line 160" })).toHaveCount(1);
+
+        const beforeScroll = await scroller.evaluate((element) => ({
+            clientHeight: element.clientHeight,
+            scrollHeight: element.scrollHeight,
+            scrollTop: element.scrollTop,
+            overflowY: window.getComputedStyle(element).overflowY,
+        }));
+
+        expect(beforeScroll.overflowY).toBe("auto");
+        expect(beforeScroll.scrollHeight - beforeScroll.clientHeight).toBeGreaterThan(400);
+
+        await scroller.hover();
+        await page.mouse.wheel(0, 700);
+
+        await expect.poll(async () => scroller.evaluate((element) => element.scrollTop))
+            .toBeGreaterThan(beforeScroll.scrollTop + 120);
     });
 
     test("should show project source references in the backlinks panel", async ({ page }) => {

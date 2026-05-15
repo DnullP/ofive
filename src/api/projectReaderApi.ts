@@ -171,6 +171,18 @@ const browserMockFiles: Record<string, string> = {
         "}",
         "",
     ].join("\n"),
+    "src/long-scroll.ts": [
+        "export const longScrollFixture = [",
+        ...Array.from({ length: 160 }, (_, index) =>
+            `  "Project reader scroll fixture line ${String(index + 1).padStart(3, "0")}",`,
+        ),
+        "];",
+        "",
+        "export function readLongScrollFixture(): string[] {",
+        "  return longScrollFixture;",
+        "}",
+        "",
+    ].join("\n"),
     "src/runtime.ts": [
         "export class BrowserRuntime {",
         "  start(): void {}",

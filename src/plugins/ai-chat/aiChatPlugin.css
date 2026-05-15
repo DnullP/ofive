@@ -1413,6 +1413,11 @@
     gap: 0;
 }
 
+.ai-chat-provider-settings-form,
+.ai-chat-tool-approval-section {
+    margin-bottom: 14px;
+}
+
 /* ai-chat-settings-row：设置项容器 */
 .ai-chat-settings-row {
     display: flex;
@@ -1465,10 +1470,106 @@
     min-width: 0;
 }
 
+.ai-chat-settings-provider-layout {
+    display: grid;
+    grid-template-columns: minmax(180px, 230px) minmax(0, 1fr);
+    min-height: 0;
+}
+
+.ai-chat-settings-provider-list-pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-right: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+}
+
+.ai-chat-settings-provider-list-header {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ai-chat-settings-provider-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+}
+
+.ai-chat-settings-provider-item {
+    width: 100%;
+    min-height: 48px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 8px 9px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+    text-align: left;
+    color: var(--text-primary);
+    background: transparent;
+    cursor: pointer;
+}
+
+.ai-chat-settings-provider-item:hover,
+.ai-chat-settings-provider-item:focus-visible {
+    outline: none;
+    background: var(--content-material-hover-bg);
+}
+
+.ai-chat-settings-provider-item.active {
+    border-color: color-mix(in srgb, var(--accent-primary) 42%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary) 11%, var(--bg-primary));
+}
+
+.ai-chat-settings-provider-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.ai-chat-settings-provider-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.ai-chat-settings-provider-detail-pane {
+    min-width: 0;
+    background: var(--bg-secondary);
+}
+
+.ai-chat-settings-provider-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-primary) 92%, var(--bg-secondary));
+}
+
+.ai-chat-settings-provider-detail-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 700;
+}
+
 .ai-chat-settings-provider-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    padding: 8px;
+    border-top: 1px solid var(--border-color);
 }
 
 .ai-chat-settings-mini-button {
@@ -1499,6 +1600,10 @@
 /* ai-chat-settings-tool-policy-header：工具审批设置说明行 */
 .ai-chat-settings-tool-policy-header {
     background: color-mix(in srgb, var(--bg-primary) 86%, var(--bg-secondary));
+}
+
+.ai-chat-tool-approval-section {
+    margin-top: 8px;
 }
 
 /* ai-chat-settings-tool-policy-list：工具审批列表 */
@@ -1587,6 +1692,78 @@
     color: var(--error-color);
 }
 
+.ai-chat-provider-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--surface-overlay-backdrop);
+    backdrop-filter: blur(10px);
+}
+
+.ai-chat-provider-modal {
+    width: min(420px, 100%);
+    border: 1px solid var(--border-color);
+    border-radius: var(--modal-panel-radius);
+    box-shadow: var(--overlay-shadow-strong);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.ai-chat-provider-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ai-chat-provider-modal-title {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.ai-chat-provider-modal-desc {
+    margin-top: 3px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.ai-chat-provider-modal-close {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--modal-control-radius);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    cursor: pointer;
+}
+
+.ai-chat-provider-modal-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px 0;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.ai-chat-provider-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px;
+}
+
 /* 桌面毛玻璃 AI 面板根容器：避免实底覆盖右侧栏材质。 */
 .app-runtime--tauri.app-effect--glass .ai-chat-panel {
     background:
@@ -1618,6 +1795,9 @@
 .app-runtime--tauri.app-effect--glass .ai-chat-status,
 .app-runtime--tauri.app-effect--glass .ai-chat-settings-row,
 .app-runtime--tauri.app-effect--glass .ai-chat-settings-actions,
+.app-runtime--tauri.app-effect--glass .ai-chat-settings-provider-list-pane,
+.app-runtime--tauri.app-effect--glass .ai-chat-settings-provider-detail-pane,
+.app-runtime--tauri.app-effect--glass .ai-chat-settings-provider-detail-header,
 .app-runtime--tauri.app-effect--glass .ai-chat-debug-entry,
 .app-runtime--tauri.app-effect--glass .ai-chat-confirmation-card {
     background: rgba(var(--window-glass-elevated-rgb), var(--glass-surface-opacity-soft));
@@ -1641,6 +1821,20 @@
     .ai-chat-debug-toolbar {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .ai-chat-settings-provider-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .ai-chat-settings-provider-list-pane {
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .ai-chat-settings-provider-list {
+        max-height: 220px;
+        overflow: auto;
     }
 
     .ai-chat-composer-row {

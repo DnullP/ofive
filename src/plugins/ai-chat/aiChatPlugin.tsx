@@ -76,6 +76,7 @@ import {
     openProjectReaderWikiLinkTarget,
     resolveProjectReaderWikiLinkTabDefinition,
 } from "../project-reader/projectReaderLinks";
+import { modalPlainTextInputProps } from "../../host/layout/textInputBehaviors";
 import {
     createEmptyPendingStreamBinding,
     createPendingStreamBinding,
@@ -2301,6 +2302,9 @@ function AiChatSettingsSection(): ReactNode {
     const [isSaving, setIsSaving] = useState(false);
     const [feedback, setFeedback] = useState<string | null>(null);
     const [feedbackIsError, setFeedbackIsError] = useState(false);
+    const [providerModalOpen, setProviderModalOpen] = useState(false);
+    const [providerDraftTitle, setProviderDraftTitle] = useState("");
+    const [providerDraftVendorId, setProviderDraftVendorId] = useState("");
 
     const selectedVendor = useMemo(() => {
         if (!settings) {
@@ -2503,8 +2507,7 @@ function AiChatSettingsSection(): ReactNode {
      * @function handleProviderChange
      * @description 切换当前使用的 provider 实例。
      */
-    const handleProviderChange = (event: ChangeEvent<HTMLSelectElement>): void => {
-        const providerId = event.target.value;
+    const handleProviderSelect = (providerId: string): void => {
         if (!settings) {
             return;
         }
@@ -2540,9 +2543,29 @@ function AiChatSettingsSection(): ReactNode {
             return;
         }
 
+        setProviderDraftTitle("");
+        setProviderDraftVendorId(vendor.id);
+        setProviderModalOpen(true);
+    };
+
+    const handleConfirmAddProvider = (event: React.FormEvent<HTMLFormElement>): void => {
+        event.preventDefault();
+        const vendor = resolveVendor(vendorCatalog, providerDraftVendorId) ?? vendorCatalog[0] ?? null;
+        if (!settings || !vendor) {
+            return;
+        }
+
         setAvailableModels([]);
         const nextProvider = createProviderForVendor(vendor, settings.providers ?? []);
-        setSettings(withActiveProvider(settings, nextProvider));
+        const titledProvider = providerDraftTitle.trim().length > 0
+            ? {
+                ...nextProvider,
+                title: providerDraftTitle.trim(),
+            }
+            : nextProvider;
+        setSettings(withActiveProvider(settings, titledProvider));
+        setProviderModalOpen(false);
+        setProviderDraftTitle("");
     };
 
     const handleRemoveProvider = (): void => {
@@ -2636,109 +2659,174 @@ function AiChatSettingsSection(): ReactNode {
         );
     }
 
+    const activeProviderVendorTitle = selectedVendor?.title ?? activeProvider?.vendorId ?? "-";
+
     return (
-        <div className="settings-item-group ai-chat-settings-form">
+        <>
+        <div className="settings-item-group ai-chat-settings-form ai-chat-provider-settings-form">
             <div className="ai-chat-settings-row">
                 <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.settingsTitle")}</div>
                 <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.settingsSubtitle")}</div>
             </div>
 
-            <div className="ai-chat-settings-row">
-                <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.providerLabel")}</div>
-                <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.providerDescription")}</div>
-                <select
-                    className="settings-compact-select"
-                    value={activeProvider?.id ?? ""}
-                    onChange={handleProviderChange}
-                >
-                    {(settings.providers ?? []).map((provider) => (
-                        <option key={provider.id} value={provider.id}>{provider.title}</option>
+            <div className="ai-chat-settings-provider-layout">
+                <div className="ai-chat-settings-provider-list-pane">
+                    <div className="ai-chat-settings-provider-list-header">
+                        <div>
+                            <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.providerLabel")}</div>
+                            <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.providerDescription")}</div>
+                        </div>
+                    </div>
+                    <div className="ai-chat-settings-provider-list" role="listbox" aria-label={i18n.t("aiChatPlugin.providerLabel")}>
+                        {(settings.providers ?? []).map((provider) => {
+                            const vendor = resolveVendor(vendorCatalog, provider.vendorId);
+                            const isSelected = provider.id === activeProvider?.id;
+                            return (
+                                <button
+                                    key={provider.id}
+                                    type="button"
+                                    className={`ai-chat-settings-provider-item${isSelected ? " active" : ""}`}
+                                    role="option"
+                                    aria-selected={isSelected}
+                                    onClick={() => {
+                                        handleProviderSelect(provider.id);
+                                    }}
+                                >
+                                    <span className="ai-chat-settings-provider-title">{provider.title}</span>
+                                    <span className="ai-chat-settings-provider-meta">{vendor?.title ?? provider.vendorId} · {provider.model || "-"}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <div className="ai-chat-settings-provider-actions">
+                        <button
+                            type="button"
+                            className="ai-chat-settings-mini-button"
+                            onClick={handleAddProvider}
+                        >
+                            <Plus size={13} strokeWidth={2} />
+                            <span>{i18n.t("aiChatPlugin.providerAdd")}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="ai-chat-settings-provider-detail-pane">
+                    <div className="ai-chat-settings-provider-detail-header">
+                        <div>
+                            <div className="ai-chat-settings-provider-detail-title">{activeProvider?.title ?? "-"}</div>
+                            <div className="ai-chat-settings-provider-meta">{activeProviderVendorTitle}</div>
+                        </div>
+                        <button
+                            type="button"
+                            className="ai-chat-settings-mini-button danger"
+                            onClick={handleRemoveProvider}
+                        >
+                            <X size={13} strokeWidth={2} />
+                            <span>{i18n.t("aiChatPlugin.providerRemove")}</span>
+                        </button>
+                    </div>
+
+                    <div className="ai-chat-settings-row">
+                        <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.providerNameLabel")}</div>
+                        <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.providerNameDescription")}</div>
+                        <input
+                            className="ai-chat-settings-input"
+                            type="text"
+                            value={activeProvider?.title ?? ""}
+                            onChange={(event) => {
+                                updateActiveProvider((provider) => ({
+                                    ...provider,
+                                    title: event.target.value,
+                                }));
+                            }}
+                        />
+                    </div>
+
+                    <div className="ai-chat-settings-row">
+                        <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.vendorLabel")}</div>
+                        <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.vendorDescription")}</div>
+                        <select
+                            className="settings-compact-select"
+                            value={activeProvider?.vendorId ?? ""}
+                            onChange={handleProviderTypeChange}
+                        >
+                            {vendorCatalog.map((vendor) => (
+                                <option key={vendor.id} value={vendor.id}>{vendor.title}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="ai-chat-settings-row">
+                        <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.modelLabel")}</div>
+                        <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.modelDescription")}</div>
+                        <select
+                            className="settings-compact-select ai-chat-settings-model-select"
+                            value={activeProvider?.model ?? ""}
+                            disabled={isLoadingModels}
+                            onChange={(event) => {
+                                updateActiveProvider((provider) => ({
+                                    ...provider,
+                                    model: event.target.value,
+                                }));
+                            }}
+                        >
+                            {availableModels.length === 0 ? (
+                                <option value={activeProvider?.model ?? ""}>{activeProvider?.model || "-"}</option>
+                            ) : availableModels.map((model) => (
+                                <option key={model.id} value={model.id}>{model.id}</option>
+                            ))}
+                        </select>
+                        <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.modelLoadHint")}</div>
+                        <input
+                            className="ai-chat-settings-input"
+                            type="text"
+                            value={activeProvider?.model ?? ""}
+                            onChange={(event) => {
+                                updateActiveProvider((provider) => ({
+                                    ...provider,
+                                    model: event.target.value,
+                                }));
+                            }}
+                        />
+                    </div>
+
+                    {selectedVendor?.fields.map((field) => (
+                        <div key={field.key} className="ai-chat-settings-row">
+                            <div className="ai-chat-settings-label">{field.label}</div>
+                            <div className="ai-chat-settings-desc">{field.description}</div>
+                            <input
+                                className="ai-chat-settings-input"
+                                type={field.fieldType}
+                                required={field.required}
+                                placeholder={field.placeholder ?? undefined}
+                                value={activeProvider?.fieldValues[field.key] ?? ""}
+                                onChange={(event) => {
+                                    updateFieldValue(field.key, event.target.value);
+                                }}
+                            />
+                        </div>
                     ))}
-                </select>
-                <div className="ai-chat-settings-provider-actions">
-                    <button
-                        type="button"
-                        className="ai-chat-settings-mini-button"
-                        onClick={handleAddProvider}
-                    >
-                        <Plus size={13} strokeWidth={2} />
-                        <span>{i18n.t("aiChatPlugin.providerAdd")}</span>
-                    </button>
-                    <button
-                        type="button"
-                        className="ai-chat-settings-mini-button danger"
-                        onClick={handleRemoveProvider}
-                    >
-                        <X size={13} strokeWidth={2} />
-                        <span>{i18n.t("aiChatPlugin.providerRemove")}</span>
-                    </button>
+
+                    <div className="ai-chat-settings-actions">
+                        <div className={`ai-chat-settings-feedback ${feedbackIsError ? "error" : ""}`}>
+                            {feedback ?? `${i18n.t("aiChatPlugin.configuredVendor")}: ${activeProvider?.title ?? selectedVendor?.title ?? "-"}`}
+                        </div>
+                        <button
+                            type="button"
+                            className="ai-chat-settings-save"
+                            disabled={isSaving}
+                            onClick={() => {
+                                void handleSave();
+                            }}
+                        >
+                            {isSaving ? i18n.t("aiChatPlugin.sending") : i18n.t("aiChatPlugin.save")}
+                        </button>
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <div className="ai-chat-settings-row">
-                <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.providerNameLabel")}</div>
-                <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.providerNameDescription")}</div>
-                <input
-                    className="ai-chat-settings-input"
-                    type="text"
-                    value={activeProvider?.title ?? ""}
-                    onChange={(event) => {
-                        updateActiveProvider((provider) => ({
-                            ...provider,
-                            title: event.target.value,
-                        }));
-                    }}
-                />
-            </div>
-
-            <div className="ai-chat-settings-row">
-                <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.vendorLabel")}</div>
-                <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.vendorDescription")}</div>
-                <select
-                    className="settings-compact-select"
-                    value={activeProvider?.vendorId ?? ""}
-                    onChange={handleProviderTypeChange}
-                >
-                    {vendorCatalog.map((vendor) => (
-                        <option key={vendor.id} value={vendor.id}>{vendor.title}</option>
-                    ))}
-                </select>
-            </div>
-
-            <div className="ai-chat-settings-row">
-                <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.modelLabel")}</div>
-                <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.modelDescription")}</div>
-                <select
-                    className="settings-compact-select ai-chat-settings-model-select"
-                    value={activeProvider?.model ?? ""}
-                    disabled={isLoadingModels}
-                    onChange={(event) => {
-                        updateActiveProvider((provider) => ({
-                            ...provider,
-                            model: event.target.value,
-                        }));
-                    }}
-                >
-                    {availableModels.length === 0 ? (
-                        <option value={activeProvider?.model ?? ""}>{activeProvider?.model || "-"}</option>
-                    ) : availableModels.map((model) => (
-                        <option key={model.id} value={model.id}>{model.id}</option>
-                    ))}
-                </select>
-                <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.modelLoadHint")}</div>
-                <input
-                    className="ai-chat-settings-input"
-                    type="text"
-                    value={activeProvider?.model ?? ""}
-                    onChange={(event) => {
-                        updateActiveProvider((provider) => ({
-                            ...provider,
-                            model: event.target.value,
-                        }));
-                    }}
-                />
-            </div>
-
+        <div className="settings-item-group ai-chat-settings-form ai-chat-tool-approval-section">
             <div className="ai-chat-settings-row ai-chat-settings-tool-policy-header">
                 <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.toolApprovalTitle")}</div>
                 <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.toolApprovalDescription")}</div>
@@ -2778,27 +2866,9 @@ function AiChatSettingsSection(): ReactNode {
                     );
                 })}
             </div>
-
-            {selectedVendor?.fields.map((field) => (
-                <div key={field.key} className="ai-chat-settings-row">
-                    <div className="ai-chat-settings-label">{field.label}</div>
-                    <div className="ai-chat-settings-desc">{field.description}</div>
-                    <input
-                        className="ai-chat-settings-input"
-                        type={field.fieldType}
-                        required={field.required}
-                        placeholder={field.placeholder ?? undefined}
-                        value={activeProvider?.fieldValues[field.key] ?? ""}
-                        onChange={(event) => {
-                            updateFieldValue(field.key, event.target.value);
-                        }}
-                    />
-                </div>
-            ))}
-
             <div className="ai-chat-settings-actions">
                 <div className={`ai-chat-settings-feedback ${feedbackIsError ? "error" : ""}`}>
-                    {feedback ?? `${i18n.t("aiChatPlugin.configuredVendor")}: ${activeProvider?.title ?? selectedVendor?.title ?? "-"}`}
+                    {feedback ?? i18n.t("aiChatPlugin.toolApprovalDescription")}
                 </div>
                 <button
                     type="button"
@@ -2812,6 +2882,90 @@ function AiChatSettingsSection(): ReactNode {
                 </button>
             </div>
         </div>
+
+        {providerModalOpen ? (
+            <div
+                className="ai-chat-provider-modal-backdrop"
+                data-floating-backdrop="true"
+                role="presentation"
+                onMouseDown={(event) => {
+                    if (event.target === event.currentTarget) {
+                        setProviderModalOpen(false);
+                    }
+                }}
+            >
+                <form
+                    className="ai-chat-provider-modal"
+                    data-floating-surface="true"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={i18n.t("aiChatPlugin.providerAdd")}
+                    onSubmit={handleConfirmAddProvider}
+                >
+                    <div className="ai-chat-provider-modal-header">
+                        <div>
+                            <div className="ai-chat-provider-modal-title">{i18n.t("aiChatPlugin.providerAdd")}</div>
+                            <div className="ai-chat-provider-modal-desc">{i18n.t("aiChatPlugin.providerDescription")}</div>
+                        </div>
+                        <button
+                            type="button"
+                            className="ai-chat-provider-modal-close"
+                            aria-label={i18n.t("common.cancel")}
+                            onClick={() => {
+                                setProviderModalOpen(false);
+                            }}
+                        >
+                            <X size={15} strokeWidth={2} />
+                        </button>
+                    </div>
+
+                    <label className="ai-chat-provider-modal-field">
+                        <span>{i18n.t("aiChatPlugin.providerNameLabel")}</span>
+                        <input
+                            {...modalPlainTextInputProps}
+                            className="ai-chat-settings-input"
+                            type="text"
+                            value={providerDraftTitle}
+                            placeholder={selectedVendor?.title ?? i18n.t("aiChatPlugin.providerLabel")}
+                            onChange={(event) => {
+                                setProviderDraftTitle(event.target.value);
+                            }}
+                        />
+                    </label>
+
+                    <label className="ai-chat-provider-modal-field">
+                        <span>{i18n.t("aiChatPlugin.vendorLabel")}</span>
+                        <select
+                            className="settings-compact-select"
+                            value={providerDraftVendorId}
+                            onChange={(event) => {
+                                setProviderDraftVendorId(event.target.value);
+                            }}
+                        >
+                            {vendorCatalog.map((vendor) => (
+                                <option key={vendor.id} value={vendor.id}>{vendor.title}</option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <div className="ai-chat-provider-modal-actions">
+                        <button
+                            type="button"
+                            className="ai-chat-settings-mini-button"
+                            onClick={() => {
+                                setProviderModalOpen(false);
+                            }}
+                        >
+                            {i18n.t("common.cancel")}
+                        </button>
+                        <button type="submit" className="ai-chat-settings-save">
+                            {i18n.t("aiChatPlugin.providerAdd")}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        ) : null}
+        </>
     );
 }
 

@@ -82,6 +82,20 @@ $$
 错误的 LaTeX：$\\invalidcommand{test}$
 `;
 
+const MERMAID_TEST_SAMPLE = `# Mermaid 渲染测试
+
+Before the diagram.
+
+\`\`\`mermaid
+graph TD
+    A[Start] --> B{Ready?}
+    B -->|Yes| C[Render Mermaid]
+    B -->|No| D[Show source]
+\`\`\`
+
+After the diagram.
+`;
+
 const CANVAS_SAMPLE = `{
     "nodes": [
         {
@@ -285,6 +299,7 @@ function resolveMockRenameRequest(): { eventId: string; path: string } | null {
 
 const MOCK_FILE_CONTENTS: Record<string, string> = {
     "test-resources/notes/code-block-test.md": CODE_BLOCK_TEST_SAMPLE,
+    "test-resources/notes/mermaid-test.md": MERMAID_TEST_SAMPLE,
     "test-resources/notes/network-segment.md": NETWORK_SEGMENT_SAMPLE,
     "test-resources/notes/latex-test.md": LATEX_TEST_SAMPLE,
     "test-resources/notes/header-wikilink-regression.md": "# [[Plain Note]] [[Target Note|Alias Note]]\n\nbody\n",

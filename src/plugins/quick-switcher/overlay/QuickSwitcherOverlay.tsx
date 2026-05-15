@@ -29,8 +29,11 @@ import { searchVaultMarkdownFiles, type VaultQuickSwitchItem } from "../../../ap
 import { UI_LANGUAGE } from "../../../i18n/uiLanguage";
 import { modalPlainTextInputProps } from "../../../host/layout/textInputBehaviors";
 import type { OverlayRenderContext } from "../../../host/registry/overlayRegistry";
+import { useDebouncedValue } from "../../../utils/useDebouncedValue";
 import { QUICK_SWITCHER_OPEN_REQUESTED_EVENT } from "../quickSwitcherEvents";
 import "./QuickSwitcherModal.css";
+
+const QUICK_SWITCHER_SEARCH_DEBOUNCE_MS = 240;
 
 /**
  * @interface QuickSwitcherOverlayProps
@@ -69,10 +72,19 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+    const debouncedQuery = useDebouncedValue(
+        query,
+        QUICK_SWITCHER_SEARCH_DEBOUNCE_MS,
+        !isOpen || query.trim().length === 0,
+    );
 
     const inputRef = useRef<HTMLInputElement | null>(null);
     const listRef = useRef<HTMLDivElement | null>(null);
     const requestVersionRef = useRef<number>(0);
+
+    useEffect(() => {
+        requestVersionRef.current += 1;
+    }, [isOpen, query]);
 
     const selectedItem = useMemo(() => {
         if (selectedIndex < 0 || selectedIndex >= results.length) {
@@ -80,6 +92,7 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
         }
         return results[selectedIndex] ?? null;
     }, [results, selectedIndex]);
+    const isSearchPending = isOpen && query !== debouncedQuery;
     const selectedPath = selectedItem?.relativePath ?? null;
 
     /**
@@ -146,7 +159,7 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
             setIsLoading(true);
             setError(null);
 
-            void searchVaultMarkdownFiles(query, 80)
+            void searchVaultMarkdownFiles(debouncedQuery, 80)
                 .then((nextResults) => {
                     if (requestVersion !== requestVersionRef.current) {
                         return;
@@ -161,7 +174,7 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
                     }
 
                     const message = reason instanceof Error ? reason.message : String(reason);
-                    console.error("[quick-switcher] search failed", { message, query });
+                    console.error("[quick-switcher] search failed", { message, query: debouncedQuery });
                     setError(message);
                     setResults([]);
                     setSelectedIndex(-1);
@@ -173,12 +186,12 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
 
                     setIsLoading(false);
                 });
-        }, 120);
+        }, 0);
 
         return () => {
             window.clearTimeout(timer);
         };
-    }, [isOpen, query]);
+    }, [debouncedQuery, isOpen]);
 
     const closeOverlay = (): void => {
         console.info("[quick-switcher] closed");
@@ -186,6 +199,10 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
     };
 
     const openResultByIndex = (index: number): void => {
+        if (isLoading || isSearchPending) {
+            return;
+        }
+
         if (index < 0 || index >= results.length) {
             return;
         }
@@ -306,11 +323,11 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
                     role="listbox"
                     aria-activedescendant={selectedItem?.relativePath}
                 >
-                    {isLoading && <div className="quick-switcher-empty">{t("quickSwitcher.searching")}</div>}
-                    {!isLoading && error && <div className="quick-switcher-empty">{t("quickSwitcher.searchFailed", { message: error })}</div>}
-                    {!isLoading && !error && results.length === 0 && <div className="quick-switcher-empty">{t("quickSwitcher.noMatch")}</div>}
+                    {(isLoading || isSearchPending) && <div className="quick-switcher-empty">{t("quickSwitcher.searching")}</div>}
+                    {!isLoading && !isSearchPending && error && <div className="quick-switcher-empty">{t("quickSwitcher.searchFailed", { message: error })}</div>}
+                    {!isLoading && !isSearchPending && !error && results.length === 0 && <div className="quick-switcher-empty">{t("quickSwitcher.noMatch")}</div>}
 
-                    {!isLoading && !error && results.map((item, index) => (
+                    {!isLoading && !isSearchPending && !error && results.map((item, index) => (
                         /* quick-switcher-item: 单条候选项，可通过鼠标与键盘高亮选择 */
                         <button
                             key={item.relativePath}

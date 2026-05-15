@@ -371,8 +371,10 @@
     display: block;
     max-width: 100%;
     max-height: 480px;
-    margin: 0 0 1em;
-    border-radius: 8px;
+    margin: 0 auto 1em;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
 }
 
 /* 阅读态 frontmatter 面板：承载文档顶部的结构化元数据。 */
@@ -900,6 +902,44 @@
     color: var(--editor-panel-text-color);
 }
 
+/* Mermaid diagram blocks rendered from ```mermaid fences. */
+.cm-mermaid-widget {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 96px;
+    width: 100%;
+    margin: 8px auto 12px;
+    padding: 0;
+    overflow: auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--editor-text-color);
+}
+
+.cm-mermaid-widget svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+}
+
+.cm-mermaid-widget-error {
+    justify-content: flex-start;
+    min-height: 0;
+    white-space: pre-wrap;
+    color: var(--editor-warning-text-color);
+    background: var(--editor-warning-bg-color);
+    font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.86em;
+}
+
+.cm-tab-reader-pre:has(.cm-mermaid-widget-read) {
+    padding: 0;
+    background: transparent;
+}
+
 /* =========================================================================
    highlight.js 语法高亮 Token 颜色（适配主题色系）
    采用中性色调，同时兼容亮色/暗色主题。
@@ -991,15 +1031,16 @@
 /* 图片嵌入容器样式：承载 `![[...]]` 渲染出的预览块。 */
 .cm-tab-editor .cm-image-embed-widget,
 .cm-tab-reader .cm-image-embed-widget {
-    display: inline-flex;
+    display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 6px;
     width: min(100%, 520px);
-    margin: 6px 0;
-    border: 1px solid var(--editor-panel-border-color);
-    border-radius: 8px;
-    background: var(--editor-panel-bg-soft-color);
-    padding: 8px;
+    margin: 8px auto 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
     box-sizing: border-box;
 }
 
@@ -1025,7 +1066,10 @@
     display: block;
     max-width: 100%;
     max-height: 360px;
-    border-radius: 6px;
+    margin: 0 auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
     object-fit: contain;
 }
 

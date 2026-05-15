@@ -22,8 +22,11 @@ import { modalPlainTextInputProps } from "../../../host/layout/textInputBehavior
 import i18n from "../../../i18n";
 import { UI_LANGUAGE } from "../../../i18n/uiLanguage";
 import type { OverlayRenderContext } from "../../../host/registry/overlayRegistry";
+import { useDebouncedValue } from "../../../utils/useDebouncedValue";
 import { COMMAND_PALETTE_OPEN_REQUESTED_EVENT } from "../commandPaletteEvents";
 import "./CommandPaletteModal.css";
+
+const COMMAND_PALETTE_FILTER_DEBOUNCE_MS = 160;
 
 /**
  * @interface CommandPaletteOverlayProps
@@ -88,6 +91,11 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
     const [isOpen, setIsOpen] = useState<boolean>(false);
     const [query, setQuery] = useState<string>("");
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
+    const debouncedQuery = useDebouncedValue(
+        query,
+        COMMAND_PALETTE_FILTER_DEBOUNCE_MS,
+        !isOpen || query.trim().length === 0,
+    );
     const inputRef = useRef<HTMLInputElement | null>(null);
 
     const commands = useMemo(
@@ -96,9 +104,10 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
     );
 
     const filteredCommands = useMemo(
-        () => commands.filter((command) => commandMatchesQuery(command, query)),
-        [commands, query],
+        () => commands.filter((command) => commandMatchesQuery(command, debouncedQuery)),
+        [commands, debouncedQuery],
     );
+    const isFilterPending = isOpen && query !== debouncedQuery;
 
     const selectedCommand = useMemo(() => {
         if (selectedIndex < 0 || selectedIndex >= filteredCommands.length) {
@@ -143,20 +152,15 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
 
     useEffect(() => {
         setSelectedIndex(filteredCommands.length > 0 ? 0 : -1);
-    }, [query, filteredCommands.length]);
+    }, [debouncedQuery, filteredCommands.length]);
 
     const closeOverlay = (): void => {
         console.info("[command-palette-plugin] closed");
         setIsOpen(false);
     };
 
-    const executeByIndex = (index: number): void => {
-        if (index < 0 || index >= filteredCommands.length) {
-            return;
-        }
-
-        const command = filteredCommands[index];
-        if (!command) {
+    const executeCommandDefinition = (command: CommandDefinition): void => {
+        if (isFilterPending && !commandMatchesQuery(command, query)) {
             return;
         }
 
@@ -168,6 +172,23 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
         window.setTimeout(() => {
             props.context.executeCommand(command.id);
         }, 0);
+    };
+
+    const executeByIndex = (index: number): void => {
+        const candidateCommands = isFilterPending
+            ? commands.filter((command) => commandMatchesQuery(command, query))
+            : filteredCommands;
+
+        if (index < 0 || index >= candidateCommands.length) {
+            return;
+        }
+
+        const command = candidateCommands[index];
+        if (!command) {
+            return;
+        }
+
+        executeCommandDefinition(command);
     };
 
     const handleKeyboard = (event: KeyboardEvent<HTMLDivElement>): void => {
@@ -275,7 +296,7 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
                                 setSelectedIndex(index);
                             }}
                             onClick={() => {
-                                executeByIndex(index);
+                                executeCommandDefinition(command);
                             }}
                         >
                             <div className="command-palette-item-row">

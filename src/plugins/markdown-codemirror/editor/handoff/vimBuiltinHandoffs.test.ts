@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { registerFrontmatterBodyVimHandoff } from "./builtins/frontmatterBodyVimHandoff";
 import { registerLatexBlockVimHandoff } from "./builtins/latexBlockVimHandoff";
+import { registerMermaidBlockVimHandoff } from "./builtins/mermaidBlockVimHandoff";
 import { registerMarkdownTableBodyVimHandoff } from "./builtins/markdownTableBodyVimHandoff";
 import { resolveRegisteredVimHandoff } from "./vimHandoffRegistry";
 
@@ -136,6 +137,26 @@ describe("builtin vim handoffs", () => {
             kind: "move-selection",
             targetLineNumber: 2,
             reason: "enter-adjacent-latex-source",
+        });
+    });
+
+    test("mermaid block handoff should resolve to move-selection", () => {
+        cleanupCallbacks.push(registerMermaidBlockVimHandoff());
+
+        expect(resolveRegisteredVimHandoff({
+            surface: "editor-body",
+            key: "j",
+            markdown: ["Before", "```mermaid", "graph TD", "```", "After"].join("\n"),
+            currentLineNumber: 1,
+            selectionHead: 0,
+            hasFrontmatter: false,
+            firstBodyLineNumber: 1,
+            isVimEnabled: true,
+            isVimNormalMode: true,
+        })).toEqual({
+            kind: "move-selection",
+            targetLineNumber: 2,
+            reason: "enter-adjacent-mermaid-source",
         });
     });
 });

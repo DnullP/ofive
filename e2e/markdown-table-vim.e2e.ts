@@ -987,6 +987,32 @@ test.describe("markdown table vim regression", () => {
         await expect(page.locator("[data-table-edge-kind='row']")).toHaveCount(3);
     });
 
+    test("row edge handles should align to the visual center of wrapped table rows", async ({ page }) => {
+        await openMockNote(page, TABLE_BOUNDARY_NOTE_PATH);
+        await expect(page.locator(".mtv-table:visible")).toBeVisible();
+        await waitForEditorFrames(page, 4);
+
+        for (const rowIndex of [0, 1, 2]) {
+            const rowHandle = page.locator(`[data-table-edge-kind='row'][data-table-edge-index='${rowIndex}']`).first();
+            const firstRowCell = page
+                .locator(`.mtv-table-body-cell:has([data-markdown-table-section='body'][data-markdown-table-row-index='${rowIndex}'][data-markdown-table-column-index='0'])`)
+                .first();
+
+            const centers = await Promise.all([
+                rowHandle.evaluate((element) => {
+                    const rect = element.getBoundingClientRect();
+                    return rect.top + rect.height / 2;
+                }),
+                firstRowCell.evaluate((element) => {
+                    const rect = element.getBoundingClientRect();
+                    return rect.top + rect.height / 2;
+                }),
+            ]);
+
+            expect(Math.abs(centers[0] - centers[1])).toBeLessThanOrEqual(1.5);
+        }
+    });
+
     test("table widget should not create an independent vertical scrollbar", async ({ page }) => {
         await openMockNote(page, TABLE_BOUNDARY_NOTE_PATH);
         const tableScroll = page.locator(".mtv-table-scroll:visible").first();

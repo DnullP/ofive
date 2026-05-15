@@ -150,14 +150,18 @@ test.describe("ai chat ux", () => {
         await page.locator(".settings-tab-search-input").fill("AI");
         await page.locator(".settings-tab-sidebar-item", { hasText: /AI Chat|AI 对话/ }).click();
 
-        const providerRow = page.locator(".ai-chat-settings-row", {
-            hasText: /Saved provider instances|已保存的 provider 实例/,
-        });
-        const providerSelect = providerRow.locator("select");
-        await expect(providerSelect.locator("option")).toHaveCount(1);
+        const providerList = page.locator(".ai-chat-settings-provider-list");
+        await expect(providerList.locator(".ai-chat-settings-provider-item")).toHaveCount(1);
 
-        await providerRow.locator("button", { hasText: /Add provider|添加 provider/ }).click();
-        await expect(providerSelect.locator("option")).toHaveCount(2);
+        await page.locator(".ai-chat-settings-provider-actions button", { hasText: /Add provider|添加 provider/ }).click();
+        const providerModal = page.locator(".ai-chat-provider-modal");
+        await expect(providerModal).toBeVisible();
+        await providerModal.locator("input").fill("OpenAI Work");
+        await providerModal.locator("select").selectOption("openai-compatible");
+        await providerModal.locator("button[type='submit']").click();
+        await expect(providerModal).toHaveCount(0);
+        await expect(providerList.locator(".ai-chat-settings-provider-item")).toHaveCount(2);
+        await expect(providerList.locator(".ai-chat-settings-provider-item.active")).toContainText("OpenAI Work");
 
         const providerNameRow = page.locator(".ai-chat-settings-row", {
             hasText: /Provider Name|Provider 名称/,
@@ -178,9 +182,9 @@ test.describe("ai chat ux", () => {
         });
         await modelRow.locator("input").fill("gpt-4.1-mini");
 
-        await page.locator(".ai-chat-settings-save").click();
-        await expect(providerSelect.locator("option", { hasText: "OpenAI Work" })).toHaveCount(1);
-        await expect(providerSelect.locator("option:checked")).toHaveText("OpenAI Work");
+        await page.locator(".ai-chat-provider-settings-form .ai-chat-settings-save").click();
+        await expect(providerList.locator(".ai-chat-settings-provider-item", { hasText: "OpenAI Work" })).toHaveCount(1);
+        await expect(providerList.locator(".ai-chat-settings-provider-item.active")).toContainText("OpenAI Work");
         await expect(vendorRow.locator("select")).toHaveValue("openai-compatible");
     });
 });

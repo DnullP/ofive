@@ -48,6 +48,7 @@ import {
     type PanelDescriptor,
 } from "../../host/registry/panelRegistry";
 import { UI_LANGUAGE } from "../../i18n/uiLanguage";
+import { useDebouncedValue } from "../../utils/useDebouncedValue";
 import "./searchPlugin.css";
 
 const { FileText, Hash, Search } = LucideIcons;
@@ -245,7 +246,10 @@ function SearchPanel({ context }: { context: PanelRenderContext }): ReactNode {
     const [error, setError] = useState<string | null>(null);
     const [hasSearched, setHasSearched] = useState(false);
     const requestIdRef = useRef(0);
-    const highlightTerms = normalizeHighlightTerms(query, tag);
+    const debouncedQuery = useDebouncedValue(query, SEARCH_DEBOUNCE_MS, query.trim().length === 0);
+    const debouncedTag = useDebouncedValue(tag, SEARCH_DEBOUNCE_MS, tag.trim().length === 0);
+    const debouncedScope = useDebouncedValue(scope, SEARCH_DEBOUNCE_MS);
+    const highlightTerms = normalizeHighlightTerms(debouncedQuery, debouncedTag);
 
     /**
      * 翻译辅助函数。
@@ -253,6 +257,10 @@ function SearchPanel({ context }: { context: PanelRenderContext }): ReactNode {
     const t = useCallback((key: string, options?: Record<string, unknown>) => {
         return i18n.t(key, options);
     }, []);
+
+    useEffect(() => {
+        requestIdRef.current += 1;
+    }, [query, scope, tag]);
 
     /**
      * 打开单条搜索结果对应文件。
@@ -281,8 +289,8 @@ function SearchPanel({ context }: { context: PanelRenderContext }): ReactNode {
     }, [context, t]);
 
     useEffect(() => {
-        const trimmedQuery = query.trim();
-        const trimmedTag = tag.trim();
+        const trimmedQuery = debouncedQuery.trim();
+        const trimmedTag = debouncedTag.trim();
 
         if (!trimmedQuery && !trimmedTag) {
             setResults([]);
@@ -295,57 +303,51 @@ function SearchPanel({ context }: { context: PanelRenderContext }): ReactNode {
 
         const nextRequestId = requestIdRef.current + 1;
         requestIdRef.current = nextRequestId;
-        const timer = window.setTimeout(() => {
-            setLoading(true);
-            setError(null);
+        setLoading(true);
+        setError(null);
 
-            console.info("[searchPlugin] search request start", {
+        console.info("[searchPlugin] search request start", {
+            query: trimmedQuery,
+            tag: trimmedTag || null,
+            scope: debouncedScope,
+        });
+
+        void searchVaultMarkdown(trimmedQuery, {
+            tag: trimmedTag || undefined,
+            scope: debouncedScope,
+            limit: SEARCH_RESULT_LIMIT,
+        }).then((items) => {
+            if (requestIdRef.current !== nextRequestId) {
+                return;
+            }
+
+            setResults(items);
+            setHasSearched(true);
+            setLoading(false);
+            console.info("[searchPlugin] search state updated", {
                 query: trimmedQuery,
                 tag: trimmedTag || null,
-                scope,
+                scope: debouncedScope,
+                resultCount: items.length,
             });
+        }).catch((err) => {
+            if (requestIdRef.current !== nextRequestId) {
+                return;
+            }
 
-            void searchVaultMarkdown(trimmedQuery, {
-                tag: trimmedTag || undefined,
-                scope,
-                limit: SEARCH_RESULT_LIMIT,
-            }).then((items) => {
-                if (requestIdRef.current !== nextRequestId) {
-                    return;
-                }
-
-                setResults(items);
-                setHasSearched(true);
-                setLoading(false);
-                console.info("[searchPlugin] search state updated", {
-                    query: trimmedQuery,
-                    tag: trimmedTag || null,
-                    scope,
-                    resultCount: items.length,
-                });
-            }).catch((err) => {
-                if (requestIdRef.current !== nextRequestId) {
-                    return;
-                }
-
-                const message = err instanceof Error ? err.message : String(err);
-                setResults([]);
-                setHasSearched(true);
-                setLoading(false);
-                setError(t("searchPlugin.failed", { message }));
-                console.error("[searchPlugin] search request failed", {
-                    query: trimmedQuery,
-                    tag: trimmedTag || null,
-                    scope,
-                    error: message,
-                });
+            const message = err instanceof Error ? err.message : String(err);
+            setResults([]);
+            setHasSearched(true);
+            setLoading(false);
+            setError(t("searchPlugin.failed", { message }));
+            console.error("[searchPlugin] search request failed", {
+                query: trimmedQuery,
+                tag: trimmedTag || null,
+                scope: debouncedScope,
+                error: message,
             });
-        }, SEARCH_DEBOUNCE_MS);
-
-        return () => {
-            window.clearTimeout(timer);
-        };
-    }, [query, tag, scope, t]);
+        });
+    }, [debouncedQuery, debouncedScope, debouncedTag, t]);
 
     return (
         /* search-panel: 搜索面板根容器，承担整体纵向布局 */

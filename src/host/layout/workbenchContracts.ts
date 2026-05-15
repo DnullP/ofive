@@ -13,6 +13,8 @@ export interface WorkbenchPanelApi {
 
 export interface WorkbenchPanelHandle {
     id: string;
+    title?: string;
+    component?: string;
     params?: Record<string, unknown>;
     api: WorkbenchPanelApi;
 }

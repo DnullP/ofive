@@ -4,7 +4,7 @@
 //! 存储位置固定为 `.ofive/skills/<skill-name>/`，一个目录对应一个 SKILL。
 
 use serde::Deserialize;
-use serde_yaml::Value as YamlValue;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -17,10 +17,16 @@ const AGENT_SKILLS_ROOT_RELATIVE_PATH: &str = ".ofive/skills";
 const SKILL_FILE_NAME: &str = "SKILL.md";
 const MAX_SIDE_CAR_SKILL_FILE_BYTES: u64 = 256 * 1024;
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 struct SkillFrontmatter {
     name: String,
     description: String,
+    license: Option<String>,
+    compatibility: Option<String>,
+    metadata: Option<BTreeMap<String, String>>,
+    allowed_tools: Option<Vec<String>>,
 }
 
 fn skills_root(vault_root: &Path) -> PathBuf {
@@ -116,11 +122,8 @@ fn extract_skill_frontmatter(content: &str) -> Result<SkillFrontmatter, String> 
     let mut yaml_lines = Vec::new();
     for line in lines {
         if line == "---" {
-            let parsed = serde_yaml::from_str::<YamlValue>(&yaml_lines.join("\n"))
-                .map_err(|error| format!("解析 SKILL.md frontmatter 失败: {error}"))?;
-            let fm = serde_yaml::from_value::<SkillFrontmatter>(parsed).map_err(|error| {
-                format!("SKILL.md frontmatter 缺少 name 或 description: {error}")
-            })?;
+            let fm = serde_yaml::from_str::<SkillFrontmatter>(&yaml_lines.join("\n"))
+                .map_err(|error| format!("SKILL.md frontmatter 必须符合 ADK schema: {error}"))?;
             if !is_valid_skill_name(&fm.name) {
                 return Err("SKILL.md frontmatter name 不符合 skill 命名规则".to_string());
             }
@@ -128,9 +131,20 @@ fn extract_skill_frontmatter(content: &str) -> Result<SkillFrontmatter, String> 
             if description.is_empty() || description.len() > 1024 {
                 return Err("SKILL.md frontmatter description 长度必须为 1-1024".to_string());
             }
+            if fm
+                .compatibility
+                .as_ref()
+                .is_some_and(|value| value.len() > 500)
+            {
+                return Err("SKILL.md frontmatter compatibility 长度不能超过 500".to_string());
+            }
             return Ok(SkillFrontmatter {
                 name: fm.name,
                 description: description.to_string(),
+                license: fm.license,
+                compatibility: fm.compatibility,
+                metadata: fm.metadata,
+                allowed_tools: fm.allowed_tools,
             });
         }
         yaml_lines.push(line);
@@ -476,6 +490,75 @@ mod tests {
         .expect_err("frontmatter name 不一致应失败");
 
         assert!(error.contains("必须与目录名"));
+    }
+
+    #[test]
+    fn write_skill_md_should_reject_unknown_adk_frontmatter_fields() {
+        let root = create_test_root();
+        create_agent_skill_in_root(
+            &root,
+            "research-helper".to_string(),
+            "research local notes".to_string(),
+        )
+        .expect("应成功创建 skill");
+
+        let error = write_agent_skill_file_in_root(
+            &root,
+            "research-helper".to_string(),
+            SKILL_FILE_NAME.to_string(),
+            "---\nname: research-helper\ndescription: research local notes\ntype: skill\nversion: 1.0\n---\n# Research\n".to_string(),
+        )
+        .expect_err("ADK 不支持的 frontmatter 字段应失败");
+
+        assert!(error.contains("ADK schema"));
+        assert!(error.contains("type") || error.contains("version"));
+    }
+
+    #[test]
+    fn write_skill_md_should_accept_adk_optional_frontmatter_fields() {
+        let root = create_test_root();
+        create_agent_skill_in_root(
+            &root,
+            "research-helper".to_string(),
+            "research local notes".to_string(),
+        )
+        .expect("应成功创建 skill");
+
+        write_agent_skill_file_in_root(
+            &root,
+            "research-helper".to_string(),
+            SKILL_FILE_NAME.to_string(),
+            "---\nname: research-helper\ndescription: research local notes\nlicense: MIT\ncompatibility: ofive\nmetadata:\n  version: \"1.0\"\nallowed-tools:\n  - agent_skill.read_file\n---\n# Research\n".to_string(),
+        )
+        .expect("ADK 支持的可选 frontmatter 字段应通过");
+    }
+
+    #[test]
+    fn collect_agent_skill_sidecar_files_should_skip_unknown_adk_frontmatter_fields() {
+        let root = create_test_root();
+        let skill_dir = skills_root(&root).join("legacy-helper");
+        fs::create_dir_all(&skill_dir).expect("应成功创建 legacy skill 目录");
+        fs::write(
+            skill_dir.join(SKILL_FILE_NAME),
+            "---\nname: legacy-helper\ndescription: old shape\ntype: skill\nversion: 1.0\n---\n# Legacy\n",
+        )
+        .expect("应成功写入 legacy SKILL.md");
+
+        let summaries = list_agent_skills_in_root(&root).expect("应成功列出 skill");
+        let summary = summaries
+            .iter()
+            .find(|item| item.name == "legacy-helper")
+            .expect("应包含 legacy skill 摘要");
+        assert!(!summary.valid);
+        assert!(summary
+            .error
+            .as_deref()
+            .unwrap_or("")
+            .contains("ADK schema"));
+
+        let files =
+            collect_agent_skill_sidecar_files_in_root(&root).expect("应成功收集 sidecar 文件");
+        assert!(files.is_empty());
     }
 
     #[test]

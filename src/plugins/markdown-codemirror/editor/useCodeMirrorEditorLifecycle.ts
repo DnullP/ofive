@@ -115,6 +115,12 @@ type PersistedEditorViewState = Omit<EditorViewStateSnapshot, "updatedAt">;
 
 type RestoredEditorSelection = Pick<PersistedEditorViewState, "anchor" | "head">;
 
+interface StaleArticleSnapshotBoundary {
+    path: string;
+    updatedAt: number;
+    initialDoc: string;
+}
+
 /**
  * @interface SyncEditorTabGutterWidthOptions
  * @description 同步标题 gutter 补偿所需的最小上下文。
@@ -549,6 +555,38 @@ function resolveSelectionForDocumentReplace(
     };
 }
 
+function buildStaleArticleSnapshotBoundary(
+    snapshot: ArticleState | null,
+    path: string,
+    initialDoc: string,
+): StaleArticleSnapshotBoundary | null {
+    if (!snapshot?.hasContentSnapshot || snapshot.path !== path || snapshot.content === initialDoc) {
+        return null;
+    }
+
+    return {
+        path,
+        updatedAt: snapshot.updatedAt,
+        initialDoc,
+    };
+}
+
+function shouldSkipArticleSnapshotSync(options: {
+    snapshot: ArticleState;
+    boundary: StaleArticleSnapshotBoundary | null;
+    currentDoc: string;
+}): boolean {
+    const { snapshot, boundary, currentDoc } = options;
+    if (!boundary) {
+        return false;
+    }
+
+    return snapshot.path === boundary.path
+        && snapshot.updatedAt <= boundary.updatedAt
+        && currentDoc === boundary.initialDoc
+        && snapshot.content !== boundary.initialDoc;
+}
+
 function restoreCompositionAnchorIfSelectionDrifted(
     view: EditorView,
     compositionAnchor: number,
@@ -568,6 +606,30 @@ function restoreCompositionAnchorIfSelectionDrifted(
     view.dispatch({
         selection: { anchor },
         scrollIntoView: true,
+    });
+}
+
+function syncRuntimeTabContentSnapshot(options: {
+    containerApi: WorkbenchContainerApi;
+    articleId: string;
+    path: string;
+    content: string;
+}): void {
+    const panel = options.containerApi.getPanel(options.articleId);
+    const updateParameters = panel?.api.updateParameters;
+    if (!panel || !updateParameters) {
+        return;
+    }
+
+    const currentParams = panel.params ?? {};
+    if (currentParams.path === options.path && currentParams.content === options.content) {
+        return;
+    }
+
+    updateParameters({
+        ...currentParams,
+        path: options.path,
+        content: options.content,
     });
 }
 
@@ -594,6 +656,27 @@ export function useCodeMirrorEditorLifecycle(
     const vimModeEnabledRef = useRef(options.vimModeEnabled);
     const editorImeCompositionGuard = useRef(createImeCompositionGuard()).current;
     const editorImeCompositionAnchorRef = useRef<number | null>(null);
+    const staleArticleSnapshotBoundaryRef = useRef<StaleArticleSnapshotBoundary | null>(null);
+
+    const markAuthoritativeInitialDocument = (content: string): { path: string; boundary: StaleArticleSnapshotBoundary | null } => {
+        const path = options.currentFilePathRef.current;
+        const boundary = buildStaleArticleSnapshotBoundary(
+            options.articleSnapshot,
+            path,
+            content,
+        );
+        staleArticleSnapshotBoundaryRef.current = boundary;
+        return { path, boundary };
+    };
+
+    const reportAuthoritativeInitialDocument = (content: string): void => {
+        const { path } = markAuthoritativeInitialDocument(content);
+        reportArticleContent({
+            articleId: options.articleId,
+            path,
+            content,
+        });
+    };
 
     useEffect(() => {
         vimModeEnabledRef.current = options.vimModeEnabled;
@@ -791,10 +874,17 @@ export function useCodeMirrorEditorLifecycle(
             EditorView.updateListener.of((update) => {
                 if (update.docChanged) {
                     const nextContent = update.state.doc.toString();
+                    const currentPath = options.currentFilePathRef.current;
                     options.setReadContent(nextContent);
                     reportArticleContent({
                         articleId: options.articleId,
-                        path: options.currentFilePathRef.current,
+                        path: currentPath,
+                        content: nextContent,
+                    });
+                    syncRuntimeTabContentSnapshot({
+                        containerApi: options.containerApi,
+                        articleId: options.articleId,
+                        path: currentPath,
                         content: nextContent,
                     });
                 }
@@ -927,11 +1017,7 @@ export function useCodeMirrorEditorLifecycle(
             },
         );
 
-        reportArticleContent({
-            articleId: options.articleId,
-            path: options.currentFilePathRef.current,
-            content: state.doc.toString(),
-        });
+        reportAuthoritativeInitialDocument(state.doc.toString());
 
         const focusInitialEditorIfNeeded = (): void => {
             if (
@@ -1104,9 +1190,18 @@ export function useCodeMirrorEditorLifecycle(
 
         const currentDoc = view.state.doc.toString();
         if (currentDoc === options.initialDoc) {
+            const { path, boundary } = markAuthoritativeInitialDocument(options.initialDoc);
+            if (boundary) {
+                reportArticleContent({
+                    articleId: options.articleId,
+                    path,
+                    content: options.initialDoc,
+                });
+            }
             return;
         }
 
+        markAuthoritativeInitialDocument(options.initialDoc);
         view.dispatch({
             changes: {
                 from: 0,
@@ -1133,6 +1228,19 @@ export function useCodeMirrorEditorLifecycle(
         }
 
         const currentDoc = view.state.doc.toString();
+        if (shouldSkipArticleSnapshotSync({
+            snapshot: options.articleSnapshot,
+            boundary: staleArticleSnapshotBoundaryRef.current,
+            currentDoc,
+        })) {
+            console.info("[editor] skipped stale editor context content", {
+                articleId: options.articleId,
+                path: options.articleSnapshot.path,
+                updatedAt: options.articleSnapshot.updatedAt,
+            });
+            return;
+        }
+
         if (currentDoc === options.articleSnapshot.content) {
             return;
         }

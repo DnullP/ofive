@@ -170,6 +170,23 @@ async function getPointPositions(page: Page): Promise<PointPositions> {
     });
 }
 
+async function getSimulationRunning(page: Page): Promise<boolean> {
+    return page.evaluate(() => {
+        const runtimeWindow = window as Window & {
+            __OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?: {
+                getSimulationRunning: () => boolean;
+            };
+        };
+
+        const hook = runtimeWindow.__OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__;
+        if (!hook) {
+            throw new Error("knowledge graph hook is unavailable");
+        }
+
+        return hook.getSimulationRunning();
+    });
+}
+
 /**
  * @function getVisibleScreenPoint
  * @description 选择一个位于画布内且留有采样边距的节点。
@@ -308,7 +325,12 @@ async function selectColorGroupQueryWithKeyboard(
  * @param page Playwright 页面对象。
  */
 async function startSimulationAndWait(page: Page): Promise<void> {
-    await page.evaluate(async () => {
+    await startSimulation(page, 0.42);
+    await waitForAnimationFrames(page, 16);
+}
+
+async function startSimulation(page: Page, alpha: number): Promise<void> {
+    await page.evaluate((nextAlpha) => {
         const runtimeWindow = window as Window & {
             __OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?: {
                 startSimulation: (alpha?: number) => void;
@@ -320,13 +342,17 @@ async function startSimulationAndWait(page: Page): Promise<void> {
             throw new Error("knowledge graph hook is unavailable");
         }
 
-        hook.startSimulation(0.42);
+        hook.startSimulation(nextAlpha);
+    }, alpha);
+}
 
+async function waitForAnimationFrames(page: Page, frameCount: number): Promise<void> {
+    await page.evaluate(async (targetFrameCount) => {
         await new Promise<void>((resolve) => {
             let frames = 0;
             const tick = (): void => {
                 frames += 1;
-                if (frames >= 16) {
+                if (frames >= targetFrameCount) {
                     resolve();
                     return;
                 }
@@ -336,7 +362,7 @@ async function startSimulationAndWait(page: Page): Promise<void> {
 
             window.requestAnimationFrame(tick);
         });
-    });
+    }, frameCount);
 }
 
 /**
@@ -453,6 +479,19 @@ test.describe("knowledge graph node dynamics", () => {
         const directorySnapshot = await getGraphRenderSnapshot(page);
         expect(colorTupleAt(directorySnapshot.colors, 0)).toEqual(colorTupleAt(directorySnapshot.colors, 2));
         expect(colorTupleAt(directorySnapshot.colors, 0)).not.toEqual(colorTupleAt(directorySnapshot.colors, 1));
+
+        const runningColorUpdatePositionsBefore = await getPointPositions(page);
+        await startSimulation(page, 0.42);
+        await page.getByTestId("knowledge-graph-color-swatch-0").fill("#ff00ff");
+        await expect.poll(async () => getSimulationRunning(page)).toBe(true);
+        await waitForAnimationFrames(page, 16);
+        const runningColorUpdatePositionsAfter = await getPointPositions(page);
+        expect(
+            computeMaxDisplacement(
+                runningColorUpdatePositionsBefore,
+                runningColorUpdatePositionsAfter,
+            ),
+        ).toBeGreaterThan(0.5);
 
         const positionsBefore = await getPointPositions(page);
         await startSimulationAndWait(page);

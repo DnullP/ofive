@@ -8,7 +8,7 @@ import React, {
     type MutableRefObject,
     type ReactNode,
 } from "react";
-import { Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import {
     readWorkbenchTabPayload,
     WORKBENCH_LEFT_ACTIVITY_BAR_ID,
@@ -69,7 +69,12 @@ import {
     setRightSidebarVisibilitySnapshot,
     subscribeRightSidebarToggleRequest,
 } from "./rightSidebarVisibilityBridge";
-import { openFileInWorkbench, resolveFileTabDefinition } from "./openFileService";
+import {
+    openFileInWorkbench,
+    resolveFileTabDefinition,
+    TAB_NAVIGATION_HISTORY_PARAM,
+    type TabNavigationHistoryState,
+} from "./openFileService";
 import { useConfigState } from "../config/configStore";
 import {
     buildWorkspaceLayoutConfigValue,
@@ -148,6 +153,26 @@ function waitForWorkbenchLayoutCommit(): Promise<void> {
             window.requestAnimationFrame(() => resolve());
         });
     });
+}
+
+function closeVaultScopedWorkbenchTabs(api: WorkbenchApi): number {
+    let closedCount = 0;
+
+    for (let pass = 0; pass < 3; pass += 1) {
+        const tabs = api.getTabs()
+            .filter((tab) => shouldCloseTabOnVaultChange({ panelId: tab.id, panelParams: tab.params }));
+
+        if (tabs.length === 0) {
+            break;
+        }
+
+        tabs.reverse().forEach((tab) => {
+            api.closeTab(tab.id);
+            closedCount += 1;
+        });
+    }
+
+    return closedCount;
 }
 
 function syncWorkbenchTitlebarOffsetTarget(root: HTMLElement): void {
@@ -284,6 +309,51 @@ function mapPanelsToDefinitions(panels: PanelDescriptor[]): WorkbenchPanelDefini
 
 type DecorateWorkbenchTabDefinition = (tab: WorkbenchTabDefinition) => WorkbenchTabDefinition;
 
+function readTabNavigationHistory(params: Record<string, unknown>): TabNavigationHistoryState | null {
+    const raw = params[TAB_NAVIGATION_HISTORY_PARAM];
+    if (!raw || typeof raw !== "object") {
+        return null;
+    }
+
+    const state = raw as { entries?: unknown; index?: unknown };
+    if (!Array.isArray(state.entries) || typeof state.index !== "number") {
+        return null;
+    }
+
+    const entries = state.entries.filter((entry) => {
+        if (!entry || typeof entry !== "object") {
+            return false;
+        }
+
+        const candidate = entry as { id?: unknown; title?: unknown; component?: unknown };
+        return typeof candidate.id === "string" &&
+            typeof candidate.title === "string" &&
+            typeof candidate.component === "string";
+    }) as TabNavigationHistoryState["entries"];
+
+    if (entries.length === 0) {
+        return null;
+    }
+
+    return {
+        entries,
+        index: Math.min(Math.max(Math.trunc(state.index), 0), entries.length - 1),
+    };
+}
+
+function attachTabNavigationHistory(
+    tab: WorkbenchTabDefinition,
+    history: TabNavigationHistoryState,
+): WorkbenchTabDefinition {
+    return {
+        ...tab,
+        params: {
+            ...(tab.params ?? {}),
+            [TAB_NAVIGATION_HISTORY_PARAM]: history,
+        },
+    };
+}
+
 function mapInitialTabs(
     initialTabs: TabInstanceDefinition[] | undefined,
     decorateTabDefinition: DecorateWorkbenchTabDefinition,
@@ -307,6 +377,8 @@ function createWorkbenchContainerApi(
         if (!tab) return null;
         return {
             id: tab.id,
+            title: tab.title,
+            component: tab.component,
             params: tab.params,
             api: {
                 close: () => workbenchApi.closeTab(tab.id),
@@ -327,6 +399,8 @@ function createWorkbenchContainerApi(
         get panels() {
             return workbenchApi.getTabs().map((tab) => ({
                 id: tab.id,
+                title: tab.title,
+                component: tab.component,
                 params: tab.params,
                 api: {
                     close: () => workbenchApi.closeTab(tab.id),
@@ -417,6 +491,11 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
     decorateTabDefinition: DecorateWorkbenchTabDefinition;
 }): ReactNode {
     const { Component, params, api, workbenchApiRef, decorateTabDefinition } = props;
+    const navigationHistory = readTabNavigationHistory(params);
+    const canNavigateBack = Boolean(navigationHistory && navigationHistory.index > 0);
+    const canNavigateForward = Boolean(
+        navigationHistory && navigationHistory.index < navigationHistory.entries.length - 1,
+    );
 
     const stableApi = useMemo(() => ({
         id: api.id,
@@ -457,7 +536,57 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
         },
     }), [api.id, workbenchApiRef, decorateTabDefinition]);
 
-    return <Component {...({ params, api: stableApi, containerApi } satisfies WorkbenchTabProps<Record<string, unknown>>)} />;
+    const navigateHistory = (direction: -1 | 1): void => {
+        const history = readTabNavigationHistory(params);
+        if (!history) {
+            return;
+        }
+
+        const nextIndex = history.index + direction;
+        const entry = history.entries[nextIndex];
+        if (!entry) {
+            return;
+        }
+
+        workbenchApiRef.current?.updateTab(api.id, decorateTabDefinition(attachTabNavigationHistory({
+            id: entry.id,
+            title: entry.title,
+            component: entry.component,
+            params: entry.params,
+        }, {
+            entries: history.entries,
+            index: nextIndex,
+        })));
+        workbenchApiRef.current?.setActiveTab(entry.id);
+    };
+
+    return (
+        <div className="workbench-layout-v2__tab-shell">
+            <div className="workbench-layout-v2__tab-navigation" aria-label={i18n.t("workbenchLayout.tabNavigation")}>
+                <button
+                    type="button"
+                    className="workbench-layout-v2__tab-navigation-button"
+                    aria-label={i18n.t("workbenchLayout.navigateBack")}
+                    title={i18n.t("workbenchLayout.navigateBack")}
+                    disabled={!canNavigateBack}
+                    onClick={() => navigateHistory(-1)}
+                >
+                    <ChevronLeft size={15} strokeWidth={2} aria-hidden="true" />
+                </button>
+                <button
+                    type="button"
+                    className="workbench-layout-v2__tab-navigation-button"
+                    aria-label={i18n.t("workbenchLayout.navigateForward")}
+                    title={i18n.t("workbenchLayout.navigateForward")}
+                    disabled={!canNavigateForward}
+                    onClick={() => navigateHistory(1)}
+                >
+                    <ChevronRight size={15} strokeWidth={2} aria-hidden="true" />
+                </button>
+            </div>
+            <Component {...({ params, api: stableApi, containerApi } satisfies WorkbenchTabProps<Record<string, unknown>>)} />
+        </div>
+    );
 });
 
 /* ────────── Main component ────────── */
@@ -623,6 +752,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     const persistedWorkspaceLayoutRef = useRef<string | null>(null);
     const workspaceLayoutRestorePendingRef = useRef(false);
     const workspaceLayoutInitialDecisionVaultPathRef = useRef<string | null>(null);
+    const workspaceLayoutBlockedVaultPathRef = useRef<string | null>(null);
     const layoutRootRef = useRef<HTMLDivElement | null>(null);
     const [createEntryDraftRequest, setCreateEntryDraftRequest] = useState<{
         kind: CreateEntryDraftRequest["kind"];
@@ -707,7 +837,26 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         let cancelled = false;
         const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath || null;
 
-        if (!currentVaultPath || !configState.backendConfig || !configState.featureSettings.restoreWorkspaceLayout) {
+        if (
+            currentVaultPath
+            && workspaceLayoutBlockedVaultPathRef.current === currentVaultPath
+            && configState.loadedVaultPath === currentVaultPath
+        ) {
+            workspaceLayoutBlockedVaultPathRef.current = null;
+        }
+
+        const blockedByVaultSwitch = Boolean(
+            currentVaultPath
+            && workspaceLayoutBlockedVaultPathRef.current === currentVaultPath
+            && configState.loadedVaultPath !== currentVaultPath,
+        );
+
+        if (
+            !currentVaultPath
+            || !configState.backendConfig
+            || blockedByVaultSwitch
+            || !configState.featureSettings.restoreWorkspaceLayout
+        ) {
             workspaceLayoutInitialDecisionVaultPathRef.current = null;
             workspaceLayoutRestorePendingRef.current = false;
             setWorkspaceLayoutHydrationComplete(false);
@@ -1017,6 +1166,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
             const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
             if (!currentVaultPath || !configState.backendConfig) return;
+            if (workspaceLayoutBlockedVaultPathRef.current === currentVaultPath && configState.loadedVaultPath !== currentVaultPath) return;
             if (!configState.featureSettings.restoreWorkspaceLayout) return;
 
             const snap = sidebarSnapshotRef.current;
@@ -1090,14 +1240,10 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
             const api = workbenchApiRef.current;
             if (api) {
-                const tabs = api.getTabs();
-                tabs.forEach((tab) => {
-                    if (shouldCloseTabOnVaultChange({ panelId: tab.id, panelParams: tab.params })) {
-                        api.closeTab(tab.id);
-                    }
-                });
+                closeVaultScopedWorkbenchTabs(api);
             }
 
+            workspaceLayoutBlockedVaultPathRef.current = payload.nextVaultPath;
             activeTabIdRef.current = null;
             clearActiveEditor();
             clearActiveBacklinkTarget();
@@ -1133,6 +1279,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
                 const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
                 if (!currentVaultPath || !configState.backendConfig) return;
+                if (workspaceLayoutBlockedVaultPathRef.current === currentVaultPath && configState.loadedVaultPath !== currentVaultPath) return;
                 if (!configState.featureSettings.restoreWorkspaceLayout) return;
 
                 const snap = sidebarSnapshotRef.current;
@@ -1177,6 +1324,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         (panelLayout: WorkbenchPanelLayoutSnapshot) => {
             const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
             if (!currentVaultPath || !configState.backendConfig) return;
+            if (workspaceLayoutBlockedVaultPathRef.current === currentVaultPath && configState.loadedVaultPath !== currentVaultPath) return;
             if (!configState.featureSettings.restoreWorkspaceLayout) return;
 
             panelLayoutSnapshotRef.current = panelLayout;
@@ -1230,6 +1378,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         (snapshot: WorkbenchLayoutSnapshot) => {
             const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
             if (!currentVaultPath || !configState.backendConfig) return;
+            if (workspaceLayoutBlockedVaultPathRef.current === currentVaultPath && configState.loadedVaultPath !== currentVaultPath) return;
             if (!configState.featureSettings.restoreWorkspaceLayout) return;
             if (workspaceSnapshot && !workspaceLayoutHydrationComplete) return;
             if (workspaceLayoutRestorePendingRef.current) return;

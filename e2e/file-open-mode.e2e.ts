@@ -10,8 +10,11 @@ const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
 const SOURCE_NOTE_PATH = "test-resources/notes/open-mode-source.md";
 const TARGET_NOTE_PATH = "test-resources/notes/network-segment.md";
 const GUIDE_NOTE_PATH = "test-resources/notes/guide.md";
+const CANVAS_NOTE_PATH = "test-resources/notes/glass-validation.canvas";
+const IMAGE_NOTE_PATH = "test-resources/notes/mock-image.png";
 
 type FileOpenMode = "new-tab" | "replace-active-tab";
+type MockTabKind = "markdown" | "canvas" | "image";
 
 async function waitForMockWorkbench(page: Page, testName: string): Promise<void> {
     await gotoMockVaultPage(page, testName, MOCK_PAGE);
@@ -41,11 +44,33 @@ function noteTitle(relativePath: string): string {
     return relativePath.split("/").pop() ?? relativePath;
 }
 
-async function openMockNoteFromTree(page: Page, relativePath: string): Promise<void> {
+async function expectActiveFileContent(page: Page, relativePath: string, kind: MockTabKind): Promise<void> {
+    await expectFocusedTab(page, noteTitle(relativePath));
+
+    if (kind === "markdown") {
+        await page.locator(".layout-v2-tab-section__card--active .cm-content").waitFor({ state: "visible" });
+        return;
+    }
+
+    if (kind === "canvas") {
+        await expect(page.locator(".layout-v2-tab-section__card--active .canvas-tab")).toBeVisible();
+        await page.locator(".layout-v2-tab-section__card--active .canvas-tab__surface").waitFor({ state: "visible" });
+        return;
+    }
+
+    await expect(page.locator(".layout-v2-tab-section__card--active .image-viewer-tab")).toBeVisible();
+    await expect(page.locator(".layout-v2-tab-section__card--active .image-viewer-header")).toHaveText(relativePath);
+}
+
+async function openMockFileFromTree(page: Page, relativePath: string, kind: MockTabKind): Promise<void> {
     await expandMockNotes(page);
     await page.locator(`.tree-item[data-tree-path='${relativePath}']`).click();
     await expect(page.locator(".layout-v2-tab-section__tab", { hasText: noteTitle(relativePath) })).toBeVisible();
-    await page.locator(".layout-v2-tab-section__card--active .cm-content").waitFor({ state: "visible" });
+    await expectActiveFileContent(page, relativePath, kind);
+}
+
+async function openMockNoteFromTree(page: Page, relativePath: string): Promise<void> {
+    await openMockFileFromTree(page, relativePath, "markdown");
 }
 
 async function clickNetworkSegmentWikiLink(page: Page): Promise<void> {
@@ -65,6 +90,28 @@ async function readFileTabTitles(page: Page): Promise<string[]> {
 
 async function expectFocusedTab(page: Page, title: string): Promise<void> {
     await expect(page.locator(".layout-v2-tab-section__tab--focused", { hasText: title })).toBeVisible();
+}
+
+function tabNavigationButton(page: Page, label: "Previous browse" | "Next browse") {
+    return page.locator(".layout-v2-tab-section__card--active").getByLabel(label);
+}
+
+async function navigateAndExpect(
+    page: Page,
+    direction: "Previous browse" | "Next browse",
+    relativePath: string,
+    kind: MockTabKind,
+): Promise<void> {
+    await tabNavigationButton(page, direction).click();
+    await expectActiveFileContent(page, relativePath, kind);
+    expect(await readFileTabTitles(page)).toEqual([noteTitle(relativePath)]);
+    await expect(page.locator(".layout-v2-tab-section__presentation-pending")).toHaveCount(0);
+}
+
+async function clickNavigationRapidly(page: Page, direction: "Previous browse" | "Next browse", count: number): Promise<void> {
+    for (let index = 0; index < count; index += 1) {
+        await tabNavigationButton(page, direction).click();
+    }
 }
 
 test.describe("file open mode", () => {
@@ -93,13 +140,70 @@ test.describe("file open mode", () => {
 
         await openMockNoteFromTree(page, SOURCE_NOTE_PATH);
         expect(await readFileTabTitles(page)).toEqual([noteTitle(SOURCE_NOTE_PATH)]);
+        await expect(tabNavigationButton(page, "Previous browse")).toBeDisabled();
+        await expect(tabNavigationButton(page, "Next browse")).toBeDisabled();
 
         await clickNetworkSegmentWikiLink(page);
         await expectFocusedTab(page, noteTitle(TARGET_NOTE_PATH));
         expect(await readFileTabTitles(page)).toEqual([noteTitle(TARGET_NOTE_PATH)]);
+        await expect(tabNavigationButton(page, "Previous browse")).toBeEnabled();
+        await expect(tabNavigationButton(page, "Next browse")).toBeDisabled();
 
         await openMockNoteFromTree(page, GUIDE_NOTE_PATH);
         await expectFocusedTab(page, noteTitle(GUIDE_NOTE_PATH));
         expect(await readFileTabTitles(page)).toEqual([noteTitle(GUIDE_NOTE_PATH)]);
+
+        const previousButton = tabNavigationButton(page, "Previous browse");
+        await previousButton.click();
+        await previousButton.click();
+        await expectFocusedTab(page, noteTitle(SOURCE_NOTE_PATH));
+        expect(await readFileTabTitles(page)).toEqual([noteTitle(SOURCE_NOTE_PATH)]);
+        await expect(page.locator(".layout-v2-tab-section__presentation-pending")).toHaveCount(0);
+        await expect(tabNavigationButton(page, "Previous browse")).toBeDisabled();
+        await expect(tabNavigationButton(page, "Next browse")).toBeEnabled();
+
+        await tabNavigationButton(page, "Next browse").click();
+        await expectFocusedTab(page, noteTitle(TARGET_NOTE_PATH));
+        expect(await readFileTabTitles(page)).toEqual([noteTitle(TARGET_NOTE_PATH)]);
+
+        await tabNavigationButton(page, "Previous browse").click();
+        await expectFocusedTab(page, noteTitle(SOURCE_NOTE_PATH));
+        expect(await readFileTabTitles(page)).toEqual([noteTitle(SOURCE_NOTE_PATH)]);
+        await expect(tabNavigationButton(page, "Previous browse")).toBeDisabled();
+        await expect(tabNavigationButton(page, "Next browse")).toBeEnabled();
+
+        await tabNavigationButton(page, "Next browse").click();
+        await expectFocusedTab(page, noteTitle(TARGET_NOTE_PATH));
+        expect(await readFileTabTitles(page)).toEqual([noteTitle(TARGET_NOTE_PATH)]);
+    });
+
+    test("replace-active-tab navigation handles mixed tab types through continuous and alternating history jumps", async ({ page }) => {
+        await waitForMockWorkbench(page, "file-open-mode-mixed-tab-history");
+        await setFileOpenMode(page, "replace-active-tab");
+
+        await openMockFileFromTree(page, SOURCE_NOTE_PATH, "markdown");
+        await openMockFileFromTree(page, CANVAS_NOTE_PATH, "canvas");
+        await openMockFileFromTree(page, IMAGE_NOTE_PATH, "image");
+        await openMockFileFromTree(page, GUIDE_NOTE_PATH, "markdown");
+        expect(await readFileTabTitles(page)).toEqual([noteTitle(GUIDE_NOTE_PATH)]);
+
+        await navigateAndExpect(page, "Previous browse", IMAGE_NOTE_PATH, "image");
+        await navigateAndExpect(page, "Previous browse", CANVAS_NOTE_PATH, "canvas");
+        await navigateAndExpect(page, "Previous browse", SOURCE_NOTE_PATH, "markdown");
+        await expect(tabNavigationButton(page, "Previous browse")).toBeDisabled();
+        await expect(tabNavigationButton(page, "Next browse")).toBeEnabled();
+
+        await clickNavigationRapidly(page, "Next browse", 3);
+        await expectActiveFileContent(page, GUIDE_NOTE_PATH, "markdown");
+        expect(await readFileTabTitles(page)).toEqual([noteTitle(GUIDE_NOTE_PATH)]);
+        await expect(page.locator(".layout-v2-tab-section__presentation-pending")).toHaveCount(0);
+        await expect(tabNavigationButton(page, "Previous browse")).toBeEnabled();
+        await expect(tabNavigationButton(page, "Next browse")).toBeDisabled();
+
+        await navigateAndExpect(page, "Previous browse", IMAGE_NOTE_PATH, "image");
+        await navigateAndExpect(page, "Next browse", GUIDE_NOTE_PATH, "markdown");
+        await navigateAndExpect(page, "Previous browse", IMAGE_NOTE_PATH, "image");
+        await navigateAndExpect(page, "Previous browse", CANVAS_NOTE_PATH, "canvas");
+        await navigateAndExpect(page, "Next browse", IMAGE_NOTE_PATH, "image");
     });
 });
