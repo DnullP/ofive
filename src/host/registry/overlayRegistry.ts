@@ -23,6 +23,7 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 import type { WorkbenchContainerApi } from "../layout/workbenchContracts";
 import type { CommandDefinition, CommandId } from "../commands/commandSystem";
+import type { FileOpenMode } from "../config/configStore";
 
 /**
  * @interface OverlayRenderContext
@@ -45,6 +46,8 @@ export interface OverlayRenderContext {
         relativePath: string;
         contentOverride?: string;
         preferredOpenerId?: string;
+        tabParams?: Record<string, unknown>;
+        openMode?: FileOpenMode;
     }) => Promise<void>;
     /** 关闭指定 tab */
     closeTab: (tabId: string) => void;

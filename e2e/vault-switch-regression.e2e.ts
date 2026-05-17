@@ -24,7 +24,6 @@ import { gotoMockVaultPage, switchMockVaultAndReload } from "./helpers/mockVault
  */
 async function waitForLayoutReady(page: Page): Promise<void> {
     await page.getByRole("main", { name: "Dockview Main Area" }).waitFor({ state: "visible" });
-    await page.locator(".layout-v2-tab-section__tab").first().waitFor({ state: "visible" });
     await page.locator("[data-testid='sidebar-left']").first().waitFor({ state: "visible" });
 }
 
@@ -59,7 +58,8 @@ test.describe("仓库切换 UI 失效", () => {
 
         await expect(page.locator(".vault-separator")).toHaveAttribute("title", nextVaultPath);
         await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "Calendar" })).toHaveCount(0);
-        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "Home" })).toBeVisible();
+        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: /Home|首页/ })).toHaveCount(0);
+        await expect(page.locator(".workbench-home-empty")).toBeVisible();
 
         await outlineTab.click();
         await expect(paneBody.getByText("No focused article")).toBeVisible();

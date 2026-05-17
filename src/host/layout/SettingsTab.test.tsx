@@ -15,6 +15,24 @@ import { __resetManagedStoreRegistryForTests } from "../store/storeRegistry";
 import { __resetBuiltinManagedStoresRegistrationForTests } from "../store/registerBuiltinManagedStores";
 
 const SETTINGS_TAB_TEST_SEARCH_ICON = "search-icon";
+const StubIcon = () => null;
+const STUBBED_LUCIDE_ICON_NAMES = [
+    "ArrowUp",
+    "Bot",
+    "Check",
+    "ChevronDown",
+    "Copy",
+    "CornerDownLeft",
+    "FileText",
+    "Pencil",
+    "Plus",
+    "RotateCcw",
+    "Search",
+    "Settings",
+    "Sparkles",
+    "Timer",
+    "X",
+] as const;
 
 mock.module("react-i18next", () => ({
     useTranslation: () => ({
@@ -28,17 +46,8 @@ mock.module("react-i18next", () => ({
 }));
 
 mock.module("lucide-react", () => ({
+    ...Object.fromEntries(STUBBED_LUCIDE_ICON_NAMES.map((name) => [name, StubIcon])),
     Search: () => <span>{SETTINGS_TAB_TEST_SEARCH_ICON}</span>,
-    Settings: () => null,
-    ArrowUp: () => null,
-    Bot: () => null,
-    Check: () => null,
-    ChevronDown: () => null,
-    Copy: () => null,
-    Plus: () => null,
-    Sparkles: () => null,
-    Timer: () => null,
-    X: () => null,
 }));
 
 afterEach(() => {

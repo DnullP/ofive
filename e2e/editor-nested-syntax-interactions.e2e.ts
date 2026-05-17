@@ -121,6 +121,10 @@ async function waitForMockWorkbench(page: Page): Promise<void> {
     await gotoMockVaultPage(page, "editor-nested-syntax-interactions", MOCK_PAGE);
     await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
     await page.locator("[data-testid='sidebar-right']").waitFor({ state: "visible" });
+    await page.evaluate(async () => {
+        const configStoreModule = await import("/src/host/config/configStore.ts");
+        await configStoreModule.updateFeatureSetting("fileOpenMode", "new-tab");
+    });
 }
 
 async function enableEditorVimMode(page: Page): Promise<void> {

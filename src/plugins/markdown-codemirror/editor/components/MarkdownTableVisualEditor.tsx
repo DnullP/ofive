@@ -16,6 +16,7 @@
  */
 
 import {
+    type ComponentPropsWithoutRef,
     useEffect,
     useLayoutEffect,
     useMemo,
@@ -31,6 +32,10 @@ import {
     type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import katex from "katex";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 import type { WorkbenchContainerApi } from "../../../../host/layout/workbenchContracts";
 import { useTranslation } from "react-i18next";
 import {
@@ -49,11 +54,14 @@ import {
     insertMarkdownTableRowAt,
     moveMarkdownTableColumn,
     moveMarkdownTableRow,
-    serializeMarkdownTable,
+    hasMarkdownTableLayout,
+    serializeMarkdownTableWithLayout,
     updateMarkdownTableCell,
+    type MarkdownTableLayout,
     type MarkdownTableCellPosition,
     type MarkdownTableModel,
 } from "../markdownTableModel";
+import { prepareMarkdownTableCellPreviewMarkdown } from "../markdownTableCellPreview";
 import {
     detectOpenWikiLink,
     resolveWikiLinkSuggestionAcceptanceAtCursor,
@@ -61,7 +69,15 @@ import {
 } from "../editPlugins/wikilinkSuggestUtils";
 import { shouldSkipWikiLinkNavigationForSelection } from "../readModeSelectionPolicy";
 import { openWikiLinkTarget } from "../syntaxPlugins/wikiLinkSyntaxRenderer";
-import { parseWikiLinkParts } from "../syntaxPlugins/wikiLinkParser";
+import {
+    decodeReadModeBlockLatexHref,
+    decodeReadModeHighlightHref,
+    decodeReadModeInlineLatexHref,
+    decodeReadModeMediaEmbedHref,
+    decodeReadModeTagHref,
+    decodeReadModeWikiLinkHref,
+} from "../markdownReadTransform";
+import { computeTagColorStyles } from "../utils/tagColor";
 import {
     createImeCompositionGuard,
     isImeComposing,
@@ -72,27 +88,6 @@ import "./MarkdownTableVisualEditor.css";
 const TABLE_WIDGET_EDITOR_FOCUS_CLASS = "cm-table-widget-focused";
 const WIKILINK_SUGGEST_DEBOUNCE_MS = 150;
 const WIKILINK_SUGGEST_MAX_ITEMS = 15;
-const TABLE_CELL_LINK_PATTERN = /(\[\[([^\]\n]+?)\]\])|(?<!!)\[([^\]]+?)\]\(([^)]+?)\)/g;
-
-/**
- * @type TableCellPreviewSegment
- * @description 单元格预览态的文本分段。
- */
-type TableCellPreviewSegment =
-    | {
-        kind: "text";
-        text: string;
-    }
-    | {
-        kind: "wikilink";
-        text: string;
-        target: string;
-    }
-    | {
-        kind: "link";
-        text: string;
-        href: string;
-    };
 
 /**
  * @interface TableWikiLinkSuggestState
@@ -194,6 +189,83 @@ interface SaveResult {
     message: string;
 }
 
+interface TableCellLatexProps {
+    /** LaTeX 公式源码。 */
+    latex: string;
+    /** 是否按 display 模式排版。 */
+    displayMode: boolean;
+}
+
+interface TableCellLatexRenderResult {
+    /** KaTeX 渲染后的 HTML。 */
+    html: string;
+    /** 是否渲染失败。 */
+    isError: boolean;
+}
+
+const tableCellLatexCache = new Map<string, TableCellLatexRenderResult>();
+
+function renderTableCellLatex(latex: string, displayMode: boolean): TableCellLatexRenderResult {
+    const cacheKey = `${displayMode ? "block" : "inline"}::${latex}`;
+    const cachedResult = tableCellLatexCache.get(cacheKey);
+    if (cachedResult) {
+        return cachedResult;
+    }
+
+    try {
+        const html = katex.renderToString(latex, {
+            displayMode,
+            throwOnError: false,
+            strict: false,
+            trust: false,
+            output: "htmlAndMathml",
+        });
+        const renderResult = { html, isError: false };
+        tableCellLatexCache.set(cacheKey, renderResult);
+        return renderResult;
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const renderResult = {
+            // i18n-guard-ignore-next-line -- KaTeX provides the dynamic diagnostic text.
+            html: `<span class="cm-latex-error" title="${escapeHtml(errorMessage)}">${escapeHtml(latex)}</span>`,
+            isError: true,
+        };
+        tableCellLatexCache.set(cacheKey, renderResult);
+        return renderResult;
+    }
+}
+
+/**
+ * @function TableCellLatex
+ * @description 在表格单元格预览中渲染 LaTeX。
+ * @param props 公式参数。
+ * @returns 公式节点。
+ */
+function TableCellLatex(props: TableCellLatexProps): ReactNode {
+    const renderResult = useMemo(
+        () => renderTableCellLatex(props.latex, props.displayMode),
+        [props.displayMode, props.latex],
+    );
+
+    return (
+        <span
+            className={[
+                props.displayMode ? "mtv-cell-latex-display" : "cm-latex-inline-widget",
+                renderResult.isError ? "cm-latex-inline-error" : "",
+            ].filter(Boolean).join(" ")}
+            dangerouslySetInnerHTML={{ __html: renderResult.html }}
+        />
+    );
+}
+
+function escapeHtml(text: string): string {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
 /**
  * @interface MarkdownTableVisualEditorProps
  * @description 组件输入参数。
@@ -203,6 +275,8 @@ export interface MarkdownTableVisualEditorProps {
     blockFrom: number;
     /** 初始表格模型。 */
     initialModel: MarkdownTableModel;
+    /** 初始表格布局元数据。 */
+    initialLayout?: MarkdownTableLayout | null;
     /** 表格源码写回回调。 */
     onCommitMarkdown: (markdownText: string) => SaveResult;
     /** 请求退出表格 Vim 导航层并返回正文。 */
@@ -325,6 +399,71 @@ function buildColumnWidthStyle(columnWidths: number[]): CSSProperties {
     };
 }
 
+function normalizePersistedSize(
+    value: number | undefined,
+    fallback: number,
+    minimum: number,
+): number {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue) || numericValue <= 0) {
+        return fallback;
+    }
+
+    return Math.max(minimum, Math.round(numericValue));
+}
+
+function resolveInitialColumnWidths(
+    model: MarkdownTableModel,
+    layout: MarkdownTableLayout | null | undefined,
+): number[] {
+    return Array.from({ length: model.headers.length }, (_, index) =>
+        normalizePersistedSize(
+            layout?.columnWidths?.[index],
+            DEFAULT_TABLE_COLUMN_WIDTH,
+            MIN_TABLE_COLUMN_WIDTH,
+        ),
+    );
+}
+
+function resolveInitialRowHeights(
+    model: MarkdownTableModel,
+    layout: MarkdownTableLayout | null | undefined,
+): number[] {
+    return Array.from({ length: model.rows.length }, (_, index) =>
+        normalizePersistedSize(
+            layout?.rowHeights?.[index],
+            MIN_TABLE_ROW_HEIGHT,
+            MIN_TABLE_ROW_HEIGHT,
+        ),
+    );
+}
+
+function buildMarkdownTableLayout(
+    columnWidths: number[],
+    rowHeights: number[],
+): MarkdownTableLayout {
+    return {
+        columnWidths: columnWidths.map((width) => Math.max(MIN_TABLE_COLUMN_WIDTH, Math.round(width))),
+        rowHeights: rowHeights.map((height) => Math.max(MIN_TABLE_ROW_HEIGHT, Math.round(height))),
+    };
+}
+
+function insertTableLayoutSize(values: number[], index: number, defaultValue: number): number[] {
+    const safeIndex = Math.max(0, Math.min(index, values.length));
+    const nextValues = [...values];
+    nextValues.splice(safeIndex, 0, defaultValue);
+    return nextValues;
+}
+
+function deleteTableLayoutSize(values: number[], index: number, defaultValue: number): number[] {
+    if (values.length <= 1) {
+        return [defaultValue];
+    }
+
+    const safeIndex = Math.max(0, Math.min(index, values.length - 1));
+    return values.filter((_, valueIndex) => valueIndex !== safeIndex);
+}
+
 function clampTableCellPosition(
     position: MarkdownTableCellPosition,
     model: MarkdownTableModel,
@@ -430,84 +569,6 @@ function clampSuggestIndex(index: number, itemCount: number): number {
 }
 
 /**
- * @function parseTableCellPreviewSegments
- * @description 将单元格文本拆分为普通文本、WikiLink 与普通链接片段。
- * @param value 单元格原始值。
- * @returns 预览分段数组。
- */
-function parseTableCellPreviewSegments(value: string): TableCellPreviewSegment[] {
-    if (value.length === 0) {
-        return [];
-    }
-
-    const segments: TableCellPreviewSegment[] = [];
-    let lastIndex = 0;
-    TABLE_CELL_LINK_PATTERN.lastIndex = 0;
-
-    for (const match of value.matchAll(TABLE_CELL_LINK_PATTERN)) {
-        const fullMatch = match[0] ?? "";
-        const matchIndex = match.index ?? -1;
-        if (matchIndex < 0 || fullMatch.length === 0) {
-            continue;
-        }
-
-        if (matchIndex > lastIndex) {
-            segments.push({
-                kind: "text",
-                text: value.slice(lastIndex, matchIndex),
-            });
-        }
-
-        const wikiLinkBody = match[2] ?? "";
-        const markdownLinkText = match[3] ?? "";
-        const markdownLinkHref = match[4] ?? "";
-
-        if (wikiLinkBody.length > 0) {
-            const parsed = parseWikiLinkParts(wikiLinkBody.trim());
-            if (parsed) {
-                segments.push({
-                    kind: "wikilink",
-                    text: parsed.displayText,
-                    target: parsed.target,
-                });
-            } else {
-                segments.push({
-                    kind: "text",
-                    text: fullMatch,
-                });
-            }
-        } else if (markdownLinkText.length > 0 && markdownLinkHref.trim().length > 0) {
-            segments.push({
-                kind: "link",
-                text: markdownLinkText,
-                href: markdownLinkHref.trim(),
-            });
-        } else {
-            segments.push({
-                kind: "text",
-                text: fullMatch,
-            });
-        }
-
-        lastIndex = matchIndex + fullMatch.length;
-    }
-
-    if (lastIndex < value.length) {
-        segments.push({
-            kind: "text",
-            text: value.slice(lastIndex),
-        });
-    }
-
-    return segments.length > 0
-        ? segments
-        : [{
-            kind: "text",
-            text: value,
-        }];
-}
-
-/**
  * @function MarkdownTableVisualEditor
  * @description 渲染 Markdown 表格可视化编辑器。
  * @param props 组件参数。
@@ -515,6 +576,8 @@ function parseTableCellPreviewSegments(value: string): TableCellPreviewSegment[]
  */
 export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps): ReactNode {
     const { t } = useTranslation();
+    const initialColumnWidths = resolveInitialColumnWidths(props.initialModel, props.initialLayout);
+    const initialRowHeights = resolveInitialRowHeights(props.initialModel, props.initialLayout);
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
     const navigationRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -531,14 +594,15 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         resolveDefaultActiveCell(props.initialModel),
     );
     const [interactionMode, setInteractionMode] = useState<"navigation" | "editing">("navigation");
+    const [isTableFocused, setIsTableFocused] = useState(false);
     const [edgeSelection, setEdgeSelection] = useState<TableEdgeSelection | null>(null);
     const [contextMenuState, setContextMenuState] = useState<TableContextMenuState>(null);
     const [dragState, setDragState] = useState<TableDragState>(null);
     const [columnWidths, setColumnWidths] = useState<number[]>(() =>
-        Array.from({ length: props.initialModel.headers.length }, () => DEFAULT_TABLE_COLUMN_WIDTH),
+        initialColumnWidths,
     );
     const [rowHeights, setRowHeights] = useState<number[]>(() =>
-        Array.from({ length: props.initialModel.rows.length }, () => MIN_TABLE_ROW_HEIGHT),
+        initialRowHeights,
     );
     const [renderedHeaderHeight, setRenderedHeaderHeight] = useState<number>(MIN_TABLE_ROW_HEIGHT);
     const [renderedRowHeights, setRenderedRowHeights] = useState<number[]>(() =>
@@ -547,9 +611,200 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const [wikiLinkSuggestState, setWikiLinkSuggestState] = useState<TableWikiLinkSuggestState>(
         INACTIVE_WIKILINK_SUGGEST_STATE,
     );
-    const lastCommittedMarkdownRef = useRef<string>(serializeMarkdownTable(props.initialModel));
+    const columnWidthsRef = useRef<number[]>(initialColumnWidths);
+    const rowHeightsRef = useRef<number[]>(initialRowHeights);
+    const hasCustomLayoutRef = useRef<boolean>(hasMarkdownTableLayout(props.initialLayout));
+    const lastCommittedMarkdownRef = useRef<string>(serializeMarkdownTableWithLayout(
+        props.initialModel,
+        hasCustomLayoutRef.current
+            ? buildMarkdownTableLayout(initialColumnWidths, initialRowHeights)
+            : null,
+    ));
     const tableModelRef = useRef<MarkdownTableModel>(props.initialModel);
     const activeCellRef = useRef<MarkdownTableCellPosition>(resolveDefaultActiveCell(props.initialModel));
+    const isTableFocusedRef = useRef(false);
+
+    const setTableFocusState = (focused: boolean): void => {
+        isTableFocusedRef.current = focused;
+        setIsTableFocused(focused);
+    };
+
+    const applyColumnWidths = (updater: (previous: number[]) => number[]): void => {
+        const nextWidths = updater(columnWidthsRef.current);
+        columnWidthsRef.current = nextWidths;
+        setColumnWidths(nextWidths);
+    };
+
+    const applyRowHeights = (updater: (previous: number[]) => number[]): void => {
+        const nextHeights = updater(rowHeightsRef.current);
+        rowHeightsRef.current = nextHeights;
+        setRowHeights(nextHeights);
+    };
+
+    const tableCellMarkdownComponents = useMemo<Components>(() => ({
+        p: ({ children }) => <span className="mtv-cell-preview-paragraph">{children}</span>,
+        strong: ({ children }) => <strong className="cm-rendered-bold">{children}</strong>,
+        em: ({ children }) => <em className="cm-rendered-italic">{children}</em>,
+        del: ({ children }) => <del className="cm-rendered-strikethrough">{children}</del>,
+        h1: ({ children }) => <strong className="cm-rendered-bold mtv-cell-preview-heading">{children}</strong>,
+        h2: ({ children }) => <strong className="cm-rendered-bold mtv-cell-preview-heading">{children}</strong>,
+        h3: ({ children }) => <strong className="cm-rendered-bold mtv-cell-preview-heading">{children}</strong>,
+        h4: ({ children }) => <strong className="cm-rendered-bold mtv-cell-preview-heading">{children}</strong>,
+        h5: ({ children }) => <strong className="cm-rendered-bold mtv-cell-preview-heading">{children}</strong>,
+        h6: ({ children }) => <strong className="cm-rendered-bold mtv-cell-preview-heading">{children}</strong>,
+        blockquote: ({ children }) => (
+            <blockquote className="cm-rendered-blockquote mtv-cell-preview-blockquote">
+                {children}
+            </blockquote>
+        ),
+        ul: ({ children }) => <ul className="mtv-cell-preview-list mtv-cell-preview-list-unordered">{children}</ul>,
+        ol: ({ children }) => <ol className="mtv-cell-preview-list mtv-cell-preview-list-ordered">{children}</ol>,
+        li: ({ children, className }) => (
+            <li className={className ? `mtv-cell-preview-list-item ${className}` : "mtv-cell-preview-list-item"}>
+                {children}
+            </li>
+        ),
+        input: ({ type, checked }) => {
+            if (type !== "checkbox") {
+                return null;
+            }
+
+            return (
+                <span
+                    aria-hidden="true"
+                    className={checked
+                        ? "cm-rendered-task-checkbox cm-rendered-task-checkbox-checked"
+                        : "cm-rendered-task-checkbox cm-rendered-task-checkbox-unchecked"}
+                />
+            );
+        },
+        code: ({ node: _node, className, children, ...componentProps }: ComponentPropsWithoutRef<"code"> & { node?: unknown }) => {
+            const isInline = !String(className ?? "").includes("language-");
+            if (isInline) {
+                return (
+                    <code
+                        className={`cm-rendered-inline-code ${className ?? ""}`.trim()}
+                        {...componentProps}
+                    >
+                        {children}
+                    </code>
+                );
+            }
+
+            return (
+                <code className={`mtv-cell-preview-code-block ${className ?? ""}`.trim()} {...componentProps}>
+                    {children}
+                </code>
+            );
+        },
+        pre: ({ children }) => <pre className="mtv-cell-preview-pre">{children}</pre>,
+        img: ({ src, alt }) => {
+            const mediaTarget = decodeReadModeMediaEmbedHref(src);
+            if (mediaTarget) {
+                return (
+                    <span className="mtv-cell-preview-media-embed">
+                        {alt ?? mediaTarget}
+                    </span>
+                );
+            }
+
+            return (
+                <img
+                    alt={alt ?? ""}
+                    className="mtv-cell-preview-image"
+                    src={src}
+                />
+            );
+        },
+        a: (componentProps) => {
+            const { href, children, ...restProps } = componentProps;
+            const wikiLinkTarget = decodeReadModeWikiLinkHref(href);
+            if (wikiLinkTarget) {
+                return (
+                    <button
+                        type="button"
+                        className="mtv-cell-preview-link-button cm-rendered-wikilink"
+                        data-wiki-link-target={wikiLinkTarget}
+                        onMouseDown={(event) => {
+                            event.stopPropagation();
+                        }}
+                        onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (shouldSkipWikiLinkNavigationForSelection(
+                                window.getSelection(),
+                                event.currentTarget,
+                            )) {
+                                return;
+                            }
+                            void openWikiLinkTarget(
+                                props.containerApi,
+                                () => props.currentFilePath,
+                                wikiLinkTarget,
+                            );
+                        }}
+                    >
+                        <span
+                            className="cm-rendered-wikilink-display"
+                            data-wiki-link-target={wikiLinkTarget}
+                        >
+                            {children}
+                        </span>
+                    </button>
+                );
+            }
+
+            if (decodeReadModeHighlightHref(href) !== null) {
+                return (
+                    <mark className="cm-rendered-highlight">
+                        {children}
+                    </mark>
+                );
+            }
+
+            const tagTarget = decodeReadModeTagHref(href);
+            if (tagTarget !== null) {
+                const styles = computeTagColorStyles(tagTarget);
+                return (
+                    <span
+                        className="cm-rendered-tag"
+                        style={{
+                            background: styles.background,
+                            borderColor: styles.border,
+                            color: styles.text,
+                        }}
+                    >
+                        {children}
+                    </span>
+                );
+            }
+
+            const inlineLatexSource = decodeReadModeInlineLatexHref(href);
+            if (inlineLatexSource !== null) {
+                return <TableCellLatex latex={inlineLatexSource} displayMode={false} />;
+            }
+
+            const blockLatexSource = decodeReadModeBlockLatexHref(href);
+            if (blockLatexSource !== null) {
+                return <TableCellLatex latex={blockLatexSource} displayMode />;
+            }
+
+            return (
+                <a
+                    {...restProps}
+                    href={href}
+                    className="mtv-cell-preview-link-anchor cm-rendered-link"
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                    }}
+                >
+                    {children}
+                </a>
+            );
+        },
+    }), [props.containerApi, props.currentFilePath]);
 
     const columnWidthStyle = useMemo<CSSProperties>(
         () => buildColumnWidthStyle(columnWidths),
@@ -565,7 +820,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     }, [activeCell]);
 
     useEffect(() => {
-        setColumnWidths((previous) => {
+        applyColumnWidths((previous) => {
             if (previous.length === tableModel.headers.length) {
                 return previous;
             }
@@ -574,7 +829,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                 previous[index] ?? DEFAULT_TABLE_COLUMN_WIDTH,
             );
         });
-        setRowHeights((previous) => {
+        applyRowHeights((previous) => {
             if (previous.length === tableModel.rows.length) {
                 return previous;
             }
@@ -702,7 +957,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
 
             if (resizeState.kind === "column") {
                 const delta = event.clientX - resizeState.startClientX;
-                setColumnWidths((previous) => previous.map((width, index) =>
+                applyColumnWidths((previous) => previous.map((width, index) =>
                     index === resizeState.index
                         ? Math.max(MIN_TABLE_COLUMN_WIDTH, resizeState.startSize + delta)
                         : width,
@@ -711,7 +966,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             }
 
             const delta = event.clientY - resizeState.startClientY;
-            setRowHeights((previous) => previous.map((height, index) =>
+            applyRowHeights((previous) => previous.map((height, index) =>
                 index === resizeState.index
                     ? Math.max(MIN_TABLE_ROW_HEIGHT, resizeState.startSize + delta)
                     : height,
@@ -719,6 +974,13 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         };
 
         const handlePointerEnd = (): void => {
+            if (resizeDragStateRef.current) {
+                hasCustomLayoutRef.current = true;
+                resizeDragStateRef.current = null;
+                commitDraftModel();
+                return;
+            }
+
             resizeDragStateRef.current = null;
         };
 
@@ -764,7 +1026,12 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             return;
         }
 
-        const nextMarkdown = serializeMarkdownTable(tableModelRef.current);
+        const nextMarkdown = serializeMarkdownTableWithLayout(
+            tableModelRef.current,
+            hasCustomLayoutRef.current
+                ? buildMarkdownTableLayout(columnWidthsRef.current, rowHeightsRef.current)
+                : null,
+        );
         if (nextMarkdown === lastCommittedMarkdownRef.current) {
             return;
         }
@@ -961,8 +1228,43 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         return () => {
             commitDraftModel();
             closeWikiLinkSuggest();
+            setTableFocusState(false);
             syncEditorFocusClass(false);
             clearFocusedMarkdownTableEditor(focusedEditorRef.current);
+        };
+    }, []);
+
+    const releaseTableFocus = (): void => {
+        commitDraftModel();
+        closeWikiLinkSuggest();
+        setContextMenuState(null);
+        setEdgeSelection(null);
+        setInteractionMode("navigation");
+        setTableFocusState(false);
+        syncEditorFocusClass(false);
+        clearFocusedMarkdownTableEditor(focusedEditorRef.current);
+    };
+
+    useEffect(() => {
+        const handlePointerDown = (event: globalThis.PointerEvent): void => {
+            if (!isTableFocusedRef.current) {
+                return;
+            }
+
+            const target = event.target as Node | null;
+            if (target && wrapperRef.current?.contains(target)) {
+                return;
+            }
+            if (isNodeInsideMarkdownTableContextMenu(target)) {
+                return;
+            }
+
+            releaseTableFocus();
+        };
+
+        window.addEventListener("pointerdown", handlePointerDown, { capture: true });
+        return () => {
+            window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
         };
     }, []);
 
@@ -974,6 +1276,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const focusCell = (position: MarkdownTableCellPosition): void => {
         setEdgeSelection(null);
         setInteractionMode("editing");
+        setTableFocusState(true);
         setActiveCell(position);
         window.requestAnimationFrame(() => {
             inputRefs.current.get(buildCellKey(position))?.focus();
@@ -986,6 +1289,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             position,
         };
         setInteractionMode("navigation");
+        setTableFocusState(true);
         setActiveCell(position);
         window.requestAnimationFrame(() => {
             const target = navigationRefs.current.get(buildCellKey(position));
@@ -1000,6 +1304,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         clearPendingMarkdownTableNavigationRestore(props.blockFrom, position);
         setEdgeSelection(null);
         setInteractionMode("navigation");
+        setTableFocusState(true);
         setActiveCell((previous) => (isSameCellPosition(previous, position) ? previous : position));
     };
 
@@ -1094,6 +1399,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         const baseRowIndex = currentCell.section === "body" ? currentCell.rowIndex : 0;
         const insertIndex = side === "above" ? baseRowIndex : baseRowIndex + 1;
         const nextModel = insertMarkdownTableRowAt(tableModelRef.current, insertIndex);
+        applyRowHeights((previous) => insertTableLayoutSize(previous, insertIndex, MIN_TABLE_ROW_HEIGHT));
         updateModelAndSelection(nextModel, {
             section: "body",
             rowIndex: Math.min(insertIndex, nextModel.rows.length - 1),
@@ -1109,6 +1415,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         const currentCell = activeCellRef.current;
         const targetRowIndex = currentCell.section === "body" ? currentCell.rowIndex : 0;
         const nextModel = deleteMarkdownTableRowAt(tableModelRef.current, targetRowIndex);
+        applyRowHeights((previous) => deleteTableLayoutSize(previous, targetRowIndex, MIN_TABLE_ROW_HEIGHT));
         updateModelAndSelection(nextModel, {
             section: "body",
             rowIndex: Math.max(0, Math.min(targetRowIndex, nextModel.rows.length - 1)),
@@ -1125,6 +1432,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         const currentCell = activeCellRef.current;
         const insertIndex = side === "left" ? currentCell.columnIndex : currentCell.columnIndex + 1;
         const nextModel = insertMarkdownTableColumnAt(tableModelRef.current, insertIndex);
+        applyColumnWidths((previous) => insertTableLayoutSize(previous, insertIndex, DEFAULT_TABLE_COLUMN_WIDTH));
         updateModelAndSelection(nextModel, {
             section: currentCell.section,
             rowIndex: currentCell.section === "body" ? currentCell.rowIndex : 0,
@@ -1139,6 +1447,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const handleDeleteColumn = (): void => {
         const currentCell = activeCellRef.current;
         const nextModel = deleteMarkdownTableColumnAt(tableModelRef.current, currentCell.columnIndex);
+        applyColumnWidths((previous) => deleteTableLayoutSize(previous, currentCell.columnIndex, DEFAULT_TABLE_COLUMN_WIDTH));
         updateModelAndSelection(nextModel, {
             section: currentCell.section,
             rowIndex: currentCell.section === "body" ? currentCell.rowIndex : 0,
@@ -1149,6 +1458,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const handleSelectColumn = (columnIndex: number): void => {
         closeWikiLinkSuggest();
         setContextMenuState(null);
+        setTableFocusState(true);
         setInteractionMode("navigation");
         setEdgeSelection({ kind: "column", index: columnIndex });
         setActiveCell({
@@ -1161,6 +1471,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const handleSelectRow = (rowIndex: number): void => {
         closeWikiLinkSuggest();
         setContextMenuState(null);
+        setTableFocusState(true);
         setInteractionMode("navigation");
         setEdgeSelection({ kind: "row", index: rowIndex });
         setActiveCell({
@@ -1173,6 +1484,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const handleInsertRowAtEdge = (rowIndex: number, side: "above" | "below"): void => {
         const insertIndex = side === "above" ? rowIndex : rowIndex + 1;
         const nextModel = insertMarkdownTableRowAt(tableModelRef.current, insertIndex);
+        applyRowHeights((previous) => insertTableLayoutSize(previous, insertIndex, MIN_TABLE_ROW_HEIGHT));
         setEdgeSelection(null);
         setContextMenuState(null);
         updateModelAndSelection(nextModel, {
@@ -1184,6 +1496,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
 
     const handleDeleteRowAtEdge = (rowIndex: number): void => {
         const nextModel = deleteMarkdownTableRowAt(tableModelRef.current, rowIndex);
+        applyRowHeights((previous) => deleteTableLayoutSize(previous, rowIndex, MIN_TABLE_ROW_HEIGHT));
         setEdgeSelection(null);
         setContextMenuState(null);
         updateModelAndSelection(nextModel, {
@@ -1196,6 +1509,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const handleInsertColumnAtEdge = (columnIndex: number, side: "left" | "right"): void => {
         const insertIndex = side === "left" ? columnIndex : columnIndex + 1;
         const nextModel = insertMarkdownTableColumnAt(tableModelRef.current, insertIndex);
+        applyColumnWidths((previous) => insertTableLayoutSize(previous, insertIndex, DEFAULT_TABLE_COLUMN_WIDTH));
         setEdgeSelection(null);
         setContextMenuState(null);
         updateModelAndSelection(nextModel, {
@@ -1207,6 +1521,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
 
     const handleDeleteColumnAtEdge = (columnIndex: number): void => {
         const nextModel = deleteMarkdownTableColumnAt(tableModelRef.current, columnIndex);
+        applyColumnWidths((previous) => deleteTableLayoutSize(previous, columnIndex, DEFAULT_TABLE_COLUMN_WIDTH));
         setEdgeSelection(null);
         setContextMenuState(null);
         updateModelAndSelection(nextModel, {
@@ -1284,7 +1599,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             const nextWidths = [...columnWidths];
             const [movedWidth] = nextWidths.splice(currentDragState.fromIndex, 1);
             nextWidths.splice(selection.index, 0, movedWidth ?? DEFAULT_TABLE_COLUMN_WIDTH);
-            setColumnWidths(nextWidths);
+            applyColumnWidths(() => nextWidths);
             setEdgeSelection({ kind: "column", index: selection.index });
             updateModelAndSelection(nextModel, {
                 section: "header",
@@ -1298,7 +1613,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         const nextHeights = [...rowHeights];
         const [movedHeight] = nextHeights.splice(currentDragState.fromIndex, 1);
         nextHeights.splice(selection.index, 0, movedHeight ?? MIN_TABLE_ROW_HEIGHT);
-        setRowHeights(nextHeights);
+        applyRowHeights(() => nextHeights);
         setEdgeSelection({ kind: "row", index: selection.index });
         updateModelAndSelection(nextModel, {
             section: "body",
@@ -1680,7 +1995,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
 
         const nextTarget = event.relatedTarget as Node | null;
         if (!nextTarget || !wrapperRef.current?.contains(nextTarget)) {
-            syncEditorFocusClass(false);
+            releaseTableFocus();
         }
     };
 
@@ -1778,8 +2093,10 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         isNavigationTarget: boolean,
     ): ReactNode => {
         const isEmpty = value.trim().length === 0;
-        const segments = parseTableCellPreviewSegments(value);
         const cellKey = buildCellKey(position);
+        const previewMarkdown = isEmpty || isNavigationTarget
+            ? ""
+            : prepareMarkdownTableCellPreviewMarkdown(value);
 
         return (
             <div
@@ -1884,65 +2201,18 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             >
                 {isEmpty ? (
                     <span className="mtv-cell-preview-placeholder">{placeholder}</span>
-                ) : segments.map((segment, index) => {
-                    if (isNavigationTarget) {
-                        return (
-                            <span key={`nav-${index}`} className="mtv-cell-preview-text">
-                                {segment.text}
-                            </span>
-                        );
-                    }
-
-                    if (segment.kind === "text") {
-                        return (
-                            <span key={`text-${index}`} className="mtv-cell-preview-text">
-                                {segment.text}
-                            </span>
-                        );
-                    }
-
-                    if (segment.kind === "wikilink") {
-                        return (
-                            <button
-                                key={`wikilink-${segment.target}-${index}`}
-                                type="button"
-                                className="mtv-cell-preview-link-button cm-rendered-wikilink"
-                                onClick={(event) => {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    if (shouldSkipWikiLinkNavigationForSelection(
-                                        window.getSelection(),
-                                        event.currentTarget,
-                                    )) {
-                                        return;
-                                    }
-                                    void openWikiLinkTarget(
-                                        props.containerApi,
-                                        () => props.currentFilePath,
-                                        segment.target,
-                                    );
-                                }}
-                            >
-                                {segment.text}
-                            </button>
-                        );
-                    }
-
-                    return (
-                        <a
-                            key={`link-${segment.href}-${index}`}
-                            href={segment.href}
-                            className="mtv-cell-preview-link-anchor cm-rendered-link"
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(event) => {
-                                event.stopPropagation();
-                            }}
+                ) : isNavigationTarget ? (
+                    <span className="mtv-cell-preview-text">{value}</span>
+                ) : (
+                    <span className="mtv-cell-preview-markdown">
+                        <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkBreaks]}
+                            components={tableCellMarkdownComponents}
                         >
-                            {segment.text}
-                        </a>
-                    );
-                })}
+                            {previewMarkdown}
+                        </ReactMarkdown>
+                    </span>
+                )}
             </div>
         );
     };
@@ -1952,6 +2222,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
      * @description 表格容器获得焦点时，将自身注册为当前聚焦表格编辑器。
      */
     const handleWrapperFocusCapture = (): void => {
+        setTableFocusState(true);
         setFocusedMarkdownTableEditor(focusedEditorRef.current);
         syncEditorFocusClass(true);
     };
@@ -1970,10 +2241,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             return;
         }
 
-        commitDraftModel();
-        closeWikiLinkSuggest();
-        syncEditorFocusClass(false);
-        clearFocusedMarkdownTableEditor(focusedEditorRef.current);
+        releaseTableFocus();
     };
 
     return (
@@ -2010,8 +2278,8 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                 const cellKey = buildCellKey(position);
                                 const isActiveCell = buildCellKey(activeCell) === cellKey;
                                 const isSelectedColumn = edgeSelection?.kind === "column" && edgeSelection.index === columnIndex;
-                                const isEditingCell = isActiveCell && interactionMode === "editing";
-                                const isNavigationTarget = isActiveCell && interactionMode === "navigation";
+                                const isEditingCell = isTableFocused && isActiveCell && interactionMode === "editing";
+                                const isNavigationTarget = isTableFocused && isActiveCell && interactionMode === "navigation";
                                 return (
                                     <th
                                         key={cellKey}
@@ -2095,8 +2363,8 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                     const cellKey = buildCellKey(position);
                                     const isActiveCell = buildCellKey(activeCell) === cellKey;
                                     const isSelectedColumn = edgeSelection?.kind === "column" && edgeSelection.index === columnIndex;
-                                    const isEditingCell = isActiveCell && interactionMode === "editing";
-                                    const isNavigationTarget = isActiveCell && interactionMode === "navigation";
+                                    const isEditingCell = isTableFocused && isActiveCell && interactionMode === "editing";
+                                    const isNavigationTarget = isTableFocused && isActiveCell && interactionMode === "navigation";
                                     return (
                                         <td
                                             key={cellKey}

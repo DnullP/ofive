@@ -59,6 +59,10 @@ pub struct AgentSkillSummary {
     pub directory_relative_path: String,
     pub files: Vec<AgentSkillFileEntry>,
     pub valid: bool,
+    #[serde(default)]
+    pub built_in: bool,
+    #[serde(default)]
+    pub read_only: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

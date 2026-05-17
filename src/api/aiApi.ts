@@ -144,6 +144,14 @@ export interface AiChatHistoryMessage {
     reasoningText?: string;
     contentBlocks?: AiChatHistoryContentBlock[];
     interruptedByUser?: boolean;
+    rollbackCheckpointId?: string;
+}
+
+export interface AiChatRollbackRestoreResponse {
+    checkpointId: string;
+    restoredPaths: string[];
+    deletedPaths: string[];
+    skippedPaths: string[];
 }
 
 /**
@@ -217,6 +225,7 @@ export interface SubmitAiChatConfirmationOptions {
     confirmed: boolean;
     sessionId?: string;
     userId?: string;
+    rollbackCheckpointId?: string;
 }
 
 /**
@@ -229,6 +238,7 @@ export interface StartAiChatStreamOptions {
     userId?: string;
     history?: AiChatHistoryMessage[];
     contextSnapshotJson?: string;
+    rollbackCheckpointId?: string;
 }
 
 export interface BrowserMockAiRuntime {
@@ -242,6 +252,7 @@ export interface BrowserMockAiRuntime {
     startAiChatStream?: (options: StartAiChatStreamOptions) => Promise<AiChatStreamStartResponse> | AiChatStreamStartResponse;
     stopAiChatStream?: (streamId: string) => Promise<boolean> | boolean;
     submitAiChatConfirmation?: (options: SubmitAiChatConfirmationOptions) => Promise<AiChatStreamStartResponse> | AiChatStreamStartResponse;
+    restoreAiChatRollbackCheckpoint?: (checkpointId: string) => Promise<AiChatRollbackRestoreResponse> | AiChatRollbackRestoreResponse;
     subscribeAiChatStreamEvents?: (handler: (payload: AiChatStreamEventPayload) => void) => UnlistenFn;
 }
 
@@ -450,6 +461,7 @@ export async function startAiChatStream(
         userId: options.userId ?? null,
         messageLength: options.message.length,
         hasContextSnapshot: Boolean(options.contextSnapshotJson?.trim()),
+        rollbackCheckpointId: options.rollbackCheckpointId ?? null,
     });
 
     const response = await invoke<AiChatStreamStartResponse>("start_ai_chat_stream", {
@@ -458,6 +470,7 @@ export async function startAiChatStream(
         userId: options.userId ?? null,
         history: options.history ?? null,
         contextSnapshotJson: options.contextSnapshotJson ?? null,
+        rollbackCheckpointId: options.rollbackCheckpointId ?? null,
     });
 
     console.info("[ai-api] startAiChatStream invoke success", {
@@ -522,6 +535,7 @@ export async function submitAiChatConfirmation(
         userId: options.userId ?? null,
         confirmationId: options.confirmationId,
         confirmed: options.confirmed,
+        rollbackCheckpointId: options.rollbackCheckpointId ?? null,
     });
 
     const response = await invoke<AiChatStreamStartResponse>("submit_ai_chat_confirmation", {
@@ -529,6 +543,7 @@ export async function submitAiChatConfirmation(
         confirmed: options.confirmed,
         sessionId: options.sessionId ?? null,
         userId: options.userId ?? null,
+        rollbackCheckpointId: options.rollbackCheckpointId ?? null,
     });
 
     console.info("[ai-api] submitAiChatConfirmation invoke success", {
@@ -536,6 +551,39 @@ export async function submitAiChatConfirmation(
     });
 
     return response;
+}
+
+/**
+ * @function restoreAiChatRollbackCheckpoint
+ * @description 恢复一轮 AI edit rollback checkpoint。
+ * @param checkpointId checkpoint id。
+ * @returns 恢复结果。
+ */
+export async function restoreAiChatRollbackCheckpoint(
+    checkpointId: string,
+): Promise<AiChatRollbackRestoreResponse> {
+    const mockRuntime = getBrowserMockAiRuntime();
+    if (mockRuntime?.restoreAiChatRollbackCheckpoint) {
+        return mockRuntime.restoreAiChatRollbackCheckpoint(checkpointId);
+    }
+
+    if (!isTauriRuntime()) {
+        throw new Error("AI rollback restore is only available in Tauri runtime");
+    }
+
+    const response = await invoke<AiChatRollbackRestoreResponse>(
+        "restore_ai_chat_rollback_checkpoint",
+        {
+            rollbackCheckpointId: checkpointId,
+        },
+    );
+
+    return {
+        checkpointId: response.checkpointId,
+        restoredPaths: response.restoredPaths ?? [],
+        deletedPaths: response.deletedPaths ?? [],
+        skippedPaths: response.skippedPaths ?? [],
+    };
 }
 
 /**

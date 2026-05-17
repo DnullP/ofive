@@ -367,6 +367,9 @@ export const storeConsumerCoverage = {
         "e2e/custom-activity.e2e.ts",
         "e2e/vault-switch-regression.e2e.ts",
     ],
+    "src/host/vault/openVaultDialog.ts": [
+        "e2e/workbench-home-empty.e2e.ts",
+    ],
     "src/host/layout/openFileService.ts": [
         "src/host/layout/openFileService.test.ts",
         "e2e/file-open-mode.e2e.ts",
@@ -422,6 +425,7 @@ export const storeConsumerCoverage = {
     "src/host/layout/WorkbenchLayoutHost.tsx": [
         "e2e/custom-activity.e2e.ts",
         "e2e/vault-switch-regression.e2e.ts",
+        "e2e/workbench-home-empty.e2e.ts",
     ],
     "src/host/notifications/notificationCenter.ts": [
         "src/host/notifications/notificationCenter.config.test.ts",

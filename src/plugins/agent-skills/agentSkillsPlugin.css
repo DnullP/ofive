@@ -87,6 +87,10 @@
     cursor: pointer;
 }
 
+.agent-skills-skill-row[data-agent-skill-read-only="true"] {
+    padding-right: 6px;
+}
+
 .agent-skills-skill-row:hover,
 .agent-skills-tree-row.is-file:hover {
     background: color-mix(in srgb, var(--text-primary) 6%, transparent);
@@ -127,6 +131,26 @@
     flex: 0 0 auto;
     color: var(--text-warning);
     font-size: 12px;
+}
+
+.agent-skills-skill-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    padding: 0 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    font-size: 10px;
+    line-height: 16px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.agent-skills-skill-badge svg {
+    color: var(--text-secondary);
 }
 
 .agent-skills-tree-group {

@@ -21,6 +21,12 @@ export interface AiChatToolCallRecord {
     completedAtUnixMs: number | null;
 }
 
+export interface AiChatToolCallRecordGroup {
+    capabilityId: string;
+    status: AiChatToolCallStatus;
+    records: AiChatToolCallRecord[];
+}
+
 interface ParsedCapabilityDebugEntry {
     capabilityId: string;
     status: AiChatToolCallStatus;
@@ -112,6 +118,43 @@ export function reduceAiChatToolCallDebugEntry(
         changed: true,
         records: nextRecords,
     };
+}
+
+export function groupAiChatToolCallRecords(
+    records: AiChatToolCallRecord[],
+): AiChatToolCallRecordGroup[] {
+    const groupsByCapability = new Map<string, AiChatToolCallRecordGroup>();
+
+    records.forEach((record) => {
+        const existingGroup = groupsByCapability.get(record.capabilityId);
+        if (!existingGroup) {
+            groupsByCapability.set(record.capabilityId, {
+                capabilityId: record.capabilityId,
+                status: record.status,
+                records: [record],
+            });
+            return;
+        }
+
+        const nextRecords = [...existingGroup.records, record];
+        groupsByCapability.set(record.capabilityId, {
+            capabilityId: record.capabilityId,
+            status: resolveGroupStatus(nextRecords),
+            records: nextRecords,
+        });
+    });
+
+    return Array.from(groupsByCapability.values());
+}
+
+function resolveGroupStatus(records: AiChatToolCallRecord[]): AiChatToolCallStatus {
+    if (records.some((record) => record.status === "failed")) {
+        return "failed";
+    }
+    if (records.some((record) => record.status === "calling")) {
+        return "calling";
+    }
+    return "completed";
 }
 
 function parseCapabilityDebugEntry(

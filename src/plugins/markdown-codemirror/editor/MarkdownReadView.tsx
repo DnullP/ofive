@@ -47,6 +47,10 @@ import {
 } from "../../project-reader/projectReaderLinks";
 import { resolveParentDirectory } from "./pathUtils";
 import { openWikiLinkTarget } from "./syntaxPlugins/wikiLinkSyntaxRenderer";
+import {
+    parseWikiLinkTarget,
+    resolveWikiLinkSubtarget,
+} from "./syntaxPlugins/wikiLinkSubtarget";
 import { isMermaidLanguage, renderMermaidToElement } from "./syntaxPlugins/mermaidRenderer";
 import {
     decodeReadModeBlockLatexHref,
@@ -83,6 +87,7 @@ type ReadModeWikiLinkPreviewData =
         kind: "markdown";
         resolvedPath: string;
         content: string;
+        revealLine?: number;
     }
     | {
         status: "ready";
@@ -118,6 +123,74 @@ function isWikiLinkPreviewModifierPressed(
 
 function buildReadModeWikiLinkPreviewCacheKey(currentFilePath: string, target: string): string {
     return `${resolveParentDirectory(currentFilePath)}::${target}`;
+}
+
+interface MarkdownAstNodeLike {
+    position?: {
+        start?: {
+            line?: number;
+        };
+    };
+}
+
+function sourceLineForMarkdownNode(
+    node: unknown,
+    sourceLineByRenderedLine: Array<number | null>,
+): number | null {
+    const renderedLine = (node as MarkdownAstNodeLike | undefined)?.position?.start?.line;
+    if (typeof renderedLine !== "number" || !Number.isFinite(renderedLine)) {
+        return null;
+    }
+
+    return sourceLineByRenderedLine[renderedLine - 1] ?? null;
+}
+
+function sourceLineDataAttributes(
+    node: unknown,
+    sourceLineByRenderedLine: Array<number | null>,
+): { "data-source-line"?: string } {
+    const sourceLine = sourceLineForMarkdownNode(node, sourceLineByRenderedLine);
+    return sourceLine === null
+        ? {}
+        : { "data-source-line": String(sourceLine) };
+}
+
+export function revealMarkdownReadViewLine(root: HTMLElement | null, line: number): boolean {
+    if (!root || !Number.isFinite(line)) {
+        return false;
+    }
+
+    const readerRoot = root.classList.contains("cm-tab-reader")
+        ? root
+        : root.querySelector<HTMLElement>(".cm-tab-reader");
+    if (!readerRoot) {
+        return false;
+    }
+
+    const targetLine = Math.max(1, Math.trunc(line));
+    const candidates = Array.from(readerRoot.querySelectorAll<HTMLElement>("[data-source-line]"))
+        .map((element) => ({
+            element,
+            line: Number.parseInt(element.dataset.sourceLine ?? "", 10),
+        }))
+        .filter((candidate) => Number.isFinite(candidate.line))
+        .sort((left, right) => left.line - right.line);
+
+    if (candidates.length === 0) {
+        return false;
+    }
+
+    const exactCandidate = candidates.find((candidate) => candidate.line === targetLine);
+    const nextCandidate = candidates.find((candidate) => candidate.line > targetLine);
+    const previousCandidates = candidates.filter((candidate) => candidate.line < targetLine);
+    const previousCandidate = previousCandidates[previousCandidates.length - 1];
+    const target = exactCandidate ?? nextCandidate ?? previousCandidate ?? null;
+    if (!target) {
+        return false;
+    }
+
+    target.element.scrollIntoView({ block: "start", inline: "nearest" });
+    return true;
 }
 
 /**
@@ -401,7 +474,10 @@ function ReadModeWikiLinkAnchor(props: ReadModeWikiLinkAnchorProps): ReactNode {
                     return;
                 }
 
-                const resolved = await resolveWikiLinkTarget(currentDirectory, wikiLinkTarget);
+                const parsedTarget = parseWikiLinkTarget(wikiLinkTarget);
+                const resolved = parsedTarget.noteTarget.length === 0 && parsedTarget.subtarget !== null
+                    ? { relativePath: currentFilePath.replace(/\\/g, "/") }
+                    : await resolveWikiLinkTarget(currentDirectory, parsedTarget.noteTarget);
                 if (requestSequenceRef.current !== requestToken) {
                     return;
                 }
@@ -418,11 +494,13 @@ function ReadModeWikiLinkAnchor(props: ReadModeWikiLinkAnchorProps): ReactNode {
                     return;
                 }
 
+                const subtarget = resolveWikiLinkSubtarget(file.content, parsedTarget.subtarget);
                 const readyData: ReadModeWikiLinkPreviewData = {
                     status: "ready",
                     kind: "markdown",
                     resolvedPath: resolved.relativePath,
                     content: file.content,
+                    revealLine: subtarget?.line,
                 };
                 readModeWikiLinkPreviewCache.set(cacheKey, readyData);
                 setPreviewData(readyData);
@@ -707,14 +785,6 @@ function ReadModeWikiLinkAnchor(props: ReadModeWikiLinkAnchorProps): ReactNode {
                         }}
                     >
                         <div className="cm-wikilink-preview">
-                            <div className="cm-wikilink-preview__header">
-                                <div className="cm-wikilink-preview__title">{children}</div>
-                                <div className="cm-wikilink-preview__path">
-                                    {previewData.status === "ready"
-                                        ? previewData.resolvedPath
-                                        : wikiLinkTarget}
-                                </div>
-                            </div>
                             <div
                                 className="cm-wikilink-preview__body"
                                 onScroll={(event) => {
@@ -747,6 +817,7 @@ function ReadModeWikiLinkAnchor(props: ReadModeWikiLinkAnchorProps): ReactNode {
                                             content={previewData.content}
                                             currentFilePath={previewData.resolvedPath}
                                             containerApi={containerApi}
+                                            initialRevealLine={previewData.revealLine ?? null}
                                         />
                                     </WikiLinkPreviewParentContext.Provider>
                                 ) : null}
@@ -770,6 +841,8 @@ interface MarkdownReadViewProps {
     currentFilePath: string;
     /** Dockview 容器 API。 */
     containerApi: WorkbenchContainerApi;
+    /** 阅读态中需要滚动定位的原始行号。 */
+    initialRevealLine?: number | null;
 }
 
 /**
@@ -780,10 +853,12 @@ interface MarkdownReadViewProps {
  */
 export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
     const parentPreviewId = useContext(WikiLinkPreviewParentContext);
+    const readerRootRef = useRef<HTMLDivElement | null>(null);
     const preparedMarkdown = useMemo(
         () => prepareMarkdownForReadMode(props.content),
         [props.content],
     );
+    const sourceLineByRenderedLine = preparedMarkdown.sourceLineByRenderedLine;
     const markdownComponents = useMemo<Components>(() => ({
         p: (componentProps) => {
             const { node, children, ...restProps } = componentProps;
@@ -792,14 +867,80 @@ export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
                 return <ReadModeLatex latex={blockLatexSource} displayMode />;
             }
 
-            return <p {...restProps}>{children}</p>;
+            return <p {...restProps} {...sourceLineDataAttributes(node, sourceLineByRenderedLine)}>{children}</p>;
         },
-        h1: (componentProps) => <h1 className="cm-rendered-header cm-rendered-header-h1" {...componentProps} />,
-        h2: (componentProps) => <h2 className="cm-rendered-header cm-rendered-header-h2" {...componentProps} />,
-        h3: (componentProps) => <h3 className="cm-rendered-header cm-rendered-header-h3" {...componentProps} />,
-        h4: (componentProps) => <h4 className="cm-rendered-header cm-rendered-header-h4" {...componentProps} />,
-        h5: (componentProps) => <h5 className="cm-rendered-header cm-rendered-header-h5" {...componentProps} />,
-        h6: (componentProps) => <h6 className="cm-rendered-header cm-rendered-header-h6" {...componentProps} />,
+        h1: (componentProps) => {
+            const { node, children, ...restProps } = componentProps;
+            return (
+                <h1
+                    className="cm-rendered-header cm-rendered-header-h1"
+                    {...restProps}
+                    {...sourceLineDataAttributes(node, sourceLineByRenderedLine)}
+                >
+                    {children}
+                </h1>
+            );
+        },
+        h2: (componentProps) => {
+            const { node, children, ...restProps } = componentProps;
+            return (
+                <h2
+                    className="cm-rendered-header cm-rendered-header-h2"
+                    {...restProps}
+                    {...sourceLineDataAttributes(node, sourceLineByRenderedLine)}
+                >
+                    {children}
+                </h2>
+            );
+        },
+        h3: (componentProps) => {
+            const { node, children, ...restProps } = componentProps;
+            return (
+                <h3
+                    className="cm-rendered-header cm-rendered-header-h3"
+                    {...restProps}
+                    {...sourceLineDataAttributes(node, sourceLineByRenderedLine)}
+                >
+                    {children}
+                </h3>
+            );
+        },
+        h4: (componentProps) => {
+            const { node, children, ...restProps } = componentProps;
+            return (
+                <h4
+                    className="cm-rendered-header cm-rendered-header-h4"
+                    {...restProps}
+                    {...sourceLineDataAttributes(node, sourceLineByRenderedLine)}
+                >
+                    {children}
+                </h4>
+            );
+        },
+        h5: (componentProps) => {
+            const { node, children, ...restProps } = componentProps;
+            return (
+                <h5
+                    className="cm-rendered-header cm-rendered-header-h5"
+                    {...restProps}
+                    {...sourceLineDataAttributes(node, sourceLineByRenderedLine)}
+                >
+                    {children}
+                </h5>
+            );
+        },
+        h6: (componentProps) => {
+            const { node, children, ...restProps } = componentProps;
+            return (
+                <h6
+                    className="cm-rendered-header cm-rendered-header-h6"
+                    {...restProps}
+                    {...sourceLineDataAttributes(node, sourceLineByRenderedLine)}
+                >
+                    {children}
+                </h6>
+            );
+        },
         strong: (componentProps) => <strong className="cm-rendered-bold" {...componentProps} />,
         em: (componentProps) => <em className="cm-rendered-italic" {...componentProps} />,
         del: (componentProps) => <del className="cm-rendered-strikethrough" {...componentProps} />,
@@ -855,12 +996,13 @@ export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
             );
         },
         li: (componentProps) => {
-            const { className, ...restProps } = componentProps;
+            const { node, className, ...restProps } = componentProps;
             return (
             <li
                 className={className
                     ? `cm-tab-reader-list-item ${className}`
                     : "cm-tab-reader-list-item"}
+                {...sourceLineDataAttributes(node, sourceLineByRenderedLine)}
                 {...restProps}
             />
             );
@@ -925,10 +1067,24 @@ export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
                 </a>
             );
         },
-    }), [parentPreviewId, props.containerApi, props.currentFilePath]);
+    }), [parentPreviewId, props.containerApi, props.currentFilePath, sourceLineByRenderedLine]);
+
+    useLayoutEffect(() => {
+        if (props.initialRevealLine === null || props.initialRevealLine === undefined) {
+            return;
+        }
+
+        const frameId = window.requestAnimationFrame(() => {
+            revealMarkdownReadViewLine(readerRootRef.current, props.initialRevealLine ?? 0);
+        });
+
+        return () => {
+            window.cancelAnimationFrame(frameId);
+        };
+    }, [props.initialRevealLine, preparedMarkdown.renderedMarkdown]);
 
     return (
-        <div className="cm-tab-reader">
+        <div ref={readerRootRef} className="cm-tab-reader">
             <div className="cm-tab-reader-content">
                 {preparedMarkdown.hasFrontmatter ? (
                     <ReadModeFrontmatterPanel frontmatter={preparedMarkdown.frontmatter} />

@@ -905,6 +905,11 @@ fn sanitize_ai_chat_message(message: AiChatHistoryMessage) -> Option<AiChatHisto
             .filter_map(sanitize_ai_chat_content_block)
             .collect(),
         interrupted_by_user: message.interrupted_by_user,
+        rollback_checkpoint_id: message
+            .rollback_checkpoint_id
+            .as_ref()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
     })
 }
 
@@ -1062,6 +1067,7 @@ mod tests {
                     reasoning_text: None,
                     content_blocks: vec![],
                     interrupted_by_user: false,
+                    rollback_checkpoint_id: Some("checkpoint-1".to_string()),
                 }],
                 protocol_messages: vec![],
             }],
@@ -1082,6 +1088,12 @@ mod tests {
         assert!(
             !loaded.conversations[0].messages[0].interrupted_by_user,
             "未中断消息不应被错误标记"
+        );
+        assert_eq!(
+            loaded.conversations[0].messages[0]
+                .rollback_checkpoint_id
+                .as_deref(),
+            Some("checkpoint-1")
         );
         assert!(root.join(".ofive/extensions/ai-chat/history.json").exists());
 
@@ -1120,6 +1132,7 @@ mod tests {
                         reasoning_text: None,
                         content_blocks: vec![],
                         interrupted_by_user: false,
+                        rollback_checkpoint_id: None,
                     },
                     AiChatHistoryMessage {
                         id: "message-2".to_string(),
@@ -1132,6 +1145,7 @@ mod tests {
                         reasoning_text: None,
                         content_blocks: vec![],
                         interrupted_by_user: false,
+                        rollback_checkpoint_id: None,
                     },
                 ],
                 protocol_messages: vec![AiChatHistoryMessage {
@@ -1145,6 +1159,7 @@ mod tests {
                     reasoning_text: None,
                     content_blocks: vec![],
                     interrupted_by_user: false,
+                    rollback_checkpoint_id: None,
                 }],
             }],
         };
@@ -1342,6 +1357,7 @@ mod tests {
                     reasoning_text: Some("first pass reasoning".to_string()),
                     content_blocks: vec![],
                     interrupted_by_user: true,
+                    rollback_checkpoint_id: None,
                 }],
                 protocol_messages: vec![],
             }],

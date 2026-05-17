@@ -18,13 +18,14 @@ import type {
     WorkbenchContainerApi,
     WorkbenchTabProps,
 } from "../../host/layout/workbenchContracts";
-import { ArrowUp, Bot, Check, ChevronDown, Copy, Plus, Sparkles, Timer, X } from "lucide-react";
+import { ArrowUp, Bot, Check, ChevronDown, Copy, Pencil, Plus, RotateCcw, Sparkles, Timer, X } from "lucide-react";
 import {
     getAiChatHistory,
     getAiToolCatalog,
     getAiVendorCatalog,
     getAiVendorModels,
     saveAiChatHistory,
+    restoreAiChatRollbackCheckpoint as restoreAiChatRollbackCheckpointInBackend,
     stopAiChatStream,
     startAiChatStream,
     submitAiChatConfirmation,
@@ -70,7 +71,15 @@ import {
     type AiChatRuntimeOpenTabSnapshot,
 } from "./aiChatShared";
 import { resolveParentDirectory } from "../markdown-codemirror/editor/pathUtils";
-import { resolveWikiLinkTarget } from "../../api/vaultApi";
+import {
+    deleteVaultCanvasFile,
+    deleteVaultMarkdownFile,
+    readVaultCanvasFile,
+    readVaultMarkdownFile,
+    resolveWikiLinkTarget,
+    saveVaultCanvasFile,
+    saveVaultMarkdownFile,
+} from "../../api/vaultApi";
 import { openFileInWorkbench } from "../../host/layout/openFileService";
 import {
     openProjectReaderWikiLinkTarget,
@@ -101,9 +110,16 @@ import {
     type AiChatSmoothedMessageState,
 } from "./aiChatStreamSmoothing";
 import {
+    groupAiChatToolCallRecords,
     reduceAiChatToolCallDebugEntry,
     type AiChatToolCallRecord,
+    type AiChatToolCallRecordGroup,
 } from "./aiChatToolCallRecords";
+import {
+    captureAiChatRollbackCheckpoint,
+    restoreAiChatRollbackCheckpoint,
+    type AiChatRollbackCheckpoint,
+} from "./aiChatRollback";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerPanel } from "../../host/registry/panelRegistry";
 import { registerTabComponent } from "../../host/registry/tabComponentRegistry";
@@ -115,6 +131,7 @@ import { registerSettingsItem, registerSettingsSection } from "../../host/settin
 import { registerPluginOwnedStore } from "../../host/store/storeRegistry";
 import { useVaultState } from "../../host/vault/vaultStore";
 import { useActiveEditor } from "../../host/editor/activeEditorStore";
+import { emitPersistedContentUpdatedEvent } from "../../host/events/appEventBus";
 import i18n from "../../i18n";
 import "./aiChatPlugin.css";
 
@@ -132,6 +149,7 @@ interface QuickPromptDefinition {
 let chatMessageSequence = 1;
 let chatDebugSequence = 1;
 let chatToolCallSequence = 1;
+let chatRollbackCheckpointSequence = 1;
 const AI_CHAT_CONFIRMATION_TOOL_NAME = "adk_request_confirmation";
 
 const QUICK_PROMPTS: QuickPromptDefinition[] = [
@@ -145,6 +163,16 @@ type ConfirmationApprovalScope = "once" | "conversation" | "operation";
 interface AiChatViewProps {
     panelContext?: PanelRenderContext | null;
     tabContainerApi?: WorkbenchContainerApi | null;
+}
+
+interface BeginAiChatTurnInput {
+    conversation: AiChatConversationRecord;
+    messageText: string;
+    sessionId: string;
+    visibleMessagesBeforeTurn: AiChatHistoryMessage[];
+    protocolMessagesBeforeTurn: AiChatHistoryMessage[];
+    checkpoint: AiChatRollbackCheckpoint;
+    userMessage?: AiChatHistoryMessage;
 }
 
 /**
@@ -190,6 +218,24 @@ function nextChatToolCallRecordId(): string {
     const nextId = `ai-chat-tool-call-${Date.now()}-${String(chatToolCallSequence)}`;
     chatToolCallSequence += 1;
     return nextId;
+}
+
+function nextChatRollbackCheckpointId(): string {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return `ai-chat-rollback-${crypto.randomUUID()}`;
+    }
+
+    const nextId = `ai-chat-rollback-${Date.now()}-${String(chatRollbackCheckpointSequence)}`;
+    chatRollbackCheckpointSequence += 1;
+    return nextId;
+}
+
+function createEmptyRollbackCheckpoint(checkpointId: string): AiChatRollbackCheckpoint {
+    return {
+        id: checkpointId,
+        createdAtUnixMs: Date.now(),
+        files: [],
+    };
 }
 
 /**
@@ -467,41 +513,89 @@ function AiChatToolCallRecordsView(props: AiChatToolCallRecordsViewProps): React
         return null;
     }
 
+    const groups = groupAiChatToolCallRecords(props.records);
+
     return (
         <div className="ai-chat-tool-call-list">
-            {props.records.map((record) => (
-                <details
-                    key={record.id}
-                    className={`ai-chat-tool-call status-${record.status}`}
-                >
-                    <summary className="ai-chat-tool-call-summary">
-                        <span className="ai-chat-tool-call-name">{record.capabilityId}</span>
-                        <span className={`ai-chat-tool-call-status status-${record.status}`}>
-                            {i18n.t(`aiChatPlugin.toolCall${record.status.charAt(0).toUpperCase()}${record.status.slice(1)}`)}
-                        </span>
-                    </summary>
-                    <div className="ai-chat-tool-call-details">
-                        {record.inputText ? (
-                            <div className="ai-chat-tool-call-detail-block">
-                                <div className="ai-chat-tool-call-detail-label">{i18n.t("aiChatPlugin.toolCallInput")}</div>
-                                <pre>{record.inputText}</pre>
-                            </div>
-                        ) : null}
-                        {record.outputText ? (
-                            <div className="ai-chat-tool-call-detail-block">
-                                <div className="ai-chat-tool-call-detail-label">{i18n.t("aiChatPlugin.toolCallOutput")}</div>
-                                <pre>{record.outputText}</pre>
-                            </div>
-                        ) : null}
-                        {record.errorText ? (
-                            <div className="ai-chat-tool-call-detail-block">
-                                <div className="ai-chat-tool-call-detail-label">{i18n.t("aiChatPlugin.toolCallError")}</div>
-                                <pre>{record.errorText}</pre>
-                            </div>
-                        ) : null}
-                    </div>
-                </details>
+            {groups.map((group) => (
+                <AiChatToolCallGroupView
+                    key={group.capabilityId}
+                    group={group}
+                />
             ))}
+        </div>
+    );
+}
+
+interface AiChatToolCallGroupViewProps {
+    group: AiChatToolCallRecordGroup;
+}
+
+function AiChatToolCallGroupView(props: AiChatToolCallGroupViewProps): ReactNode {
+    const { group } = props;
+
+    return (
+        <details
+            className={`ai-chat-tool-call-group status-${group.status}`}
+        >
+            <summary className="ai-chat-tool-call-summary">
+                <span className="ai-chat-tool-call-name">{group.capabilityId}</span>
+                <span className="ai-chat-tool-call-count">
+                    {i18n.t("aiChatPlugin.toolCallCount", { count: group.records.length })}
+                </span>
+                <span className={`ai-chat-tool-call-status status-${group.status}`}>
+                    {i18n.t(`aiChatPlugin.toolCall${group.status.charAt(0).toUpperCase()}${group.status.slice(1)}`)}
+                </span>
+            </summary>
+            <div className="ai-chat-tool-call-group-details">
+                {group.records.map((record, index) => (
+                    <AiChatToolCallRecordView
+                        key={record.id}
+                        record={record}
+                        index={index}
+                    />
+                ))}
+            </div>
+        </details>
+    );
+}
+
+interface AiChatToolCallRecordViewProps {
+    record: AiChatToolCallRecord;
+    index: number;
+}
+
+function AiChatToolCallRecordView(props: AiChatToolCallRecordViewProps): ReactNode {
+    const { record, index } = props;
+
+    return (
+        <div className={`ai-chat-tool-call status-${record.status}`}>
+            <div className="ai-chat-tool-call-instance-heading">
+                <span>{i18n.t("aiChatPlugin.toolCallInstance", { index: index + 1 })}</span>
+                <span className={`ai-chat-tool-call-status status-${record.status}`}>
+                    {i18n.t(`aiChatPlugin.toolCall${record.status.charAt(0).toUpperCase()}${record.status.slice(1)}`)}
+                </span>
+            </div>
+            <div className="ai-chat-tool-call-details">
+                {record.inputText ? (
+                    <div className="ai-chat-tool-call-detail-block">
+                        <div className="ai-chat-tool-call-detail-label">{i18n.t("aiChatPlugin.toolCallInput")}</div>
+                        <pre>{record.inputText}</pre>
+                    </div>
+                ) : null}
+                {record.outputText ? (
+                    <div className="ai-chat-tool-call-detail-block">
+                        <div className="ai-chat-tool-call-detail-label">{i18n.t("aiChatPlugin.toolCallOutput")}</div>
+                        <pre>{record.outputText}</pre>
+                    </div>
+                ) : null}
+                {record.errorText ? (
+                    <div className="ai-chat-tool-call-detail-block">
+                        <div className="ai-chat-tool-call-detail-label">{i18n.t("aiChatPlugin.toolCallError")}</div>
+                        <pre>{record.errorText}</pre>
+                    </div>
+                ) : null}
+            </div>
         </div>
     );
 }
@@ -535,8 +629,15 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     const [isModelSwitcherSaving, setIsModelSwitcherSaving] = useState(false);
     const [modelSwitcherFeedback, setModelSwitcherFeedback] = useState<string | null>(null);
     const [modelSwitcherFeedbackIsError, setModelSwitcherFeedbackIsError] = useState(false);
+    const [editingUserMessage, setEditingUserMessage] = useState<{
+        conversationId: string;
+        messageId: string;
+        draft: string;
+    } | null>(null);
+    const [isConversationReplaying, setIsConversationReplaying] = useState(false);
     const bindingsRef = useRef<Record<string, PendingStreamBinding>>({});
     const smoothedMessagesRef = useRef<Record<string, AiChatSmoothedMessageState>>({});
+    const rollbackCheckpointsRef = useRef<Record<string, AiChatRollbackCheckpoint>>({});
     const historyLoadedRef = useRef(false);
     const historySaveTimerRef = useRef<number | null>(null);
     const threadViewportRef = useRef<HTMLDivElement | null>(null);
@@ -918,6 +1019,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         && activeConversation
         && draft.trim()
         && !isActiveConversationStreaming
+        && !isConversationReplaying
         && isVendorConfigured,
     );
 
@@ -975,6 +1077,9 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             setToolCallRecordsByMessageId({});
             setSettings(null);
             setToolCatalog([]);
+            setEditingUserMessage(null);
+            setIsConversationReplaying(false);
+            rollbackCheckpointsRef.current = {};
             conversationAutoApprovalRef.current = new Set();
             historyLoadedRef.current = false;
             resetAiChatSettingsStore();
@@ -1009,6 +1114,9 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                 setDebugEntriesByConversation({});
                 setPendingConfirmations({});
                 setToolCallRecordsByMessageId({});
+                setEditingUserMessage(null);
+                setIsConversationReplaying(false);
+                rollbackCheckpointsRef.current = {};
                 conversationAutoApprovalRef.current = new Set();
                 setDebugFilter("all");
                 setDebugCopyState("idle");
@@ -1443,6 +1551,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         setActiveTab("chat");
         setConversationQuery("");
         setDraft("");
+        setEditingUserMessage(null);
         setError(null);
     };
 
@@ -1458,6 +1567,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         } : currentState);
         setActiveTab("chat");
         setConversationQuery("");
+        setEditingUserMessage(null);
         setError(null);
     };
 
@@ -1527,6 +1637,10 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                 confirmationId: confirmation.confirmationId,
                 confirmed: approved,
                 sessionId: confirmation.sessionId,
+                rollbackCheckpointId: historyState?.conversations
+                    .find((conversation) => conversation.id === confirmation.conversationId)
+                    ?.messages.find((message) => message.id === confirmation.assistantMessageId)
+                    ?.rollbackCheckpointId,
             });
             const currentBinding = bindingsRef.current[confirmation.conversationId];
             if (currentBinding) {
@@ -1695,6 +1809,228 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         }
     };
 
+    const captureCurrentRollbackCheckpoint = async (): Promise<AiChatRollbackCheckpoint> => {
+        return captureAiChatRollbackCheckpoint({
+            files,
+            readMarkdownFile: readVaultMarkdownFile,
+            readCanvasFile: readVaultCanvasFile,
+            checkpointId: nextChatRollbackCheckpointId(),
+            nowUnixMs: Date.now(),
+        });
+    };
+
+    const restoreRollbackCheckpoint = async (
+        checkpointId: string | undefined,
+    ): Promise<void> => {
+        const normalizedCheckpointId = checkpointId?.trim();
+        if (!normalizedCheckpointId) {
+            throw new Error(i18n.t("aiChatPlugin.rollbackUnavailable"));
+        }
+
+        let result: { deletedPaths: string[]; restoredPaths: string[]; skippedPaths?: string[] };
+        try {
+            result = await restoreAiChatRollbackCheckpointInBackend(normalizedCheckpointId);
+        } catch (backendError) {
+            const checkpoint = rollbackCheckpointsRef.current[normalizedCheckpointId];
+            const canUseLocalFallback = Boolean(checkpoint)
+                && !(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+            if (!checkpoint || !canUseLocalFallback) {
+                throw backendError instanceof Error
+                    ? backendError
+                    : new Error(String(backendError));
+            }
+            result = await restoreAiChatRollbackCheckpoint(checkpoint, {
+                files,
+                saveMarkdownFile: saveVaultMarkdownFile,
+                saveCanvasFile: saveVaultCanvasFile,
+                deleteMarkdownFile: deleteVaultMarkdownFile,
+                deleteCanvasFile: deleteVaultCanvasFile,
+            });
+        }
+
+        if (result.skippedPaths?.length) {
+            throw new Error(i18n.t("aiChatPlugin.rollbackIncomplete", {
+                paths: result.skippedPaths.join(", "),
+            }));
+        }
+
+        [...result.deletedPaths, ...result.restoredPaths].forEach((relativePath) => {
+            emitPersistedContentUpdatedEvent({ relativePath, source: "save" });
+        });
+    };
+
+    const clearMessageRuntimeState = (messageIds: string[]): void => {
+        if (messageIds.length === 0) {
+            return;
+        }
+
+        const messageIdSet = new Set(messageIds);
+        setPendingConfirmations((current) => {
+            const next = { ...current };
+            messageIdSet.forEach((messageId) => {
+                delete next[messageId];
+            });
+            return next;
+        });
+        setToolCallRecordsByMessageId((current) => {
+            const next = { ...current };
+            messageIdSet.forEach((messageId) => {
+                delete next[messageId];
+            });
+            return next;
+        });
+        commitSmoothedMessages((current) => {
+            let changed = false;
+            const next = { ...current };
+            messageIdSet.forEach((messageId) => {
+                if (messageId in next) {
+                    changed = true;
+                    delete next[messageId];
+                }
+            });
+            return changed ? next : current;
+        });
+    };
+
+    const resolveProtocolMessagesBeforeUserMessage = (
+        conversation: AiChatConversationRecord,
+        userMessageId: string,
+        visibleMessagesBeforeTurn: AiChatHistoryMessage[],
+    ): AiChatHistoryMessage[] => {
+        const protocolMessages = conversation.protocolMessages ?? [];
+        const userProtocolIndex = protocolMessages.findIndex((message) => {
+            return message.id === userMessageId;
+        });
+
+        if (userProtocolIndex >= 0) {
+            return protocolMessages.slice(0, userProtocolIndex);
+        }
+
+        return visibleMessagesBeforeTurn;
+    };
+
+    const buildContextSnapshotJson = async (): Promise<string> => {
+        const openTabs = buildOpenTabsSnapshot(props.panelContext);
+        const projectReaderProjects = await listProjectReaderProjects()
+            .then((response) => response.projects.map((project) => ({
+                id: project.id,
+                name: project.name,
+                rootPath: project.rootPath,
+            })))
+            .catch(() => []);
+
+        return serializeAiChatRuntimeContextSnapshot(
+            buildAiChatRuntimeContextSnapshot({
+                vaultPath: currentVaultPath,
+                activeFile: activeEditor,
+                openTabs,
+                files,
+                projectReaderProjects,
+                settings,
+            }),
+        );
+    };
+
+    const beginAiChatTurn = async (input: BeginAiChatTurnInput): Promise<void> => {
+        const trimmed = input.messageText.trim();
+        if (!trimmed || !currentVaultPath || !isVendorConfigured) {
+            return;
+        }
+
+        const contextSnapshotJson = await buildContextSnapshotJson();
+        const startedAt = Date.now();
+        const userMessage: AiChatHistoryMessage = input.userMessage
+            ? {
+                ...input.userMessage,
+                text: trimmed,
+                createdAtUnixMs: startedAt,
+                rollbackCheckpointId: input.checkpoint.id,
+            }
+            : {
+                id: nextChatMessageId(),
+                role: "user",
+                text: trimmed,
+                createdAtUnixMs: startedAt,
+                rollbackCheckpointId: input.checkpoint.id,
+            };
+        const assistantMessage: AiChatHistoryMessage = {
+            id: nextChatMessageId(),
+            role: "assistant",
+            text: "",
+            createdAtUnixMs: startedAt,
+            startedAtUnixMs: startedAt,
+            rollbackCheckpointId: input.checkpoint.id,
+        };
+        const history = input.protocolMessagesBeforeTurn.length
+            ? input.protocolMessagesBeforeTurn
+            : input.visibleMessagesBeforeTurn;
+
+        rollbackCheckpointsRef.current = {
+            ...rollbackCheckpointsRef.current,
+            [input.checkpoint.id]: input.checkpoint,
+        };
+
+        console.info("[aiChatPlugin] submit message", {
+            conversationId: input.conversation.id,
+            sessionId: input.sessionId,
+            messageLength: trimmed.length,
+            activeFilePath: activeEditor?.path ?? null,
+        });
+
+        setError(null);
+        setActiveTab("chat");
+        updateConversation(input.conversation.id, (conversation) => ({
+            ...conversation,
+            sessionId: input.sessionId,
+            updatedAtUnixMs: Date.now(),
+            messages: [
+                ...input.visibleMessagesBeforeTurn,
+                userMessage,
+                assistantMessage,
+            ],
+            protocolMessages: [
+                ...input.protocolMessagesBeforeTurn,
+                createProtocolUserTextMessage(userMessage),
+            ],
+        }));
+
+        setConversationBinding(input.conversation.id, createPendingStreamBinding(
+            input.conversation.id,
+            input.sessionId,
+            assistantMessage.id,
+        ));
+
+        try {
+            const response = await startAiChatStream({
+                message: trimmed,
+                sessionId: input.sessionId,
+                history,
+                contextSnapshotJson,
+                rollbackCheckpointId: input.checkpoint.id,
+            });
+            const currentBinding = bindingsRef.current[input.conversation.id];
+            if (currentBinding && !currentBinding.streamId) {
+                const nextBinding = {
+                    ...currentBinding,
+                    streamId: response.streamId,
+                };
+                setConversationBinding(input.conversation.id, nextBinding);
+                if (nextBinding.stopRequested) {
+                    void stopAiChatStream(response.streamId).catch((stopError) => {
+                        setError(stopError instanceof Error ? stopError.message : String(stopError));
+                        updateConversationBinding(input.conversation.id, (binding) => ({
+                            ...binding,
+                            stopRequested: false,
+                        }));
+                    });
+                }
+            }
+        } catch (submitError) {
+            setError(submitError instanceof Error ? submitError.message : String(submitError));
+            setConversationBinding(input.conversation.id, createEmptyPendingStreamBinding());
+        }
+    };
+
     /**
      * @function handleSubmit
      * @description 提交当前输入并启动流式聊天。
@@ -1705,102 +2041,179 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         }
 
         const trimmed = draft.trim();
-        if (!trimmed || isActiveConversationStreaming || !currentVaultPath || !isVendorConfigured) {
+        if (
+            !trimmed
+            || isActiveConversationStreaming
+            || isConversationReplaying
+            || !currentVaultPath
+            || !isVendorConfigured
+        ) {
             return;
         }
 
-        const openTabs = buildOpenTabsSnapshot(props.panelContext);
-        const projectReaderProjects = await listProjectReaderProjects()
-            .then((response) => response.projects.map((project) => ({
-                id: project.id,
-                name: project.name,
-                rootPath: project.rootPath,
-            })))
-            .catch(() => []);
-        const contextSnapshotJson = serializeAiChatRuntimeContextSnapshot(
-            buildAiChatRuntimeContextSnapshot({
-                vaultPath: currentVaultPath,
-                activeFile: activeEditor,
-                openTabs,
-                files,
-                projectReaderProjects,
-                settings,
-            }),
-        );
-        const startedAt = Date.now();
-
-        console.info("[aiChatPlugin] submit message", {
-            conversationId: activeConversation.id,
-            sessionId: activeConversation.sessionId,
-            messageLength: trimmed.length,
-            openTabCount: openTabs.length,
-            activeFilePath: activeEditor?.path ?? null,
-        });
-
-        const userMessage: AiChatHistoryMessage = {
-            id: nextChatMessageId(),
-            role: "user",
-            text: trimmed,
-            createdAtUnixMs: startedAt,
-        };
-        const assistantMessage: AiChatHistoryMessage = {
-            id: nextChatMessageId(),
-            role: "assistant",
-            text: "",
-            createdAtUnixMs: startedAt,
-            startedAtUnixMs: startedAt,
-        };
-        const history = activeConversation.protocolMessages?.length
-            ? activeConversation.protocolMessages
-            : activeConversation.messages;
-
-        setDraft("");
-        setError(null);
-        setActiveTab("chat");
-        updateConversation(activeConversation.id, (conversation) => ({
-            ...conversation,
-            updatedAtUnixMs: Date.now(),
-            messages: [...conversation.messages, userMessage, assistantMessage],
-            protocolMessages: [
-                ...(conversation.protocolMessages ?? []),
-                createProtocolUserTextMessage(userMessage),
-            ],
-        }));
-
-        setConversationBinding(activeConversation.id, createPendingStreamBinding(
-            activeConversation.id,
-            activeConversation.sessionId,
-            assistantMessage.id,
-        ));
-
         try {
-            const response = await startAiChatStream({
-                message: trimmed,
+            const checkpoint = await captureCurrentRollbackCheckpoint();
+            setDraft("");
+            await beginAiChatTurn({
+                conversation: activeConversation,
+                messageText: trimmed,
                 sessionId: activeConversation.sessionId,
-                history,
-                contextSnapshotJson,
+                visibleMessagesBeforeTurn: activeConversation.messages,
+                protocolMessagesBeforeTurn: activeConversation.protocolMessages ?? [],
+                checkpoint,
             });
-            const currentBinding = bindingsRef.current[activeConversation.id];
-            if (currentBinding && !currentBinding.streamId) {
-                const nextBinding = {
-                    ...currentBinding,
-                    streamId: response.streamId,
-                };
-                setConversationBinding(activeConversation.id, nextBinding);
-                if (nextBinding.stopRequested) {
-                    void stopAiChatStream(response.streamId).catch((stopError) => {
-                        setError(stopError instanceof Error ? stopError.message : String(stopError));
-                        updateConversationBinding(activeConversation.id, (binding) => ({
-                            ...binding,
-                            stopRequested: false,
-                        }));
-                    });
-                }
-            }
         } catch (submitError) {
             setError(submitError instanceof Error ? submitError.message : String(submitError));
-            setConversationBinding(activeConversation.id, createEmptyPendingStreamBinding());
         }
+    };
+
+    const handleCopyMessage = async (message: AiChatHistoryMessage): Promise<void> => {
+        const text = message.text.trim();
+        if (!text) {
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch (copyError) {
+            setError(i18n.t("aiChatPlugin.copyMessageFailed"));
+            console.error("[ai-chat] copy message failed", {
+                messageId: message.id,
+                error: copyError,
+            });
+        }
+    };
+
+    const handleRetryAssistantMessage = async (
+        assistantMessage: AiChatHistoryMessage,
+    ): Promise<void> => {
+        if (!activeConversation || isActiveConversationStreaming || isConversationReplaying) {
+            return;
+        }
+
+        const assistantIndex = activeConversation.messages.findIndex((message) => {
+            return message.id === assistantMessage.id;
+        });
+        if (assistantIndex <= 0) {
+            return;
+        }
+
+        const userIndex = assistantIndex - 1;
+        const userMessage = activeConversation.messages[userIndex];
+        if (!userMessage || userMessage.role !== "user") {
+            return;
+        }
+
+        setIsConversationReplaying(true);
+        try {
+            const rollbackCheckpointId = assistantMessage.rollbackCheckpointId ?? userMessage.rollbackCheckpointId;
+            await restoreRollbackCheckpoint(rollbackCheckpointId);
+            const visibleMessagesBeforeTurn = activeConversation.messages.slice(0, userIndex);
+            const protocolMessagesBeforeTurn = resolveProtocolMessagesBeforeUserMessage(
+                activeConversation,
+                userMessage.id,
+                visibleMessagesBeforeTurn,
+            );
+            clearMessageRuntimeState(activeConversation.messages.slice(userIndex + 1).map((message) => message.id));
+            if (!rollbackCheckpointId) {
+                throw new Error(i18n.t("aiChatPlugin.rollbackUnavailable"));
+            }
+            const checkpoint = rollbackCheckpointsRef.current[rollbackCheckpointId]
+                ?? createEmptyRollbackCheckpoint(rollbackCheckpointId);
+            await beginAiChatTurn({
+                conversation: activeConversation,
+                messageText: userMessage.text,
+                sessionId: createConversationSessionId(activeConversation.id),
+                visibleMessagesBeforeTurn,
+                protocolMessagesBeforeTurn,
+                userMessage,
+                checkpoint,
+            });
+        } catch (retryError) {
+            setError(retryError instanceof Error ? retryError.message : String(retryError));
+        } finally {
+            setIsConversationReplaying(false);
+        }
+    };
+
+    const handleStartEditUserMessage = (message: AiChatHistoryMessage): void => {
+        if (!activeConversation || isActiveConversationStreaming || isConversationReplaying) {
+            return;
+        }
+
+        setEditingUserMessage({
+            conversationId: activeConversation.id,
+            messageId: message.id,
+            draft: message.text,
+        });
+    };
+
+    const handleCancelEditUserMessage = (): void => {
+        setEditingUserMessage(null);
+    };
+
+    const handleSubmitEditedUserMessage = async (): Promise<void> => {
+        if (!activeConversation || !editingUserMessage || isActiveConversationStreaming || isConversationReplaying) {
+            return;
+        }
+
+        const editedText = editingUserMessage.draft.trim();
+        if (!editedText) {
+            return;
+        }
+
+        const userIndex = activeConversation.messages.findIndex((message) => {
+            return message.id === editingUserMessage.messageId;
+        });
+        const userMessage = activeConversation.messages[userIndex];
+        if (userIndex < 0 || !userMessage || userMessage.role !== "user") {
+            return;
+        }
+
+        setIsConversationReplaying(true);
+        try {
+            const rollbackCheckpointId = userMessage.rollbackCheckpointId;
+            await restoreRollbackCheckpoint(rollbackCheckpointId);
+            const visibleMessagesBeforeTurn = activeConversation.messages.slice(0, userIndex);
+            const protocolMessagesBeforeTurn = resolveProtocolMessagesBeforeUserMessage(
+                activeConversation,
+                userMessage.id,
+                visibleMessagesBeforeTurn,
+            );
+            clearMessageRuntimeState(activeConversation.messages.slice(userIndex).map((message) => message.id));
+            if (!rollbackCheckpointId) {
+                throw new Error(i18n.t("aiChatPlugin.rollbackUnavailable"));
+            }
+            const checkpoint = rollbackCheckpointsRef.current[rollbackCheckpointId]
+                ?? createEmptyRollbackCheckpoint(rollbackCheckpointId);
+            setEditingUserMessage(null);
+            await beginAiChatTurn({
+                conversation: activeConversation,
+                messageText: editedText,
+                sessionId: createConversationSessionId(activeConversation.id),
+                visibleMessagesBeforeTurn,
+                protocolMessagesBeforeTurn,
+                userMessage,
+                checkpoint,
+            });
+        } catch (editError) {
+            setError(editError instanceof Error ? editError.message : String(editError));
+        } finally {
+            setIsConversationReplaying(false);
+        }
+    };
+
+    const handleEditMessageKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+        if (!shouldSubmitAiChatComposer({
+            key: event.key,
+            shiftKey: event.shiftKey,
+            nativeEvent: event.nativeEvent,
+        })) {
+            return;
+        }
+
+        event.preventDefault();
+        void handleSubmitEditedUserMessage();
     };
 
     /**
@@ -1998,6 +2411,10 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                             const durationLabel = message.role === "assistant"
                                 ? formatAiChatDuration(message.durationMs)
                                 : null;
+                            const isEditingThisUserMessage = message.role === "user"
+                                && editingUserMessage?.conversationId === activeConversation.id
+                                && editingUserMessage.messageId === message.id;
+                            const messageActionsDisabled = isActiveConversationStreaming || isConversationReplaying;
 
                             return (
                                 <div key={message.id} className={`ai-chat-message ${message.role}`}>
@@ -2022,17 +2439,61 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                                                 </div>
                                             ) : null}
                                         </div>
-                                        <div className="ai-chat-message-bubble">
-                                            <AiChatMessageMarkdown
-                                                content={renderedMessageText}
-                                                reasoningContent={renderedReasoningText}
-                                                role={message.role}
-                                                streaming={isStreamingMessage}
-                                                onOpenWikiLinkTarget={(target) => {
-                                                    void handleOpenWikiLinkTarget(target);
+                                        {isEditingThisUserMessage ? (
+                                            <form
+                                                className="ai-chat-message-edit-form"
+                                                onSubmit={(event) => {
+                                                    event.preventDefault();
+                                                    void handleSubmitEditedUserMessage();
                                                 }}
-                                            />
-                                        </div>
+                                            >
+                                                <textarea
+                                                    className="ai-chat-message-edit-input"
+                                                    value={editingUserMessage.draft}
+                                                    disabled={messageActionsDisabled}
+                                                    onKeyDown={handleEditMessageKeyDown}
+                                                    onChange={(event) => {
+                                                        setEditingUserMessage((current) => current
+                                                            && current.messageId === message.id
+                                                            ? { ...current, draft: event.target.value }
+                                                            : current);
+                                                    }}
+                                                />
+                                                <div className="ai-chat-message-edit-actions">
+                                                    <button
+                                                        type="submit"
+                                                        className="ai-chat-message-action-button"
+                                                        disabled={messageActionsDisabled || !editingUserMessage.draft.trim()}
+                                                        aria-label={i18n.t("aiChatPlugin.submitEditedMessage")}
+                                                        title={i18n.t("aiChatPlugin.submitEditedMessage")}
+                                                    >
+                                                        <Check size={13} strokeWidth={2} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="ai-chat-message-action-button"
+                                                        disabled={messageActionsDisabled}
+                                                        aria-label={i18n.t("aiChatPlugin.cancelEditMessage")}
+                                                        title={i18n.t("aiChatPlugin.cancelEditMessage")}
+                                                        onClick={handleCancelEditUserMessage}
+                                                    >
+                                                        <X size={13} strokeWidth={2} />
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        ) : (
+                                            <div className="ai-chat-message-bubble">
+                                                <AiChatMessageMarkdown
+                                                    content={renderedMessageText}
+                                                    reasoningContent={renderedReasoningText}
+                                                    role={message.role}
+                                                    streaming={isStreamingMessage}
+                                                    onOpenWikiLinkTarget={(target) => {
+                                                        void handleOpenWikiLinkTarget(target);
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
                                         {confirmation ? (
                                             <div className="ai-chat-confirmation-card">
                                                 <div className="ai-chat-confirmation-meta">
@@ -2102,6 +2563,49 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                                         {message.role === "assistant" ? (
                                             <AiChatToolCallRecordsView records={toolCallRecords} />
                                         ) : null}
+                                        <div className="ai-chat-message-actions">
+                                            {message.role === "assistant" ? (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        className="ai-chat-message-action-button"
+                                                        disabled={!message.text.trim()}
+                                                        aria-label={i18n.t("aiChatPlugin.copyMessage")}
+                                                        title={i18n.t("aiChatPlugin.copyMessage")}
+                                                        onClick={() => {
+                                                            void handleCopyMessage(message);
+                                                        }}
+                                                    >
+                                                        <Copy size={13} strokeWidth={1.9} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="ai-chat-message-action-button"
+                                                        disabled={messageActionsDisabled || isStreamingMessage}
+                                                        aria-label={i18n.t("aiChatPlugin.retryMessage")}
+                                                        title={i18n.t("aiChatPlugin.retryMessage")}
+                                                        onClick={() => {
+                                                            void handleRetryAssistantMessage(message);
+                                                        }}
+                                                    >
+                                                        <RotateCcw size={13} strokeWidth={1.9} />
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    className="ai-chat-message-action-button"
+                                                    disabled={messageActionsDisabled || isEditingThisUserMessage}
+                                                    aria-label={i18n.t("aiChatPlugin.editMessage")}
+                                                    title={i18n.t("aiChatPlugin.editMessage")}
+                                                    onClick={() => {
+                                                        handleStartEditUserMessage(message);
+                                                    }}
+                                                >
+                                                    <Pencil size={13} strokeWidth={1.9} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -2176,7 +2680,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                     className="ai-chat-input"
                     value={draft}
                     placeholder={i18n.t("aiChatPlugin.draftPlaceholder")}
-                    disabled={!currentVaultPath || !activeConversation}
+                    disabled={!currentVaultPath || !activeConversation || isConversationReplaying}
                     onKeyDown={handleInputKeyDown}
                     onChange={(event) => {
                         setDraft(event.target.value);
@@ -2251,7 +2755,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                             type="button"
                             className="ai-chat-send-button"
                             aria-busy={isActiveConversationStopping}
-                            disabled={isActiveConversationStreaming ? isActiveConversationStopping : !canSend}
+                            disabled={isConversationReplaying || (isActiveConversationStreaming ? isActiveConversationStopping : !canSend)}
                             onClick={() => {
                                 if (isActiveConversationStreaming) {
                                     void handleStopConversation();

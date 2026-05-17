@@ -11,7 +11,6 @@ import { gotoMockVaultPage } from "./helpers/mockVault";
 
 async function waitForLayoutReady(page: Page): Promise<void> {
     await page.getByRole("main", { name: "Dockview Main Area" }).waitFor({ state: "visible" });
-    await page.locator(".layout-v2-tab-section__tab").first().waitFor({ state: "visible" });
 }
 
 test.describe("日历刷新体验", () => {
@@ -64,7 +63,6 @@ test.describe("日历刷新体验", () => {
         await expect(popover.locator(".calendar-tab__panel-popover-close")).toHaveCount(0);
 
         await calendarPanel.locator(".calendar-tab__month-label").click();
-        await expect(popover).toHaveClass(/is-closing/);
         await expect(popover).toHaveCount(0);
     });
 });

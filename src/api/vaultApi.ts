@@ -59,6 +59,8 @@ export interface AgentSkillSummary {
     directoryRelativePath: string;
     files: AgentSkillFileEntry[];
     valid: boolean;
+    builtIn?: boolean;
+    readOnly?: boolean;
     error?: string | null;
 }
 
@@ -456,6 +458,46 @@ let browserFallbackVaultPath = "";
 const BROWSER_FALLBACK_VAULT_CONFIG_STORAGE_KEY_PREFIX = "ofive:browser-fallback:vault-config:";
 let browserMockMarkdownContentsPromise: Promise<Record<string, string>> | null = null;
 const browserFallbackAgentSkillFiles = new Map<string, string>();
+
+export const BUILTIN_WIKILINK_SKILL_NAME = "ofive-wikilink-syntax";
+
+const BUILTIN_WIKILINK_SKILL_CONTENT = `---
+name: ofive-wikilink-syntax
+description: Explain ofive WikiLink syntax for notes, anchors, paragraphs, lines, and external project code references.
+---
+# ofive-wikilink-syntax
+
+Use this skill when the user asks about, writes, fixes, or reviews ofive WikiLinks.
+
+## Note WikiLinks
+
+\`\`\`text
+[[Daily Note]]
+[[Daily Note|today]]
+[[Daily Note#L42]]
+[[Daily Note#line:42]]
+[[Daily Note#Decision Log]]
+[[Daily Note#title:Decision Log]]
+[[Daily Note#P3]]
+[[Daily Note#paragraph:3]]
+[[#Decision Log]]
+\`\`\`
+
+## External Project Code References
+
+\`\`\`text
+[[projectName:/path/to/file:line:column-endLine:endColumn|label]]
+[[mock-ofive:/src/main.ts:7:1-9:1|createMainRuntime]]
+[[ofive:/src/plugins/ai-chat/aiChatPlugin.tsx:1713|AI Chat context]]
+\`\`\`
+
+## Guidance
+
+- Prefer line or line-column ranges for code references.
+- Prefer title targets when linking to a Markdown heading.
+- Prefer paragraph targets when the destination is prose without a stable heading.
+- Preview and click behavior should resolve to the same target position.
+`;
 
 function getBrowserFallbackConfigReadDelayMs(): number {
     if (typeof window === "undefined") {
@@ -1452,8 +1494,60 @@ function normalizeAgentSkillName(skillName: string): string {
     return skillName.trim();
 }
 
+function normalizeAgentSkillFilePath(relativePath: string): string {
+    return normalizeSlashPath(relativePath).replace(/^\/+/, "");
+}
+
+function isBuiltinAgentSkillName(skillName: string): boolean {
+    return normalizeAgentSkillName(skillName) === BUILTIN_WIKILINK_SKILL_NAME;
+}
+
+function getBuiltinAgentSkillSummary(): AgentSkillSummary {
+    return {
+        name: BUILTIN_WIKILINK_SKILL_NAME,
+        description: extractBrowserAgentSkillDescription(BUILTIN_WIKILINK_SKILL_CONTENT),
+        directoryRelativePath: `.ofive/skills/${BUILTIN_WIKILINK_SKILL_NAME}`,
+        files: [{
+            relativePath: "SKILL.md",
+            sizeBytes: new Blob([BUILTIN_WIKILINK_SKILL_CONTENT]).size,
+        }],
+        valid: true,
+        builtIn: true,
+        readOnly: true,
+        error: null,
+    };
+}
+
+function withBuiltinAgentSkills(skills: AgentSkillSummary[]): AgentSkillSummary[] {
+    const builtin = getBuiltinAgentSkillSummary();
+    return [
+        builtin,
+        ...skills.filter((skill) => skill.name !== builtin.name),
+    ].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function readBuiltinAgentSkillFile(
+    skillName: string,
+    relativePath: string,
+): ReadAgentSkillFileResponse | null {
+    if (!isBuiltinAgentSkillName(skillName)) {
+        return null;
+    }
+
+    const normalizedRelativePath = normalizeAgentSkillFilePath(relativePath);
+    if (normalizedRelativePath !== "SKILL.md") {
+        throw new Error("Built-in SKILL file does not exist.");
+    }
+
+    return {
+        skillName: BUILTIN_WIKILINK_SKILL_NAME,
+        relativePath: normalizedRelativePath,
+        content: BUILTIN_WIKILINK_SKILL_CONTENT,
+    };
+}
+
 function buildBrowserAgentSkillKey(skillName: string, relativePath: string): string {
-    return `${normalizeAgentSkillName(skillName)}/${normalizeSlashPath(relativePath).replace(/^\/+/, "")}`;
+    return `${normalizeAgentSkillName(skillName)}/${normalizeAgentSkillFilePath(relativePath)}`;
 }
 
 function parseAgentSkillVaultPath(relativePath: string): { skillName: string; filePath: string } | null {
@@ -1499,7 +1593,7 @@ export async function listAgentSkills(): Promise<AgentSkillSummary[]> {
             });
             bySkill.set(skillName, files);
         }
-        return Array.from(bySkill.entries())
+        const skills = Array.from(bySkill.entries())
             .map(([name, files]) => {
                 const skillContent = browserFallbackAgentSkillFiles.get(buildBrowserAgentSkillKey(name, "SKILL.md")) ?? "";
                 return {
@@ -1512,9 +1606,11 @@ export async function listAgentSkills(): Promise<AgentSkillSummary[]> {
                 };
             })
             .sort((left, right) => left.name.localeCompare(right.name));
+        return withBuiltinAgentSkills(skills);
     }
 
-    return invoke<AgentSkillSummary[]>("list_agent_skills");
+    const skills = await invoke<AgentSkillSummary[]>("list_agent_skills");
+    return withBuiltinAgentSkills(skills);
 }
 
 /**
@@ -1522,6 +1618,10 @@ export async function listAgentSkills(): Promise<AgentSkillSummary[]> {
  * @description 创建当前仓库中的 Agent SKILL。
  */
 export async function createAgentSkill(skillName: string, description: string): Promise<AgentSkillSummary> {
+    if (isBuiltinAgentSkillName(skillName)) {
+        throw new Error("Built-in SKILLs cannot be created or replaced.");
+    }
+
     if (!isTauriRuntime()) {
         const normalizedName = normalizeAgentSkillName(skillName);
         const content = `---\nname: ${normalizedName}\ndescription: ${description.trim()}\n---\n# ${normalizedName}\n\nUse this skill when ${description.trim()}\n`;
@@ -1544,10 +1644,15 @@ export async function readAgentSkillFile(
     skillName: string,
     relativePath: string,
 ): Promise<ReadAgentSkillFileResponse> {
+    const builtinFile = readBuiltinAgentSkillFile(skillName, relativePath);
+    if (builtinFile) {
+        return builtinFile;
+    }
+
     if (!isTauriRuntime()) {
         return {
             skillName: normalizeAgentSkillName(skillName),
-            relativePath: normalizeSlashPath(relativePath).replace(/^\/+/, ""),
+            relativePath: normalizeAgentSkillFilePath(relativePath),
             content: browserFallbackAgentSkillFiles.get(buildBrowserAgentSkillKey(skillName, relativePath)) ?? "",
         };
     }
@@ -1567,13 +1672,17 @@ export async function writeAgentSkillFile(
     relativePath: string,
     content: string,
 ): Promise<WriteAgentSkillFileResponse> {
+    if (isBuiltinAgentSkillName(skillName)) {
+        throw new Error("Built-in SKILLs are read-only.");
+    }
+
     if (!isTauriRuntime()) {
         const key = buildBrowserAgentSkillKey(skillName, relativePath);
         const created = !browserFallbackAgentSkillFiles.has(key);
         browserFallbackAgentSkillFiles.set(key, content);
         return {
             skillName: normalizeAgentSkillName(skillName),
-            relativePath: normalizeSlashPath(relativePath).replace(/^\/+/, ""),
+            relativePath: normalizeAgentSkillFilePath(relativePath),
             created,
         };
     }
@@ -2592,6 +2701,8 @@ export async function deleteVaultDirectory(relativePath: string): Promise<void> 
  */
 export async function deleteVaultMarkdownFile(relativePath: string): Promise<void> {
     if (!isTauriRuntime()) {
+        const markdownContents = await getBrowserMockMarkdownContents();
+        delete markdownContents[normalizeSlashPath(relativePath)];
         return;
     }
 

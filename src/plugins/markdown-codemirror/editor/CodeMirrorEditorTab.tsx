@@ -66,7 +66,7 @@ import {
     canExecuteEditorNativeCommandInMode,
     toggleEditorDisplayMode,
 } from "./editorModePolicy";
-import { MarkdownReadView } from "./MarkdownReadView";
+import { MarkdownReadView, revealMarkdownReadViewLine } from "./MarkdownReadView";
 import {
     updateEditorDisplayMode,
     useEditorDisplayModeState,
@@ -324,6 +324,12 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
     const initialCursorOffset = typeof props.params.initialCursorOffset === "number"
         ? props.params.initialCursorOffset
         : null;
+    const initialRevealLine = typeof props.params.initialRevealLine === "number"
+        ? props.params.initialRevealLine
+        : null;
+    const isForcedReadMode = props.params.forceDisplayMode === "read"
+        || props.params.initialDisplayMode === "read";
+    const isReadOnlyTab = props.params.readOnly === true || isForcedReadMode;
     const initialDoc = useMemo(() => {
         const content = props.params.content;
         if (typeof content === "string") {
@@ -375,11 +381,12 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         () => evaluateReadModeRenderGuard(readContent),
         [readContent],
     );
+    const requestedDisplayMode: EditorDisplayMode = isForcedReadMode ? "read" : displayMode;
     const effectiveDisplayMode: EditorDisplayMode =
-        displayMode === "read" && readModeGuard.canRenderReadMode
+        requestedDisplayMode === "read" && (isForcedReadMode || readModeGuard.canRenderReadMode)
             ? "read"
             : "edit";
-    const isReadModeGuardBlocked = displayMode === "read" && !readModeGuard.canRenderReadMode;
+    const isReadModeGuardBlocked = !isForcedReadMode && requestedDisplayMode === "read" && !readModeGuard.canRenderReadMode;
     const isReadingMode = effectiveDisplayMode === "read";
     const modeToggleLabel = displayMode === "read"
         ? i18n.t("editor.switchToEditMode")
@@ -597,10 +604,11 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         editorTabOutEnabled,
         editorTabRestoreMode,
         editorLineNumbers,
-        initialAutoFocus: props.params.autoFocus === true,
+        initialAutoFocus: !isReadOnlyTab && props.params.autoFocus === true,
         initialCursorOffset: typeof props.params.initialCursorOffset === "number"
             ? props.params.initialCursorOffset
             : null,
+        readOnly: isReadOnlyTab,
         hasAppliedInitialAutoFocusRef,
         articleSnapshot,
         setReadContent,
@@ -774,6 +782,10 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
             });
             if (displayModeRef.current === "edit") {
                 view.focus();
+            } else {
+                window.requestAnimationFrame(() => {
+                    revealMarkdownReadViewLine(tabRootRef.current, safeLineNumber);
+                });
             }
 
             console.info("[editor] reveal requested event handled", {
@@ -1068,7 +1080,12 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                             value={titleDraft}
                             spellCheck={false}
                             disabled={isTitleRenaming}
+                            readOnly={isReadOnlyTab}
+                            aria-readonly={isReadOnlyTab}
                             onChange={(event) => {
+                                if (isReadOnlyTab) {
+                                    return;
+                                }
                                 setTitleDraft(event.target.value);
                             }}
                             onCompositionStart={() => {
@@ -1078,6 +1095,9 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                                 titleImeCompositionGuard.handleCompositionEnd();
                             }}
                             onBlur={() => {
+                                if (isReadOnlyTab) {
+                                    return;
+                                }
                                 if (shouldDeferTitleBlurCommit()) {
                                     return;
                                 }
@@ -1086,6 +1106,9 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                             }}
                             onKeyDownCapture={(event) => {
                                 event.stopPropagation();
+                                if (isReadOnlyTab) {
+                                    return;
+                                }
 
                                 if (shouldSubmitPlainEnter({
                                     key: event.key,
@@ -1103,20 +1126,22 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                                 }
                             }}
                         />
-                        <button
-                            type="button"
-                            className={`cm-tab-mode-toggle ${displayMode === "read" ? "is-reading" : "is-editing"}`}
-                            title={modeToggleLabel}
-                            aria-label={modeToggleLabel}
-                            aria-pressed={displayMode === "read"}
-                            onClick={() => {
-                                updateEditorDisplayMode(toggleEditorDisplayMode(displayMode));
-                            }}
-                        >
-                            {displayMode === "read"
-                                ? <SquarePen size={16} strokeWidth={1.8} aria-hidden="true" />
-                                : <BookOpen size={16} strokeWidth={1.8} aria-hidden="true" />}
-                        </button>
+                        {!isReadOnlyTab ? (
+                            <button
+                                type="button"
+                                className={`cm-tab-mode-toggle ${displayMode === "read" ? "is-reading" : "is-editing"}`}
+                                title={modeToggleLabel}
+                                aria-label={modeToggleLabel}
+                                aria-pressed={displayMode === "read"}
+                                onClick={() => {
+                                    updateEditorDisplayMode(toggleEditorDisplayMode(displayMode));
+                                }}
+                            >
+                                {displayMode === "read"
+                                    ? <SquarePen size={16} strokeWidth={1.8} aria-hidden="true" />
+                                    : <BookOpen size={16} strokeWidth={1.8} aria-hidden="true" />}
+                            </button>
+                        ) : null}
                     </div>
                 </div>
                 {isReadModeGuardBlocked ? (
@@ -1135,6 +1160,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                         content={readContent}
                         currentFilePath={displayFilePath}
                         containerApi={props.containerApi}
+                        initialRevealLine={initialRevealLine}
                     />
                 ) : null}
             </div>

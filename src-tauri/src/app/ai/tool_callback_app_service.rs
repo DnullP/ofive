@@ -18,7 +18,7 @@ use tauri::AppHandle;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-use crate::app::ai::tool_cli_app_service;
+use crate::app::ai::{edit_rollback_app_service, tool_cli_app_service};
 use crate::domain::ai::sidecar_contract::{
     SidecarCapabilityCallRequest, SidecarCapabilityCallResult,
 };
@@ -30,6 +30,7 @@ struct ToolCallbackServerState {
     app_handle: AppHandle,
     vault_root: PathBuf,
     callback_token: String,
+    rollback_checkpoint_id: Option<String>,
 }
 
 /// sidecar callback 句柄。
@@ -54,6 +55,7 @@ impl SidecarCapabilityCallbackHandle {
 pub(crate) async fn start_sidecar_capability_callback_server(
     app_handle: AppHandle,
     vault_root: PathBuf,
+    rollback_checkpoint_id: Option<String>,
 ) -> Result<SidecarCapabilityCallbackHandle, String> {
     let callback_token = next_callback_token();
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -71,6 +73,7 @@ pub(crate) async fn start_sidecar_capability_callback_server(
             app_handle,
             vault_root,
             callback_token: callback_token.clone(),
+            rollback_checkpoint_id,
         });
 
     tauri::async_runtime::spawn(async move {
@@ -105,6 +108,18 @@ async fn handle_capability_call(
     }
 
     let vault_root = state.vault_root.clone();
+    if let Err(error) = edit_rollback_app_service::record_ai_chat_capability_rollback_checkpoint(
+        &vault_root,
+        state.rollback_checkpoint_id.as_deref(),
+        &request.capability_id,
+        &request.input,
+    ) {
+        return Ok(Json(SidecarCapabilityCallResult::failure(
+            request.capability_id,
+            error,
+        )));
+    }
+
     Ok(Json(
         tool_cli_app_service::execute_sidecar_capability_call_via_cli(
             &state.app_handle,

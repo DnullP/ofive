@@ -4,6 +4,7 @@
 //! 稳定编排边界。
 
 pub(crate) mod chat_app_service;
+pub(crate) mod edit_rollback_app_service;
 pub(crate) mod mcp_server_app_service;
 pub(crate) mod module_contribution;
 pub(crate) mod persistence_callback_app_service;

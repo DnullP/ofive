@@ -61,6 +61,8 @@ export interface ReadModeFrontmatterField {
 export interface PreparedReadModeMarkdown {
     /** 去除 frontmatter 且完成增强语法转换后的 Markdown。 */
     renderedMarkdown: string;
+    /** renderedMarkdown 行号到原始 Markdown 行号的映射；无法对应时为 null。 */
+    sourceLineByRenderedLine: Array<number | null>;
     /** frontmatter 是否存在。 */
     hasFrontmatter: boolean;
     /** frontmatter 字段列表。 */
@@ -79,6 +81,11 @@ export function prepareMarkdownForReadMode(markdown: string): PreparedReadModeMa
     const rangeByStartLine = new Map(ranges.map((range) => [range.fromLine, range]));
     const { frontmatter, hasFrontmatter } = extractFrontmatterFields(markdown, ranges);
     const outputLines: string[] = [];
+    const sourceLineByRenderedLine: Array<number | null> = [];
+    const pushOutputLine = (lineText: string, sourceLine: number | null): void => {
+        outputLines.push(lineText);
+        sourceLineByRenderedLine.push(sourceLine);
+    };
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
         const lineNumber = lineIndex + 1;
@@ -91,22 +98,32 @@ export function prepareMarkdownForReadMode(markdown: string): PreparedReadModeMa
 
         if (range?.type === "latex-block") {
             const latexSource = extractLatexBlockSource(lines, range.fromLine, range.toLine);
-            appendReadModeBlockLatex(outputLines, lines, range.toLine, latexSource);
+            appendReadModeBlockLatex(
+                outputLines,
+                sourceLineByRenderedLine,
+                lines,
+                range.fromLine,
+                range.toLine,
+                latexSource,
+            );
             lineIndex = range.toLine - 1;
             continue;
         }
 
         if (range?.type === "code-fence") {
-            outputLines.push(...lines.slice(range.fromLine - 1, range.toLine));
+            for (let sourceLine = range.fromLine; sourceLine <= range.toLine; sourceLine += 1) {
+                pushOutputLine(lines[sourceLine - 1] ?? "", sourceLine);
+            }
             lineIndex = range.toLine - 1;
             continue;
         }
 
-        outputLines.push(transformInlineReadModeSyntax(lines[lineIndex] ?? ""));
+        pushOutputLine(transformInlineReadModeSyntax(lines[lineIndex] ?? ""), lineNumber);
     }
 
     return {
         renderedMarkdown: outputLines.join("\n"),
+        sourceLineByRenderedLine,
         hasFrontmatter,
         frontmatter,
     };
@@ -144,12 +161,15 @@ function extractLatexBlockSource(lines: string[], fromLine: number, toLine: numb
  */
 function appendReadModeBlockLatex(
     outputLines: string[],
+    sourceLineByRenderedLine: Array<number | null>,
     sourceLines: string[],
+    fromLine: number,
     toLine: number,
     latexSource: string,
 ): void {
     if (outputLines.length > 0 && outputLines[outputLines.length - 1] !== "") {
         outputLines.push("");
+        sourceLineByRenderedLine.push(null);
     }
 
     outputLines.push(buildProtocolMarkdown(
@@ -157,10 +177,12 @@ function appendReadModeBlockLatex(
         latexSource,
         "LaTeX",
     ));
+    sourceLineByRenderedLine.push(fromLine);
 
     const nextLineText = sourceLines[toLine] ?? "";
     if (nextLineText.trim() !== "") {
         outputLines.push("");
+        sourceLineByRenderedLine.push(null);
     }
 }
 

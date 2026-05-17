@@ -112,6 +112,8 @@ pub struct AiChatHistoryMessage {
     pub content_blocks: Vec<AiChatHistoryContentBlock>,
     #[serde(default)]
     pub interrupted_by_user: bool,
+    #[serde(default)]
+    pub rollback_checkpoint_id: Option<String>,
 }
 
 /// AI 对话会话记录。
@@ -151,6 +153,16 @@ pub struct AiSidecarHealthResponse {
 #[serde(rename_all = "camelCase")]
 pub struct AiChatStreamStartResponse {
     pub stream_id: String,
+}
+
+/// Result returned after restoring one AI edit rollback checkpoint.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatRollbackRestoreResponse {
+    pub checkpoint_id: String,
+    pub restored_paths: Vec<String>,
+    pub deleted_paths: Vec<String>,
+    pub skipped_paths: Vec<String>,
 }
 
 /// Rust 转发给前端的聊天流事件。

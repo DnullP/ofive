@@ -28,16 +28,30 @@ import { parseWikiLinkParts } from "./wikiLinkParser";
 function createRenderTarget(options?: {
     rendered?: boolean;
     widgetTarget?: string;
+    renderedWidgetTarget?: string;
 }): EventTarget {
     return {
         closest(selector: string) {
             if (
                 options?.widgetTarget
-                && selector === ".cm-rendered-wikilink-display"
+                && selector.includes(".cm-rendered-wikilink-display")
+                && selector.includes("[data-wiki-link-target]")
             ) {
                 return {
                     dataset: {
                         wikiLinkTarget: options.widgetTarget,
+                    },
+                };
+            }
+
+            if (
+                options?.renderedWidgetTarget
+                && selector.includes(".cm-rendered-wikilink")
+                && selector.includes("[data-wiki-link-target]")
+            ) {
+                return {
+                    dataset: {
+                        wikiLinkTarget: options.renderedWidgetTarget,
                     },
                 };
             }
@@ -57,6 +71,7 @@ function createRenderTarget(options?: {
 function createTextRenderTarget(options?: {
     rendered?: boolean;
     widgetTarget?: string;
+    renderedWidgetTarget?: string;
 }): EventTarget {
     return {
         parentElement: createRenderTarget(options),
@@ -126,6 +141,15 @@ describe("wikilink navigation interaction", () => {
         expect(
             extractWidgetWikiLinkTarget(createTextRenderTarget({ widgetTarget: "folder/note" })),
         ).toBe("folder/note");
+    });
+
+    it("从渲染态 wikilink 根节点中提取目标路径", () => {
+        expect(
+            extractWidgetWikiLinkTarget(createRenderTarget({ renderedWidgetTarget: "table/note" })),
+        ).toBe("table/note");
+        expect(
+            extractWidgetWikiLinkTarget(createTextRenderTarget({ renderedWidgetTarget: "table/note" })),
+        ).toBe("table/note");
     });
 
     it("普通左键点击渲染态 wikilink 时会阻止默认行为并打开目标", () => {

@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "bun:test";
 import type { ChatDebugEntry } from "./aiChatStreamState";
-import { reduceAiChatToolCallDebugEntry } from "./aiChatToolCallRecords";
+import { groupAiChatToolCallRecords, reduceAiChatToolCallDebugEntry } from "./aiChatToolCallRecords";
 
 function createDebugEntry(
     title: string,
@@ -88,5 +88,50 @@ describe("aiChatToolCallRecords", () => {
 
         expect(next.changed).toBe(false);
         expect(next.records).toHaveLength(0);
+    });
+
+    it("应按 capability 汇总多次同类工具调用", () => {
+        const groups = groupAiChatToolCallRecords([
+            {
+                id: "tool-call-1",
+                assistantMessageId: "assistant-1",
+                capabilityId: "vault.read_markdown_file",
+                status: "completed",
+                inputText: "{}",
+                outputText: "{}",
+                errorText: null,
+                startedAtUnixMs: 10,
+                completedAtUnixMs: 20,
+            },
+            {
+                id: "tool-call-2",
+                assistantMessageId: "assistant-1",
+                capabilityId: "vault.read_markdown_file",
+                status: "calling",
+                inputText: "{}",
+                outputText: null,
+                errorText: null,
+                startedAtUnixMs: 30,
+                completedAtUnixMs: null,
+            },
+            {
+                id: "tool-call-3",
+                assistantMessageId: "assistant-1",
+                capabilityId: "vault.apply_markdown_patch",
+                status: "failed",
+                inputText: "{}",
+                outputText: null,
+                errorText: "invalid",
+                startedAtUnixMs: 40,
+                completedAtUnixMs: 50,
+            },
+        ]);
+
+        expect(groups).toHaveLength(2);
+        expect(groups[0]?.capabilityId).toBe("vault.read_markdown_file");
+        expect(groups[0]?.status).toBe("calling");
+        expect(groups[0]?.records).toHaveLength(2);
+        expect(groups[1]?.capabilityId).toBe("vault.apply_markdown_patch");
+        expect(groups[1]?.status).toBe("failed");
     });
 });

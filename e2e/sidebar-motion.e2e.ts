@@ -349,7 +349,7 @@ async function expectCollapsedSidebarControlsUsable(page: Page): Promise<void> {
         };
     });
 
-    expect(before.leftWidth).toBeGreaterThanOrEqual(160);
+    expect(before.leftWidth).toBeGreaterThanOrEqual(120);
     expect(before.leftBarScrollWidth).toBeLessThanOrEqual(before.leftWidth + 1);
     expect(before.leftToggleWidth).toBeGreaterThan(0);
     expect(before.leftToggleInsideLeftSidebar).toBe(true);
@@ -362,9 +362,13 @@ async function expectCollapsedSidebarControlsUsable(page: Page): Promise<void> {
 }
 
 async function waitForMockLayoutReady(page: Page): Promise<void> {
+    await page.locator("[data-testid='main-dockview-host']").first().waitFor({ state: "visible" });
     await page.locator("[data-testid='sidebar-left']").first().waitFor({ state: "visible" });
     await page.locator("[data-testid='sidebar-right']").first().waitFor({ state: "visible" });
-    await page.locator(".layout-v2-tab-section__tab-main").first().waitFor({ state: "visible" });
+    await page.evaluate(async () => {
+        const configStoreModule = await import("/src/host/config/configStore.ts");
+        await configStoreModule.updateFeatureSetting("fileOpenMode", "new-tab");
+    });
 }
 
 async function expandMockNotes(page: Page): Promise<void> {

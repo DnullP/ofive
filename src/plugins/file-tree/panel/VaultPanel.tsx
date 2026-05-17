@@ -11,7 +11,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { confirm, open } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { FileTree, type FileTreeItem } from "./FileTree";
 import type { TabInstanceDefinition } from "../../../host/layout/workbenchContracts";
 import { openFileWithResolver } from "../../../host/layout/openFileService";
@@ -41,10 +41,8 @@ import {
 import { buildCreatedMarkdownInitialContent } from "../../../utils/frontmatterTemplate";
 import { getConfigSnapshot } from "../../../host/config/configStore";
 import { getArticleSnapshotById, useFocusedArticle } from "../../../host/editor/editorContextStore";
-import {
-    setCurrentVaultPath,
-    useVaultState,
-} from "../../../host/vault/vaultStore";
+import { useVaultState } from "../../../host/vault/vaultStore";
+import { openVaultWithSystemPicker } from "../../../host/vault/openVaultDialog";
 import {
     subscribeFileTreeRenameRequestedEvent,
     type FileTreeRenameRequestedBusEvent,
@@ -213,32 +211,6 @@ function buildMoveSelectionLabel(items: FileTreeItem[], t: ReturnType<typeof use
 
 
 /**
- * @function normalizeSelectedVaultPath
- * @description 规范化系统目录选择结果，兼容 string / string[] / 对象结构。
- * @param selected 系统对话框返回值。
- * @returns 规范化路径，无法识别返回 null。
- */
-function normalizeSelectedVaultPath(selected: unknown): string | null {
-    if (typeof selected === "string") {
-        return selected;
-    }
-
-    if (Array.isArray(selected)) {
-        const first = selected[0];
-        return typeof first === "string" ? first : null;
-    }
-
-    if (selected && typeof selected === "object") {
-        const selectedObject = selected as { path?: unknown };
-        if (typeof selectedObject.path === "string") {
-            return selectedObject.path;
-        }
-    }
-
-    return null;
-}
-
-/**
  * @function splitVaultDisplayPath
  * @description 将绝对路径拆分为「可省略前缀」和「仓库根目录名」两段。
  *   当路径过长时，前缀部分由 CSS text-overflow 截断，根目录名始终完整显示。
@@ -305,26 +277,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
      * @description 通过系统文件对话框选择目录并更新全局仓库路径。
      */
     const handleOpenVaultWithSystemFs = async (): Promise<void> => {
-        try {
-            console.info("[vault-ui] openVault:dialog:open");
-            const selected = await open({
-                directory: true,
-                multiple: false,
-                title: t("vault.selectDirectory"),
-            });
-            const selectedPath = normalizeSelectedVaultPath(selected);
-
-            if (!selectedPath) {
-                console.warn("[vault-ui] openVault:dialog:cancelled-or-invalid", { selected });
-                return;
-            }
-
-            console.info("[vault-ui] openVault:dialog:selected", { selectedPath });
-            await setCurrentVaultPath(selectedPath);
-        } catch (openError) {
-            const message = openError instanceof Error ? openError.message : t("vault.openDirectoryFailed");
-            console.error("[vault-ui] openVault:dialog:failed", { message });
-        }
+        await openVaultWithSystemPicker();
     };
 
     /**

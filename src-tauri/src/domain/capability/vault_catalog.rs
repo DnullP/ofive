@@ -362,7 +362,7 @@ fn list_agent_skills_capability() -> CapabilityDescriptor {
         id: "agent_skill.list".to_string(),
         api_version: CAPABILITY_API_VERSION.to_string(),
         display_name: "List Agent Skills".to_string(),
-        description: "List user-created Agent skills stored in .ofive/skills in the current vault. Use this to discover workflow-specific SKILL.md instructions available to the agent.".to_string(),
+        description: "List built-in and user-created Agent skills available in the current vault. User-created skills are stored in .ofive/skills; built-in skills are read-only product guidance.".to_string(),
         kind: CapabilityKind::Read,
         input_schema: json!({
             "type": "object",
@@ -372,7 +372,7 @@ fn list_agent_skills_capability() -> CapabilityDescriptor {
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["name", "description", "directoryRelativePath", "files", "valid"]
+                "required": ["name", "description", "directoryRelativePath", "files", "valid", "builtIn", "readOnly"]
             }
         }),
         risk_level: CapabilityRiskLevel::Low,
@@ -392,7 +392,7 @@ fn read_agent_skill_file_capability() -> CapabilityDescriptor {
         id: "agent_skill.read_file".to_string(),
         api_version: CAPABILITY_API_VERSION.to_string(),
         display_name: "Read Agent Skill File".to_string(),
-        description: "Read SKILL.md or a Markdown reference file from one user-created Agent skill under .ofive/skills/<skillName>. Valid resource paths are SKILL.md, references/**/*.md, assets/**/*.md, and scripts/**/*.md.".to_string(),
+        description: "Read SKILL.md or a Markdown reference file from one Agent skill. User-created skills live under .ofive/skills/<skillName>; built-in skills are read-only and may expose SKILL.md only.".to_string(),
         kind: CapabilityKind::Read,
         input_schema: json!({
             "type": "object",
@@ -429,7 +429,7 @@ fn create_agent_skill_capability() -> CapabilityDescriptor {
         id: "agent_skill.create".to_string(),
         api_version: CAPABILITY_API_VERSION.to_string(),
         display_name: "Create Agent Skill".to_string(),
-        description: "Create one user-defined Agent skill directory under .ofive/skills, including an initial SKILL.md. Skill names must match ADK skill naming: lowercase letters, digits, and hyphens only.".to_string(),
+        description: "Create one user-defined Agent skill directory under .ofive/skills, including an initial SKILL.md. Skill names must match ADK skill naming: lowercase letters, digits, and hyphens only. Built-in skill names are reserved.".to_string(),
         kind: CapabilityKind::Write,
         input_schema: json!({
             "type": "object",
@@ -441,7 +441,7 @@ fn create_agent_skill_capability() -> CapabilityDescriptor {
         }),
         output_schema: json!({
             "type": "object",
-            "required": ["name", "description", "directoryRelativePath", "files", "valid"]
+            "required": ["name", "description", "directoryRelativePath", "files", "valid", "builtIn", "readOnly"]
         }),
         risk_level: CapabilityRiskLevel::Medium,
         requires_confirmation: true,
@@ -460,7 +460,7 @@ fn write_agent_skill_file_capability() -> CapabilityDescriptor {
         id: "agent_skill.write_file".to_string(),
         api_version: CAPABILITY_API_VERSION.to_string(),
         display_name: "Write Agent Skill File".to_string(),
-        description: "Create or overwrite SKILL.md or a Markdown reference file for one user-defined Agent skill under .ofive/skills/<skillName>. SKILL.md frontmatter must use the Go ADK skill schema only: name, description, optional license, compatibility, metadata, and allowed-tools. Keep name equal to skillName; do not add top-level type or version fields.".to_string(),
+        description: "Create or overwrite SKILL.md or a Markdown reference file for one user-defined Agent skill under .ofive/skills/<skillName>. Built-in skills are read-only. SKILL.md frontmatter must use the Go ADK skill schema only: name, description, optional license, compatibility, metadata, and allowed-tools. Keep name equal to skillName; do not add top-level type or version fields.".to_string(),
         kind: CapabilityKind::Write,
         input_schema: json!({
             "type": "object",

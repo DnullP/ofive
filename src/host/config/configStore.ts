@@ -176,7 +176,7 @@ export interface FeatureSettings {
     frontmatterAutoInsertOnCreate: boolean;
     /** 重启时是否恢复上次的工作区布局和标签页，默认 true */
     restoreWorkspaceLayout: boolean;
-    /** 从 wikilink 或文件树打开文件时的默认行为，默认打开新标签页 */
+    /** 从 wikilink 或文件树打开文件时的默认行为，默认原地替换当前文件标签 */
     fileOpenMode: FileOpenMode;
 }
 
@@ -263,7 +263,7 @@ export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
     frontmatterTemplate: "---\ntitle: {{filename}}\ndate: {{date}}\n---",
     frontmatterAutoInsertOnCreate: false,
     restoreWorkspaceLayout: true,
-    fileOpenMode: "new-tab",
+    fileOpenMode: "replace-active-tab",
 };
 
 /**

@@ -34,6 +34,17 @@ export interface MarkdownTableModel {
 }
 
 /**
+ * @interface MarkdownTableLayout
+ * @description Markdown 表格可视化布局元数据。
+ */
+export interface MarkdownTableLayout {
+    /** 每列像素宽度。 */
+    columnWidths?: number[];
+    /** 表体每行像素高度。 */
+    rowHeights?: number[];
+}
+
+/**
  * @interface MarkdownTableCellPosition
  * @description 表格单元格位置。
  */
@@ -45,6 +56,8 @@ export interface MarkdownTableCellPosition {
     /** 列索引。 */
     columnIndex: number;
 }
+
+const MARKDOWN_TABLE_LAYOUT_COMMENT_PATTERN = /^<!--\s*ofive-table-layout:\s*(\{.*\})\s*-->\s*$/;
 
 /**
  * @function createDefaultMarkdownTableModel
@@ -209,6 +222,120 @@ export function parseMarkdownTableLines(lines: string[]): MarkdownTableModel | n
     };
 }
 
+function normalizeLayoutValues(value: unknown): number[] | undefined {
+    if (!Array.isArray(value)) {
+        return undefined;
+    }
+
+    const values = value
+        .map((item) => Number(item))
+        .filter((item) => Number.isFinite(item) && item > 0)
+        .map((item) => Math.round(item));
+
+    return values.length > 0 ? values : undefined;
+}
+
+/**
+ * @function parseMarkdownTableLayoutComment
+ * @description 解析 ofive 表格布局 HTML 注释。
+ * @param line 单行 Markdown 文本。
+ * @returns 布局元数据；非布局注释或非法内容返回 null。
+ */
+export function parseMarkdownTableLayoutComment(line: string): MarkdownTableLayout | null {
+    const match = line.match(MARKDOWN_TABLE_LAYOUT_COMMENT_PATTERN);
+    if (!match) {
+        return null;
+    }
+
+    try {
+        const rawLayout = JSON.parse(match[1] ?? "{}") as {
+            columns?: unknown;
+            rows?: unknown;
+        };
+        const layout: MarkdownTableLayout = {
+            columnWidths: normalizeLayoutValues(rawLayout.columns),
+            rowHeights: normalizeLayoutValues(rawLayout.rows),
+        };
+        return hasMarkdownTableLayout(layout) ? layout : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * @function hasMarkdownTableLayout
+ * @description 判断布局元数据是否包含可持久化的尺寸。
+ * @param layout 布局元数据。
+ * @returns 有列宽或行高时返回 true。
+ */
+export function hasMarkdownTableLayout(layout: MarkdownTableLayout | null | undefined): boolean {
+    return (layout?.columnWidths?.length ?? 0) > 0 || (layout?.rowHeights?.length ?? 0) > 0;
+}
+
+/**
+ * @function serializeMarkdownTableLayoutComment
+ * @description 将表格布局元数据序列化为 HTML 注释。
+ * @param layout 布局元数据。
+ * @returns 注释文本；无布局时返回 null。
+ */
+export function serializeMarkdownTableLayoutComment(layout: MarkdownTableLayout | null | undefined): string | null {
+    if (!hasMarkdownTableLayout(layout)) {
+        return null;
+    }
+
+    const payload: { columns?: number[]; rows?: number[] } = {};
+    if (layout?.columnWidths?.length) {
+        payload.columns = layout.columnWidths
+            .filter((width) => Number.isFinite(width) && width > 0)
+            .map((width) => Math.round(width));
+    }
+    if (layout?.rowHeights?.length) {
+        payload.rows = layout.rowHeights
+            .filter((height) => Number.isFinite(height) && height > 0)
+            .map((height) => Math.round(height));
+    }
+
+    if (!payload.columns?.length && !payload.rows?.length) {
+        return null;
+    }
+
+    return `<!-- ofive-table-layout: ${JSON.stringify(payload)} -->`;
+}
+
+/**
+ * @function escapeMarkdownTableCellPipes
+ * @description 转义单元格内未转义的管道符，避免写回后破坏表格列结构。
+ * @param cell 单元格原始文本。
+ * @returns 已转义的单元格文本。
+ */
+function escapeMarkdownTableCellPipes(cell: string): string {
+    let escapedCell = "";
+    let isEscaped = false;
+
+    for (const char of cell) {
+        if (isEscaped) {
+            escapedCell += char;
+            isEscaped = false;
+            continue;
+        }
+
+        if (char === "\\") {
+            escapedCell += char;
+            isEscaped = true;
+            continue;
+        }
+
+        if (char === "|") {
+            escapedCell += "\\|";
+            continue;
+        }
+
+        escapedCell += char;
+    }
+
+    return escapedCell;
+}
+
 /**
  * @function buildAlignmentMarker
  * @description 为指定列宽与对齐方式生成 Markdown 分隔行单元格。
@@ -238,15 +365,20 @@ function buildAlignmentMarker(width: number, alignment: MarkdownTableAlignment):
  */
 export function serializeMarkdownTable(model: MarkdownTableModel): string {
     const columnCount = model.headers.length;
+    const escapedHeaders = model.headers.map((cell) => escapeMarkdownTableCellPipes(cell ?? ""));
+    const escapedRows = model.rows.map((row) =>
+        normalizeMarkdownTableRow(row, columnCount)
+            .map((cell) => escapeMarkdownTableCellPipes(cell ?? "")),
+    );
     const widths = Array.from({ length: columnCount }, (_, columnIndex) => {
         const cellValues = [
-            model.headers[columnIndex] ?? "",
-            ...model.rows.map((row) => row[columnIndex] ?? ""),
+            escapedHeaders[columnIndex] ?? "",
+            ...escapedRows.map((row) => row[columnIndex] ?? ""),
         ];
         return Math.max(3, ...cellValues.map((value) => value.length));
     });
 
-    const formatRow = (cells: string[]): string => `| ${cells.map((cell, columnIndex) =>
+    const formatEscapedRow = (cells: string[]): string => `| ${cells.map((cell, columnIndex) =>
         (cell ?? "").padEnd(widths[columnIndex] ?? 3),
     ).join(" | ")} |`;
 
@@ -255,10 +387,26 @@ export function serializeMarkdownTable(model: MarkdownTableModel): string {
     ).join(" | ")} |`;
 
     return [
-        formatRow(model.headers),
+        formatEscapedRow(escapedHeaders),
         separatorRow,
-        ...model.rows.map((row) => formatRow(normalizeMarkdownTableRow(row, columnCount))),
+        ...escapedRows.map((row) => formatEscapedRow(row)),
     ].join("\n");
+}
+
+/**
+ * @function serializeMarkdownTableWithLayout
+ * @description 序列化 Markdown 表格，并按需追加 ofive 表格布局注释。
+ * @param model 表格模型。
+ * @param layout 布局元数据。
+ * @returns Markdown 表格文本。
+ */
+export function serializeMarkdownTableWithLayout(
+    model: MarkdownTableModel,
+    layout: MarkdownTableLayout | null | undefined,
+): string {
+    const tableMarkdown = serializeMarkdownTable(model);
+    const layoutComment = serializeMarkdownTableLayoutComment(layout);
+    return layoutComment ? `${tableMarkdown}\n${layoutComment}` : tableMarkdown;
 }
 
 /**

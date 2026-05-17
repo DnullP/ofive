@@ -142,6 +142,7 @@ pub(crate) async fn start_ai_chat_stream(
     user_id: Option<String>,
     history: Option<Vec<AiChatHistoryMessage>>,
     context_snapshot_json: Option<String>,
+    rollback_checkpoint_id: Option<String>,
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AiChatStreamStartResponse, String> {
@@ -176,6 +177,7 @@ pub(crate) async fn start_ai_chat_stream(
         tool_callback_app_service::start_sidecar_capability_callback_server(
             app_handle.clone(),
             vault_root.clone(),
+            rollback_checkpoint_id.clone(),
         )
         .await?;
     let persistence_callback_handle =
@@ -475,6 +477,7 @@ pub(crate) async fn submit_ai_chat_confirmation(
     confirmed: bool,
     session_id: Option<String>,
     user_id: Option<String>,
+    rollback_checkpoint_id: Option<String>,
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AiChatStreamStartResponse, String> {
@@ -505,6 +508,7 @@ pub(crate) async fn submit_ai_chat_confirmation(
         tool_callback_app_service::start_sidecar_capability_callback_server(
             app_handle.clone(),
             vault_root.clone(),
+            rollback_checkpoint_id.clone(),
         )
         .await?;
     let persistence_callback_handle =

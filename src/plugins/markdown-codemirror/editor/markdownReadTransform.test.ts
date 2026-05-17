@@ -48,6 +48,7 @@ describe("markdownReadTransform", () => {
         expect(prepared.renderedMarkdown).toBe(
             "\n[mark](/__ofive_highlight__/mark) [#tag](/__ofive_tag__/tag) [$E=mc^2$](/__ofive_inline_latex__/E%3Dmc%5E2)",
         );
+        expect(prepared.sourceLineByRenderedLine).toEqual([7, 8]);
     });
 
     test("should convert block latex into a dedicated read mode protocol", () => {

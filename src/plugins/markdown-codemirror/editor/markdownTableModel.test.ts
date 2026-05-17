@@ -12,8 +12,11 @@ import {
     insertMarkdownTableRowAt,
     moveMarkdownTableColumn,
     moveMarkdownTableRow,
+    parseMarkdownTableLayoutComment,
     parseMarkdownTableLines,
     serializeMarkdownTable,
+    serializeMarkdownTableLayoutComment,
+    serializeMarkdownTableWithLayout,
     splitMarkdownTableCells,
     type MarkdownTableModel,
     updateMarkdownTableCell,
@@ -60,6 +63,54 @@ describe("serializeMarkdownTable", () => {
                 "| Cell 3   | Cell 4   |",
             ].join("\n"),
         );
+    });
+
+    test("should escape unescaped pipes inside cells", () => {
+        const markdown = serializeMarkdownTable({
+            headers: ["Name", "Target"],
+            alignments: ["none", "none"],
+            rows: [
+                ["Alias", "[[guide|Guide Alias]]"],
+                ["Already escaped", "a \\| b"],
+            ],
+        });
+
+        expect(markdown).toContain("[[guide\\|Guide Alias]]");
+        expect(markdown).toContain("a \\| b");
+        expect(markdown).not.toContain("[[guide|Guide Alias]]");
+    });
+});
+
+describe("markdown table layout metadata", () => {
+    test("should parse and serialize table layout comments", () => {
+        const comment = serializeMarkdownTableLayoutComment({
+            columnWidths: [164.4, 220],
+            rowHeights: [34, 72.6],
+        });
+
+        expect(comment).toBe('<!-- ofive-table-layout: {"columns":[164,220],"rows":[34,73]} -->');
+        expect(parseMarkdownTableLayoutComment(comment ?? "")).toEqual({
+            columnWidths: [164, 220],
+            rowHeights: [34, 73],
+        });
+    });
+
+    test("should append layout metadata after table markdown", () => {
+        expect(serializeMarkdownTableWithLayout(createDefaultMarkdownTableModel(), {
+            columnWidths: [188, 236],
+            rowHeights: [40, 56],
+        })).toBe([
+            "| Column 1 | Column 2 |",
+            "| -------- | -------- |",
+            "| Cell 1   | Cell 2   |",
+            "| Cell 3   | Cell 4   |",
+            '<!-- ofive-table-layout: {"columns":[188,236],"rows":[40,56]} -->',
+        ].join("\n"));
+    });
+
+    test("should ignore invalid layout comments", () => {
+        expect(parseMarkdownTableLayoutComment("<!-- ofive-table-layout: nope -->")).toBeNull();
+        expect(parseMarkdownTableLayoutComment("<!-- unrelated -->")).toBeNull();
     });
 });
 

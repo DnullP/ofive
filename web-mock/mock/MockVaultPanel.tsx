@@ -82,6 +82,37 @@ $$
 错误的 LaTeX：$\\invalidcommand{test}$
 `;
 
+const WIKILINK_SUBTARGET_TARGET_LINES = [
+    "# WikiLink Subtarget Target",
+    "",
+    "First paragraph before anchors.",
+    "",
+    "Second paragraph before anchors.",
+    "",
+    "Third paragraph landing marker.",
+    "",
+    ...Array.from({ length: 28 }, (_, index) => `Filler line ${index + 1}.`),
+    "",
+    "## Deep Anchor",
+    "",
+    "Deep anchor body marker.",
+    "",
+    "Line landing marker for subtarget navigation.",
+];
+const WIKILINK_SUBTARGET_LINE = WIKILINK_SUBTARGET_TARGET_LINES.findIndex((line) =>
+    line.includes("Line landing marker"),
+) + 1;
+const WIKILINK_SUBTARGET_TARGET_SAMPLE = WIKILINK_SUBTARGET_TARGET_LINES.join("\n");
+const WIKILINK_SUBTARGET_SOURCE_SAMPLE = [
+    "# WikiLink Subtarget Source",
+    "",
+    `Line link [[wikilink-subtarget-target#L${WIKILINK_SUBTARGET_LINE}|line target]].`,
+    "",
+    "Title link [[wikilink-subtarget-target#Deep Anchor|title target]].",
+    "",
+    "Paragraph link [[wikilink-subtarget-target#P3|paragraph target]].",
+].join("\n");
+
 const MERMAID_TEST_SAMPLE = `# Mermaid 渲染测试
 
 Before the diagram.
@@ -304,6 +335,8 @@ const MOCK_FILE_CONTENTS: Record<string, string> = {
     "test-resources/notes/latex-test.md": LATEX_TEST_SAMPLE,
     "test-resources/notes/header-wikilink-regression.md": "# [[Plain Note]] [[Target Note|Alias Note]]\n\nbody\n",
     "test-resources/notes/project-reader-preview.md": "# Project Reader Preview\n\n[[mock-ofive:/src/main.ts:7:1-9:1|createMainRuntime]]\n",
+    "test-resources/notes/wikilink-subtarget-source.md": WIKILINK_SUBTARGET_SOURCE_SAMPLE,
+    "test-resources/notes/wikilink-subtarget-target.md": WIKILINK_SUBTARGET_TARGET_SAMPLE,
     "test-resources/notes/open-mode-source.md": "# Open Mode Source\n\n[[network-segment]]\n",
     "test-resources/notes/scroll-regression.md": SCROLL_REGRESSION_SAMPLE,
     "test-resources/notes/scroll-regression-alt.md": SCROLL_REGRESSION_ALT_SAMPLE,
@@ -405,13 +438,15 @@ export function MockVaultPanel(props: MockVaultPanelProps): ReactNode {
                 items={files}
                 renameRequest={renameRequest}
                 onOpenFile={(item) => {
-                    const content = fileContents[item.path] ?? `# ${item.path}`;
-                    if (openFile) {
-                        void openFile({ relativePath: item.path, contentOverride: content });
-                        return;
-                    }
+                    void loadBrowserMockMarkdownContents().then((browserMockContents) => {
+                        const content = browserMockContents[item.path] ?? fileContents[item.path] ?? `# ${item.path}`;
+                        if (openFile) {
+                            void openFile({ relativePath: item.path, contentOverride: content });
+                            return;
+                        }
 
-                    openTab(createFileTab(item, content));
+                        openTab(createFileTab(item, content));
+                    });
                 }}
             />
         </div>

@@ -355,6 +355,12 @@ export async function openFileInWorkbench(
         ?? findExistingFilePanelByPath(options.containerApi, normalizedPath);
 
     if (existingPanel) {
+        if (options.tabParams && existingPanel.api.updateParameters) {
+            existingPanel.api.updateParameters({
+                ...(existingPanel.params ?? {}),
+                ...options.tabParams,
+            });
+        }
         existingPanel.api.setActive();
         console.info("[openFileService] activated existing file tab", {
             relativePath: normalizedPath,
@@ -368,6 +374,7 @@ export async function openFileInWorkbench(
         currentVaultPath: options.currentVaultPath,
         contentOverride: options.contentOverride,
         preferredOpenerId: options.preferredOpenerId,
+        tabParams: options.tabParams,
     });
 
     if (!tab) {

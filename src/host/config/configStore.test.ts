@@ -55,6 +55,10 @@ describe("configStore defaults", () => {
         await syncConfigStateForVault("", true);
     });
 
+    it("应默认使用原地替换打开笔记", () => {
+        expect(DEFAULT_FEATURE_SETTINGS.fileOpenMode).toBe("replace-active-tab");
+    });
+
     it("应在首次加载缺省 features 的仓库时默认开启毛玻璃并写回配置", async () => {
         currentVaultConfig = {
             schemaVersion: 1,

@@ -11,7 +11,10 @@ const MOUSE_DRAG_TAG = "@mouse-drag";
 async function waitForMockWorkbench(page: Page): Promise<void> {
     await page.goto(MOCK_PAGE);
     await page.locator("[data-testid='main-dockview-host']").waitFor({ state: "visible" });
-    await page.locator(".layout-v2-tab-section__tab-main", { hasText: "首页" }).first().waitFor({ state: "visible" });
+    await page.evaluate(async () => {
+        const configStoreModule = await import("/src/host/config/configStore.ts");
+        await configStoreModule.updateFeatureSetting("fileOpenMode", "new-tab");
+    });
 }
 
 async function openMockGuideTab(page: Page): Promise<void> {
@@ -133,6 +136,7 @@ async function readPreviewSectionRects(page: Page): Promise<Array<{
 test.describe("main tab pre-destroy", () => {
     test(`right-to-left lone-tab drag should not leave an empty shell ${MOUSE_DRAG_TAG}`, async ({ page }) => {
         await waitForMockWorkbench(page);
+        await openMockNote(page, "test-resources/notes/network-segment.md");
         await openMockGuideTab(page);
         await createRightSideSplit(page);
 
@@ -161,8 +165,9 @@ test.describe("main tab pre-destroy", () => {
         await page.mouse.up();
     });
 
-    test(`splitting ready editor should enter pending presentation before remounted editor is committed ${MOUSE_DRAG_TAG}`, async ({ page }) => {
+    test(`splitting ready editor should preserve committed presentation without fallback ${MOUSE_DRAG_TAG}`, async ({ page }) => {
         await waitForMockWorkbench(page);
+        await openMockGuideTab(page);
         await openMockNote(page, "test-resources/notes/network-segment.md");
 
         const observedStates: string[] = [];
@@ -207,7 +212,9 @@ test.describe("main tab pre-destroy", () => {
             (window as unknown as { __stopSplitPresentationMonitor?: () => void }).__stopSplitPresentationMonitor?.();
         });
 
-        expect(observedStates).toContain("pending");
+        expect(observedStates).toContain("committed");
+        expect(observedStates).not.toContain("missing");
+        await expect(page.locator(".layout-v2-tab-section__presentation-pending")).toHaveCount(0);
         await expect(page.locator(".layout-v2-tab-section")).toHaveCount(2);
     });
 

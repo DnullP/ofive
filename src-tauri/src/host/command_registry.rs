@@ -72,6 +72,10 @@ define_app_commands![
         crate::host::commands::ai_commands::submit_ai_chat_confirmation
     ),
     (
+        "restore_ai_chat_rollback_checkpoint",
+        crate::host::commands::ai_commands::restore_ai_chat_rollback_checkpoint
+    ),
+    (
         "get_capability_catalog",
         crate::host::commands::capability_commands::get_capability_catalog
     ),

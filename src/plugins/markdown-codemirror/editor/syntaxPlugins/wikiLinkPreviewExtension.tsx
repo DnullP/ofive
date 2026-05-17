@@ -49,10 +49,16 @@ import {
     isRenderedWikiLinkTarget,
     type WikiLinkMatch,
 } from "./wikiLinkSyntaxRenderer";
+import {
+    parseWikiLinkTarget,
+    resolveWikiLinkSubtarget,
+} from "./wikiLinkSubtarget";
 
 const WIKI_LINK_PREVIEW_HIDE_DELAY_MS = 500;
 const WIKI_LINK_PREVIEW_GAP_PX = 4;
 const WIKI_LINK_PREVIEW_EXIT_ANIMATION_MS = 140;
+const WIKI_LINK_WIDGET_SELECTOR =
+    ".cm-rendered-wikilink-display[data-wiki-link-target], .cm-rendered-wikilink[data-wiki-link-target]";
 
 /**
  * @interface WikiLinkPreviewModifierState
@@ -96,6 +102,28 @@ export interface WikiLinkPreviewViewLike {
 export interface WikiLinkPreviewTarget extends WikiLinkMatch {
     /** 锚点位置，用于计算气泡定位。 */
     anchorPos: number;
+    /** Widget 链接的 DOM 锚点位置。 */
+    anchorRect?: WikiLinkPreviewAnchorRect;
+}
+
+interface WikiLinkPreviewAnchorRect {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+}
+
+interface ClosestCapablePreviewTarget extends EventTarget {
+    closest: (selector: string) => unknown;
+}
+
+interface ParentElementPreviewTarget extends EventTarget {
+    parentElement?: unknown;
+}
+
+interface PreviewElementLike {
+    textContent?: string | null;
+    getBoundingClientRect?: () => WikiLinkPreviewAnchorRect;
 }
 
 type WikiLinkPreviewData =
@@ -107,6 +135,7 @@ type WikiLinkPreviewData =
         kind: "markdown";
         resolvedPath: string;
         content: string;
+        revealLine?: number;
     }
     | {
         status: "ready";
@@ -116,7 +145,6 @@ type WikiLinkPreviewData =
     };
 
 interface WikiLinkPreviewCardProps {
-    anchor: WikiLinkPreviewTarget;
     data: WikiLinkPreviewData;
     containerApi: WorkbenchContainerApi;
     previewId: string;
@@ -130,6 +158,83 @@ interface WikiLinkPreviewCardProps {
  */
 function isApplePlatform(platform: string): boolean {
     return /(Mac|iPhone|iPad|iPod)/i.test(platform);
+}
+
+function closestPreviewElementFromEventTarget(
+    eventTarget: EventTarget | null,
+    selector: string,
+): PreviewElementLike | null {
+    const directTarget = eventTarget as ClosestCapablePreviewTarget | null;
+    if (directTarget && typeof directTarget.closest === "function") {
+        const closest = directTarget.closest(selector);
+        return typeof closest === "object" && closest !== null
+            ? closest as PreviewElementLike
+            : null;
+    }
+
+    const parentElement = eventTarget && typeof eventTarget === "object"
+        ? (eventTarget as ParentElementPreviewTarget).parentElement
+        : null;
+    const parentTarget = parentElement as ClosestCapablePreviewTarget | null;
+    if (parentTarget && typeof parentTarget.closest === "function") {
+        const closest = parentTarget.closest(selector);
+        return typeof closest === "object" && closest !== null
+            ? closest as PreviewElementLike
+            : null;
+    }
+
+    return null;
+}
+
+function extractWidgetWikiLinkPreviewAnchor(eventTarget: EventTarget | null): {
+    displayText: string | null;
+    anchorRect: WikiLinkPreviewAnchorRect | undefined;
+} {
+    const element = closestPreviewElementFromEventTarget(eventTarget, WIKI_LINK_WIDGET_SELECTOR);
+    if (!element) {
+        return { displayText: null, anchorRect: undefined };
+    }
+
+    const displayText = element.textContent?.trim() || null;
+    if (typeof element.getBoundingClientRect !== "function") {
+        return { displayText, anchorRect: undefined };
+    }
+
+    const rect = element.getBoundingClientRect();
+    return {
+        displayText,
+        anchorRect: {
+            left: rect.left,
+            right: rect.right,
+            top: rect.top,
+            bottom: rect.bottom,
+        },
+    };
+}
+
+function createWidgetWikiLinkPreviewTarget(
+    target: string,
+    anchor: ReturnType<typeof extractWidgetWikiLinkPreviewAnchor> | null,
+): WikiLinkPreviewTarget {
+    return {
+        from: 0,
+        to: 0,
+        target,
+        displayText: anchor?.displayText ?? target,
+        anchorPos: 0,
+        anchorRect: anchor?.anchorRect,
+    };
+}
+
+function safePosAtCoords(
+    view: WikiLinkPreviewViewLike,
+    coords: { x: number; y: number },
+): number | null {
+    try {
+        return view.posAtCoords(coords);
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -160,17 +265,32 @@ export function resolveWikiLinkPreviewAtMouseEvent(
     view: WikiLinkPreviewViewLike,
 ): WikiLinkPreviewTarget | null {
     const widgetTarget = extractWidgetWikiLinkTarget(event.target);
+    const widgetAnchor = widgetTarget
+        ? extractWidgetWikiLinkPreviewAnchor(event.target)
+        : null;
     const renderedTargetHit = widgetTarget !== null || isRenderedWikiLinkTarget(event.target);
     if (!renderedTargetHit) {
         return null;
     }
 
-    const position = view.posAtCoords({
+    if (
+        widgetTarget !== null
+        && widgetAnchor?.anchorRect !== undefined
+        && widgetAnchor.displayText !== null
+    ) {
+        return createWidgetWikiLinkPreviewTarget(widgetTarget, widgetAnchor);
+    }
+
+    const position = safePosAtCoords(view, {
         x: event.clientX,
         y: event.clientY,
     });
     if (position === null) {
-        return null;
+        if (widgetTarget === null) {
+            return null;
+        }
+
+        return createWidgetWikiLinkPreviewTarget(widgetTarget, widgetAnchor);
     }
 
     const matchedLink = findWikiLinkAtPosition(view.state, position);
@@ -189,9 +309,28 @@ export function resolveWikiLinkPreviewAtMouseEvent(
         from: position,
         to: position,
         target: widgetTarget,
-        displayText: widgetTarget,
+        displayText: widgetAnchor?.displayText ?? widgetTarget,
         anchorPos: position,
+        anchorRect: widgetAnchor?.anchorRect,
     };
+}
+
+function areAnchorRectsEqual(
+    left: WikiLinkPreviewAnchorRect | undefined,
+    right: WikiLinkPreviewAnchorRect | undefined,
+): boolean {
+    if (left === right) {
+        return true;
+    }
+
+    if (!left || !right) {
+        return false;
+    }
+
+    return left.left === right.left
+        && left.right === right.right
+        && left.top === right.top
+        && left.bottom === right.bottom;
 }
 
 /**
@@ -217,7 +356,8 @@ function arePreviewTargetsEqual(
         && left.to === right.to
         && left.target === right.target
         && left.displayText === right.displayText
-        && left.anchorPos === right.anchorPos;
+        && left.anchorPos === right.anchorPos
+        && areAnchorRectsEqual(left.anchorRect, right.anchorRect);
 }
 
 /**
@@ -240,17 +380,6 @@ function buildPreviewCacheKey(currentFilePath: string, target: string): string {
 function WikiLinkPreviewCard(props: WikiLinkPreviewCardProps): ReactNode {
     return (
         <div className="cm-wikilink-preview">
-            {/* cm-wikilink-preview__header: 预览卡片头部，承载标题与目标路径 */}
-            <div className="cm-wikilink-preview__header">
-                {/* cm-wikilink-preview__title: 主标题，显示 hover 命中的链接文本 */}
-                <div className="cm-wikilink-preview__title">{props.anchor.displayText}</div>
-                {/* cm-wikilink-preview__path: 次级路径，显示解析后的目标文件路径 */}
-                <div className="cm-wikilink-preview__path">
-                    {props.data.status === "ready"
-                        ? props.data.resolvedPath
-                        : props.anchor.target}
-                </div>
-            </div>
             {/* cm-wikilink-preview__body: 预览正文区域，承载状态提示或阅读态内容 */}
             <div className="cm-wikilink-preview__body">
                 {props.data.status === "loading" ? (
@@ -274,6 +403,7 @@ function WikiLinkPreviewCard(props: WikiLinkPreviewCardProps): ReactNode {
                             content={props.data.content}
                             currentFilePath={props.data.resolvedPath}
                             containerApi={props.containerApi}
+                            initialRevealLine={props.data.revealLine ?? null}
                         />
                     </WikiLinkPreviewParentContext.Provider>
                 ) : null}
@@ -463,7 +593,7 @@ class WikiLinkPreviewPlugin implements PluginValue {
         const requestToken = this.requestSequence + 1;
         this.requestSequence = requestToken;
 
-        void this.loadPreviewData(currentDirectory, target, requestToken, cacheKey);
+        void this.loadPreviewData(currentDirectory, currentFilePath, target, requestToken, cacheKey);
     }
 
     private hidePreviewImmediately(): void {
@@ -515,6 +645,7 @@ class WikiLinkPreviewPlugin implements PluginValue {
 
     private async loadPreviewData(
         currentDirectory: string,
+        currentFilePath: string,
         target: WikiLinkPreviewTarget,
         requestToken: number,
         cacheKey: string,
@@ -537,7 +668,10 @@ class WikiLinkPreviewPlugin implements PluginValue {
                 return;
             }
 
-            const resolved = await resolveWikiLinkTarget(currentDirectory, target.target);
+            const parsedTarget = parseWikiLinkTarget(target.target);
+            const resolved = parsedTarget.noteTarget.length === 0 && parsedTarget.subtarget !== null
+                ? { relativePath: currentFilePath.replace(/\\/g, "/") }
+                : await resolveWikiLinkTarget(currentDirectory, parsedTarget.noteTarget);
             if (!this.shouldAcceptAsyncResult(target, requestToken)) {
                 return;
             }
@@ -554,11 +688,13 @@ class WikiLinkPreviewPlugin implements PluginValue {
                 return;
             }
 
+            const subtarget = resolveWikiLinkSubtarget(file.content, parsedTarget.subtarget);
             const readyData: WikiLinkPreviewData = {
                 status: "ready",
                 kind: "markdown",
                 resolvedPath: resolved.relativePath,
                 content: file.content,
+                revealLine: subtarget?.line,
             };
             this.previewCache.set(cacheKey, readyData);
             this.renderPreview(target, readyData);
@@ -716,7 +852,6 @@ class WikiLinkPreviewPlugin implements PluginValue {
         this.cancelScheduledUnmount();
         root.render(
             <WikiLinkPreviewCard
-                anchor={target}
                 data={data}
                 containerApi={this.containerApi}
                 previewId={this.previewId}
@@ -765,7 +900,8 @@ class WikiLinkPreviewPlugin implements PluginValue {
             return;
         }
 
-        const anchorCoords = this.view.coordsAtPos(this.activeTarget.anchorPos);
+        const anchorCoords = this.activeTarget.anchorRect
+            ?? this.view.coordsAtPos(this.activeTarget.anchorPos);
         if (anchorCoords === null) {
             this.hidePreviewImmediately();
             return;

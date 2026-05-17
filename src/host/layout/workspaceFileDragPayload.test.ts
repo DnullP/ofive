@@ -11,14 +11,19 @@
  *   bun test src/host/layout/workspaceFileDragPayload.test.ts
  */
 
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import {
+    clearWorkspaceFileDragPayload,
     hasWorkspaceFileDragPayload,
     hasWorkspaceFileDragPayloadFiles,
     readWorkspaceFileDragPayload,
     WORKSPACE_FILE_DRAG_MIME_TYPE,
     writeWorkspaceFileDragPayload,
 } from "./workspaceFileDragPayload";
+
+afterEach(() => {
+    clearWorkspaceFileDragPayload();
+});
 
 /**
  * @interface MockDataTransfer
@@ -88,6 +93,22 @@ test("should write and read normalized workspace file payload", () => {
         { path: "notes/guide.md", isDir: false },
         { path: "assets", isDir: true },
     ]);
+});
+
+test("should fall back to current in-window drag payload when dragover data is protected", () => {
+    const dragStartTransfer = createMockDataTransfer();
+    writeWorkspaceFileDragPayload(dragStartTransfer, [
+        { path: "notes\\dragged.md", isDir: false },
+    ]);
+
+    const dragOverTransfer = createMockDataTransfer();
+
+    expect(readWorkspaceFileDragPayload(dragOverTransfer)).toEqual([
+        { path: "notes/dragged.md", isDir: false },
+    ]);
+
+    clearWorkspaceFileDragPayload();
+    expect(readWorkspaceFileDragPayload(dragOverTransfer)).toEqual([]);
 });
 
 test("should ignore invalid payload entries", () => {

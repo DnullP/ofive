@@ -35,7 +35,7 @@ async function waitForMockWorkbench(page: Page): Promise<void> {
     });
     await page.goto(MOCK_PAGE);
     await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
-    await page.locator(".layout-v2-tab-section__tab-main").first().waitFor({ state: "visible" });
+    await page.locator("[data-testid='main-dockview-host']").waitFor({ state: "visible" });
 }
 
 async function expandMockNotes(page: Page): Promise<void> {

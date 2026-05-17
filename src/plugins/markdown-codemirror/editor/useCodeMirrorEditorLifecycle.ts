@@ -38,6 +38,7 @@
  *     initialCursorOffset: typeof props.params.initialCursorOffset === "number"
  *       ? props.params.initialCursorOffset
  *       : null,
+ *     readOnly: false,
  *     hasAppliedInitialAutoFocusRef,
  *     articleSnapshot,
  *     setReadContent,
@@ -181,6 +182,8 @@ export interface UseCodeMirrorEditorLifecycleOptions {
     initialAutoFocus: boolean;
     /** 初始光标偏移。 */
     initialCursorOffset: number | null;
+    /** 是否禁用编辑。 */
+    readOnly: boolean;
     /** 初次自动聚焦守卫。 */
     hasAppliedInitialAutoFocusRef: MutableRefObject<boolean>;
     /** 编辑器上下文快照。 */
@@ -756,6 +759,8 @@ export function useCodeMirrorEditorLifecycle(
                 },
             }),
             editorBaseSetup,
+            EditorState.readOnly.of(options.readOnly),
+            EditorView.editable.of(!options.readOnly),
             markdown(),
             createCodeMirrorThemeExtension(),
             fontFamilyCompartmentRef.current.of(
@@ -1013,7 +1018,7 @@ export function useCodeMirrorEditorLifecycle(
             {
                 getCurrentFilePath: () => options.currentFilePathRef.current,
                 createBinaryFile: createVaultBinaryFile,
-                canMutateDocument: () => canMutateEditorDocument(options.displayModeRef.current),
+                canMutateDocument: () => !options.readOnly && canMutateEditorDocument(options.displayModeRef.current),
             },
         );
 

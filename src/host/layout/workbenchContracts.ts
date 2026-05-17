@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { CommandId } from "../commands/commandSystem";
+import type { FileOpenMode } from "../config/configStore";
 
 export type PanelPosition = "left" | "right";
 
@@ -83,6 +84,8 @@ export interface PanelRenderContext {
         relativePath: string;
         contentOverride?: string;
         preferredOpenerId?: string;
+        tabParams?: Record<string, unknown>;
+        openMode?: FileOpenMode;
     }) => Promise<void>;
     closeTab: (tabId: string) => void;
     setActiveTab: (tabId: string) => void;

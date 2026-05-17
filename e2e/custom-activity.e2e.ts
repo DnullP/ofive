@@ -24,7 +24,6 @@ import { gotoMockVaultPage } from "./helpers/mockVault";
 async function waitForLayoutReady(page: Page): Promise<void> {
     await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
     await page.locator("[data-testid='main-dockview-host']").waitFor({ state: "visible" });
-    await page.locator(".layout-v2-tab-section__tab").first().waitFor({ state: "visible" });
     await page.locator("[data-testid='sidebar-left']").first().waitFor({ state: "visible" });
 }
 
@@ -257,7 +256,7 @@ test.describe("自定义 Activity", () => {
 
         await expect(createdActivityButton).toHaveCount(0);
         await expect(page.locator("[data-workbench-layout-mode='layout-v2']")).toBeVisible();
-        await expect(page.locator(".layout-v2-tab-section__tab").first()).toBeVisible();
+        await expect(page.locator("[data-testid='main-dockview-host']")).toBeVisible();
         expect(pageErrors).toEqual([]);
     });
 

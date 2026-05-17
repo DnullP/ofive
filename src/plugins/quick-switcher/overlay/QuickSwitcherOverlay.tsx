@@ -27,10 +27,14 @@ import { CornerDownLeft, FileText, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { searchVaultMarkdownFiles, type VaultQuickSwitchItem } from "../../../api/vaultApi";
 import { UI_LANGUAGE } from "../../../i18n/uiLanguage";
+import type { FileOpenMode } from "../../../host/config/configStore";
 import { modalPlainTextInputProps } from "../../../host/layout/textInputBehaviors";
 import type { OverlayRenderContext } from "../../../host/registry/overlayRegistry";
 import { useDebouncedValue } from "../../../utils/useDebouncedValue";
-import { QUICK_SWITCHER_OPEN_REQUESTED_EVENT } from "../quickSwitcherEvents";
+import {
+    QUICK_SWITCHER_OPEN_REQUESTED_EVENT,
+    type QuickSwitcherOpenRequestDetail,
+} from "../quickSwitcherEvents";
 import "./QuickSwitcherModal.css";
 
 const QUICK_SWITCHER_SEARCH_DEBOUNCE_MS = 240;
@@ -72,6 +76,7 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+    const [openModeOverride, setOpenModeOverride] = useState<FileOpenMode | undefined>(undefined);
     const debouncedQuery = useDebouncedValue(
         query,
         QUICK_SWITCHER_SEARCH_DEBOUNCE_MS,
@@ -114,8 +119,10 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
     }, [scrollActiveItemIntoView]);
 
     useEffect(() => {
-        const handleOpenRequested = (): void => {
+        const handleOpenRequested = (event: Event): void => {
+            const detail = (event as CustomEvent<QuickSwitcherOpenRequestDetail>).detail;
             console.info("[quick-switcher] open requested by plugin event");
+            setOpenModeOverride(detail?.openMode);
             setIsOpen(true);
         };
 
@@ -220,6 +227,7 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
         closeOverlay();
         void props.context.openFile({
             relativePath: target.relativePath,
+            openMode: openModeOverride,
         }).catch((reason) => {
             console.error("[quick-switcher] open file failed", {
                 relativePath: target.relativePath,

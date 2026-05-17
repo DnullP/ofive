@@ -1,5 +1,5 @@
 import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
-import { FileText, Folder, Plus, X } from "lucide-react";
+import { FileText, Folder, Lock, Plus, X } from "lucide-react";
 import {
     createAgentSkill,
     listAgentSkills,
@@ -22,6 +22,10 @@ function buildDraftSkillName(value: string): string {
 function joinSkillFilePath(skill: AgentSkillSummary, filePath: string): string {
     const directory = skill.directoryRelativePath || `.ofive/skills/${skill.name}`;
     return `${directory.replace(/\/+$/u, "")}/${filePath.replace(/^\/+/u, "")}`;
+}
+
+function isReadOnlySkill(skill: AgentSkillSummary): boolean {
+    return skill.builtIn === true || skill.readOnly === true;
 }
 
 interface AgentSkillTreeNode {
@@ -172,9 +176,17 @@ export function AgentSkillsPanel({ context }: AgentSkillsPanelProps): ReactNode 
         setOpeningFilePath(filePath);
         try {
             const response = await readAgentSkillFile(selectedSkill.name, filePath);
+            const readOnly = isReadOnlySkill(selectedSkill);
             await context.openFile({
                 relativePath: joinSkillFilePath(selectedSkill, filePath),
                 contentOverride: response.content,
+                tabParams: readOnly
+                    ? {
+                        readOnly: true,
+                        forceDisplayMode: "read",
+                        initialDisplayMode: "read",
+                    }
+                    : undefined,
             });
             setActiveFilePath(filePath);
             setMessage("");
@@ -232,24 +244,34 @@ export function AgentSkillsPanel({ context }: AgentSkillsPanelProps): ReactNode 
                 <div className="agent-skills-skill-list" aria-label={i18n.t("agentSkills.skillList")}>
                     {skills.length === 0 ? (
                         <div className="agent-skills-empty">{isLoading ? i18n.t("common.loading") : i18n.t("agentSkills.empty")}</div>
-                    ) : skills.map((skill) => (
-                        <button
-                            type="button"
-                            key={skill.name}
-                            className={skill.name === selectedSkillName ? "agent-skills-skill-row is-selected" : "agent-skills-skill-row"}
-                            data-agent-skill-name={skill.name}
-                            onClick={() => {
-                                setSelectedSkillName(skill.name);
-                                setActiveFilePath("");
-                            }}
-                        >
-                            <span className="agent-skills-skill-copy">
-                                <span className="agent-skills-skill-name">{skill.name}</span>
-                                {skill.description ? <span className="agent-skills-skill-description">{skill.description}</span> : null}
-                            </span>
-                            {!skill.valid ? <strong title={i18n.t("agentSkills.invalidSkill")}>!</strong> : null}
-                        </button>
-                    ))}
+                    ) : skills.map((skill) => {
+                        const readOnly = isReadOnlySkill(skill);
+                        return (
+                            <button
+                                type="button"
+                                key={skill.name}
+                                className={skill.name === selectedSkillName ? "agent-skills-skill-row is-selected" : "agent-skills-skill-row"}
+                                data-agent-skill-name={skill.name}
+                                data-agent-skill-read-only={readOnly ? "true" : undefined}
+                                onClick={() => {
+                                    setSelectedSkillName(skill.name);
+                                    setActiveFilePath("");
+                                }}
+                            >
+                                <span className="agent-skills-skill-copy">
+                                    <span className="agent-skills-skill-name">{skill.name}</span>
+                                    {skill.description ? <span className="agent-skills-skill-description">{skill.description}</span> : null}
+                                </span>
+                                {readOnly ? (
+                                    <span className="agent-skills-skill-badge" title={i18n.t("agentSkills.builtInReadOnly")}>
+                                        <Lock size={11} />
+                                        <span>{i18n.t("agentSkills.builtIn")}</span>
+                                    </span>
+                                ) : null}
+                                {!skill.valid ? <strong title={i18n.t("agentSkills.invalidSkill")}>!</strong> : null}
+                            </button>
+                        );
+                    })}
                 </div>
             </section>
 

@@ -55,9 +55,6 @@ test.describe("ai chat ux", () => {
         await expect(page.locator(".layout-v2-tab-section__tab--focused", { hasText: "guide.md" })).toBeVisible();
         await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "guide.md" })).toHaveCount(1);
 
-        await page.locator(".layout-v2-tab-section__tab-main", { hasText: "首页" }).click();
-        await expect(page.locator(".layout-v2-tab-section__tab--focused", { hasText: "首页" })).toBeVisible();
-
         await wikiLink.click();
         await expect(page.locator(".layout-v2-tab-section__tab--focused", { hasText: "guide.md" })).toBeVisible();
         await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "guide.md" })).toHaveCount(1);
@@ -113,14 +110,42 @@ test.describe("ai chat ux", () => {
         await page.locator(".ai-chat-input").fill("tool record");
         await page.locator(".ai-chat-send-button").click();
 
-        const toolCall = page.locator(".ai-chat-tool-call", { hasText: "vault.read_markdown_file" }).first();
-        await expect(toolCall).toBeVisible();
-        await expect(toolCall.locator(".ai-chat-tool-call-status")).toContainText(/Calling|调用中|Completed|调用完成/);
-        await expect(toolCall.locator(".ai-chat-tool-call-status")).toContainText(/Completed|调用完成/, { timeout: 3_000 });
+        const toolGroup = page.locator(".ai-chat-tool-call-group", { hasText: "vault.read_markdown_file" }).first();
+        await expect(toolGroup).toBeVisible();
+        await expect(toolGroup.locator(".ai-chat-tool-call-status").first()).toContainText(/Calling|调用中|Completed|调用完成/);
+        await expect(toolGroup.locator(".ai-chat-tool-call-status").first()).toContainText(/Completed|调用完成/, { timeout: 3_000 });
+        await expect(toolGroup.locator(".ai-chat-tool-call-count")).toContainText(/2 calls|2 次调用/);
 
-        await toolCall.locator(".ai-chat-tool-call-summary").click();
-        await expect(toolCall.locator(".ai-chat-tool-call-detail-block", { hasText: "mock/article.md" })).toBeVisible();
-        await expect(toolCall.locator(".ai-chat-tool-call-detail-block", { hasText: "mock content" })).toBeVisible();
+        await toolGroup.locator(".ai-chat-tool-call-summary").click();
+        await expect(toolGroup.locator(".ai-chat-tool-call")).toHaveCount(2);
+        await expect(toolGroup.locator(".ai-chat-tool-call-detail-block", { hasText: "mock/article.md" })).toBeVisible();
+        await expect(toolGroup.locator(".ai-chat-tool-call-detail-block", { hasText: "second mock content" })).toBeVisible();
+    });
+
+    test("message actions should copy, retry, and edit from a prior user turn", async ({ page }) => {
+        await waitForAiChatReady(page);
+
+        await page.locator(".ai-chat-input").fill("first action prompt");
+        await page.locator(".ai-chat-send-button").click();
+        const firstAssistant = page.locator(".ai-chat-message.assistant", { hasText: "Mock response for: first action prompt" }).first();
+        await expect(firstAssistant.locator(".ai-chat-message-duration")).toBeVisible({ timeout: 3_000 });
+        await expect(firstAssistant.locator(".ai-chat-message-action-button")).toHaveCount(2);
+
+        await firstAssistant.locator(".ai-chat-message-action-button").nth(1).click();
+        await expect(page.locator(".ai-chat-message.assistant", { hasText: "Mock response for: first action prompt" }).last()).toBeVisible({ timeout: 3_000 });
+        await expect(page.locator(".ai-chat-message.assistant")).toHaveCount(1);
+
+        const userMessage = page.locator(".ai-chat-message.user", { hasText: "first action prompt" }).first();
+        await userMessage.locator(".ai-chat-message-action-button").click();
+        const editInput = userMessage.locator(".ai-chat-message-edit-input");
+        await expect(editInput).toBeVisible();
+        await editInput.fill("edited action prompt");
+        await page.locator(".ai-chat-message-edit-form .ai-chat-message-edit-actions .ai-chat-message-action-button").first().click();
+
+        await expect(page.locator(".ai-chat-message.user", { hasText: "edited action prompt" })).toBeVisible();
+        await expect(page.locator(".ai-chat-message.user", { hasText: "first action prompt" })).toHaveCount(0);
+        await expect(page.locator(".ai-chat-message.assistant", { hasText: "Mock response for: edited action prompt" })).toBeVisible({ timeout: 3_000 });
+        await expect(page.locator(".ai-chat-message.assistant")).toHaveCount(1);
     });
 
     test("approval split menu should persist always-allow operation policy", async ({ page }) => {

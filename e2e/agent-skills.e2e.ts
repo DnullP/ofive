@@ -40,6 +40,28 @@ async function readActiveEditorDocument(page: Page): Promise<string> {
 }
 
 test.describe("agent skills panel", () => {
+    test("opens the built-in WikiLink SKILL as a read-only reader tab", async ({ page }) => {
+        await gotoMockVaultPage(page, "agent-skills-builtin-wikilink", "/web-mock/mock-tauri-test.html?showControls=0");
+        await waitForWorkbench(page);
+        await openAgentSkillsPanel(page);
+
+        const builtinSkill = page.locator(".agent-skills-skill-list [data-agent-skill-name='ofive-wikilink-syntax']");
+        await expect(builtinSkill).toBeVisible();
+        await expect(builtinSkill).toHaveAttribute("data-agent-skill-read-only", "true");
+        await builtinSkill.click();
+
+        await page.locator(".agent-skills-file-tree [data-agent-skill-file-path='SKILL.md']").click();
+
+        const activeEditor = page.locator(".layout-v2-tab-section__card--active");
+        await expect(activeEditor.locator(".cm-tab.cm-tab-reading")).toBeVisible();
+        await expect(activeEditor.locator(".cm-tab-reader")).toBeVisible();
+        await expect(activeEditor.locator(".cm-tab-mode-toggle")).toHaveCount(0);
+        await expect(activeEditor.locator(".cm-tab-title-input")).toHaveAttribute("readonly", "");
+        await expect(activeEditor.locator(".cm-tab-editor")).toHaveClass(/is-hidden/);
+        await expect(activeEditor.locator(".cm-tab-reader")).toContainText("[[Daily Note#L42]]");
+        await expect(activeEditor.locator(".cm-tab-reader")).toContainText("[[mock-ofive:/src/main.ts:7:1-9:1|createMainRuntime]]");
+    });
+
     test("creates a vault-backed Agent SKILL and opens its files in an editor tab", async ({ page }) => {
         await gotoMockVaultPage(page, "agent-skills", "/web-mock/mock-tauri-test.html?showControls=0");
         await waitForWorkbench(page);

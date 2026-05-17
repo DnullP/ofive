@@ -16,6 +16,7 @@ export const WORKSPACE_FILE_DRAG_HAS_FILE_MIME_TYPE = "application/x-ofive-works
 export const WORKSPACE_FILE_DRAG_LOCAL_SCOPE_EVENT = "ofive:workspace-file-local-scope";
 
 const LEGACY_FILE_TREE_DRAG_MIME_TYPE = "application/x-ofive-file-tree-items";
+let currentWorkspaceFileDragPayloadItems: WorkspaceFileDragPayloadItem[] = [];
 
 /**
  * @interface WorkspaceFileDragPayloadItem
@@ -85,6 +86,7 @@ export function writeWorkspaceFileDragPayload(
     items: WorkspaceFileDragPayloadItem[],
 ): void {
     const normalizedItems = normalizeWorkspaceFileDragPayloadItems(items);
+    currentWorkspaceFileDragPayloadItems = normalizedItems;
     const serialized = JSON.stringify(normalizedItems);
     dataTransfer.setData(WORKSPACE_FILE_DRAG_MIME_TYPE, serialized);
     dataTransfer.setData(
@@ -92,6 +94,14 @@ export function writeWorkspaceFileDragPayload(
         normalizedItems.some((item) => !item.isDir) ? "1" : "0",
     );
     dataTransfer.setData(LEGACY_FILE_TREE_DRAG_MIME_TYPE, serialized);
+}
+
+/**
+ * @function clearWorkspaceFileDragPayload
+ * @description 清理同窗口拖拽 fallback；应在 dragend/drop 后调用。
+ */
+export function clearWorkspaceFileDragPayload(): void {
+    currentWorkspaceFileDragPayloadItems = [];
 }
 
 /**
@@ -148,7 +158,7 @@ export function readWorkspaceFileDragPayload(dataTransfer: DataTransfer | null):
     const rawPayload = dataTransfer.getData(WORKSPACE_FILE_DRAG_MIME_TYPE)
         || dataTransfer.getData(LEGACY_FILE_TREE_DRAG_MIME_TYPE);
     if (!rawPayload) {
-        return [];
+        return currentWorkspaceFileDragPayloadItems;
     }
 
     try {

@@ -34,7 +34,11 @@ const NOTES_TO_OPEN = [
 async function waitForMockWorkbench(page: Page): Promise<void> {
     await page.goto(MOCK_PAGE);
     await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
-    await page.locator(".layout-v2-tab-section__tab-main", { hasText: "首页" }).first().waitFor({ state: "visible" });
+    await page.locator("[data-testid='main-dockview-host']").waitFor({ state: "visible" });
+    await page.evaluate(async () => {
+        const configStoreModule = await import("/src/host/config/configStore.ts");
+        await configStoreModule.updateFeatureSetting("fileOpenMode", "new-tab");
+    });
 }
 
 /**

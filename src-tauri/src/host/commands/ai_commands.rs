@@ -4,11 +4,14 @@
 
 use tauri::{AppHandle, State};
 
-use crate::app::ai::{chat_app_service, settings_app_service, tool_app_service};
+use crate::app::ai::{
+    chat_app_service, edit_rollback_app_service, settings_app_service, tool_app_service,
+};
 use crate::domain::ai::tool::AiToolDescriptor;
 use crate::shared::ai_service::{
     AiChatHistoryMessage, AiChatHistoryState, AiChatSettings, AiChatStreamStartResponse,
-    AiSidecarHealthResponse, AiVendorDefinition, AiVendorModelDefinition,
+    AiChatRollbackRestoreResponse, AiSidecarHealthResponse, AiVendorDefinition,
+    AiVendorModelDefinition,
 };
 use crate::shared::backend_plugin_contracts::BackendPluginConfig;
 use crate::state::AppState;
@@ -27,6 +30,7 @@ pub(crate) const AI_COMMAND_IDS: &[&str] = &[
     "start_ai_chat_stream",
     "stop_ai_chat_stream",
     "submit_ai_chat_confirmation",
+    "restore_ai_chat_rollback_checkpoint",
 ];
 
 /// 获取可用 AI vendor 列表。
@@ -113,6 +117,7 @@ pub async fn start_ai_chat_stream(
     user_id: Option<String>,
     history: Option<Vec<AiChatHistoryMessage>>,
     context_snapshot_json: Option<String>,
+    rollback_checkpoint_id: Option<String>,
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AiChatStreamStartResponse, String> {
@@ -122,6 +127,7 @@ pub async fn start_ai_chat_stream(
         user_id,
         history,
         context_snapshot_json,
+        rollback_checkpoint_id,
         app_handle,
         state,
     )
@@ -141,6 +147,7 @@ pub async fn submit_ai_chat_confirmation(
     confirmed: bool,
     session_id: Option<String>,
     user_id: Option<String>,
+    rollback_checkpoint_id: Option<String>,
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AiChatStreamStartResponse, String> {
@@ -149,8 +156,22 @@ pub async fn submit_ai_chat_confirmation(
         confirmed,
         session_id,
         user_id,
+        rollback_checkpoint_id,
         app_handle,
         state,
     )
     .await
+}
+
+/// 恢复一轮 AI edit rollback checkpoint。
+#[tauri::command]
+pub fn restore_ai_chat_rollback_checkpoint(
+    rollback_checkpoint_id: String,
+    state: State<'_, AppState>,
+) -> Result<AiChatRollbackRestoreResponse, String> {
+    let root = crate::state::get_vault_root(&state)?;
+    edit_rollback_app_service::restore_ai_chat_rollback_checkpoint_in_root(
+        &root,
+        rollback_checkpoint_id,
+    )
 }

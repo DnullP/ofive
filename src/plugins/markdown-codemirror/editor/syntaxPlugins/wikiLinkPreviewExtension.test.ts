@@ -32,16 +32,49 @@ describe("resolveProjectReaderWikiLinkPreview", () => {
 function createRenderTarget(options?: {
     rendered?: boolean;
     widgetTarget?: string;
+    renderedWidgetTarget?: string;
+    textContent?: string;
 }): EventTarget {
     return {
         closest(selector: string) {
             if (
                 options?.widgetTarget
-                && selector === ".cm-rendered-wikilink-display"
+                && selector.includes(".cm-rendered-wikilink-display")
+                && selector.includes("[data-wiki-link-target]")
             ) {
                 return {
+                    textContent: options.textContent,
                     dataset: {
                         wikiLinkTarget: options.widgetTarget,
+                    },
+                    getBoundingClientRect() {
+                        return {
+                            left: 11,
+                            right: 41,
+                            top: 13,
+                            bottom: 29,
+                        };
+                    },
+                };
+            }
+
+            if (
+                options?.renderedWidgetTarget
+                && selector.includes(".cm-rendered-wikilink")
+                && selector.includes("[data-wiki-link-target]")
+            ) {
+                return {
+                    textContent: options.textContent,
+                    dataset: {
+                        wikiLinkTarget: options.renderedWidgetTarget,
+                    },
+                    getBoundingClientRect() {
+                        return {
+                            left: 17,
+                            right: 53,
+                            top: 19,
+                            bottom: 31,
+                        };
                     },
                 };
             }
@@ -150,6 +183,45 @@ describe("resolveWikiLinkPreviewAtMouseEvent", () => {
         expect(match?.anchorPos).toBe(0);
     });
 
+    it("解析无法映射文档坐标的 widget wikilink hover 命中", () => {
+        const state = EditorState.create({
+            doc: "| Cell |\n| --- |\n| [[Target Note|Alias]] |",
+        });
+
+        const match = resolveWikiLinkPreviewAtMouseEvent(
+            {
+                metaKey: true,
+                ctrlKey: false,
+                target: createRenderTarget({
+                    renderedWidgetTarget: "Target Note",
+                    textContent: "Alias",
+                }),
+                clientX: 10,
+                clientY: 18,
+            },
+            {
+                state,
+                posAtCoords() {
+                    throw new Error("widget preview should be anchored without posAtCoords");
+                },
+            },
+        );
+
+        expect(match).toEqual({
+            from: 0,
+            to: 0,
+            target: "Target Note",
+            displayText: "Alias",
+            anchorPos: 0,
+            anchorRect: {
+                left: 17,
+                right: 53,
+                top: 19,
+                bottom: 31,
+            },
+        });
+    });
+
     it("非渲染态 hover 不触发预览", () => {
         const state = EditorState.create({
             doc: "[[Target Note]]",
@@ -167,6 +239,30 @@ describe("resolveWikiLinkPreviewAtMouseEvent", () => {
                 state,
                 posAtCoords() {
                     return 4;
+                },
+            },
+        );
+
+        expect(match).toBeNull();
+    });
+
+    it("忽略普通渲染态 wikilink hover 的坐标解析异常", () => {
+        const state = EditorState.create({
+            doc: "[[Target Note]]",
+        });
+
+        const match = resolveWikiLinkPreviewAtMouseEvent(
+            {
+                metaKey: true,
+                ctrlKey: false,
+                target: createRenderTarget({ rendered: true }),
+                clientX: 10,
+                clientY: 18,
+            },
+            {
+                state,
+                posAtCoords() {
+                    throw new Error("CodeMirror coordinate scan failed");
                 },
             },
         );

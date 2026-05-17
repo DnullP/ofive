@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
 const GUIDE_NOTE_PATH = "test-resources/notes/guide.md";
@@ -65,6 +65,30 @@ async function waitForEditorFrames(page: Page, frameCount = 2): Promise<void> {
             });
         }
     }, frameCount);
+}
+
+async function dispatchCmdHoverOnLocator(page: Page, locator: Locator): Promise<void> {
+    await locator.evaluate((target) => {
+        const rect = target.getBoundingClientRect();
+        target.dispatchEvent(new MouseEvent("mousemove", {
+            bubbles: true,
+            cancelable: true,
+            clientX: rect.left + Math.max(1, rect.width / 2),
+            clientY: rect.top + Math.max(1, rect.height / 2),
+            metaKey: true,
+            ctrlKey: true,
+        }));
+    });
+    await waitForEditorFrames(page, 2);
+}
+
+async function hideWikiLinkPreview(page: Page): Promise<void> {
+    await page.keyboard.up("Meta").catch(() => undefined);
+    await page.mouse.move(4, 4);
+    await page.evaluate(() => {
+        document.querySelectorAll(".cm-wikilink-preview-tooltip").forEach((element) => element.remove());
+    });
+    await waitForEditorFrames(page, 2);
 }
 
 function activeTableNavigationCell(page: Page) {
@@ -164,6 +188,26 @@ async function getActiveEditorState(page: Page): Promise<{
                 : null,
         };
     });
+}
+
+async function closeMockNoteTab(page: Page, tabTitle: string): Promise<void> {
+    await page.getByRole("button", { name: `Close ${tabTitle}`, exact: true }).first().click();
+    await waitForEditorFrames(page, 2);
+}
+
+async function flushAutoSave(page: Page): Promise<void> {
+    await page.evaluate(async () => {
+        const autoSaveModule = await import("/src/host/editor/autoSaveService.ts");
+        await autoSaveModule.flushAutoSave();
+    });
+}
+
+async function readBrowserMockMarkdownContent(page: Page, relativePath: string): Promise<string> {
+    return page.evaluate(async (path) => {
+        const fixturesModule = await import("/src/api/vaultBrowserMockFixtures.ts");
+        const contents = await fixturesModule.loadBrowserMockMarkdownContents();
+        return contents[path] ?? "";
+    }, relativePath);
 }
 
 async function expectActiveEditorLine(page: Page, lineNumber: number, lineText: string): Promise<void> {
@@ -416,6 +460,75 @@ test.describe("markdown table vim regression", () => {
         await waitForMockWorkbench(page);
         await enableEditorVimMode(page);
         await openMockNote(page, TABLE_NOTE_PATH);
+    });
+
+    test("table cell previews should render inline markdown and enhanced syntax", async ({ page }) => {
+        const markdown = [
+            "# Table Cell Rendering",
+            "",
+            "| Syntax | Rendered |",
+            "| --- | --- |",
+            "| Plain | **table bold** *table italic* ~~table strike~~ `table code` ==table mark== #tabletopic $a^2+b^2=c^2$ [[guide\\|Guide Alias]] [external](https://example.com) |",
+            "",
+            "Tail",
+        ].join("\n");
+
+        await replaceActiveEditorDoc(page, markdown, "Tail");
+        await waitForEditorFrames(page, 4);
+
+        const tableWidget = page.locator(".layout-v2-tab-section__card--active .cm-markdown-table-widget");
+        await expect(tableWidget.locator(".mtv-shell")).toBeVisible();
+        await expect(tableWidget.locator(".cm-rendered-bold", { hasText: "table bold" })).toBeVisible();
+        await expect(tableWidget.locator(".cm-rendered-italic", { hasText: "table italic" })).toBeVisible();
+        await expect(tableWidget.locator(".cm-rendered-strikethrough", { hasText: "table strike" })).toBeVisible();
+        await expect(tableWidget.locator(".cm-rendered-inline-code", { hasText: "table code" })).toBeVisible();
+        await expect(tableWidget.locator(".cm-rendered-highlight", { hasText: "table mark" })).toBeVisible();
+        await expect(tableWidget.locator(".cm-rendered-tag", { hasText: "#tabletopic" })).toBeVisible();
+        await expect(tableWidget.locator(".mtv-cell-preview-markdown .cm-latex-inline-widget").first()).toBeVisible();
+        await expect(tableWidget.locator(".cm-rendered-wikilink").filter({ hasText: /^Guide Alias$/ })).toBeVisible();
+        await expect(tableWidget.locator(".cm-rendered-link", { hasText: "external" })).toBeVisible();
+    });
+
+    test("table wikilinks should preview, open, and collapse after outside editor click", async ({ page }) => {
+        const markdown = [
+            "# Table WikiLink Focus",
+            "Before table",
+            "| Name | Link |",
+            "| --- | --- |",
+            "| Row | [[guide\\|Guide Alias]] |",
+            "",
+            "Tail",
+        ].join("\n");
+
+        await replaceActiveEditorDoc(page, markdown, "Before table");
+        await waitForEditorFrames(page, 4);
+
+        const tableWidget = page.locator(".layout-v2-tab-section__card--active .cm-markdown-table-widget");
+        const tableLink = tableWidget.locator(".cm-rendered-wikilink", { hasText: /^Guide Alias$/ }).first();
+        await expect(tableLink).toBeVisible();
+        await expect(tableLink).toHaveAttribute("data-wiki-link-target", "guide");
+
+        await dispatchCmdHoverOnLocator(page, tableLink);
+        await expect(page.locator(".cm-wikilink-preview-tooltip")).toBeVisible();
+        await hideWikiLinkPreview(page);
+
+        await clickEditorLine(page, 1);
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("j");
+        await page.keyboard.press("l");
+        await waitForEditorFrames(page, 4);
+
+        const activeLinkCell = activeTableNavigationCell(page);
+        await expect(activeLinkCell).toBeFocused();
+        await expect(activeLinkCell).toHaveText("[[guide\\|Guide Alias]]");
+
+        await page.locator(".layout-v2-tab-section__card--active .cm-line", { hasText: "Tail" }).click();
+        await waitForEditorFrames(page, 4);
+        await expect(page.locator("[data-vim-nav-active='true']:visible")).toHaveCount(0);
+        await expect(tableLink).toBeVisible();
+
+        await tableLink.click();
+        await expect(page.getByRole("button", { name: "guide.md" }).first()).toBeVisible();
     });
 
     test("j/k should enter table from the nearest visible body lines using first and last row anchors", async ({ page }) => {
@@ -975,16 +1088,61 @@ test.describe("markdown table vim regression", () => {
         await expect(page.locator("[data-table-edge-kind='column']")).toHaveCount(3);
 
         const secondRowHandle = page.locator("[data-table-edge-kind='row'][data-table-edge-index='1']").first();
-        await secondRowHandle.click({ button: "right" });
+        await secondRowHandle.click({ button: "right", force: true });
         await page.getByRole("menuitem", { name: "Insert Row Below" }).click();
         await waitForEditorFrames(page, 4);
         await expect(page.locator("[data-table-edge-kind='row']")).toHaveCount(4);
 
         const fourthRowHandle = page.locator("[data-table-edge-kind='row'][data-table-edge-index='3']").first();
-        await fourthRowHandle.click({ button: "right" });
+        await fourthRowHandle.click({ button: "right", force: true });
         await page.getByRole("menuitem", { name: "Delete Current Row" }).click();
         await waitForEditorFrames(page, 4);
         await expect(page.locator("[data-table-edge-kind='row']")).toHaveCount(3);
+    });
+
+    test("resized table layout should persist in markdown and restore after reopening @mouse-drag", async ({ page }) => {
+        await openMockNote(page, TABLE_BOUNDARY_NOTE_PATH);
+        await expect(page.locator(".mtv-table:visible")).toBeVisible();
+
+        const firstHeaderCell = page.locator(".mtv-table-head-cell").first();
+        const firstRowCell = page.locator(".mtv-table-body-cell").first();
+        const firstColumnResizeHandle = page.locator("[data-table-resize-kind='column'][data-table-resize-index='0']").first();
+        const firstRowResizeHandle = page.locator("[data-table-resize-kind='row'][data-table-resize-index='0']").first();
+
+        const initialHeaderWidth = await firstHeaderCell.evaluate((element) => element.getBoundingClientRect().width);
+        const initialRowHeight = await firstRowCell.evaluate((element) => element.getBoundingClientRect().height);
+
+        await dragLocatorBy(page, firstColumnResizeHandle, 52, 0);
+        await waitForEditorFrames(page, 1);
+        await dragLocatorBy(page, firstRowResizeHandle, 0, 34);
+        await waitForEditorFrames(page, 4);
+
+        const resizedHeaderWidth = await firstHeaderCell.evaluate((element) => Math.round(element.getBoundingClientRect().width));
+        const resizedRowHeight = await firstRowCell.evaluate((element) => Math.round(element.getBoundingClientRect().height));
+        expect(resizedHeaderWidth).toBeGreaterThan(Math.round(initialHeaderWidth + 24));
+        expect(resizedRowHeight).toBeGreaterThan(Math.round(initialRowHeight + 16));
+
+        await expect.poll(async () => {
+            const state = await getActiveEditorState(page);
+            return /<!-- ofive-table-layout: \{"columns":\[[^\]]+\],"rows":\[[^\]]+\]\} -->/.test(state.docText);
+        }).toBe(true);
+
+        await flushAutoSave(page);
+        const savedContent = await readBrowserMockMarkdownContent(page, TABLE_BOUNDARY_NOTE_PATH);
+        expect(savedContent).toContain("<!-- ofive-table-layout:");
+
+        await closeMockNoteTab(page, "table-vim-boundary.md");
+        await openMockNote(page, TABLE_BOUNDARY_NOTE_PATH);
+        await expect(page.locator(".mtv-table:visible")).toBeVisible();
+        await waitForEditorFrames(page, 4);
+
+        const restoredHeaderWidth = await page.locator(".mtv-table-head-cell").first()
+            .evaluate((element) => Math.round(element.getBoundingClientRect().width));
+        const restoredRowHeight = await page.locator(".mtv-table-body-cell").first()
+            .evaluate((element) => Math.round(element.getBoundingClientRect().height));
+
+        expect(Math.abs(restoredHeaderWidth - resizedHeaderWidth)).toBeLessThanOrEqual(3);
+        expect(Math.abs(restoredRowHeight - resizedRowHeight)).toBeLessThanOrEqual(3);
     });
 
     test("row edge handles should align to the visual center of wrapped table rows", async ({ page }) => {

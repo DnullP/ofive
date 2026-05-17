@@ -10,7 +10,10 @@ import {
 import { FileText, Folder, FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "./FileTree.css";
-import { writeWorkspaceFileDragPayload } from "../../../host/layout/workspaceFileDragPayload";
+import {
+  clearWorkspaceFileDragPayload,
+  writeWorkspaceFileDragPayload,
+} from "../../../host/layout/workspaceFileDragPayload";
 import {
   showRegisteredContextMenu,
   useContextMenuProvider,
@@ -1103,6 +1106,7 @@ export function FileTree({
     setDraggingItems([]);
     setDraggingPaths(new Set());
     setDropTargetDirectoryPath(null);
+    clearWorkspaceFileDragPayload();
   };
 
   const handleBeginDrag = (event: ReactDragEvent<HTMLButtonElement>, node: TreeNode): void => {

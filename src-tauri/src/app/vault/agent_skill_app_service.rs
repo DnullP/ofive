@@ -16,6 +16,45 @@ use crate::shared::vault_contracts::{
 const AGENT_SKILLS_ROOT_RELATIVE_PATH: &str = ".ofive/skills";
 const SKILL_FILE_NAME: &str = "SKILL.md";
 const MAX_SIDE_CAR_SKILL_FILE_BYTES: u64 = 256 * 1024;
+const BUILTIN_WIKILINK_SKILL_NAME: &str = "ofive-wikilink-syntax";
+const BUILTIN_WIKILINK_SKILL_DESCRIPTION: &str = "Explain ofive WikiLink syntax for notes, anchors, paragraphs, lines, and external project code references.";
+const BUILTIN_WIKILINK_SKILL_CONTENT: &str = r#"---
+name: ofive-wikilink-syntax
+description: Explain ofive WikiLink syntax for notes, anchors, paragraphs, lines, and external project code references.
+---
+# ofive-wikilink-syntax
+
+Use this skill when the user asks about, writes, fixes, or reviews ofive WikiLinks.
+
+## Note WikiLinks
+
+```text
+[[Daily Note]]
+[[Daily Note|today]]
+[[Daily Note#L42]]
+[[Daily Note#line:42]]
+[[Daily Note#Decision Log]]
+[[Daily Note#title:Decision Log]]
+[[Daily Note#P3]]
+[[Daily Note#paragraph:3]]
+[[#Decision Log]]
+```
+
+## External Project Code References
+
+```text
+[[projectName:/path/to/file:line:column-endLine:endColumn|label]]
+[[mock-ofive:/src/main.ts:7:1-9:1|createMainRuntime]]
+[[ofive:/src/plugins/ai-chat/aiChatPlugin.tsx:1713|AI Chat context]]
+```
+
+## Guidance
+
+- Prefer line or line-column ranges for code references.
+- Prefer title targets when linking to a Markdown heading.
+- Prefer paragraph targets when the destination is prose without a stable heading.
+- Preview and click behavior should resolve to the same target position.
+"#;
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -55,6 +94,28 @@ fn normalize_skill_name(name: &str) -> Result<String, String> {
         );
     }
     Ok(normalized)
+}
+
+fn is_builtin_skill_name(name: &str) -> bool {
+    name.trim() == BUILTIN_WIKILINK_SKILL_NAME
+}
+
+fn builtin_wikilink_skill_summary() -> AgentSkillSummary {
+    AgentSkillSummary {
+        name: BUILTIN_WIKILINK_SKILL_NAME.to_string(),
+        description: BUILTIN_WIKILINK_SKILL_DESCRIPTION.to_string(),
+        directory_relative_path: format!(
+            "{AGENT_SKILLS_ROOT_RELATIVE_PATH}/{BUILTIN_WIKILINK_SKILL_NAME}"
+        ),
+        files: vec![AgentSkillFileEntry {
+            relative_path: SKILL_FILE_NAME.to_string(),
+            size_bytes: BUILTIN_WIKILINK_SKILL_CONTENT.as_bytes().len() as u64,
+        }],
+        valid: true,
+        built_in: true,
+        read_only: true,
+        error: None,
+    }
 }
 
 fn normalize_skill_file_relative_path(path: &str) -> Result<String, String> {
@@ -268,6 +329,8 @@ fn build_skill_summary(skill_dir: &Path) -> Result<AgentSkillSummary, String> {
         directory_relative_path,
         files,
         valid,
+        built_in: false,
+        read_only: false,
         error,
     })
 }
@@ -276,12 +339,12 @@ fn build_skill_summary(skill_dir: &Path) -> Result<AgentSkillSummary, String> {
 pub(crate) fn list_agent_skills_in_root(
     vault_root: &Path,
 ) -> Result<Vec<AgentSkillSummary>, String> {
+    let mut skills = vec![builtin_wikilink_skill_summary()];
     let root = skills_root(vault_root);
     if !root.exists() {
-        return Ok(Vec::new());
+        return Ok(skills);
     }
 
-    let mut skills = Vec::new();
     for entry in fs::read_dir(&root)
         .map_err(|error| format!("读取 Agent SKILL 根目录失败 {}: {error}", root.display()))?
     {
@@ -305,6 +368,9 @@ pub(crate) fn list_agent_skills_in_root(
         if !is_valid_skill_name(name) {
             continue;
         }
+        if is_builtin_skill_name(name) {
+            continue;
+        }
         skills.push(build_skill_summary(&path)?);
     }
     skills.sort_by(|left, right| left.name.cmp(&right.name));
@@ -318,6 +384,9 @@ pub(crate) fn create_agent_skill_in_root(
     description: String,
 ) -> Result<AgentSkillSummary, String> {
     let skill_name = normalize_skill_name(&skill_name)?;
+    if is_builtin_skill_name(&skill_name) {
+        return Err("内置 SKILL 不可创建或覆盖".to_string());
+    }
     let description = description.trim().to_string();
     if description.is_empty() || description.len() > 1024 {
         return Err("description 长度必须为 1-1024".to_string());
@@ -347,6 +416,16 @@ pub(crate) fn read_agent_skill_file_in_root(
 ) -> Result<ReadAgentSkillFileResponse, String> {
     let (skill_name, relative_path, target_path) =
         resolve_skill_file_path(vault_root, &skill_name, &relative_path)?;
+    if is_builtin_skill_name(&skill_name) {
+        if relative_path != SKILL_FILE_NAME {
+            return Err("目标 SKILL 文件不存在".to_string());
+        }
+        return Ok(ReadAgentSkillFileResponse {
+            skill_name,
+            relative_path,
+            content: BUILTIN_WIKILINK_SKILL_CONTENT.to_string(),
+        });
+    }
     if !target_path.is_file() {
         return Err("目标 SKILL 文件不存在".to_string());
     }
@@ -368,6 +447,9 @@ pub(crate) fn write_agent_skill_file_in_root(
 ) -> Result<WriteAgentSkillFileResponse, String> {
     let (skill_name, relative_path, target_path) =
         resolve_skill_file_path(vault_root, &skill_name, &relative_path)?;
+    if is_builtin_skill_name(&skill_name) {
+        return Err("内置 SKILL 是只读的".to_string());
+    }
     if relative_path == SKILL_FILE_NAME {
         let frontmatter = extract_skill_frontmatter(&content)?;
         if frontmatter.name != skill_name {
@@ -469,6 +551,44 @@ mod tests {
         assert!(files.iter().any(|item| {
             item.skill_name == "research-helper" && item.relative_path == "references/context.md"
         }));
+        assert!(files.iter().any(|item| {
+            item.skill_name == BUILTIN_WIKILINK_SKILL_NAME && item.relative_path == SKILL_FILE_NAME
+        }));
+    }
+
+    #[test]
+    fn builtin_wikilink_skill_should_be_listed_readable_and_read_only() {
+        let root = create_test_root();
+
+        let summaries = list_agent_skills_in_root(&root).expect("应成功列出 skill");
+        let builtin = summaries
+            .iter()
+            .find(|item| item.name == BUILTIN_WIKILINK_SKILL_NAME)
+            .expect("应包含内置 wikilink skill");
+
+        assert!(builtin.built_in);
+        assert!(builtin.read_only);
+        assert!(builtin.valid);
+
+        let read = read_agent_skill_file_in_root(
+            &root,
+            BUILTIN_WIKILINK_SKILL_NAME.to_string(),
+            SKILL_FILE_NAME.to_string(),
+        )
+        .expect("应成功读取内置 skill");
+        assert!(read.content.contains("[[Daily Note#L42]]"));
+        assert!(read
+            .content
+            .contains("[[mock-ofive:/src/main.ts:7:1-9:1|createMainRuntime]]"));
+
+        let error = write_agent_skill_file_in_root(
+            &root,
+            BUILTIN_WIKILINK_SKILL_NAME.to_string(),
+            SKILL_FILE_NAME.to_string(),
+            read.content,
+        )
+        .expect_err("内置 skill 应不可写");
+        assert!(error.contains("只读"));
     }
 
     #[test]
@@ -558,7 +678,10 @@ mod tests {
 
         let files =
             collect_agent_skill_sidecar_files_in_root(&root).expect("应成功收集 sidecar 文件");
-        assert!(files.is_empty());
+        assert!(!files.iter().any(|item| item.skill_name == "legacy-helper"));
+        assert!(files
+            .iter()
+            .any(|item| item.skill_name == BUILTIN_WIKILINK_SKILL_NAME));
     }
 
     #[test]

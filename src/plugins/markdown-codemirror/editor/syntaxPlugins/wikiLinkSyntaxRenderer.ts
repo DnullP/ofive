@@ -16,11 +16,18 @@ import {
     rangeIntersectsSelection,
     registerLineSyntaxRenderer,
 } from "../syntaxRenderRegistry";
-import { resolveWikiLinkTarget } from "../../../../api/vaultApi";
-import { openFileInWorkbench } from "../../../../host/layout/openFileService";
+import { readVaultMarkdownFile, resolveWikiLinkTarget } from "../../../../api/vaultApi";
+import { emitEditorRevealRequestedEvent } from "../../../../host/events/appEventBus";
+import { buildFileTabId, openFileInWorkbench } from "../../../../host/layout/openFileService";
 import { resolveParentDirectory } from "../pathUtils";
 import { openProjectReaderWikiLinkTarget } from "../../../project-reader/projectReaderLinks";
 import { parseWikiLinkParts } from "./wikiLinkParser";
+import {
+    parseWikiLinkTarget,
+    resolveWikiLinkSubtarget,
+    type ParsedWikiLinkTarget,
+    type ResolvedWikiLinkSubtarget,
+} from "./wikiLinkSubtarget";
 
 const WIKI_LINK_PATTERN = /(\[\[)([^\]\n]+?)(\]\])/g;
 const INLINE_CODE_SPAN_PATTERN = /`[^`\n]+`/g;
@@ -146,6 +153,55 @@ class WikiLinkDisplayWidget extends WidgetType {
     }
 }
 
+function readExistingPanelContent(
+    containerApi: WorkbenchContainerApi,
+    relativePath: string,
+): string | null {
+    const normalizedPath = relativePath.replace(/\\/g, "/");
+    const panel = containerApi.getPanel(buildFileTabId(normalizedPath))
+        ?? containerApi.panels?.find((candidate) =>
+            typeof candidate.params?.path === "string"
+            && candidate.params.path.replace(/\\/g, "/") === normalizedPath,
+        );
+
+    return typeof panel?.params?.content === "string"
+        ? panel.params.content
+        : null;
+}
+
+async function resolveNavigationSubtarget(options: {
+    containerApi: WorkbenchContainerApi;
+    relativePath: string;
+    parsedTarget: ParsedWikiLinkTarget;
+}): Promise<ResolvedWikiLinkSubtarget | null> {
+    const subtarget = options.parsedTarget.subtarget;
+    if (!subtarget) {
+        return null;
+    }
+
+    const existingContent = readExistingPanelContent(options.containerApi, options.relativePath);
+    const content = existingContent
+        ?? (await readVaultMarkdownFile(options.relativePath)).content;
+    return resolveWikiLinkSubtarget(content, subtarget);
+}
+
+function scheduleEditorRevealRequest(options: {
+    articleId: string;
+    path: string;
+    line: number;
+}): void {
+    const emitReveal = (): void => {
+        emitEditorRevealRequestedEvent(options);
+    };
+
+    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+        window.requestAnimationFrame(emitReveal);
+        return;
+    }
+
+    emitReveal();
+}
+
 /**
  * @function openWikiLinkTarget
  * @description 打开或激活指定 wiki link 目标。
@@ -164,33 +220,53 @@ export async function openWikiLinkTarget(
 
     const currentFilePath = getCurrentFilePath();
     const currentDirectory = resolveParentDirectory(currentFilePath);
+    const parsedTarget = parseWikiLinkTarget(target);
 
     try {
-        const resolved = await resolveWikiLinkTarget(currentDirectory, target);
+        const resolved = parsedTarget.noteTarget.length === 0 && parsedTarget.subtarget !== null
+            ? { relativePath: currentFilePath.replace(/\\/g, "/") }
+            : await resolveWikiLinkTarget(currentDirectory, parsedTarget.noteTarget);
         if (!resolved) {
             console.warn("[editor] wikilink target not found", {
                 currentDirectory,
                 target,
+                noteTarget: parsedTarget.noteTarget,
             });
             return;
         }
 
-        const targetId = `file:${resolved.relativePath}`;
-        const existingPanel = containerApi.getPanel(targetId);
-        if (existingPanel) {
-            existingPanel.api.setActive();
-            return;
-        }
+        const navigationTarget = await resolveNavigationSubtarget({
+            containerApi,
+            relativePath: resolved.relativePath,
+            parsedTarget,
+        });
 
         await openFileInWorkbench({
             containerApi,
             relativePath: resolved.relativePath,
+            tabParams: navigationTarget
+                ? {
+                    initialCursorOffset: navigationTarget.offset,
+                    initialRevealLine: navigationTarget.line,
+                    autoFocus: true,
+                }
+                : undefined,
         });
+
+        if (navigationTarget) {
+            scheduleEditorRevealRequest({
+                articleId: buildFileTabId(resolved.relativePath),
+                path: resolved.relativePath,
+                line: navigationTarget.line,
+            });
+        }
 
         console.info("[editor] wikilink opened", {
             currentDirectory,
             target,
             resolvedPath: resolved.relativePath,
+            subtarget: parsedTarget.subtarget,
+            revealLine: navigationTarget?.line ?? null,
         });
     } catch (error) {
         console.error("[editor] wikilink open failed", {
@@ -199,10 +275,11 @@ export async function openWikiLinkTarget(
             message: error instanceof Error ? error.message : String(error),
         });
 
-        const fallbackPath = target.endsWith(".md")
-            ? target
-            : `${target}.md`;
-        const fallbackId = createWikiLinkTabId(target);
+        const fallbackTarget = parsedTarget.noteTarget || target;
+        const fallbackPath = fallbackTarget.endsWith(".md")
+            ? fallbackTarget
+            : `${fallbackTarget}.md`;
+        const fallbackId = createWikiLinkTabId(fallbackTarget);
         const fallbackPanel = containerApi.getPanel(fallbackId);
         if (fallbackPanel) {
             fallbackPanel.api.setActive();
@@ -210,7 +287,7 @@ export async function openWikiLinkTarget(
             await openFileInWorkbench({
                 containerApi,
                 relativePath: fallbackPath,
-                contentOverride: `# ${target}\n\n${i18n.t("editor.newPageContent", { target })}`,
+                contentOverride: `# ${fallbackTarget}\n\n${i18n.t("editor.newPageContent", { target: fallbackTarget })}`,
             });
         }
     }
@@ -274,12 +351,15 @@ export function isRenderedWikiLinkTarget(eventTarget: EventTarget | null): boole
 
 /**
  * @function extractWidgetWikiLinkTarget
- * @description 从别名 widget DOM 中提取 WikiLink 目标。
+ * @description 从 widget DOM 中提取 WikiLink 目标。
  * @param eventTarget 鼠标事件目标。
- * @returns 命中 alias widget 时返回目标文本。
+ * @returns 命中带目标数据的 widget 时返回目标文本。
  */
 export function extractWidgetWikiLinkTarget(eventTarget: EventTarget | null): string | null {
-    const widgetTarget = closestFromEventTarget(eventTarget, ".cm-rendered-wikilink-display") as {
+    const widgetTarget = closestFromEventTarget(
+        eventTarget,
+        ".cm-rendered-wikilink-display[data-wiki-link-target], .cm-rendered-wikilink[data-wiki-link-target]",
+    ) as {
         dataset?: { wikiLinkTarget?: string };
     } | null;
 

@@ -2,6 +2,8 @@
 :root {
     --wbh-empty-text: color-mix(in srgb, var(--text-secondary) 72%, transparent);
     --wbh-empty-bg: color-mix(in srgb, var(--bg-primary) 48%, transparent);
+    --wbh-home-write-accent: #1f8f6a;
+    --wbh-home-explore-accent: #c47a1b;
 
     --wbh-card-text: color-mix(in srgb, var(--text-primary) 92%, transparent);
     --wbh-card-bg: linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 72%, transparent), color-mix(in srgb, var(--bg-primary) 76%, transparent));

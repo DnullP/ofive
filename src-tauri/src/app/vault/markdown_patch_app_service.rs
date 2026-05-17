@@ -347,6 +347,13 @@ fn validate_patch_block(block: &ParsedDiffBlock, index: usize) -> Result<(), Str
         ));
     }
 
+    if block.old_lines == block.new_lines {
+        return Err(format!(
+            "patch hunk {} 没有产生任何文本变化，oldLines 与 newLines 完全相同。请重新读取目标文件，并把需要修改的原文放在 - 行、修改后的文本放在 + 行。",
+            index + 1,
+        ));
+    }
+
     Ok(())
 }
 
@@ -578,6 +585,30 @@ mod tests {
         .expect("插入 patch 应成功");
 
         assert_eq!(patched, "# Title\n\nalpha\nbeta\ngamma\n");
+    }
+
+    #[test]
+    fn apply_unified_markdown_diff_to_content_should_reject_noop_hunk() {
+        let result = apply_unified_markdown_diff_to_content(
+            "# Title\n\nalpha\nbeta\ngamma\n",
+            "--- a/notes/guide.md\n+++ b/notes/guide.md\n@@ -3,3 +3,3 @@\n alpha\n-beta\n+beta\n gamma",
+        );
+
+        let error = result.expect_err("oldLines 与 newLines 完全相同时应拒绝 patch");
+        assert!(error.contains("没有产生任何文本变化"));
+        assert!(error.contains("oldLines 与 newLines 完全相同"));
+    }
+
+    #[test]
+    fn apply_unified_markdown_diff_to_content_should_reject_mixed_patch_with_noop_hunk() {
+        let result = apply_unified_markdown_diff_to_content(
+            "# Title\n\nalpha\nbeta\ngamma\nomega\n",
+            "--- a/notes/guide.md\n+++ b/notes/guide.md\n@@ -3,3 +3,3 @@\n alpha\n-beta\n+beta\n gamma\n@@ -5,2 +5,2 @@\n gamma\n-omega\n+omega patched",
+        );
+
+        let error = result.expect_err("包含 no-op hunk 的混合 patch 应整体拒绝");
+        assert!(error.contains("patch hunk 1"));
+        assert!(error.contains("没有产生任何文本变化"));
     }
 
     #[test]

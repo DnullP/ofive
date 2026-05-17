@@ -56,6 +56,10 @@ async function waitForMockWorkbench(page: Page): Promise<void> {
     await page.goto(MOCK_PAGE);
     await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
     await page.locator(".layout-v2-tab-section").first().waitFor({ state: "visible" });
+    await page.evaluate(async () => {
+        const configStoreModule = await import("/src/host/config/configStore.ts");
+        await configStoreModule.updateFeatureSetting("fileOpenMode", "new-tab");
+    });
 }
 
 /**
@@ -289,7 +293,7 @@ async function openSplitWorkspaceAndReload(page: Page): Promise<void> {
         { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
     ).toEqual({
         hasWorkspaceLayout: true,
-        tabCount: 3,
+        tabCount: 2,
         mainTabsHasSplit: true,
         hasPersistedContentParam: false,
     });
@@ -330,7 +334,7 @@ test.describe("main tab layout restore regression", () => {
             { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
         ).toEqual({
             hasWorkspaceLayout: true,
-            tabCount: 3,
+            tabCount: 2,
             mainTabsHasSplit: true,
             hasPersistedContentParam: false,
         });
@@ -351,7 +355,7 @@ test.describe("main tab layout restore regression", () => {
             { timeout: 5_000 },
         ).toEqual({
             sectionCount: 2,
-            hasHome: true,
+            hasHome: false,
             hasGuide: true,
             hasNetwork: true,
             hasEmptySection: false,
@@ -382,12 +386,11 @@ test.describe("main tab layout restore regression", () => {
             { timeout: 3_000 },
         ).toEqual({
             sectionCount: 1,
-            titles: ["首页", "guide.md"],
+            titles: ["guide.md"],
             hasEmptySection: false,
         });
 
         await closeTab(page, "guide.md");
-        await closeTab(page, "首页");
         await expect.poll(
             async () => {
                 const sections = await readTabSections(page);
@@ -417,7 +420,6 @@ test.describe("main tab layout restore regression", () => {
         await openSplitWorkspaceAndReload(page);
 
         await closeTab(page, "guide.md");
-        await closeTab(page, "首页");
         await expect.poll(
             async () => {
                 const sections = await readTabSections(page);
@@ -458,7 +460,7 @@ test.describe("main tab layout restore regression", () => {
             { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
         ).toEqual({
             hasWorkspaceLayout: true,
-            tabCount: 5,
+            tabCount: 4,
             mainTabsHasSplit: true,
             hasPersistedContentParam: false,
         });
@@ -471,7 +473,7 @@ test.describe("main tab layout restore regression", () => {
             },
             { timeout: 5_000 },
         ).toEqual([
-            ["首页", "guide.md", "latex-test.md"],
+            ["guide.md", "latex-test.md"],
             ["network-segment.md", "scroll-regression.md"],
         ]);
         expect(pageErrors).toEqual([]);
@@ -494,7 +496,7 @@ test.describe("main tab layout restore regression", () => {
             { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
         ).toEqual({
             hasWorkspaceLayout: true,
-            tabCount: 4,
+            tabCount: 3,
             mainTabsHasSplit: false,
             hasPersistedContentParam: false,
         });
@@ -506,7 +508,7 @@ test.describe("main tab layout restore regression", () => {
                 return sections.flatMap((section) => section.titles);
             },
             { timeout: 5_000 },
-        ).toEqual(["首页", "glass-validation.canvas", "mock-image.png", "知识图谱"]);
+        ).toEqual(["glass-validation.canvas", "mock-image.png", "知识图谱"]);
 
         await focusTab(page, "glass-validation.canvas");
         await expect(page.locator(".canvas-tab")).toBeVisible();
@@ -533,7 +535,7 @@ test.describe("main tab layout restore regression", () => {
             { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
         ).toEqual({
             hasWorkspaceLayout: true,
-            tabCount: 3,
+            tabCount: 2,
             mainTabsHasSplit: true,
             hasPersistedContentParam: false,
         });
@@ -547,15 +549,16 @@ test.describe("main tab layout restore regression", () => {
         ).toEqual([
             {
                 id: "main-tabs",
-                titles: ["首页"],
+                titles: [],
             },
         ]);
+        await expect(page.locator(".workbench-home-empty")).toBeVisible();
         await expect.poll(
             async () => readPersistedWorkspaceLayoutProbe(page),
             { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
         ).toEqual({
             hasWorkspaceLayout: true,
-            tabCount: 3,
+            tabCount: 2,
             mainTabsHasSplit: true,
             hasPersistedContentParam: false,
         });

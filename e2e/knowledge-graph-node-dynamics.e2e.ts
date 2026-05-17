@@ -58,8 +58,8 @@ type PointPositions = number[];
  * @param page Playwright 页面对象。
  */
 async function waitForMockLayoutReady(page: Page): Promise<void> {
+    await page.locator("[data-testid='main-dockview-host']").waitFor({ state: "visible" });
     await page.locator("[data-testid='sidebar-left']").waitFor({ state: "visible" });
-    await page.locator(".layout-v2-tab-section__tab-main").first().waitFor({ state: "visible" });
 }
 
 /**

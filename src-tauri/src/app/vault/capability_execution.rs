@@ -644,11 +644,13 @@ mod tests {
             .expect("列出 Agent SKILL 应成功");
 
         let items = result.as_array().expect("输出应为数组");
-        assert_eq!(items.len(), 1);
-        assert_eq!(
-            items[0].get("name").and_then(|value| value.as_str()),
-            Some("research-helper")
-        );
+        assert!(items.iter().any(|item| {
+            item.get("name").and_then(|value| value.as_str()) == Some("research-helper")
+        }));
+        assert!(items.iter().any(|item| {
+            item.get("name").and_then(|value| value.as_str()) == Some("ofive-wikilink-syntax")
+                && item.get("readOnly").and_then(|value| value.as_bool()) == Some(true)
+        }));
     }
 
     #[test]

@@ -11,10 +11,7 @@
 
 import React, { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import { CalendarDays, CheckSquare, Compass, FolderOpen, Hand, Orbit, Plus, Workflow } from "lucide-react";
-import {
-    WorkbenchLayoutHost,
-    type TabInstanceDefinition,
-} from "../../src/host/layout";
+import { WorkbenchLayoutHost } from "../../src/host/layout";
 import { buildGlassRuntimeStyle } from "../../src/host/layout/glassRuntimeStyle";
 import { CodeMirrorEditorTab } from "../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
 import { KnowledgeGraphTab } from "../../src/plugins/knowledge-graph/tab/KnowledgeGraphTab";
@@ -193,16 +190,6 @@ function resolveShouldShowControls(): boolean {
     }
 
     return true;
-}
-
-function MockHomeTab(): ReactNode {
-    return (
-        <div className="editor-tab-view">
-            <h2>ofive Mock Workspace</h2>
-            <p>该页面不依赖后端，左侧文件与内容均为前端 mock 数据。</p>
-            <p>请测试面板拖拽：将右侧 "反向链接" 拖到左侧，再拖回右侧，观察是否消失。</p>
-        </div>
-    );
 }
 
 function MockOutlinePanel(): ReactNode {
@@ -627,6 +614,52 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
                         done: false,
                     });
                 }, 300);
+
+                schedule(streamId, () => {
+                    emit({
+                        streamId,
+                        eventType: "debug",
+                        sessionId,
+                        agentName: "browser-mock-ai",
+                        deltaText: null,
+                        accumulatedText: null,
+                        reasoningDeltaText: null,
+                        reasoningAccumulatedText: null,
+                        historyContentBlocksJson: null,
+                        debugTitle: "Capability call started",
+                        debugLevel: "info",
+                        debugText: "capability=vault.read_markdown_file input={\"relativePath\":\"mock/second.md\"}",
+                        confirmationId: null,
+                        confirmationHint: null,
+                        confirmationToolName: null,
+                        confirmationToolArgsJson: null,
+                        error: null,
+                        done: false,
+                    });
+                }, 340);
+
+                schedule(streamId, () => {
+                    emit({
+                        streamId,
+                        eventType: "debug",
+                        sessionId,
+                        agentName: "browser-mock-ai",
+                        deltaText: null,
+                        accumulatedText: null,
+                        reasoningDeltaText: null,
+                        reasoningAccumulatedText: null,
+                        historyContentBlocksJson: null,
+                        debugTitle: "Capability call completed",
+                        debugLevel: "info",
+                        debugText: "capability=vault.read_markdown_file output={\"content\":\"second mock content\"}",
+                        confirmationId: null,
+                        confirmationHint: null,
+                        confirmationToolName: null,
+                        confirmationToolArgsJson: null,
+                        error: null,
+                        done: false,
+                    });
+                }, 430);
             }
 
             schedule(streamId, () => {
@@ -952,7 +985,6 @@ function ensureMockComponentsRegistered(): void {
         defaultOrder: 2,
         render: (context) => React.createElement(CalendarPanel, context),
     });
-    registerTabComponent({ id: "home", component: MockHomeTab as never, lifecycleScope: "global" });
     registerTabComponent({
         id: "codemirror",
         component: CodeMirrorEditorTab as never,
@@ -1121,17 +1153,6 @@ export function MockApp(): ReactNode {
         };
     };
 
-    const initialTabs = useMemo<TabInstanceDefinition[]>(
-        () => [
-            {
-                id: "home",
-                title: "首页",
-                component: "home",
-            },
-        ],
-        [],
-    );
-
     return (
         <div className="app-shell">
             {showControls ? (
@@ -1199,7 +1220,6 @@ export function MockApp(): ReactNode {
             ) : null}
             <div className="app-content">
                 <WorkbenchLayoutHost
-                    initialTabs={initialTabs}
                     initialActivePanelId="files"
                 />
             </div>

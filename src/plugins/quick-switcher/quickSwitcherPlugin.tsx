@@ -17,12 +17,13 @@
  */
 
 import React from "react";
-import { registerCommand } from "../../host/commands/commandSystem";
+import { registerCommands } from "../../host/commands/commandSystem";
 import { registerOverlay } from "../../host/registry";
 import { QuickSwitcherOverlay } from "./overlay/QuickSwitcherOverlay";
 import { notifyQuickSwitcherOpenRequested } from "./quickSwitcherEvents";
 
 const QUICK_SWITCHER_COMMAND_ID = "quickSwitcher.open";
+const OPEN_NOTE_IN_NEW_TAB_COMMAND_ID = "note.openInNewTab";
 const QUICK_SWITCHER_OVERLAY_ID = "quick-switcher";
 
 /**
@@ -31,18 +32,32 @@ const QUICK_SWITCHER_OVERLAY_ID = "quick-switcher";
  * @returns 插件清理函数。
  */
 export function activatePlugin(): () => void {
-    const unregisterCommand = registerCommand({
-        id: QUICK_SWITCHER_COMMAND_ID,
-        title: "commands.quickSwitcher",
-        shortcut: {
-            defaultBinding: "Cmd+O",
-            editableInSettings: true,
+    const unregisterCommands = registerCommands([
+        {
+            id: QUICK_SWITCHER_COMMAND_ID,
+            title: "commands.quickSwitcher",
+            shortcut: {
+                defaultBinding: "Cmd+O",
+                editableInSettings: true,
+            },
+            execute() {
+                notifyQuickSwitcherOpenRequested();
+                console.info("[quick-switcher-plugin] quick switcher opened by command");
+            },
         },
-        execute() {
-            notifyQuickSwitcherOpenRequested();
-            console.info("[quick-switcher-plugin] quick switcher opened by command");
+        {
+            id: OPEN_NOTE_IN_NEW_TAB_COMMAND_ID,
+            title: "commands.openNoteInNewTab",
+            shortcut: {
+                defaultBinding: "Cmd+Shift+N",
+                editableInSettings: true,
+            },
+            execute() {
+                notifyQuickSwitcherOpenRequested({ openMode: "new-tab" });
+                console.info("[quick-switcher-plugin] open note in new tab requested by command");
+            },
         },
-    });
+    ]);
 
     const unregisterOverlay = registerOverlay({
         id: QUICK_SWITCHER_OVERLAY_ID,
@@ -54,7 +69,7 @@ export function activatePlugin(): () => void {
 
     return () => {
         unregisterOverlay();
-        unregisterCommand();
+        unregisterCommands();
         console.info("[quick-switcher-plugin] unregistered quick switcher plugin");
     };
 }

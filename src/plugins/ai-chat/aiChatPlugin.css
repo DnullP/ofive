@@ -461,6 +461,79 @@
     color: var(--text-tertiary);
 }
 
+/* ai-chat-message-actions：单条消息底部操作按钮区 */
+.ai-chat-message-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    min-height: 24px;
+}
+
+/* ai-chat-message-action-button：消息级图标操作按钮 */
+.ai-chat-message-action-button {
+    width: 24px;
+    height: 24px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
+    border-radius: 0;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+    cursor: pointer;
+}
+
+.ai-chat-message-action-button:hover,
+.ai-chat-message-action-button:focus-visible {
+    outline: none;
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--accent-primary) 30%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-primary));
+}
+
+.ai-chat-message-action-button:disabled {
+    opacity: 0.46;
+    cursor: not-allowed;
+}
+
+/* ai-chat-message-edit-form：用户消息编辑态容器 */
+.ai-chat-message-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+/* ai-chat-message-edit-input：用户消息编辑输入框 */
+.ai-chat-message-edit-input {
+    width: 100%;
+    min-height: 78px;
+    max-height: 180px;
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 30%, var(--border-color));
+    border-radius: 0;
+    padding: 9px;
+    resize: vertical;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-primary) 90%, var(--bg-secondary));
+}
+
+.ai-chat-message-edit-input:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent-primary) 46%, var(--border-color));
+}
+
+/* ai-chat-message-edit-actions：编辑态提交/取消按钮区 */
+.ai-chat-message-edit-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
 /* ai-chat-message-placeholder：空消息占位文本 */
 .ai-chat-message-placeholder {
     color: var(--text-secondary);
@@ -759,6 +832,15 @@
     align-items: stretch;
 }
 
+.ai-chat-confirm-approve-split::before {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 100%;
+    width: 100%;
+    height: 8px;
+}
+
 .ai-chat-confirm-approve-split .ai-chat-confirm-button.primary {
     border-right-width: 0;
 }
@@ -774,18 +856,27 @@
     right: 0;
     bottom: calc(100% + 6px);
     z-index: 10;
-    display: none;
+    display: flex;
+    flex-direction: column;
     min-width: 148px;
     padding: 4px;
     border: 1px solid var(--border-color);
-    background: var(--bg-secondary);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-secondary));
     box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+    transition:
+        opacity 120ms ease,
+        visibility 0s linear 180ms;
 }
 
 .ai-chat-confirm-approve-split:hover .ai-chat-confirm-approve-menu,
 .ai-chat-confirm-approve-split:focus-within .ai-chat-confirm-approve-menu {
-    display: flex;
-    flex-direction: column;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
 }
 
 .ai-chat-confirm-menu-item {
@@ -830,20 +921,20 @@
     gap: 6px;
 }
 
-/* ai-chat-tool-call：单条可展开工具调用记录 */
-.ai-chat-tool-call {
+/* ai-chat-tool-call-group：同一 capability 的工具调用汇总 */
+.ai-chat-tool-call-group {
     border: 1px solid color-mix(in srgb, var(--border-color) 86%, transparent);
     border-radius: 0;
     background: color-mix(in srgb, var(--bg-secondary) 82%, var(--bg-primary));
 }
 
-/* ai-chat-tool-call.status-calling：调用中状态 */
-.ai-chat-tool-call.status-calling {
+/* ai-chat-tool-call-group.status-calling：调用中状态 */
+.ai-chat-tool-call-group.status-calling {
     border-color: color-mix(in srgb, var(--accent-primary) 24%, var(--border-color));
 }
 
-/* ai-chat-tool-call.status-failed：失败状态 */
-.ai-chat-tool-call.status-failed {
+/* ai-chat-tool-call-group.status-failed：失败状态 */
+.ai-chat-tool-call-group.status-failed {
     border-color: color-mix(in srgb, var(--error-color) 34%, var(--border-color));
 }
 
@@ -851,7 +942,6 @@
 .ai-chat-tool-call-summary {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 8px;
     padding: 7px 8px;
     cursor: pointer;
@@ -866,11 +956,20 @@
 /* ai-chat-tool-call-name：工具名称 */
 .ai-chat-tool-call-name {
     min-width: 0;
+    flex: 1 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font: 11px/1.4 "SFMono-Regular", "Consolas", "Menlo", monospace;
     color: var(--text-secondary);
+}
+
+/* ai-chat-tool-call-count：同类工具调用次数 */
+.ai-chat-tool-call-count {
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-tertiary);
 }
 
 /* ai-chat-tool-call-status：工具调用状态标签 */
@@ -898,7 +997,44 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+/* ai-chat-tool-call-group-details：汇总展开后的每次调用列表 */
+.ai-chat-tool-call-group-details {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     padding: 0 8px 8px;
+}
+
+/* ai-chat-tool-call：单次工具调用详情块 */
+.ai-chat-tool-call {
+    border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
+    border-radius: 0;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+}
+
+.ai-chat-tool-call.status-calling {
+    border-color: color-mix(in srgb, var(--accent-primary) 22%, var(--border-color));
+}
+
+.ai-chat-tool-call.status-failed {
+    border-color: color-mix(in srgb, var(--error-color) 30%, var(--border-color));
+}
+
+/* ai-chat-tool-call-instance-heading：单次调用头部 */
+.ai-chat-tool-call-instance-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-tertiary);
 }
 
 /* ai-chat-tool-call-detail-label：工具调用详情标签 */

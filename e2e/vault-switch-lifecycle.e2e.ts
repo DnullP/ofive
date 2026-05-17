@@ -22,7 +22,11 @@ const NETWORK_NOTE_PATH = "test-resources/notes/network-segment.md";
 
 async function waitForMockLayoutReady(page: Page): Promise<void> {
     await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
-    await page.locator(".layout-v2-tab-section__tab-main").first().waitFor({ state: "visible" });
+    await page.locator("[data-testid='main-dockview-host']").waitFor({ state: "visible" });
+    await page.evaluate(async () => {
+        const configStoreModule = await import("/src/host/config/configStore.ts");
+        await configStoreModule.updateFeatureSetting("fileOpenMode", "new-tab");
+    });
 }
 
 async function ensureMockNotesTreeExpanded(page: Page): Promise<void> {

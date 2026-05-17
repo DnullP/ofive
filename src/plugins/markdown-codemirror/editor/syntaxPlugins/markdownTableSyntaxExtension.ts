@@ -28,8 +28,10 @@ import type { WorkbenchContainerApi } from "../../../../host/layout/workbenchCon
 import i18n from "../../../../i18n";
 import { MarkdownTableVisualEditor } from "../components/MarkdownTableVisualEditor";
 import {
+    parseMarkdownTableLayoutComment,
     parseMarkdownTableLines,
-    serializeMarkdownTable,
+    serializeMarkdownTableWithLayout,
+    type MarkdownTableLayout,
     type MarkdownTableModel,
 } from "../markdownTableModel";
 import {
@@ -58,6 +60,8 @@ interface MarkdownTableBlock {
     endLineNumber: number;
     /** 结构化表格模型。 */
     model: MarkdownTableModel;
+    /** 表格布局元数据。 */
+    layout: MarkdownTableLayout | null;
 }
 
 interface MarkdownTableSyntaxExtensionOptions {
@@ -150,21 +154,32 @@ function parseMarkdownTableBlocks(view: EditorView): MarkdownTableBlock[] {
             continue;
         }
 
-        const endLineNumber = lineNumber + candidateLines.length - 1;
-        const endLine = view.state.doc.line(endLineNumber);
-        if (isRangeInsideHigherPriorityZone(view, line.from, endLine.to, "markdown-table")) {
+        const tableEndLineNumber = lineNumber + candidateLines.length - 1;
+        let blockEndLineNumber = tableEndLineNumber;
+        let layout: MarkdownTableLayout | null = null;
+        if (tableEndLineNumber < view.state.doc.lines) {
+            const possibleLayoutLine = view.state.doc.line(tableEndLineNumber + 1);
+            layout = parseMarkdownTableLayoutComment(possibleLayoutLine.text);
+            if (layout) {
+                blockEndLineNumber = tableEndLineNumber + 1;
+            }
+        }
+
+        const blockEndLine = view.state.doc.line(blockEndLineNumber);
+        if (isRangeInsideHigherPriorityZone(view, line.from, blockEndLine.to, "markdown-table")) {
             lineNumber += 1;
             continue;
         }
 
         blocks.push({
             from: line.from,
-            to: endLine.to,
+            to: blockEndLine.to,
             startLineNumber: lineNumber,
-            endLineNumber,
+            endLineNumber: blockEndLineNumber,
             model,
+            layout,
         });
-        lineNumber = endLineNumber + 1;
+        lineNumber = blockEndLineNumber + 1;
     }
 
     return blocks;
@@ -262,12 +277,16 @@ class MarkdownTableWidget extends WidgetType {
     /** 表格模型。 */
     private readonly model: MarkdownTableModel;
 
+    /** 表格布局元数据。 */
+    private readonly layout: MarkdownTableLayout | null;
+
     /** React 根实例。 */
     private root: Root | null = null;
 
     constructor(
         blockFrom: number,
         model: MarkdownTableModel,
+        layout: MarkdownTableLayout | null,
         private readonly view: EditorView,
         private readonly containerApi: WorkbenchContainerApi,
         private readonly getCurrentFilePath: () => string,
@@ -275,10 +294,13 @@ class MarkdownTableWidget extends WidgetType {
         super();
         this.blockFrom = blockFrom;
         this.model = model;
+        this.layout = layout;
     }
 
     eq(other: MarkdownTableWidget): boolean {
-        return this.blockFrom === other.blockFrom && serializeMarkdownTable(this.model) === serializeMarkdownTable(other.model);
+        return this.blockFrom === other.blockFrom
+            && serializeMarkdownTableWithLayout(this.model, this.layout)
+            === serializeMarkdownTableWithLayout(other.model, other.layout);
     }
 
     toDOM(): HTMLElement {
@@ -291,6 +313,7 @@ class MarkdownTableWidget extends WidgetType {
                 createElement(MarkdownTableVisualEditor, {
                     blockFrom: this.blockFrom,
                     initialModel: this.model,
+                    initialLayout: this.layout,
                     onCommitMarkdown: (markdownText: string) => saveMarkdownTable(this.view, this.blockFrom, markdownText),
                     onRequestExitVimNavigation: (direction: "previous" | "next") => {
                         exitMarkdownTableVimNavigation(this.view, this.blockFrom, direction);
@@ -309,6 +332,10 @@ class MarkdownTableWidget extends WidgetType {
         return wrapper;
     }
 
+    ignoreEvent(event: Event): boolean {
+        return event.type !== "mousemove";
+    }
+
     destroy(): void {
         const root = this.root;
         if (root !== null) {
@@ -323,10 +350,6 @@ class MarkdownTableWidget extends WidgetType {
             });
         }
         this.root = null;
-    }
-
-    ignoreEvent(): boolean {
-        return true;
     }
 }
 
@@ -437,6 +460,7 @@ export function createMarkdownTableSyntaxExtension(
                             widget: new MarkdownTableWidget(
                                 block.from,
                                 block.model,
+                                block.layout,
                                 view,
                                 containerApi,
                                 getCurrentFilePath,

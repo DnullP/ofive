@@ -5,7 +5,7 @@
  *   确保在应用启动时只执行一次。
  *
  *   注册的内置组件包括：
- *   - Tab 组件：home, settings
+ *   - Tab 组件：settings
  *
  * @dependencies
  *   - ./tabComponentRegistry
@@ -17,7 +17,7 @@
  *   - registerBuiltinTabComponents        注册内置 Tab 组件
  */
 
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType } from "react";
 import { registerTabComponent } from "./tabComponentRegistry";
 
 /* ────────────────── 延迟导入的组件引用 ────────────────── */
@@ -25,12 +25,9 @@ import { registerTabComponent } from "./tabComponentRegistry";
 /**
  * @interface BuiltinComponentRefs
  * @description 内置组件的引用集合，由外层传入以避免循环依赖。
- * @field HomeTab           - 首页 Tab 组件
  * @field SettingsTab       - 设置 Tab 组件
  */
 export interface BuiltinComponentRefs {
-    /** 首页 Tab */
-    HomeTab: () => ReactNode;
     /** 设置 Tab */
     SettingsTab: ComponentType<any>;
 }
@@ -48,11 +45,6 @@ const cleanupFns: (() => void)[] = [];
  */
 function registerBuiltinTabComponents(refs: BuiltinComponentRefs): (() => void)[] {
     const fns: (() => void)[] = [];
-
-    fns.push(registerTabComponent({
-        id: "home",
-        component: refs.HomeTab as any,
-    }));
 
     fns.push(registerTabComponent({
         id: "settings",

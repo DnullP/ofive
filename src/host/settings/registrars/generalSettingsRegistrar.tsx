@@ -112,8 +112,8 @@ export function registerGeneralSettingsSection(): () => void {
             ),
             presentation: "buttons",
             options: [
-                { value: "new-tab", label: "settings.fileOpenModeNewTab", description: "settings.fileOpenModeNewTabDesc" },
                 { value: "replace-active-tab", label: "settings.fileOpenModeReplaceActive", description: "settings.fileOpenModeReplaceActiveDesc" },
+                { value: "new-tab", label: "settings.fileOpenModeNewTab", description: "settings.fileOpenModeNewTabDesc" },
             ],
         },
         {

@@ -385,7 +385,7 @@ test.describe("editor view state regression", () => {
         expect(afterSwitch.editorHasFocus).toBe(true);
     });
 
-    test("home tab switch restores editor reading progress immediately", async ({ page }) => {
+    test("settings tab switch restores editor reading progress immediately", async ({ page }) => {
         await openMockNote(page, SCROLL_NOTE_PATH);
 
         await page.getByRole("button", { name: "scroll-regression.md" }).first().click();
@@ -396,7 +396,8 @@ test.describe("editor view state regression", () => {
         expect(beforeSwitch.title).toBe("scroll-regression");
         expect(beforeSwitch.scrollTop).toBeGreaterThan(2600);
 
-        await page.getByRole("button", { name: "首页" }).first().click();
+        await page.getByTestId("activity-bar-item-__settings__").click();
+        await expect(page.locator(".layout-v2-tab-section__tab--focused").filter({ hasText: /设置|Settings/ })).toBeVisible();
         await page.getByRole("button", { name: "scroll-regression.md" }).first().click();
         await waitForVisibleEditorTitle(page, "scroll-regression");
 

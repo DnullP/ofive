@@ -16,7 +16,6 @@ import { gotoMockVaultPage } from "./helpers/mockVault";
  */
 async function waitForLayoutReady(page: Page): Promise<void> {
     await page.getByRole("main", { name: "Dockview Main Area" }).waitFor({ state: "visible" });
-    await page.locator(".layout-v2-tab-section__tab").first().waitFor({ state: "visible" });
 }
 
 test.describe("任务看板", () => {
