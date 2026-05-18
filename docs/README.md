@@ -31,6 +31,7 @@ related:
 
 ## 专项文档
 
+- [AI 全流程开发与治理工作流](ai-development-workflow.md)
 - [前后端功能扩展长期工作流](feature-extension-workflow.md)
 - [插件开发教程](plugin-development-guide.md)
 - [后端模块扩展标准流程](backend-module-extension-workflow.md)
