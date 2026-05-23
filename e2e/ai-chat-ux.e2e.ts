@@ -157,7 +157,18 @@ test.describe("ai chat ux", () => {
         const confirmation = page.locator(".ai-chat-confirmation-card", { hasText: "vault.apply_markdown_patch" });
         await expect(confirmation).toBeVisible();
         await confirmation.locator(".ai-chat-confirm-button.menu-trigger").hover();
-        await confirmation.locator(".ai-chat-confirm-menu-item", { hasText: /Always allow this operation|该操作均允许/ }).click();
+        const operationMenuItem = confirmation.locator(".ai-chat-confirm-menu-item", { hasText: /Always allow this operation|该操作均允许/ });
+        await expect(operationMenuItem).toBeVisible();
+        const idleMenuItemBackground = await operationMenuItem.evaluate((element) => getComputedStyle(element).backgroundColor);
+        await operationMenuItem.hover();
+        await expect.poll(
+            () => operationMenuItem.evaluate((element, idleBackground) => {
+                const backgroundColor = getComputedStyle(element).backgroundColor;
+                const markerOpacity = Number(getComputedStyle(element, "::before").opacity);
+                return backgroundColor !== idleBackground && markerOpacity > 0.9;
+            }, idleMenuItemBackground),
+        ).toBe(true);
+        await operationMenuItem.click();
         await expect(confirmation).toHaveCount(0);
 
         await page.getByTestId("activity-bar-item-__settings__").click();

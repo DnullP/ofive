@@ -37,6 +37,12 @@ describe("markdownReadTransform", () => {
         );
     });
 
+    test("should preserve image embed layout suffix in read mode media target", () => {
+        expect(transformMarkdownForReadMode("![[Images/demo.png|640x360]]")).toBe(
+            "![demo.png](/__ofive_media_embed__/Images%2Fdemo.png%7C640x360)",
+        );
+    });
+
     test("should extract frontmatter and transform enhanced inline syntax", () => {
         const prepared = prepareMarkdownForReadMode("---\ntitle: Demo\ntags:\n  - alpha\n  - beta\n---\n\n==mark== #tag $E=mc^2$");
 

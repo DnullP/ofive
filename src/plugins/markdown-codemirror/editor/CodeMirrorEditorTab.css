@@ -1040,11 +1040,13 @@
 /* 图片嵌入容器样式：承载 `![[...]]` 渲染出的预览块。 */
 .cm-tab-editor .cm-image-embed-widget,
 .cm-tab-reader .cm-image-embed-widget {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 6px;
-    width: min(100%, 520px);
+    width: 100%;
+    max-width: 100%;
     margin: 8px auto 12px;
     border: 0;
     border-radius: 0;
@@ -1073,13 +1075,56 @@
 .cm-tab-editor .cm-image-embed-image,
 .cm-tab-reader .cm-image-embed-image {
     display: block;
+    width: 100%;
     max-width: 100%;
-    max-height: 360px;
+    height: var(--cm-image-embed-height, auto);
+    max-height: 720px;
     margin: 0 auto;
     border: 0;
     border-radius: 0;
     background: transparent;
     object-fit: contain;
+}
+
+.cm-tab-editor .cm-image-embed-resize-handle {
+    position: absolute;
+    right: -4px;
+    bottom: 22px;
+    z-index: 2;
+    width: 18px;
+    height: 18px;
+    opacity: 0;
+    cursor: nwse-resize;
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 54%, transparent);
+    border-radius: 3px;
+    background:
+        linear-gradient(135deg, transparent 0 48%, color-mix(in srgb, var(--accent-primary) 70%, transparent) 49% 56%, transparent 57%),
+        color-mix(in srgb, var(--bg-primary) 78%, transparent);
+    box-shadow: var(--overlay-shadow-floating);
+    transition:
+        opacity 120ms ease,
+        background 120ms ease,
+        border-color 120ms ease;
+}
+
+.cm-tab-editor .cm-image-embed-widget::after {
+    content: "";
+    position: absolute;
+    right: -14px;
+    bottom: 8px;
+    width: 42px;
+    height: 42px;
+}
+
+.cm-tab-editor .cm-image-embed-widget:hover .cm-image-embed-resize-handle,
+.cm-tab-editor .cm-image-embed-widget-resizing .cm-image-embed-resize-handle,
+.cm-tab-editor .cm-image-embed-resize-handle:hover,
+.cm-tab-editor .cm-image-embed-resize-handle:active {
+    opacity: 1;
+    border-color: color-mix(in srgb, var(--accent-primary) 76%, transparent);
+    background:
+        linear-gradient(135deg, transparent 0 48%, var(--accent-primary) 49% 56%, transparent 57%),
+        color-mix(in srgb, var(--accent-primary) 14%, var(--bg-primary));
 }
 
 /* 图片嵌入标题样式：显示解析后的文件名。 */

@@ -880,21 +880,46 @@
 }
 
 .ai-chat-confirm-menu-item {
+    position: relative;
     width: 100%;
-    border: 0;
-    padding: 7px 8px;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    padding: 7px 8px 7px 10px;
     color: var(--text-primary);
     background: transparent;
     text-align: left;
     font-size: 11px;
     font-weight: 600;
     cursor: pointer;
+    transition:
+        background 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease;
 }
 
-.ai-chat-confirm-menu-item:hover,
+.ai-chat-confirm-menu-item::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 5px;
+    bottom: 5px;
+    width: 2px;
+    opacity: 0;
+    background: var(--accent-primary);
+    transition: opacity 120ms ease;
+}
+
+.ai-chat-confirm-menu-item:not(:disabled):hover,
 .ai-chat-confirm-menu-item:focus-visible {
     outline: none;
-    background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-primary));
+    border-color: color-mix(in srgb, var(--accent-primary) 46%, transparent);
+    background: color-mix(in srgb, var(--accent-primary) 22%, var(--bg-primary));
+    color: color-mix(in srgb, var(--text-primary) 88%, var(--accent-primary));
+}
+
+.ai-chat-confirm-menu-item:not(:disabled):hover::before,
+.ai-chat-confirm-menu-item:focus-visible::before {
+    opacity: 1;
 }
 
 .ai-chat-confirm-menu-item:disabled {

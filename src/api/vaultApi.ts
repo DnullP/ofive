@@ -458,6 +458,8 @@ let browserFallbackVaultPath = "";
 const BROWSER_FALLBACK_VAULT_CONFIG_STORAGE_KEY_PREFIX = "ofive:browser-fallback:vault-config:";
 let browserMockMarkdownContentsPromise: Promise<Record<string, string>> | null = null;
 const browserFallbackAgentSkillFiles = new Map<string, string>();
+const BROWSER_FALLBACK_TRANSPARENT_PNG_BASE64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAQAAAAAYLlVAAAAJ0lEQVR42u3PAQ0AAAgDINc/9K3hHBQQ7XS7oQAAAAAAAAAAAOA2HF4AAfWFGmwAAAAASUVORK5CYII=";
 
 export const BUILTIN_WIKILINK_SKILL_NAME = "ofive-wikilink-syntax";
 
@@ -715,6 +717,33 @@ function normalizeMarkdownLinkTarget(target: string): string | null {
     }
 
     return normalized;
+}
+
+function isBrowserFallbackImagePath(relativePath: string): boolean {
+    return /\.(png|jpg|jpeg|gif|webp|bmp|svg|ico)$/i.test(relativePath);
+}
+
+function getBrowserFallbackMimeType(relativePath: string): string {
+    const normalizedPath = normalizeSlashPath(relativePath).toLowerCase();
+    if (normalizedPath.endsWith(".jpg") || normalizedPath.endsWith(".jpeg")) {
+        return "image/jpeg";
+    }
+    if (normalizedPath.endsWith(".gif")) {
+        return "image/gif";
+    }
+    if (normalizedPath.endsWith(".webp")) {
+        return "image/webp";
+    }
+    if (normalizedPath.endsWith(".svg")) {
+        return "image/svg+xml";
+    }
+    if (normalizedPath.endsWith(".bmp")) {
+        return "image/bmp";
+    }
+    if (normalizedPath.endsWith(".ico")) {
+        return "image/x-icon";
+    }
+    return "image/png";
 }
 
 /**
@@ -1753,6 +1782,14 @@ export async function readVaultCanvasFile(relativePath: string): Promise<ReadCan
  */
 export async function readVaultBinaryFile(relativePath: string): Promise<ReadBinaryFileResponse> {
     if (!isTauriRuntime()) {
+        if (isBrowserFallbackImagePath(relativePath)) {
+            return {
+                relativePath,
+                mimeType: getBrowserFallbackMimeType(relativePath),
+                base64Content: BROWSER_FALLBACK_TRANSPARENT_PNG_BASE64,
+            };
+        }
+
         throw new Error(i18n.t("editor.noLocalBinaryRead"));
     }
 
@@ -1853,7 +1890,33 @@ export async function resolveMediaEmbedTarget(
     target: string,
 ): Promise<ResolveMediaEmbedTargetResponse | null> {
     if (!isTauriRuntime()) {
-        return null;
+        const markdownContents = await getBrowserMockMarkdownContents();
+        const normalizedTarget = normalizeSlashPath(normalizeWikiTarget(target));
+        if (!normalizedTarget) {
+            return null;
+        }
+
+        const allMockPaths = Object.keys(markdownContents);
+        const searchPaths = [
+            normalizedTarget,
+            currentDir ? normalizeSlashPath(`${currentDir}/${normalizedTarget}`) : normalizedTarget,
+        ];
+        const match = allMockPaths.find((path) =>
+            searchPaths.some((candidate) => normalizeSlashPath(path) === candidate)
+                && isBrowserFallbackImagePath(path),
+        ) ?? allMockPaths.find((path) =>
+            isBrowserFallbackImagePath(path)
+                && normalizeSlashPath(path).split("/").pop() === normalizedTarget.split("/").pop(),
+        );
+
+        if (!match) {
+            return null;
+        }
+
+        return {
+            relativePath: match,
+            absolutePath: `${browserFallbackVaultPath}/${match}`,
+        };
     }
 
     return invoke<ResolveMediaEmbedTargetResponse | null>("resolve_media_embed_target", {

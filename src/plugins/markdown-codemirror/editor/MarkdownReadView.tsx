@@ -25,6 +25,7 @@ import {
     useRef,
     useState,
     type ComponentPropsWithoutRef,
+    type CSSProperties,
     type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -62,6 +63,7 @@ import {
     prepareMarkdownForReadMode,
     type ReadModeFrontmatterField,
 } from "./markdownReadTransform";
+import { parseImageEmbedTarget, type ImageEmbedLayout } from "./imageEmbedLayout";
 import { computeTagColorStyles } from "./utils/tagColor";
 import { shouldSkipWikiLinkNavigationForSelection } from "./readModeSelectionPolicy";
 import {
@@ -977,11 +979,13 @@ export function MarkdownReadView(props: MarkdownReadViewProps): ReactNode {
             const { src, alt, ...restProps } = componentProps;
             const mediaTarget = decodeReadModeMediaEmbedHref(src);
             if (mediaTarget) {
+                const parsedMediaTarget = parseImageEmbedTarget(mediaTarget);
                 return (
                     <ReadModeImageEmbed
-                        alt={alt ?? mediaTarget}
+                        alt={alt ?? parsedMediaTarget.target}
                         currentFilePath={props.currentFilePath}
-                        rawTarget={mediaTarget}
+                        layout={parsedMediaTarget.layout}
+                        rawTarget={parsedMediaTarget.target}
                     />
                 );
             }
@@ -1134,6 +1138,8 @@ function ReadModeFrontmatterPanel(props: ReadModeFrontmatterPanelProps): ReactNo
 interface ReadModeImageEmbedProps {
     /** 图片嵌入原始目标。 */
     rawTarget: string;
+    /** 图片显示尺寸。 */
+    layout?: ImageEmbedLayout | null;
     /** 当前文档路径。 */
     currentFilePath: string;
     /** 图片 alt 文本。 */
@@ -1222,8 +1228,16 @@ function ReadModeImageEmbed(props: ReadModeImageEmbedProps): ReactNode {
     }, [props.currentFilePath, props.rawTarget]);
 
     if (imageState.status === "ready") {
+        const imageStyle = {
+            width: props.layout?.width ? `${Math.round(props.layout.width)}px` : undefined,
+            maxWidth: "100%",
+            "--cm-image-embed-height": props.layout?.height
+                ? `${Math.round(props.layout.height)}px`
+                : undefined,
+        } as CSSProperties;
+
         return (
-            <span className="cm-image-embed-widget">
+            <span className="cm-image-embed-widget" style={imageStyle}>
                 <img
                     alt={props.alt}
                     className="cm-image-embed-image"

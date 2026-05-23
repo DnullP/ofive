@@ -20,6 +20,7 @@
 
 import YAML from "yaml";
 import { detectExcludedLineRanges } from "../../../utils/markdownBlockDetector";
+import { parseImageEmbedTarget } from "./imageEmbedLayout";
 import { parseWikiLinkParts } from "./syntaxPlugins/wikiLinkParser";
 
 /** 阅读态 WikiLink href 路径前缀。 */
@@ -270,13 +271,16 @@ function transformInlineReadModeSyntax(lineText: string): string {
         return token;
     };
 
-    let transformedText = lineText.replace(IMAGE_EMBED_PATTERN, (_fullMatch, rawTarget: string) => toToken(
-        buildProtocolImageMarkdown(
-            READ_MODE_MEDIA_EMBED_PROTOCOL,
-            rawTarget.trim(),
-            buildMediaEmbedLabel(rawTarget),
-        ),
-    ));
+    let transformedText = lineText.replace(IMAGE_EMBED_PATTERN, (_fullMatch, rawTarget: string) => {
+        const parsedTarget = parseImageEmbedTarget(rawTarget);
+        return toToken(
+            buildProtocolImageMarkdown(
+                READ_MODE_MEDIA_EMBED_PROTOCOL,
+                rawTarget.trim(),
+                buildMediaEmbedLabel(parsedTarget.target),
+            ),
+        );
+    });
 
     transformedText = transformedText.replace(WIKILINK_PATTERN, (fullMatch, imagePrefix: string | undefined, rawTarget: string) => {
         if (imagePrefix === "!") {

@@ -21,12 +21,19 @@ import {
 } from "@codemirror/view";
 import { readVaultBinaryFile, resolveMediaEmbedTarget } from "../../../../api/vaultApi";
 import { shouldRebuildImageEmbedDecorations } from "./imageEmbedUpdatePolicy";
+import {
+    parseImageEmbedTarget,
+    serializeImageEmbedSyntax,
+    type ImageEmbedLayout,
+} from "../imageEmbedLayout";
 import { resolveParentDirectory } from "../pathUtils";
 import { rangeIntersectsSelection } from "../syntaxRenderRegistry";
 import { isInsideExclusionZone } from "../syntaxExclusionZones";
 
 const IMAGE_EMBED_PATTERN = /(!\[\[)([^\]\n]+?)(\]\])/g;
 const INLINE_CODE_SPAN_PATTERN = /`[^`\n]+`/g;
+const MIN_IMAGE_EMBED_WIDTH = 120;
+const MIN_IMAGE_EMBED_HEIGHT = 80;
 
 /**
  * @function isInsideInlineCode
@@ -72,12 +79,32 @@ interface ImageEmbedCacheItem {
 interface ImageEmbedWidgetPayload {
     /** 当前渲染状态 */
     state: ImageEmbedRenderState;
+    /** 图片嵌入原始目标，不包含尺寸后缀。 */
+    target: string;
     /** 展示标题（优先文件名） */
     label: string;
     /** 图片数据源 */
     source: string;
     /** 错误信息 */
     errorMessage: string;
+    /** 当前持久化布局。 */
+    layout: ImageEmbedLayout | null;
+    /** 被替换源码的起始偏移。 */
+    tokenFrom: number;
+    /** 被替换源码的结束偏移。 */
+    tokenTo: number;
+    /** 当前编辑器视图。 */
+    view: EditorView;
+}
+
+interface ImageResizeDragState {
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    startWidth: number;
+    startHeight: number;
+    aspectRatio: number;
+    wrapperElement: HTMLElement;
 }
 
 /**
@@ -87,6 +114,7 @@ interface ImageEmbedWidgetPayload {
 class ImageEmbedWidget extends WidgetType {
     /** Widget 渲染数据。 */
     private readonly payload: ImageEmbedWidgetPayload;
+    private resizeDragState: ImageResizeDragState | null = null;
 
     constructor(payload: ImageEmbedWidgetPayload) {
         super();
@@ -96,9 +124,14 @@ class ImageEmbedWidget extends WidgetType {
     eq(other: ImageEmbedWidget): boolean {
         return (
             this.payload.state === other.payload.state &&
+            this.payload.target === other.payload.target &&
             this.payload.label === other.payload.label &&
             this.payload.source === other.payload.source &&
-            this.payload.errorMessage === other.payload.errorMessage
+            this.payload.errorMessage === other.payload.errorMessage &&
+            this.payload.layout?.width === other.payload.layout?.width &&
+            this.payload.layout?.height === other.payload.layout?.height &&
+            this.payload.tokenFrom === other.payload.tokenFrom &&
+            this.payload.tokenTo === other.payload.tokenTo
         );
     }
 
@@ -106,6 +139,8 @@ class ImageEmbedWidget extends WidgetType {
         try {
             const wrapperElement = document.createElement("span");
             wrapperElement.className = "cm-image-embed-widget";
+            wrapperElement.dataset.imageEmbedTarget = this.payload.target;
+            this.applyLayoutToWrapper(wrapperElement, this.payload.layout);
 
             if (this.payload.state === "ready") {
                 const imageElement = document.createElement("img");
@@ -113,6 +148,15 @@ class ImageEmbedWidget extends WidgetType {
                 imageElement.src = this.payload.source;
                 imageElement.alt = this.payload.label;
                 wrapperElement.appendChild(imageElement);
+
+                const resizeHandleElement = document.createElement("span");
+                resizeHandleElement.className = "cm-image-embed-resize-handle";
+                resizeHandleElement.dataset.imageEmbedResizeHandle = "true";
+                resizeHandleElement.setAttribute("aria-hidden", "true");
+                resizeHandleElement.addEventListener("pointerdown", (event) => {
+                    this.handleResizePointerDown(event, wrapperElement);
+                });
+                wrapperElement.appendChild(resizeHandleElement);
 
                 const captionElement = document.createElement("span");
                 captionElement.className = "cm-image-embed-caption";
@@ -146,6 +190,136 @@ class ImageEmbedWidget extends WidgetType {
 
     ignoreEvent(): boolean {
         return false;
+    }
+
+    destroy(): void {
+        this.stopResizeDrag(false);
+    }
+
+    private applyLayoutToWrapper(
+        wrapperElement: HTMLElement,
+        layout: ImageEmbedLayout | null | undefined,
+    ): void {
+        if (layout?.width && layout.width > 0) {
+            wrapperElement.style.width = `${Math.round(layout.width)}px`;
+            wrapperElement.style.maxWidth = "100%";
+        } else {
+            wrapperElement.style.width = "100%";
+            wrapperElement.style.maxWidth = "100%";
+        }
+
+        if (layout?.height && layout.height > 0) {
+            wrapperElement.style.setProperty("--cm-image-embed-height", `${Math.round(layout.height)}px`);
+        } else {
+            wrapperElement.style.removeProperty("--cm-image-embed-height");
+        }
+    }
+
+    private handleResizePointerDown(event: PointerEvent, wrapperElement: HTMLElement): void {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const imageElement = wrapperElement.querySelector<HTMLImageElement>(".cm-image-embed-image");
+        const wrapperRect = wrapperElement.getBoundingClientRect();
+        const imageRect = imageElement?.getBoundingClientRect();
+        const startWidth = Math.max(MIN_IMAGE_EMBED_WIDTH, Math.round(wrapperRect.width));
+        const startHeight = Math.max(
+            MIN_IMAGE_EMBED_HEIGHT,
+            Math.round(imageRect?.height ?? wrapperRect.height),
+        );
+        const naturalAspectRatio = imageElement && imageElement.naturalWidth > 0 && imageElement.naturalHeight > 0
+            ? imageElement.naturalWidth / imageElement.naturalHeight
+            : null;
+        const aspectRatio = naturalAspectRatio ?? (startWidth / Math.max(1, startHeight));
+
+        this.resizeDragState = {
+            pointerId: event.pointerId,
+            startClientX: event.clientX,
+            startClientY: event.clientY,
+            startWidth,
+            startHeight,
+            aspectRatio: Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1,
+            wrapperElement,
+        };
+
+        wrapperElement.classList.add("cm-image-embed-widget-resizing");
+        wrapperElement.ownerDocument.defaultView?.addEventListener("pointermove", this.handleWindowPointerMove);
+        wrapperElement.ownerDocument.defaultView?.addEventListener("pointerup", this.handleWindowPointerUp);
+        wrapperElement.ownerDocument.defaultView?.addEventListener("pointercancel", this.handleWindowPointerCancel);
+    }
+
+    private readonly handleWindowPointerMove = (event: PointerEvent): void => {
+        const dragState = this.resizeDragState;
+        if (!dragState || event.pointerId !== dragState.pointerId) {
+            return;
+        }
+
+        event.preventDefault();
+        const widthDelta = event.clientX - dragState.startClientX;
+        const heightDelta = event.clientY - dragState.startClientY;
+        const widthFromHorizontalDrag = dragState.startWidth + widthDelta;
+        const widthFromVerticalDrag = (dragState.startHeight + heightDelta) * dragState.aspectRatio;
+        const nextWidth = Math.max(
+            MIN_IMAGE_EMBED_WIDTH,
+            Math.round(Math.max(widthFromHorizontalDrag, widthFromVerticalDrag)),
+        );
+        const nextHeight = Math.max(
+            MIN_IMAGE_EMBED_HEIGHT,
+            Math.round(nextWidth / dragState.aspectRatio),
+        );
+
+        this.applyLayoutToWrapper(dragState.wrapperElement, {
+            width: nextWidth,
+            height: nextHeight,
+        });
+    };
+
+    private readonly handleWindowPointerUp = (event: PointerEvent): void => {
+        if (this.resizeDragState && event.pointerId === this.resizeDragState.pointerId) {
+            this.stopResizeDrag(true);
+        }
+    };
+
+    private readonly handleWindowPointerCancel = (event: PointerEvent): void => {
+        if (this.resizeDragState && event.pointerId === this.resizeDragState.pointerId) {
+            this.stopResizeDrag(false);
+        }
+    };
+
+    private stopResizeDrag(shouldCommit: boolean): void {
+        const dragState = this.resizeDragState;
+        if (!dragState) {
+            return;
+        }
+
+        const ownerWindow = dragState.wrapperElement.ownerDocument.defaultView;
+        ownerWindow?.removeEventListener("pointermove", this.handleWindowPointerMove);
+        ownerWindow?.removeEventListener("pointerup", this.handleWindowPointerUp);
+        ownerWindow?.removeEventListener("pointercancel", this.handleWindowPointerCancel);
+        dragState.wrapperElement.classList.remove("cm-image-embed-widget-resizing");
+        this.resizeDragState = null;
+
+        if (!shouldCommit) {
+            this.applyLayoutToWrapper(dragState.wrapperElement, this.payload.layout);
+            return;
+        }
+
+        const imageElement = dragState.wrapperElement.querySelector<HTMLImageElement>(".cm-image-embed-image");
+        const wrapperRect = dragState.wrapperElement.getBoundingClientRect();
+        const imageRect = imageElement?.getBoundingClientRect();
+        const nextLayout: ImageEmbedLayout = {
+            width: Math.max(MIN_IMAGE_EMBED_WIDTH, Math.round(wrapperRect.width)),
+            height: Math.max(MIN_IMAGE_EMBED_HEIGHT, Math.round(imageRect?.height ?? wrapperRect.height)),
+        };
+        const nextSyntax = serializeImageEmbedSyntax(this.payload.target, nextLayout);
+
+        this.payload.view.dispatch({
+            changes: {
+                from: this.payload.tokenFrom,
+                to: this.payload.tokenTo,
+                insert: nextSyntax,
+            },
+        });
     }
 }
 
@@ -357,7 +531,9 @@ export function createImageEmbedSyntaxExtension(
 
                         matches.forEach((match) => {
                             const fullText = match[0] ?? "";
-                            const rawTarget = (match[2] ?? "").trim();
+                            const rawTargetWithLayout = (match[2] ?? "").trim();
+                            const parsedTarget = parseImageEmbedTarget(rawTargetWithLayout);
+                            const rawTarget = parsedTarget.target;
                             const matchIndex = match.index ?? -1;
                             if (matchIndex < 0 || fullText.length === 0 || rawTarget.length === 0) {
                                 return;
@@ -386,9 +562,14 @@ export function createImageEmbedSyntaxExtension(
 
                             const widget = new ImageEmbedWidget({
                                 state: activeCacheItem?.state ?? "loading",
+                                target: rawTarget,
                                 label,
                                 source: activeCacheItem?.source ?? "",
                                 errorMessage: activeCacheItem?.errorMessage ?? "",
+                                layout: parsedTarget.layout,
+                                tokenFrom,
+                                tokenTo,
+                                view,
                             });
 
                             builder.add(
