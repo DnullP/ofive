@@ -9,6 +9,7 @@
 import { useRef, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { updateFeatureSetting, useConfigState } from "../../config/configStore";
+import { UiTextArea } from "../../ui";
 import { registerSettingsItems, registerSettingsSection } from "../settingsRegistry";
 
 /**
@@ -37,12 +38,14 @@ function FrontmatterTemplateEditor(): React.JSX.Element {
                 <span className="settings-compact-title">{t("settings.frontmatterTemplate")}</span>
                 <span className="settings-compact-desc">{t("settings.frontmatterTemplateDesc")}</span>
             </div>
-            <textarea
+            <UiTextArea
                 className="settings-frontmatter-template-textarea"
+                controlSize="default"
                 defaultValue={template}
+                monospace
                 placeholder={t("settings.frontmatterTemplatePlaceholder")}
                 rows={6}
-                spellCheck={false}
+                variant="settings"
                 onChange={handleChange}
             />
         </div>

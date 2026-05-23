@@ -18,7 +18,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import { Command, CornerDownLeft, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { CommandDefinition } from "../../../host/commands/commandSystem";
-import { modalPlainTextInputProps } from "../../../host/layout/textInputBehaviors";
+import { UiModal, UiTextInput } from "../../../host/ui";
 import i18n from "../../../i18n";
 import { UI_LANGUAGE } from "../../../i18n/uiLanguage";
 import type { OverlayRenderContext } from "../../../host/registry/overlayRegistry";
@@ -234,23 +234,18 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
     }
 
     return (
-        <div
+        <UiModal
             className="command-palette-overlay"
-            data-floating-backdrop="true"
-            role="presentation"
-            onMouseDown={(event) => {
-                if (event.target === event.currentTarget) {
-                    closeOverlay();
-                }
-            }}
+            contentClassName="command-palette-content"
+            isOpen={isOpen}
+            panelClassName="command-palette-panel"
+            placement="top"
+            showCloseButton={false}
+            size="lg"
+            ariaLabel={t("commandPalette.ariaLabel")}
+            onClose={closeOverlay}
             onKeyDown={handleKeyboard}
         >
-            {/* command-palette-panel: 浮窗主体容器，承载输入与候选列表 */}
-            <section
-                className="command-palette-panel"
-                data-floating-surface="true"
-                aria-label={t("commandPalette.ariaLabel")}
-            >
                 <div className="command-palette-header">
                     <div className="command-palette-header-copy">
                         <span className="command-palette-kicker">{t("commandPalette.ariaLabel")}</span>
@@ -267,10 +262,11 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
                 {/* command-palette-input: 搜索输入框，用于实时过滤指令 */}
                 <label className="command-palette-input-shell">
                     <Search size={16} strokeWidth={1.8} className="command-palette-input-icon" />
-                    <input
+                    <UiTextInput
                         ref={inputRef}
-                        {...modalPlainTextInputProps}
                         className="command-palette-input"
+                        controlSize="large"
+                        variant="unstyled"
                         type="text"
                         value={query}
                         placeholder={t("commandPalette.placeholder")}
@@ -319,7 +315,6 @@ export function CommandPaletteOverlay(props: CommandPaletteOverlayProps): ReactN
                         {t(UI_LANGUAGE.actions.run)}
                     </span>
                 </div>
-            </section>
-        </div>
+        </UiModal>
     );
 }

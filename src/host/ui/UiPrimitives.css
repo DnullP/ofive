@@ -1,0 +1,315 @@
+.ofive-ui-control {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--surface-input-border);
+    border-radius: var(--modal-control-radius);
+    background: var(--surface-input-bg);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: var(--font-size-ui-lg);
+    line-height: 1.45;
+    outline: none;
+    transition:
+        border-color var(--motion-duration-fast) var(--motion-ease-standard),
+        background-color var(--motion-duration-fast) var(--motion-ease-standard),
+        box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.ofive-ui-control::placeholder {
+    color: var(--text-tertiary);
+}
+
+.ofive-ui-control:focus,
+.ofive-ui-control:focus-visible {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary-soft) 42%, transparent);
+}
+
+.ofive-ui-control:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.ofive-ui-control--compact {
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: var(--font-size-ui-md);
+}
+
+.ofive-ui-control--default {
+    min-height: 34px;
+    padding: 8px 10px;
+}
+
+.ofive-ui-control--large {
+    min-height: 42px;
+    padding: 10px 12px;
+    font-size: 14px;
+}
+
+.ofive-ui-control--settings {
+    border-color: var(--content-material-border);
+    background: var(--content-material-input-bg);
+}
+
+.ofive-ui-control--plain {
+    border-color: transparent;
+    border-bottom-color: var(--border-color);
+    background: transparent;
+    box-shadow: none;
+}
+
+.ofive-ui-control--unstyled {
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+    box-shadow: none;
+}
+
+.ofive-ui-control--monospace {
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+.ofive-ui-control--invalid {
+    border-color: color-mix(in srgb, var(--error-color) 72%, var(--surface-input-border));
+}
+
+.ofive-ui-textarea {
+    resize: vertical;
+}
+
+.ofive-ui-select {
+    cursor: pointer;
+}
+
+.ofive-ui-button {
+    min-width: 0;
+    min-height: 30px;
+    border: 1px solid var(--surface-input-border);
+    border-radius: var(--modal-control-radius);
+    padding: 7px 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    color: var(--text-primary);
+    background: var(--surface-input-bg);
+    font-family: inherit;
+    font-size: var(--font-size-ui-md);
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+    transition:
+        border-color var(--motion-duration-fast) var(--motion-ease-standard),
+        background-color var(--motion-duration-fast) var(--motion-ease-standard),
+        color var(--motion-duration-fast) var(--motion-ease-standard),
+        filter var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.ofive-ui-button:hover,
+.ofive-ui-button:focus-visible {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent-primary) 34%, var(--surface-input-border));
+    background: color-mix(in srgb, var(--surface-list-hover-bg) 54%, var(--surface-input-bg));
+}
+
+.ofive-ui-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.ofive-ui-button--compact {
+    min-height: 28px;
+    padding: 5px 9px;
+    font-size: var(--font-size-ui-sm);
+}
+
+.ofive-ui-button--large {
+    min-height: 36px;
+    padding: 9px 14px;
+    font-size: var(--font-size-ui-lg);
+}
+
+.ofive-ui-button--primary {
+    border-color: transparent;
+    color: var(--accent-primary-foreground);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-primary) 84%, var(--bg-primary)), var(--accent-primary));
+}
+
+.ofive-ui-button--primary:hover,
+.ofive-ui-button--primary:focus-visible {
+    border-color: transparent;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-primary) 90%, var(--bg-primary)), var(--accent-primary));
+    filter: brightness(1.03);
+}
+
+.ofive-ui-button--ghost {
+    border-color: transparent;
+    color: var(--text-secondary);
+    background: transparent;
+}
+
+.ofive-ui-button--danger {
+    color: var(--error-color);
+}
+
+.ofive-ui-button--icon-only {
+    width: 30px;
+    padding: 0;
+}
+
+.ofive-ui-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1260;
+    display: flex;
+    padding: 24px;
+    background: var(--surface-overlay-backdrop);
+    backdrop-filter: blur(10px);
+}
+
+.ofive-ui-modal-backdrop--center {
+    align-items: center;
+    justify-content: center;
+}
+
+.ofive-ui-modal-backdrop--top {
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 10vh;
+}
+
+.ofive-ui-modal {
+    width: min(var(--ofive-ui-modal-width, 520px), 100%);
+    max-height: min(86vh, var(--ofive-ui-modal-max-height, 820px));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--surface-overlay-panel-border);
+    border-radius: var(--modal-panel-radius);
+    background: var(--surface-overlay-panel-bg);
+    color: var(--text-primary);
+    box-shadow: var(--surface-overlay-panel-shadow);
+}
+
+.ofive-ui-modal--sm {
+    --ofive-ui-modal-width: 420px;
+}
+
+.ofive-ui-modal--md {
+    --ofive-ui-modal-width: 520px;
+}
+
+.ofive-ui-modal--lg {
+    --ofive-ui-modal-width: 760px;
+}
+
+.ofive-ui-modal--xl {
+    --ofive-ui-modal-width: 920px;
+}
+
+.ofive-ui-modal__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--surface-overlay-panel-border);
+}
+
+.ofive-ui-modal__title {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.ofive-ui-modal__description {
+    margin-top: 4px;
+    color: var(--text-secondary);
+    font-size: var(--font-size-ui-md);
+    line-height: 1.5;
+}
+
+.ofive-ui-modal__content {
+    min-height: 0;
+    overflow: auto;
+    padding: 14px 16px;
+}
+
+.ofive-ui-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--surface-overlay-panel-border);
+}
+
+.ofive-ui-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--text-primary);
+    font-size: var(--font-size-ui-md);
+    font-weight: 600;
+}
+
+.ofive-ui-field__description {
+    color: var(--text-secondary);
+    font-size: var(--font-size-ui-sm);
+    font-weight: 400;
+    line-height: 1.45;
+}
+
+.ofive-ui-dropdown-menu {
+    min-width: 180px;
+    max-height: 260px;
+    overflow: auto;
+    border: 1px solid var(--surface-overlay-panel-border);
+    border-radius: var(--modal-control-radius);
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--surface-overlay-panel-bg);
+    box-shadow: var(--surface-overlay-panel-shadow);
+}
+
+.ofive-ui-dropdown-item {
+    width: 100%;
+    min-height: 28px;
+    border: 0;
+    border-radius: var(--modal-control-radius);
+    padding: 6px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--text-primary);
+    background: transparent;
+    font-family: inherit;
+    font-size: var(--font-size-ui-md);
+    text-align: left;
+    cursor: pointer;
+}
+
+.ofive-ui-dropdown-item:hover,
+.ofive-ui-dropdown-item:focus-visible,
+.ofive-ui-dropdown-item--selected {
+    outline: none;
+    background: var(--modal-list-item-bg-active);
+    color: var(--text-primary);
+}
+
+.ofive-ui-dropdown-item:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
+.app-runtime--tauri.app-effect--glass .ofive-ui-control,
+.app-runtime--tauri.app-effect--glass .ofive-ui-button {
+    background: rgba(var(--window-glass-bg-rgb), 0.12);
+}

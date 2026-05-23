@@ -1,67 +1,16 @@
-/* 浮窗全屏遮罩：覆盖主布局并聚焦“移动文件”交互。 */
-.move-file-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 1260;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding-top: 10vh;
-    background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
-    backdrop-filter: blur(10px);
-}
-
 /* 浮窗主体容器：承载标题、输入框与目录候选列表。 */
 .move-file-panel {
-    width: min(760px, 88vw);
     max-height: 74vh;
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--border-color);
-    border-radius: var(--modal-panel-radius);
-    background: var(--bg-secondary);
-    box-shadow: var(--overlay-shadow-strong);
-    overflow: hidden;
 }
 
-/* 浮窗头部：展示动作标题与当前源文件路径。 */
-.move-file-header {
-    padding: 12px 16px 10px;
-    border-bottom: 1px solid var(--border-color);
-}
-
-/* 头部标题：强调当前动作语义。 */
-.move-file-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-/* 源文件路径：展示待移动文件的相对路径上下文。 */
-.move-file-source-path {
-    margin-top: 4px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.move-file-content {
+    padding: 0;
 }
 
 /* 搜索输入框：用户输入关键字筛选目录候选。 */
 .move-file-input {
-    border: 0;
-    border-bottom: 1px solid var(--border-color);
-    background: transparent;
-    color: var(--text-primary);
     font-size: 15px;
-    line-height: 1.5;
     padding: 12px 16px;
-    outline: none;
-}
-
-/* 输入框占位符：弱化提示文本。 */
-.move-file-input::placeholder {
-    color: var(--text-secondary);
 }
 
 /* 候选列表容器：纵向展示目录搜索结果。 */

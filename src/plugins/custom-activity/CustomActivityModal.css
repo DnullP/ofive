@@ -1,68 +1,12 @@
-/* custom-activity-overlay: 遮罩层，负责承载并居中 modal。 */
-.custom-activity-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 1200;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
-    backdrop-filter: blur(10px);
-}
-
 /* custom-activity-modal: 弹窗主体容器。 */
 .custom-activity-modal {
-    width: min(760px, 100%);
-    max-height: min(86vh, 820px);
-    overflow: auto;
-    border: 1px solid var(--border-color);
-    border-radius: var(--modal-panel-radius);
-    background: var(--bg-secondary);
-    box-shadow: var(--overlay-shadow-strong);
-}
-
-/* custom-activity-modal__header: 标题区。 */
-.custom-activity-modal__header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 16px 16px 10px;
-    user-select: none;
-}
-
-/* custom-activity-modal__title: 主标题文字。 */
-.custom-activity-modal__title {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-/* custom-activity-modal__subtitle: 标题下说明。 */
-.custom-activity-modal__subtitle {
-    margin: 6px 0 0;
-    color: var(--text-secondary);
-    font-size: 13px;
-    line-height: 1.5;
-}
-
-/* custom-activity-modal__close: 关闭按钮。 */
-.custom-activity-modal__close {
-    border: 0;
-    border-radius: var(--modal-control-radius);
-    background: transparent;
-    color: var(--text-secondary);
-    padding: 8px 12px;
-    cursor: pointer;
+    --ofive-ui-modal-max-height: 820px;
 }
 
 /* custom-activity-modal__content: 主内容区。 */
 .custom-activity-modal__content {
     display: grid;
     gap: 12px;
-    padding: 0 16px 16px;
 }
 
 /* custom-activity-modal__section: 分区卡片。 */
@@ -81,41 +25,6 @@
     font-size: 14px;
     font-weight: 700;
     color: var(--text-primary);
-}
-
-/* custom-activity-modal__field: 单个表单项。 */
-.custom-activity-modal__field {
-    display: grid;
-    gap: 8px;
-}
-
-/* custom-activity-modal__label: 表单标签。 */
-.custom-activity-modal__label {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-secondary);
-}
-
-/* custom-activity-modal__input: 文本输入框。 */
-.custom-activity-modal__input {
-    width: 100%;
-    border: 1px solid var(--border-color);
-    border-radius: var(--modal-control-radius);
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    padding: 11px 13px;
-    font-size: 14px;
-}
-
-/* custom-activity-modal__select: 下拉选择框。 */
-.custom-activity-modal__select {
-    width: 100%;
-    border: 1px solid var(--border-color);
-    border-radius: var(--modal-control-radius);
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    padding: 11px 13px;
-    font-size: 14px;
 }
 
 /* custom-activity-modal__type-grid: 类型选项栅格。 */
@@ -216,38 +125,10 @@
     gap: 10px;
 }
 
-/* custom-activity-modal__button: 通用按钮。 */
-.custom-activity-modal__button {
-    border: 1px solid var(--border-color);
-    border-radius: var(--modal-control-radius);
-    background: var(--bg-primary);
-    color: var(--text-secondary);
-    padding: 10px 14px;
-    cursor: pointer;
-}
-
-/* custom-activity-modal__button.primary: 主按钮。 */
-.custom-activity-modal__button.primary {
-    border-color: transparent;
-    background: var(--accent-primary);
-    color: var(--accent-primary-foreground);
-}
-
-/* custom-activity-modal__button:disabled: 禁用态按钮。 */
-.custom-activity-modal__button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
 @media (max-width: 640px) {
-
-    /* custom-activity-modal__header: 小屏标题区。 */
-    .custom-activity-modal__header {
-        padding: 18px 18px 10px;
-    }
 
     /* custom-activity-modal__content: 小屏内容区。 */
     .custom-activity-modal__content {
-        padding: 0 18px 18px;
+        padding: 18px;
     }
 }

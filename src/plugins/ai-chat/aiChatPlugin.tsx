@@ -85,7 +85,15 @@ import {
     openProjectReaderWikiLinkTarget,
     resolveProjectReaderWikiLinkTabDefinition,
 } from "../project-reader/projectReaderLinks";
-import { modalPlainTextInputProps } from "../../host/layout/textInputBehaviors";
+import {
+    UiButton,
+    UiDropdownMenu,
+    UiDropdownMenuItem,
+    UiField,
+    UiModal,
+    UiSelect,
+    UiTextInput,
+} from "../../host/ui";
 import {
     createEmptyPendingStreamBinding,
     createPendingStreamBinding,
@@ -2701,18 +2709,18 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                                 <ChevronDown size={13} strokeWidth={1.9} />
                             </button>
                             {modelSwitcherOpen ? (
-                                <div className="ai-chat-model-menu" role="listbox" aria-label={i18n.t("aiChatPlugin.modelSwitcherTitle")}>
+                                <UiDropdownMenu className="ai-chat-model-menu" role="listbox" aria-label={i18n.t("aiChatPlugin.modelSwitcherTitle")}>
                                     {isModelSwitcherLoading ? (
                                         <div className="ai-chat-model-menu-status">{i18n.t("aiChatPlugin.refreshingModels")}</div>
                                     ) : modelSwitcherModels.map((model) => {
                                         const selected = settings ? model.id === resolveActiveProvider(settings).model : false;
                                         return (
-                                            <button
+                                            <UiDropdownMenuItem
                                                 key={model.id}
-                                                type="button"
                                                 className={`ai-chat-model-option ${selected ? "selected" : ""}`}
                                                 role="option"
                                                 aria-selected={selected}
+                                                selected={selected}
                                                 disabled={isModelSwitcherSaving}
                                                 onClick={() => {
                                                     void handleModelSwitcherSelectModel(model.id);
@@ -2720,7 +2728,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                                             >
                                                 <span>{model.id}</span>
                                                 {selected ? <Check size={14} strokeWidth={2} /> : null}
-                                            </button>
+                                            </UiDropdownMenuItem>
                                         );
                                     })}
                                     {isModelSwitcherSaving ? (
@@ -2731,7 +2739,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                                             {modelSwitcherFeedback}
                                         </div>
                                     ) : null}
-                                </div>
+                                </UiDropdownMenu>
                             ) : null}
                         </div>
                         {composerHint ? (
@@ -3203,14 +3211,14 @@ function AiChatSettingsSection(): ReactNode {
                         })}
                     </div>
                     <div className="ai-chat-settings-provider-actions">
-                        <button
-                            type="button"
+                        <UiButton
                             className="ai-chat-settings-mini-button"
+                            controlSize="compact"
                             onClick={handleAddProvider}
                         >
                             <Plus size={13} strokeWidth={2} />
                             <span>{i18n.t("aiChatPlugin.providerAdd")}</span>
-                        </button>
+                        </UiButton>
                     </div>
                 </div>
 
@@ -3220,21 +3228,24 @@ function AiChatSettingsSection(): ReactNode {
                             <div className="ai-chat-settings-provider-detail-title">{activeProvider?.title ?? "-"}</div>
                             <div className="ai-chat-settings-provider-meta">{activeProviderVendorTitle}</div>
                         </div>
-                        <button
-                            type="button"
+                        <UiButton
                             className="ai-chat-settings-mini-button danger"
+                            controlSize="compact"
+                            variant="danger"
                             onClick={handleRemoveProvider}
                         >
                             <X size={13} strokeWidth={2} />
                             <span>{i18n.t("aiChatPlugin.providerRemove")}</span>
-                        </button>
+                        </UiButton>
                     </div>
 
                     <div className="ai-chat-settings-row">
                         <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.providerNameLabel")}</div>
                         <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.providerNameDescription")}</div>
-                        <input
+                        <UiTextInput
                             className="ai-chat-settings-input"
+                            controlSize="compact"
+                            variant="settings"
                             type="text"
                             value={activeProvider?.title ?? ""}
                             onChange={(event) => {
@@ -3249,22 +3260,21 @@ function AiChatSettingsSection(): ReactNode {
                     <div className="ai-chat-settings-row">
                         <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.vendorLabel")}</div>
                         <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.vendorDescription")}</div>
-                        <select
-                            className="settings-compact-select"
+                        <UiSelect
                             value={activeProvider?.vendorId ?? ""}
                             onChange={handleProviderTypeChange}
                         >
                             {vendorCatalog.map((vendor) => (
                                 <option key={vendor.id} value={vendor.id}>{vendor.title}</option>
                             ))}
-                        </select>
+                        </UiSelect>
                     </div>
 
                     <div className="ai-chat-settings-row">
                         <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.modelLabel")}</div>
                         <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.modelDescription")}</div>
-                        <select
-                            className="settings-compact-select ai-chat-settings-model-select"
+                        <UiSelect
+                            className="ai-chat-settings-model-select"
                             value={activeProvider?.model ?? ""}
                             disabled={isLoadingModels}
                             onChange={(event) => {
@@ -3279,10 +3289,12 @@ function AiChatSettingsSection(): ReactNode {
                             ) : availableModels.map((model) => (
                                 <option key={model.id} value={model.id}>{model.id}</option>
                             ))}
-                        </select>
+                        </UiSelect>
                         <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.modelLoadHint")}</div>
-                        <input
+                        <UiTextInput
                             className="ai-chat-settings-input"
+                            controlSize="compact"
+                            variant="settings"
                             type="text"
                             value={activeProvider?.model ?? ""}
                             onChange={(event) => {
@@ -3298,8 +3310,10 @@ function AiChatSettingsSection(): ReactNode {
                         <div key={field.key} className="ai-chat-settings-row">
                             <div className="ai-chat-settings-label">{field.label}</div>
                             <div className="ai-chat-settings-desc">{field.description}</div>
-                            <input
+                            <UiTextInput
                                 className="ai-chat-settings-input"
+                                controlSize="compact"
+                                variant="settings"
                                 type={field.fieldType}
                                 required={field.required}
                                 placeholder={field.placeholder ?? undefined}
@@ -3315,16 +3329,16 @@ function AiChatSettingsSection(): ReactNode {
                         <div className={`ai-chat-settings-feedback ${feedbackIsError ? "error" : ""}`}>
                             {feedback ?? `${i18n.t("aiChatPlugin.configuredVendor")}: ${activeProvider?.title ?? selectedVendor?.title ?? "-"}`}
                         </div>
-                        <button
-                            type="button"
+                        <UiButton
                             className="ai-chat-settings-save"
+                            variant="primary"
                             disabled={isSaving}
                             onClick={() => {
                                 void handleSave();
                             }}
                         >
                             {isSaving ? i18n.t("aiChatPlugin.sending") : i18n.t("aiChatPlugin.save")}
-                        </button>
+                        </UiButton>
                     </div>
                 </div>
             </div>
@@ -3355,8 +3369,8 @@ function AiChatSettingsSection(): ReactNode {
                                     {tool.description}
                                 </div>
                             </div>
-                            <select
-                                className="settings-compact-select ai-chat-settings-tool-policy-select"
+                            <UiSelect
+                                className="ai-chat-settings-tool-policy-select"
                                 value={selectedMode}
                                 onChange={(event) => {
                                     updateToolApprovalMode(tool.capabilityId, event.target.value as AiToolApprovalMode);
@@ -3365,7 +3379,7 @@ function AiChatSettingsSection(): ReactNode {
                                 <option value="default">{i18n.t("aiChatPlugin.toolApprovalDefault")}</option>
                                 <option value="require">{i18n.t("aiChatPlugin.toolApprovalRequire")}</option>
                                 <option value="auto">{i18n.t("aiChatPlugin.toolApprovalAuto")}</option>
-                            </select>
+                            </UiSelect>
                         </div>
                     );
                 })}
@@ -3374,101 +3388,76 @@ function AiChatSettingsSection(): ReactNode {
                 <div className={`ai-chat-settings-feedback ${feedbackIsError ? "error" : ""}`}>
                     {feedback ?? i18n.t("aiChatPlugin.toolApprovalDescription")}
                 </div>
-                <button
-                    type="button"
+                <UiButton
                     className="ai-chat-settings-save"
+                    variant="primary"
                     disabled={isSaving}
                     onClick={() => {
                         void handleSave();
                     }}
                 >
                     {isSaving ? i18n.t("aiChatPlugin.sending") : i18n.t("aiChatPlugin.save")}
-                </button>
+                </UiButton>
             </div>
         </div>
 
-        {providerModalOpen ? (
-            <div
-                className="ai-chat-provider-modal-backdrop"
-                data-floating-backdrop="true"
-                role="presentation"
-                onMouseDown={(event) => {
-                    if (event.target === event.currentTarget) {
-                        setProviderModalOpen(false);
-                    }
-                }}
-            >
-                <form
-                    className="ai-chat-provider-modal"
-                    data-floating-surface="true"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label={i18n.t("aiChatPlugin.providerAdd")}
-                    onSubmit={handleConfirmAddProvider}
+        <UiModal
+            ariaLabel={i18n.t("aiChatPlugin.providerAdd")}
+            className="ai-chat-provider-modal-backdrop"
+            closeLabel={i18n.t("common.cancel")}
+            description={i18n.t("aiChatPlugin.providerDescription")}
+            footer={(
+                <>
+                    <UiButton
+                        className="ai-chat-settings-mini-button"
+                        controlSize="compact"
+                        onClick={() => {
+                            setProviderModalOpen(false);
+                        }}
+                    >
+                        {i18n.t("common.cancel")}
+                    </UiButton>
+                    <UiButton className="ai-chat-settings-save" type="submit" variant="primary">
+                        {i18n.t("aiChatPlugin.providerAdd")}
+                    </UiButton>
+                </>
+            )}
+            isOpen={providerModalOpen}
+            onClose={() => {
+                setProviderModalOpen(false);
+            }}
+            onSubmit={handleConfirmAddProvider}
+            panelClassName="ai-chat-provider-modal"
+            size="sm"
+            title={i18n.t("aiChatPlugin.providerAdd")}
+        >
+            <UiField label={i18n.t("aiChatPlugin.providerNameLabel")}>
+                <UiTextInput
+                    className="ai-chat-settings-input"
+                    controlSize="compact"
+                    variant="settings"
+                    type="text"
+                    value={providerDraftTitle}
+                    placeholder={selectedVendor?.title ?? i18n.t("aiChatPlugin.providerLabel")}
+                    onChange={(event) => {
+                        setProviderDraftTitle(event.target.value);
+                    }}
+                />
+            </UiField>
+
+            <UiField label={i18n.t("aiChatPlugin.vendorLabel")}>
+                <UiSelect
+                    value={providerDraftVendorId}
+                    onChange={(event) => {
+                        setProviderDraftVendorId(event.target.value);
+                    }}
                 >
-                    <div className="ai-chat-provider-modal-header">
-                        <div>
-                            <div className="ai-chat-provider-modal-title">{i18n.t("aiChatPlugin.providerAdd")}</div>
-                            <div className="ai-chat-provider-modal-desc">{i18n.t("aiChatPlugin.providerDescription")}</div>
-                        </div>
-                        <button
-                            type="button"
-                            className="ai-chat-provider-modal-close"
-                            aria-label={i18n.t("common.cancel")}
-                            onClick={() => {
-                                setProviderModalOpen(false);
-                            }}
-                        >
-                            <X size={15} strokeWidth={2} />
-                        </button>
-                    </div>
-
-                    <label className="ai-chat-provider-modal-field">
-                        <span>{i18n.t("aiChatPlugin.providerNameLabel")}</span>
-                        <input
-                            {...modalPlainTextInputProps}
-                            className="ai-chat-settings-input"
-                            type="text"
-                            value={providerDraftTitle}
-                            placeholder={selectedVendor?.title ?? i18n.t("aiChatPlugin.providerLabel")}
-                            onChange={(event) => {
-                                setProviderDraftTitle(event.target.value);
-                            }}
-                        />
-                    </label>
-
-                    <label className="ai-chat-provider-modal-field">
-                        <span>{i18n.t("aiChatPlugin.vendorLabel")}</span>
-                        <select
-                            className="settings-compact-select"
-                            value={providerDraftVendorId}
-                            onChange={(event) => {
-                                setProviderDraftVendorId(event.target.value);
-                            }}
-                        >
-                            {vendorCatalog.map((vendor) => (
-                                <option key={vendor.id} value={vendor.id}>{vendor.title}</option>
-                            ))}
-                        </select>
-                    </label>
-
-                    <div className="ai-chat-provider-modal-actions">
-                        <button
-                            type="button"
-                            className="ai-chat-settings-mini-button"
-                            onClick={() => {
-                                setProviderModalOpen(false);
-                            }}
-                        >
-                            {i18n.t("common.cancel")}
-                        </button>
-                        <button type="submit" className="ai-chat-settings-save">
-                            {i18n.t("aiChatPlugin.providerAdd")}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        ) : null}
+                    {vendorCatalog.map((vendor) => (
+                        <option key={vendor.id} value={vendor.id}>{vendor.title}</option>
+                    ))}
+                </UiSelect>
+            </UiField>
+        </UiModal>
         </>
     );
 }

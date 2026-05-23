@@ -16,6 +16,7 @@ func TestOpenAICompatibleGenerateContentSendsToolsAndToolMessages(t *testing.T) 
 	t.Parallel()
 
 	var capturedRequest map[string]any
+	var capturedUserAgent string
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		defer request.Body.Close()
 
@@ -25,6 +26,7 @@ func TestOpenAICompatibleGenerateContentSendsToolsAndToolMessages(t *testing.T) 
 		if authorization := request.Header.Get("Authorization"); authorization != "Bearer test-key" {
 			t.Fatalf("unexpected authorization header: %q", authorization)
 		}
+		capturedUserAgent = request.Header.Get("User-Agent")
 
 		body, err := io.ReadAll(request.Body)
 		if err != nil {
@@ -91,6 +93,9 @@ func TestOpenAICompatibleGenerateContentSendsToolsAndToolMessages(t *testing.T) 
 
 	if capturedRequest["model"] != "gpt-4.1" {
 		t.Fatalf("expected configured model, got %#v", capturedRequest["model"])
+	}
+	if capturedUserAgent != "ofive-ai-sidecar" {
+		t.Fatalf("expected compatible user agent, got %q", capturedUserAgent)
 	}
 	if capturedRequest["tool_choice"] != "auto" {
 		t.Fatalf("expected tool choice auto, got %#v", capturedRequest["tool_choice"])

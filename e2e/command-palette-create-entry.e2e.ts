@@ -46,8 +46,8 @@ test("command palette create-file command should open create-entry modal", async
 
     const createEntryModal = page.locator(".create-entry-panel");
     await expect(createEntryModal).toBeVisible();
-    await expect(createEntryModal.locator(".create-entry-title")).toHaveText(/New File|新建文件/);
-    await expect(createEntryModal.locator(".create-entry-input")).toHaveValue("untitled");
+    await expect(createEntryModal.locator(".ofive-ui-modal__title")).toHaveText(/New File|新建文件/);
+    await expect(createEntryModal.locator(".ofive-ui-text-input")).toHaveValue("untitled");
 });
 
 test("create-file command should insert frontmatter when frontmatter auto-create setting is enabled", async ({ page }) => {
@@ -72,8 +72,8 @@ test("create-file command should insert frontmatter when frontmatter auto-create
 
     const createEntryModal = page.locator(".create-entry-panel");
     await expect(createEntryModal).toBeVisible();
-    await createEntryModal.locator(".create-entry-input").fill("alias-auto-frontmatter");
-    await createEntryModal.locator(".create-entry-button.primary").click();
+    await createEntryModal.locator(".ofive-ui-text-input").fill("alias-auto-frontmatter");
+    await createEntryModal.locator(".ofive-ui-button--primary").click();
 
     await expect(page.locator(".layout-v2-tab-section__card--active .cm-frontmatter-widget").first()).toBeVisible();
 

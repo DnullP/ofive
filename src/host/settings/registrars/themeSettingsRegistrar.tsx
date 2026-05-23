@@ -11,6 +11,7 @@ import { useMemo, type ChangeEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { updateFeatureSetting, useConfigState } from "../../config/configStore";
 import { updateThemeMode, type ThemeMode, useThemeState } from "../../theme/themeStore";
+import { UiTextInput } from "../../ui";
 import { registerSettingsItems, registerSettingsSection } from "../settingsRegistry";
 
 const THEME_MODE_OPTIONS: Array<{ value: ThemeMode; labelKey: string; descKey: string }> = [
@@ -94,8 +95,10 @@ function GlassSettingNumberRow(props: {
                     />
                 )}
                 <div className="settings-glass-value-group">
-                    <input
+                    <UiTextInput
                         className="settings-compact-number-input"
+                        controlSize="compact"
+                        variant="settings"
                         type="number"
                         min={props.min}
                         max={props.max}

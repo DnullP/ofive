@@ -10,6 +10,7 @@
 
 import type { ChangeEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { UiTextInput } from "../../../host/ui";
 import {
     KNOWLEDGE_GRAPH_SETTING_DEFINITIONS,
     type KnowledgeGraphSettingDefinition,
@@ -78,8 +79,10 @@ function GraphSettingField({ definition }: { definition: KnowledgeGraphSettingDe
             <span className="settings-dense-title">{t(definition.title)}</span>
 
             <div className="settings-graph-control-row">
-                <input
+                <UiTextInput
                     className="settings-compact-number-input"
+                    controlSize="compact"
+                    variant="settings"
                     type="number"
                     value={String(currentValue)}
                     min={definition.min}

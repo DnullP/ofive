@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { modalPlainTextInputProps } from "./textInputBehaviors";
+import { UiModal, UiTextInput } from "../ui";
 import "./MoveFileDirectoryModal.css";
 
 /**
@@ -203,70 +203,60 @@ export function MoveFileDirectoryModal(props: MoveFileDirectoryModalProps): Reac
     }
 
     return (
-        <div
-            className="move-file-overlay"
-            data-floating-backdrop="true"
-            role="presentation"
-            onMouseDown={(event) => {
-                if (event.target === event.currentTarget) {
-                    props.onClose();
-                }
-            }}
+        <UiModal
+            ariaLabel={props.ariaLabel ?? t("moveFileModal.ariaLabel")}
+            contentClassName="move-file-content"
+            description={props.sourceFilePath}
+            isOpen={props.isOpen}
+            panelClassName="move-file-panel"
+            placement="top"
+            showCloseButton={false}
+            size="lg"
+            title={props.title ?? t("moveFileModal.title")}
+            onClose={props.onClose}
             onKeyDown={handleKeyboard}
         >
-            <section
-                className="move-file-panel"
-                data-floating-surface="true"
-                aria-label={props.ariaLabel ?? t("moveFileModal.ariaLabel")}
-            >
-                <header className="move-file-header">
-                    <div className="move-file-title">{props.title ?? t("moveFileModal.title")}</div>
-                    <div className="move-file-source-path" title={props.sourceFilePath}>
-                        {props.sourceFilePath}
-                    </div>
-                </header>
+            <UiTextInput
+                ref={inputRef}
+                className="move-file-input"
+                controlSize="large"
+                variant="plain"
+                type="text"
+                value={query}
+                placeholder={t("moveFileModal.placeholder")}
+                onChange={(event) => {
+                    setQuery(event.target.value);
+                }}
+            />
 
-                <input
-                    ref={inputRef}
-                    {...modalPlainTextInputProps}
-                    className="move-file-input"
-                    type="text"
-                    value={query}
-                    placeholder={t("moveFileModal.placeholder")}
-                    onChange={(event) => {
-                        setQuery(event.target.value);
-                    }}
-                />
+            <div className="move-file-list" role="listbox" aria-activedescendant={selectedOption?.relativePath || "vault-root"}>
+                {filteredOptions.length === 0 && <div className="move-file-empty">{t("moveFileModal.noMatch")}</div>}
 
-                <div className="move-file-list" role="listbox" aria-activedescendant={selectedOption?.relativePath || "vault-root"}>
-                    {filteredOptions.length === 0 && <div className="move-file-empty">{t("moveFileModal.noMatch")}</div>}
-
-                    {filteredOptions.map((option, index) => {
-                        const optionId = option.relativePath || "vault-root";
-                        return (
-                            <button
-                                key={optionId}
-                                id={optionId}
-                                type="button"
-                                role="option"
-                                className={`move-file-item ${index === selectedIndex ? "active" : ""}`}
-                                aria-selected={index === selectedIndex}
-                                onMouseEnter={() => {
-                                    setSelectedIndex(index);
-                                }}
-                                onClick={() => {
-                                    executeByIndex(index);
-                                }}
-                            >
-                                <span className="move-file-item-title">{option.title}</span>
-                                <span className="move-file-item-meta">
-                                    {option.relativePath || t("common.rootDirectory")}
-                                </span>
-                            </button>
-                        );
-                    })}
-                </div>
-            </section>
-        </div>
+                {filteredOptions.map((option, index) => {
+                    const optionId = option.relativePath || "vault-root";
+                    return (
+                        <button
+                            key={optionId}
+                            id={optionId}
+                            type="button"
+                            role="option"
+                            className={`move-file-item ${index === selectedIndex ? "active" : ""}`}
+                            aria-selected={index === selectedIndex}
+                            onMouseEnter={() => {
+                                setSelectedIndex(index);
+                            }}
+                            onClick={() => {
+                                executeByIndex(index);
+                            }}
+                        >
+                            <span className="move-file-item-title">{option.title}</span>
+                            <span className="move-file-item-meta">
+                                {option.relativePath || t("common.rootDirectory")}
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+        </UiModal>
     );
 }

@@ -19,6 +19,7 @@
 
 import type { ChangeEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { UiSelect, UiTextInput } from "../ui";
 import type {
     NumberSettingsItemRegistration,
     SelectSettingsItemRegistration,
@@ -107,9 +108,11 @@ function RegisteredNumberItem(props: { item: NumberSettingsItemRegistration }): 
                 ) : null}
             </div>
             <div className="settings-glass-value-group">
-                <input
+                <UiTextInput
                     id={inputId}
                     className="settings-compact-number-input"
+                    controlSize="compact"
+                    variant="settings"
                     type="number"
                     min={props.item.min}
                     max={props.item.max}
@@ -183,9 +186,8 @@ function RegisteredSelectItem(props: { item: SelectSettingsItemRegistration }): 
                     <span className="settings-compact-desc">{t(props.item.description)}</span>
                 ) : null}
             </div>
-            <select
+            <UiSelect
                 id={inputId}
-                className="settings-compact-select"
                 value={value}
                 disabled={disabled}
                 onChange={(event) => {
@@ -204,7 +206,7 @@ function RegisteredSelectItem(props: { item: SelectSettingsItemRegistration }): 
                         {t(option.label)}
                     </option>
                 ))}
-            </select>
+            </UiSelect>
         </div>
     );
 }

@@ -416,20 +416,6 @@
     border-color: var(--accent-primary);
 }
 
-/* 紧凑行下拉选择框 */
-.settings-compact-select {
-    min-width: 80px;
-    border: 1px solid var(--content-material-border);
-    border-radius: 0;
-    background: var(--content-material-input-bg);
-    color: var(--text-primary);
-    padding: 4px 8px;
-    font-size: 13px;
-    cursor: pointer;
-}
-
-/* 字体设置已简化为下拉选择框，复用 .settings-compact-select 样式 */
-
 /* ========== 旧 settings-item 保留兼容（逐步迁移后可移除） ========== */
 
 /* 单个设置项：标题描述 + 开关（旧样式，兼容未迁移组件） */

@@ -50,6 +50,7 @@ func NewOpenAICompatibleLLM(name, baseURL, modelName, apiKey string) *OpenAIComp
 		option.WithAPIKey(apiKey),
 		option.WithBaseURL(baseURL),
 		option.WithHTTPClient(newStreamingHTTPClient()),
+		option.WithHeader("User-Agent", "ofive-ai-sidecar"),
 	)
 
 	return &OpenAICompatibleLLM{

@@ -9,8 +9,8 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { UiButton, UiModal, UiTextInput } from "../ui";
 import { shouldSubmitPlainEnter } from "../../utils/imeInputGuard";
-import { modalPlainTextInputProps } from "./textInputBehaviors";
 import "./CreateEntryModal.css";
 
 /**
@@ -92,57 +92,44 @@ export function CreateEntryModal(props: CreateEntryModalProps): ReactNode {
     }
 
     return (
-        <div
-            className="create-entry-overlay"
-            data-floating-backdrop="true"
-            role="presentation"
-            onMouseDown={(event) => {
-                if (event.target === event.currentTarget) {
-                    props.onClose();
-                }
-            }}
+        <UiModal
+            ariaLabel={props.title}
+            description={`${t("moveFileModal.vaultRoot")}: ${props.baseDirectory || t("common.rootDirectory")}`}
+            footer={(
+                <>
+                    <UiButton className="create-entry-button" onClick={props.onClose}>
+                        {t("common.cancel")}
+                    </UiButton>
+                    <UiButton className="create-entry-button primary" variant="primary" onClick={submit}>
+                        {props.confirmLabel ?? (props.kind === "file" ? t("common.newFile") : t("common.newFolder"))}
+                    </UiButton>
+                </>
+            )}
+            isOpen={props.isOpen}
+            panelClassName="create-entry-panel"
+            placement="top"
+            size="md"
+            title={props.title}
+            onClose={props.onClose}
             onKeyDown={handleKeyDown}
         >
-            {/* create-entry-panel: 创建输入浮窗主体 */}
-            <section
-                className="create-entry-panel"
-                data-floating-surface="true"
-                aria-label={props.title}
-            >
-                {/* create-entry-title: 创建类型标题 */}
-                <div className="create-entry-title">{props.title}</div>
-                {/* create-entry-directory: 目标目录提示 */}
-                <div className="create-entry-directory">
-                    {t("moveFileModal.vaultRoot")}:
-                    {props.baseDirectory ? ` ${props.baseDirectory}` : ` ${t("common.rootDirectory")}`}
+            <UiTextInput
+                ref={inputRef}
+                className="create-entry-input"
+                controlSize="large"
+                type="text"
+                value={draftName}
+                placeholder={props.placeholder}
+                invalid={Boolean(props.validationMessage)}
+                onChange={(event) => {
+                    setDraftName(event.target.value);
+                }}
+            />
+            {props.validationMessage ? (
+                <div className="create-entry-validation" role="alert">
+                    {props.validationMessage}
                 </div>
-                {/* create-entry-input: 名称输入框 */}
-                <input
-                    ref={inputRef}
-                    {...modalPlainTextInputProps}
-                    className="create-entry-input"
-                    type="text"
-                    value={draftName}
-                    placeholder={props.placeholder}
-                    onChange={(event) => {
-                        setDraftName(event.target.value);
-                    }}
-                />
-                {props.validationMessage ? (
-                    <div className="create-entry-validation" role="alert">
-                        {props.validationMessage}
-                    </div>
-                ) : null}
-                {/* create-entry-actions: 浮窗底部操作区 */}
-                <div className="create-entry-actions">
-                    <button type="button" className="create-entry-button" onClick={props.onClose}>
-                        {t("common.cancel")}
-                    </button>
-                    <button type="button" className="create-entry-button primary" onClick={submit}>
-                        {props.confirmLabel ?? (props.kind === "file" ? t("common.newFile") : t("common.newFolder"))}
-                    </button>
-                </div>
-            </section>
-        </div>
+            ) : null}
+        </UiModal>
     );
 }

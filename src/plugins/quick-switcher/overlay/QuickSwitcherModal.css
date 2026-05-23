@@ -14,15 +14,13 @@
 .quick-switcher-panel {
     width: min(720px, 86vw);
     max-height: 72vh;
+}
+
+.quick-switcher-content {
     display: flex;
     flex-direction: column;
     gap: 8px;
     padding: 12px;
-    border: 1px solid var(--surface-overlay-panel-border);
-    border-radius: var(--modal-panel-radius);
-    background: var(--surface-overlay-panel-bg);
-    box-shadow: var(--surface-overlay-panel-shadow);
-    overflow: hidden;
 }
 
 /* 浮窗头部：展示上下文和当前选中结果。 */
@@ -94,19 +92,9 @@
 
 /* 搜索输入框：用户输入关键字并实时触发检索 */
 .quick-switcher-input {
-    border: 0;
-    background: transparent;
-    color: var(--text-primary);
     font-size: 16px;
     line-height: 1.5;
     padding: 14px 0;
-    outline: none;
-    width: 100%;
-}
-
-/* 输入框占位符文本：弱化提示信息 */
-.quick-switcher-input::placeholder {
-    color: var(--text-secondary);
 }
 
 /* 候选列表容器：纵向展示搜索结果 */

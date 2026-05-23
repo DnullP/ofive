@@ -28,7 +28,7 @@ import { useTranslation } from "react-i18next";
 import { searchVaultMarkdownFiles, type VaultQuickSwitchItem } from "../../../api/vaultApi";
 import { UI_LANGUAGE } from "../../../i18n/uiLanguage";
 import type { FileOpenMode } from "../../../host/config/configStore";
-import { modalPlainTextInputProps } from "../../../host/layout/textInputBehaviors";
+import { UiModal, UiTextInput } from "../../../host/ui";
 import type { OverlayRenderContext } from "../../../host/registry/overlayRegistry";
 import { useDebouncedValue } from "../../../utils/useDebouncedValue";
 import {
@@ -279,24 +279,18 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
     }
 
     return (
-        /* quick-switcher-overlay: 页面级遮罩层，用于聚焦当前快速切换交互 */
-        <div
+        <UiModal
             className="quick-switcher-overlay"
-            data-floating-backdrop="true"
-            role="presentation"
-            onMouseDown={(event) => {
-                if (event.target === event.currentTarget) {
-                    closeOverlay();
-                }
-            }}
+            contentClassName="quick-switcher-content"
+            isOpen={isOpen}
+            panelClassName="quick-switcher-panel"
+            placement="top"
+            showCloseButton={false}
+            size="lg"
+            ariaLabel={t("quickSwitcher.ariaLabel")}
+            onClose={closeOverlay}
             onKeyDown={handleKeyboard}
         >
-            {/* quick-switcher-panel: 浮窗主体容器，承载输入与候选列表 */}
-            <section
-                className="quick-switcher-panel"
-                data-floating-surface="true"
-                aria-label={t("quickSwitcher.ariaLabel")}
-            >
                 <div className="quick-switcher-header">
                     <div className="quick-switcher-header-copy">
                         <span className="quick-switcher-kicker">{t("quickSwitcher.ariaLabel")}</span>
@@ -311,10 +305,11 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
                 {/* quick-switcher-input: 搜索输入框，输入即触发后端检索 */}
                 <label className="quick-switcher-input-shell">
                     <Search size={16} strokeWidth={1.8} className="quick-switcher-input-icon" />
-                    <input
+                    <UiTextInput
                         ref={inputRef}
-                        {...modalPlainTextInputProps}
                         className="quick-switcher-input"
+                        controlSize="large"
+                        variant="unstyled"
                         type="text"
                         value={query}
                         placeholder={t("quickSwitcher.placeholder")}
@@ -371,7 +366,6 @@ export function QuickSwitcherOverlay(props: QuickSwitcherOverlayProps): ReactNod
                         {t(UI_LANGUAGE.actions.open)}
                     </span>
                 </div>
-            </section>
-        </div>
+        </UiModal>
     );
 }

@@ -27,8 +27,8 @@ import {
     type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { UiButton, UiField, UiModal, UiSelect, UiTextInput } from "../../host/ui";
 import type { OverlayRenderContext } from "../../host/registry";
-import { modalPlainTextInputProps } from "../../host/layout/textInputBehaviors";
 import { getConfigSnapshot } from "../../host/config/configStore";
 import {
     appendCustomActivityToVaultConfig,
@@ -169,45 +169,25 @@ export function CustomActivityModal(props: OverlayRenderContext): ReactNode {
     }
 
     return (
-        <div
-            className="custom-activity-overlay"
-            data-floating-backdrop="true"
-            role="presentation"
-            onMouseDown={(event) => {
-                if (event.target === event.currentTarget) {
-                    handleClose();
-                }
-            }}
+        <UiModal
+            ariaLabel={t("customActivity.modalTitle")}
+            closeLabel={t("common.close")}
+            contentClassName="custom-activity-modal__content"
+            description={t("customActivity.modalSubtitle")}
+            isOpen={isOpen}
+            panelClassName="custom-activity-modal"
+            size="lg"
+            title={t("customActivity.modalTitle")}
+            onClose={handleClose}
             onKeyDown={handleKeyDown}
         >
-            <section
-                className="custom-activity-modal"
-                data-floating-surface="true"
-                aria-label={t("customActivity.modalTitle")}
-            >
-                <header className="custom-activity-modal__header">
-                    <div>
-                        <h2 className="custom-activity-modal__title">{t("customActivity.modalTitle")}</h2>
-                        <p className="custom-activity-modal__subtitle">{t("customActivity.modalSubtitle")}</p>
-                    </div>
-                    <button
-                        type="button"
-                        className="custom-activity-modal__close"
-                        onClick={handleClose}
-                    >
-                        {t("common.close")}
-                    </button>
-                </header>
-
-                <div className="custom-activity-modal__content">
                     <section className="custom-activity-modal__section">
                         <h3 className="custom-activity-modal__section-title">{t("customActivity.basicSection")}</h3>
-                        <label className="custom-activity-modal__field">
-                            <span className="custom-activity-modal__label">{t("customActivity.nameLabel")}</span>
-                            <input
+                        <UiField label={t("customActivity.nameLabel")}>
+                            <UiTextInput
                                 ref={inputRef}
-                                {...modalPlainTextInputProps}
                                 className="custom-activity-modal__input"
+                                controlSize="large"
                                 type="text"
                                 value={name}
                                 placeholder={t("customActivity.namePlaceholder")}
@@ -215,7 +195,7 @@ export function CustomActivityModal(props: OverlayRenderContext): ReactNode {
                                     setName(event.target.value);
                                 }}
                             />
-                        </label>
+                        </UiField>
                     </section>
 
                     <section className="custom-activity-modal__section">
@@ -246,10 +226,11 @@ export function CustomActivityModal(props: OverlayRenderContext): ReactNode {
                             </button>
                         </div>
                         {kind === "callback" && (
-                            <label className="custom-activity-modal__field">
-                                <span className="custom-activity-modal__label">{t("customActivity.commandLabel")}</span>
-                                <select
+                            <UiField label={t("customActivity.commandLabel")}>
+                                <UiSelect
                                     className="custom-activity-modal__select"
+                                    controlSize="large"
+                                    variant="default"
                                     value={commandId}
                                     onChange={(event) => {
                                         setCommandId(event.target.value);
@@ -260,8 +241,8 @@ export function CustomActivityModal(props: OverlayRenderContext): ReactNode {
                                             {definition.id}
                                         </option>
                                     ))}
-                                </select>
-                            </label>
+                                </UiSelect>
+                            </UiField>
                         )}
                     </section>
 
@@ -287,22 +268,20 @@ export function CustomActivityModal(props: OverlayRenderContext): ReactNode {
                     {error && <div className="custom-activity-modal__error">{error}</div>}
 
                     <div className="custom-activity-modal__actions">
-                        <button type="button" className="custom-activity-modal__button" onClick={handleClose}>
+                        <UiButton className="custom-activity-modal__button" onClick={handleClose}>
                             {t("common.cancel")}
-                        </button>
-                        <button
-                            type="button"
+                        </UiButton>
+                        <UiButton
                             className="custom-activity-modal__button primary"
+                            variant="primary"
                             onClick={() => {
                                 void handleSubmit();
                             }}
                             disabled={isSaving}
                         >
                             {isSaving ? t("customActivity.saving") : t("customActivity.create")}
-                        </button>
+                        </UiButton>
                     </div>
-                </div>
-            </section>
-        </div>
+        </UiModal>
     );
 }
