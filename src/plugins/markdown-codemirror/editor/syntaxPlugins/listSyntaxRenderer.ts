@@ -17,9 +17,11 @@
 import { type EditorSelection, type EditorState } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType } from "@codemirror/view";
 import {
+    pushLineSyntaxDecoration,
     pushSyntaxDecorationRange,
     rangeIntersectsSelection,
     registerLineSyntaxRenderer,
+    type LineSyntaxDecorationContext,
 } from "../syntaxRenderRegistry";
 
 /**
@@ -303,6 +305,83 @@ function buildListContentClassName(match: MarkdownListLineMatch): string {
 }
 
 /**
+ * @function buildListSourceClassName
+ * @description 按列表类型生成编辑态源码 marker 样式类。
+ * @param match 列表匹配结果。
+ * @returns 源码 marker className。
+ */
+function buildListSourceClassName(match: MarkdownListLineMatch): string {
+    return [
+        "cm-list-syntax-marker-source",
+        `cm-list-syntax-marker-source-${match.kind}`,
+    ].join(" ");
+}
+
+/**
+ * @function buildListSourceLineClassName
+ * @description 按列表类型生成编辑态源码行样式类。
+ * @param match 列表匹配结果。
+ * @returns 源码行 className。
+ */
+function buildListSourceLineClassName(match: MarkdownListLineMatch): string {
+    return [
+        "cm-list-source-line",
+        `cm-list-source-line-${match.kind}`,
+    ].join(" ");
+}
+
+/**
+ * @function applyListLineDecorations
+ * @description 为单行列表应用装饰。选区命中时回退源码，同时让列表正文沿用渲染态起点。
+ * @param context 语法渲染上下文。
+ */
+export function applyListLineDecorations(context: LineSyntaxDecorationContext): void {
+    const listMatch = detectMarkdownListLine(context.lineText);
+    if (!listMatch) {
+        return;
+    }
+
+    const lineEnd = context.lineFrom + context.lineText.length;
+    const markerFrom = context.lineFrom + listMatch.markerStart;
+    const contentFrom = context.lineFrom + listMatch.contentStart;
+    const isEditing = rangeIntersectsSelection(context.view, context.lineFrom, lineEnd);
+    if (isEditing) {
+        pushSyntaxDecorationRange(
+            context.ranges,
+            markerFrom,
+            contentFrom,
+            Decoration.mark({ class: buildListSourceClassName(listMatch) }),
+        );
+        pushLineSyntaxDecoration(
+            context.ranges,
+            context.lineFrom,
+            Decoration.line({ class: buildListSourceLineClassName(listMatch) }),
+        );
+        return;
+    }
+
+    pushSyntaxDecorationRange(
+        context.ranges,
+        markerFrom,
+        contentFrom,
+        Decoration.replace({
+            widget: new ListMarkerWidget(
+                listMatch.kind,
+                listMatch.markerText,
+                listMatch.taskState,
+            ),
+        }),
+    );
+
+    pushSyntaxDecorationRange(
+        context.ranges,
+        contentFrom,
+        lineEnd,
+        Decoration.mark({ class: buildListContentClassName(listMatch) }),
+    );
+}
+
+/**
  * @function registerListSyntaxRenderer
  * @description 注册 Markdown 列表渲染插件。
  *   编辑态下回退源码，非编辑态下将 marker 替换为列表 widget。
@@ -310,46 +389,6 @@ function buildListContentClassName(match: MarkdownListLineMatch): string {
 export function registerListSyntaxRenderer(): void {
     registerLineSyntaxRenderer({
         id: "list-line",
-        applyLineDecorations(context) {
-            const listMatch = detectMarkdownListLine(context.lineText);
-            if (!listMatch) {
-                return;
-            }
-
-            const lineEnd = context.lineFrom + context.lineText.length;
-            const markerFrom = context.lineFrom + listMatch.markerStart;
-            const markerTo = markerFrom + listMatch.markerText.length;
-            const contentFrom = context.lineFrom + listMatch.contentStart;
-            const isEditing = rangeIntersectsSelection(context.view, context.lineFrom, lineEnd);
-            if (isEditing) {
-                pushSyntaxDecorationRange(
-                    context.ranges,
-                    markerFrom,
-                    markerTo,
-                    Decoration.mark({ class: "cm-list-syntax-marker-source" }),
-                );
-                return;
-            }
-
-            pushSyntaxDecorationRange(
-                context.ranges,
-                markerFrom,
-                contentFrom,
-                Decoration.replace({
-                    widget: new ListMarkerWidget(
-                        listMatch.kind,
-                        listMatch.markerText,
-                        listMatch.taskState,
-                    ),
-                }),
-            );
-
-            pushSyntaxDecorationRange(
-                context.ranges,
-                contentFrom,
-                lineEnd,
-                Decoration.mark({ class: buildListContentClassName(listMatch) }),
-            );
-        },
+        applyLineDecorations: applyListLineDecorations,
     });
 }

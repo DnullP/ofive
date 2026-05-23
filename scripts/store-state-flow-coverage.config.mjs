@@ -313,6 +313,9 @@ export const storeConsumerCoverage = {
         "e2e/vault-switch-regression.e2e.ts",
         "e2e/custom-activity.e2e.ts",
     ],
+    "src/host/lifecycle/appLifecycle.ts": [
+        "src/host/lifecycle/appLifecycle.test.ts",
+    ],
     "src/host/settings/registerBuiltinSettings.ts": [
         "src/host/settings/registerBuiltinSettings.test.ts",
     ],

@@ -17,6 +17,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
 const GUIDE_NOTE_PATH = "test-resources/notes/guide.md";
+const KNOWLEDGE_GRAPH_TITLE = /知识图谱|Knowledge Graph/;
 
 interface KnowledgeGraphLifecycleCounters {
     init: number;
@@ -97,7 +98,7 @@ test.describe("knowledge graph tab lifecycle", () => {
         await waitForMockLayoutReady(page);
 
         await page.getByTestId("activity-bar-item-knowledge-graph").click();
-        await expect(page.locator(".layout-v2-tab-section__tab-title", { hasText: "知识图谱" })).toBeVisible();
+        await expect(page.locator(".layout-v2-tab-section__tab-title", { hasText: KNOWLEDGE_GRAPH_TITLE })).toBeVisible();
         await expect(page.locator(".knowledge-graph-tab").first()).toBeVisible();
         await expect(page.locator(".knowledge-graph-tab__empty--status")).toHaveCount(0, { timeout: 10_000 });
         await expect.poll(() => lifecycle.load, { timeout: 10_000 }).toBeGreaterThan(0);
@@ -117,9 +118,9 @@ test.describe("knowledge graph tab lifecycle", () => {
         await expect.poll(() => lifecycle.load, { timeout: 2_000 }).toBe(baseline.load);
         await expect.poll(() => lifecycle.init, { timeout: 2_000 }).toBe(baseline.init);
 
-        await page.locator(".layout-v2-tab-section__tab-main", { hasText: "知识图谱" }).click();
+        await page.locator(".layout-v2-tab-section__tab-main", { hasText: KNOWLEDGE_GRAPH_TITLE }).click();
 
-        await expect(page.locator(".layout-v2-tab-section__tab--focused", { hasText: "知识图谱" })).toBeVisible();
+        await expect(page.locator(".layout-v2-tab-section__tab--focused", { hasText: KNOWLEDGE_GRAPH_TITLE })).toBeVisible();
         await expect(page.locator(".knowledge-graph-tab").first()).toBeVisible();
         await expect.poll(() => lifecycle.destroy, { timeout: 2_000 }).toBe(baseline.destroy);
         await expect.poll(() => lifecycle.load, { timeout: 2_000 }).toBe(baseline.load);

@@ -5,10 +5,41 @@
 
 import { describe, expect, test } from "bun:test";
 import { EditorState } from "@codemirror/state";
+import type { LineSyntaxDecorationContext, SyntaxDecorationRange } from "../syntaxRenderRegistry";
 import {
+    applyListLineDecorations,
     buildTaskCheckboxToggleSpec,
     detectMarkdownListLine,
 } from "./listSyntaxRenderer";
+
+function createListDecorationContext(
+    lineText: string,
+    selectionFrom: number,
+): {
+    context: LineSyntaxDecorationContext;
+    ranges: SyntaxDecorationRange[];
+} {
+    const ranges: SyntaxDecorationRange[] = [];
+    return {
+        context: {
+            view: {
+                state: {
+                    selection: {
+                        ranges: [{
+                            from: selectionFrom,
+                            to: selectionFrom,
+                            empty: true,
+                        }],
+                    },
+                },
+            } as never,
+            lineText,
+            lineFrom: 0,
+            ranges,
+        },
+        ranges,
+    };
+}
 
 describe("detectMarkdownListLine", () => {
     test("识别无序列表并返回 marker 与内容区边界", () => {
@@ -115,5 +146,34 @@ describe("buildTaskCheckboxToggleSpec", () => {
         });
 
         expect(buildTaskCheckboxToggleSpec(state, 1)).toBeNull();
+    });
+});
+
+describe("applyListLineDecorations", () => {
+    test("editing 列表行时应回退源码并让 marker 区间包含后续空格", () => {
+        const { context, ranges } = createListDecorationContext("- item", 3);
+
+        applyListLineDecorations(context);
+
+        expect(ranges).toHaveLength(2);
+        expect(ranges[0]).toMatchObject({ from: 0, to: 2 });
+        expect((ranges[0]?.decoration as unknown as { spec?: { class?: string } }).spec?.class)
+            .toContain("cm-list-syntax-marker-source-unordered");
+        expect(ranges[1]).toMatchObject({ from: 0, to: 0 });
+        expect((ranges[1]?.decoration as unknown as { spec?: { class?: string } }).spec?.class)
+            .toContain("cm-list-source-line-unordered");
+    });
+
+    test("editing task list 时源码 marker 区间应覆盖 checkbox 前缀", () => {
+        const { context, ranges } = createListDecorationContext("- [ ] pending", 7);
+
+        applyListLineDecorations(context);
+
+        expect(ranges).toHaveLength(2);
+        expect(ranges[0]).toMatchObject({ from: 0, to: 6 });
+        expect((ranges[0]?.decoration as unknown as { spec?: { class?: string } }).spec?.class)
+            .toContain("cm-list-syntax-marker-source-task");
+        expect((ranges[1]?.decoration as unknown as { spec?: { class?: string } }).spec?.class)
+            .toContain("cm-list-source-line-task");
     });
 });

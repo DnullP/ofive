@@ -17,9 +17,9 @@
  *  - SettingsRegisteredSection
  */
 
-import type { ChangeEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { UiSelect, UiTextInput } from "../ui";
+import { UiNumberInput, UiSelect } from "../ui";
 import type {
     NumberSettingsItemRegistration,
     SelectSettingsItemRegistration,
@@ -87,15 +87,23 @@ function RegisteredNumberItem(props: { item: NumberSettingsItemRegistration }): 
     const disabled = resolveDisabledState(props.item.disabled);
     const inputId = `${props.item.sectionId}-${props.item.id}`;
 
-    const handleChange = (event: ChangeEvent<HTMLInputElement>): void => {
-        const nextValue = props.item.normalizeValue
-            ? props.item.normalizeValue(event.target.value, value)
-            : Number(event.target.value);
-
-        if (!Number.isFinite(nextValue)) {
-            return;
+    const parseValue = (rawValue: string): number | null => {
+        if (rawValue.trim().length === 0) {
+            return null;
         }
 
+        const nextValue = props.item.normalizeValue
+            ? props.item.normalizeValue(rawValue, value)
+            : Number(rawValue);
+
+        if (!Number.isFinite(nextValue)) {
+            return null;
+        }
+
+        return nextValue;
+    };
+
+    const handleValueChange = (nextValue: number): void => {
         void props.item.updateValue(nextValue);
     };
 
@@ -108,18 +116,18 @@ function RegisteredNumberItem(props: { item: NumberSettingsItemRegistration }): 
                 ) : null}
             </div>
             <div className="settings-glass-value-group">
-                <UiTextInput
+                <UiNumberInput
                     id={inputId}
                     className="settings-compact-number-input"
                     controlSize="compact"
                     variant="settings"
-                    type="number"
                     min={props.item.min}
                     max={props.item.max}
                     step={props.item.step}
                     value={value}
                     disabled={disabled}
-                    onChange={handleChange}
+                    parseValue={parseValue}
+                    onValueChange={handleValueChange}
                 />
                 {props.item.suffix ? (
                     <span className="settings-glass-value-suffix">{t(props.item.suffix)}</span>

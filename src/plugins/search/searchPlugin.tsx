@@ -355,77 +355,62 @@ function SearchPanel({ context }: { context: PanelRenderContext }): ReactNode {
             {/* search-toolbar: 顶部搜索控制区，承载 query/tag/scope 输入 */}
             <div className="search-toolbar">
                 <div className="search-toolbar-head">
-                    <div className="search-toolbar-copy">
-                        <span className="search-toolbar-title">{t("searchPlugin.toolbarTitle")}</span>
-                        <span className="search-toolbar-hint">{t("searchPlugin.toolbarHint")}</span>
-                    </div>
-                    <span className="search-meta-chip">{t("searchPlugin.resultCount", { count: results.length })}</span>
-                </div>
-
-                <div className="search-toolbar-grid">
-                    <div className="search-input-stack">
-                        <span className="search-input-label">{t(UI_LANGUAGE.labels.keyword)}</span>
-                        {/* search-query-field: 主搜索框，负责文件名与全文关键词输入 */}
-                        <label className="search-query-field">
-                            <Search size={14} strokeWidth={1.8} />
-                            <input
-                                type="search"
-                                value={query}
-                                placeholder={t("searchPlugin.queryPlaceholder")}
-                                onChange={(event) => {
-                                    setQuery(event.target.value);
-                                }}
-                            />
-                        </label>
-                    </div>
-
-                    <div className="search-input-stack">
-                        <span className="search-input-label">{t(UI_LANGUAGE.labels.tagFilter)}</span>
-                        {/* search-tag-field: 标签过滤输入框，仅负责 tag 条件输入 */}
-                        <label className="search-tag-field">
-                            <Hash size={14} strokeWidth={1.8} />
-                            <input
-                                type="search"
-                                value={tag}
-                                placeholder={t("searchPlugin.tagPlaceholder")}
-                                onChange={(event) => {
-                                    setTag(event.target.value);
-                                }}
-                            />
-                        </label>
+                    <span className="search-toolbar-title">{t("searchPlugin.toolbarTitle")}</span>
+                    <div className="search-toolbar-status">
+                        {loading ? (
+                            <span className="search-meta-chip search-meta-chip--active">{t("searchPlugin.loading")}</span>
+                        ) : null}
+                        <span className="search-meta-chip">{t("searchPlugin.resultCount", { count: results.length })}</span>
                     </div>
                 </div>
 
-                {/* search-scope-switch: 搜索范围切换按钮组 */}
-                <div className="search-scope-switch">
-                    {SEARCH_SCOPE_OPTIONS.map((option) => (
-                        <button
-                            key={option.scope}
-                            type="button"
-                            className={scope === option.scope
-                                ? "search-scope-button search-scope-button--active"
-                                : "search-scope-button"}
-                            onClick={() => {
-                                setScope(option.scope);
+                {/* search-query-field: 主搜索框，负责文件名与全文关键词输入 */}
+                <label className="search-query-field">
+                    <Search size={14} strokeWidth={1.8} />
+                    <input
+                        aria-label={t(UI_LANGUAGE.labels.keyword)}
+                        type="search"
+                        value={query}
+                        placeholder={t("searchPlugin.queryPlaceholder")}
+                        onChange={(event) => {
+                            setQuery(event.target.value);
+                        }}
+                    />
+                </label>
+
+                <div className="search-filter-row">
+                    {/* search-tag-field: 标签过滤输入框，仅负责 tag 条件输入 */}
+                    <label className="search-tag-field">
+                        <Hash size={14} strokeWidth={1.8} />
+                        <input
+                            aria-label={t(UI_LANGUAGE.labels.tagFilter)}
+                            type="search"
+                            value={tag}
+                            placeholder={t("searchPlugin.tagPlaceholder")}
+                            onChange={(event) => {
+                                setTag(event.target.value);
                             }}
-                        >
-                            {t(option.translationKey)}
-                        </button>
-                    ))}
-                </div>
-            </div>
+                        />
+                    </label>
 
-            {/* search-meta: 结果统计与状态信息栏 */}
-            <div className="search-meta">
-                <span>
-                    {t("searchPlugin.filtersSummary", {
-                        scope: t(SEARCH_SCOPE_OPTIONS.find((entry) => entry.scope === scope)?.translationKey ?? "searchPlugin.scopeAll"),
-                        tag: tag.trim() ? `#${tag.trim().replace(/^#+/, "")}` : t("searchPlugin.scopeAll"),
-                    })}
-                </span>
-                {loading ? (
-                    <span className="search-meta-chip search-meta-chip--active">{t("searchPlugin.loading")}</span>
-                ) : null}
+                    {/* search-scope-switch: 搜索范围切换按钮组 */}
+                    <div className="search-scope-switch">
+                        {SEARCH_SCOPE_OPTIONS.map((option) => (
+                            <button
+                                key={option.scope}
+                                type="button"
+                                className={scope === option.scope
+                                    ? "search-scope-button search-scope-button--active"
+                                    : "search-scope-button"}
+                                onClick={() => {
+                                    setScope(option.scope);
+                                }}
+                            >
+                                {t(option.translationKey)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </div>
 
             {error ? (
@@ -436,8 +421,8 @@ function SearchPanel({ context }: { context: PanelRenderContext }): ReactNode {
             {!hasSearched && !loading ? (
                 /* search-empty: 初始空状态提示 */
                 <div className="search-empty">
-                    <div className="search-empty-title">{t("searchPlugin.emptyStateTitle")}</div>
-                    <div>{t("searchPlugin.emptyStateHint")}</div>
+                    <span className="search-empty-title">{t("searchPlugin.emptyStateTitle")}</span>
+                    <span>{t("searchPlugin.emptyStateHint")}</span>
                 </div>
             ) : null}
 

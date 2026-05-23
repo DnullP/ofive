@@ -148,6 +148,9 @@ const AI_CHAT_PLUGIN_ID = "ai-chat";
 const AI_CHAT_TAB_COMPONENT_ID = "ai-chat-tab";
 const AI_CHAT_TAB_ID = "ai-chat-tab-instance";
 const AI_CHAT_CONVERTIBLE_ID = "ai-chat";
+const AI_CHAT_SETTINGS_TAB_ID = "settings";
+const AI_CHAT_SETTINGS_COMPONENT_ID = "settings";
+const AI_CHAT_SETTINGS_API_KEY_FOCUS_TARGET = "ai-chat-api-key";
 
 interface QuickPromptDefinition {
     id: string;
@@ -427,6 +430,14 @@ function buildOpenTabsSnapshot(
     }));
 }
 
+function buildAiChatSettingsTabParams(): Record<string, unknown> {
+    return {
+        sectionId: AI_CHAT_PANEL_ID,
+        focusTarget: AI_CHAT_SETTINGS_API_KEY_FOCUS_TARGET,
+        focusRequestId: `ai-chat-api-key-${Date.now()}`,
+    };
+}
+
 /**
  * @function parseHistoryContentBlocksJson
  * @description 解析流事件中的协议历史块 JSON。
@@ -625,6 +636,10 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     const [activeTab, setActiveTab] = useState<"history" | "chat" | "debug">("chat");
     const [debugFilter, setDebugFilter] = useState<ChatDebugFilterValue>("all");
     const [debugCopyState, setDebugCopyState] = useState<"idle" | "copied" | "error">("idle");
+    const [copiedMessageFeedback, setCopiedMessageFeedback] = useState<{
+        messageId: string;
+        updatedAtUnixMs: number;
+    } | null>(null);
     const [conversationQuery, setConversationQuery] = useState("");
     const [draft, setDraft] = useState("");
     const [error, setError] = useState<string | null>(null);
@@ -1071,6 +1086,36 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         }
     };
 
+    const handleOpenAiSettingsApiKey = (): void => {
+        const params = buildAiChatSettingsTabParams();
+        const settingsTab = props.tabContainerApi?.getPanel(AI_CHAT_SETTINGS_TAB_ID)
+            ?? props.panelContext?.workbenchApi?.getPanel(AI_CHAT_SETTINGS_TAB_ID)
+            ?? null;
+
+        if (settingsTab) {
+            settingsTab.api.updateParameters?.({
+                ...(settingsTab.params ?? {}),
+                ...params,
+            });
+            settingsTab.api.setActive();
+            return;
+        }
+
+        const tab = {
+            id: AI_CHAT_SETTINGS_TAB_ID,
+            title: i18n.t("workbenchLayout.settingsTooltip"),
+            component: AI_CHAT_SETTINGS_COMPONENT_ID,
+            params,
+        };
+
+        if (props.panelContext) {
+            props.panelContext.openTab(tab);
+            return;
+        }
+
+        props.tabContainerApi?.addPanel(tab);
+    };
+
     useEffect(() => {
         let disposed = false;
 
@@ -1476,6 +1521,24 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             window.clearTimeout(timer);
         };
     }, [debugCopyState]);
+
+    useEffect(() => {
+        if (!copiedMessageFeedback) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            setCopiedMessageFeedback((current) => {
+                return current?.updatedAtUnixMs === copiedMessageFeedback.updatedAtUnixMs
+                    ? null
+                    : current;
+            });
+        }, 1600);
+
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [copiedMessageFeedback]);
 
     useEffect(() => {
         if (!modelSwitcherOpen) {
@@ -2083,8 +2146,15 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
 
         try {
             await navigator.clipboard.writeText(text);
+            setCopiedMessageFeedback({
+                messageId: message.id,
+                updatedAtUnixMs: Date.now(),
+            });
         } catch (copyError) {
             setError(i18n.t("aiChatPlugin.copyMessageFailed"));
+            setCopiedMessageFeedback((current) => {
+                return current?.messageId === message.id ? null : current;
+            });
             console.error("[ai-chat] copy message failed", {
                 messageId: message.id,
                 error: copyError,
@@ -2423,6 +2493,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                                 && editingUserMessage?.conversationId === activeConversation.id
                                 && editingUserMessage.messageId === message.id;
                             const messageActionsDisabled = isActiveConversationStreaming || isConversationReplaying;
+                            const isCopyFeedbackVisible = copiedMessageFeedback?.messageId === message.id;
 
                             return (
                                 <div key={message.id} className={`ai-chat-message ${message.role}`}>
@@ -2576,15 +2647,23 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                                                 <>
                                                     <button
                                                         type="button"
-                                                        className="ai-chat-message-action-button"
+                                                        className={`ai-chat-message-action-button${isCopyFeedbackVisible ? " state-copied" : ""}`}
                                                         disabled={!message.text.trim()}
-                                                        aria-label={i18n.t("aiChatPlugin.copyMessage")}
-                                                        title={i18n.t("aiChatPlugin.copyMessage")}
+                                                        aria-label={i18n.t(isCopyFeedbackVisible
+                                                            ? "aiChatPlugin.copyMessageCopied"
+                                                            : "aiChatPlugin.copyMessage")}
+                                                        title={i18n.t(isCopyFeedbackVisible
+                                                            ? "aiChatPlugin.copyMessageCopied"
+                                                            : "aiChatPlugin.copyMessage")}
                                                         onClick={() => {
                                                             void handleCopyMessage(message);
                                                         }}
                                                     >
-                                                        <Copy size={13} strokeWidth={1.9} />
+                                                        {isCopyFeedbackVisible ? (
+                                                            <Check size={13} strokeWidth={2.1} />
+                                                        ) : (
+                                                            <Copy size={13} strokeWidth={1.9} />
+                                                        )}
                                                     </button>
                                                     <button
                                                         type="button"
@@ -2680,7 +2759,13 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
 
             <div className="ai-chat-composer">
                 {!isVendorConfigured ? (
-                    <div className="ai-chat-status">{i18n.t("aiChatPlugin.vendorMissing")}</div>
+                    <button
+                        type="button"
+                        className="ai-chat-status ai-chat-status-action"
+                        onClick={handleOpenAiSettingsApiKey}
+                    >
+                        {i18n.t("aiChatPlugin.vendorMissing")}
+                    </button>
                 ) : null}
 
                 <textarea
@@ -3307,7 +3392,12 @@ function AiChatSettingsSection(): ReactNode {
                     </div>
 
                     {selectedVendor?.fields.map((field) => (
-                        <div key={field.key} className="ai-chat-settings-row">
+                        <div
+                            key={field.key}
+                            className="ai-chat-settings-row"
+                            data-ai-chat-settings-field={field.key}
+                            data-settings-focus-target={field.key === "apiKey" ? AI_CHAT_SETTINGS_API_KEY_FOCUS_TARGET : undefined}
+                        >
                             <div className="ai-chat-settings-label">{field.label}</div>
                             <div className="ai-chat-settings-desc">{field.description}</div>
                             <UiTextInput

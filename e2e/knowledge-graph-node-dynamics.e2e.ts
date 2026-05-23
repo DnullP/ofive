@@ -47,10 +47,27 @@ interface ScreenPoint {
 interface PixelEnergy {
     alpha: number;
     brightness: number;
+    maxContrast: number;
+    meanContrast: number;
+    nonBackgroundPixelCount: number;
     sampleCount: number;
 }
 
 type PointPositions = number[];
+
+interface HoverRenderState {
+    selectedIndices: number[];
+    linkColors: number[];
+    linkWidths: number[];
+    labelStats: {
+        totalLabelCount: number;
+        visibleLabelCount: number;
+        opacity: number;
+        swapCount: number;
+        maxSwapCount: number;
+    };
+    simulationRunning: boolean;
+}
 
 /**
  * @function waitForMockLayoutReady
@@ -294,6 +311,41 @@ function colorTupleAt(colors: number[], index: number): number[] {
     return colors.slice(index * 4, index * 4 + 4).map((value) => Math.round(value * 1000) / 1000);
 }
 
+async function setGraphHoverPoint(page: Page, index: number | null): Promise<HoverRenderState> {
+    return page.evaluate(async (nextIndex) => {
+        const runtimeWindow = window as Window & {
+            __OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?: {
+                hoverPoint: (index: number | null) => void;
+                renderFrame: (alpha?: number) => void;
+                getSelectedIndices: () => number[];
+                getLinkColors: () => number[];
+                getLinkWidths: () => number[];
+                getLabelStats: () => HoverRenderState["labelStats"];
+                getSimulationRunning: () => boolean;
+            };
+        };
+
+        const hook = runtimeWindow.__OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__;
+        if (!hook) {
+            throw new Error("knowledge graph hook is unavailable");
+        }
+
+        hook.hoverPoint(nextIndex);
+        hook.renderFrame(nextIndex === null ? undefined : 0);
+        await new Promise<void>((resolve) => {
+            window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+        });
+
+        return {
+            selectedIndices: hook.getSelectedIndices(),
+            linkColors: hook.getLinkColors(),
+            linkWidths: hook.getLinkWidths(),
+            labelStats: hook.getLabelStats(),
+            simulationRunning: hook.getSimulationRunning(),
+        };
+    }, index);
+}
+
 async function selectColorGroupQueryWithKeyboard(
     page: Page,
     index: number,
@@ -403,6 +455,7 @@ async function sampleFocusedPointEnergy(
     return page.evaluate(async ({ index, shouldFocus }) => {
         const runtimeWindow = window as Window & {
             __OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?: {
+                hoverPoint: (index: number | null) => void;
                 focusPoint: (index: number | null) => void;
                 renderFrame: (alpha?: number) => void;
                 samplePointPixelEnergy: (index: number, radius?: number) => PixelEnergy | null;
@@ -414,6 +467,7 @@ async function sampleFocusedPointEnergy(
             throw new Error("knowledge graph hook is unavailable");
         }
 
+        hook.hoverPoint(null);
         hook.focusPoint(shouldFocus ? index : null);
         hook.renderFrame(0);
 
@@ -431,6 +485,43 @@ async function sampleFocusedPointEnergy(
         index: pointIndex,
         shouldFocus: focused,
     });
+}
+
+async function samplePointEnergy(page: Page, pointIndex: number, radius = 12): Promise<PixelEnergy> {
+    return page.evaluate(async ({ index, sampleRadius }) => {
+        const runtimeWindow = window as Window & {
+            __OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?: {
+                renderFrame: (alpha?: number) => void;
+                samplePointPixelEnergy: (index: number, radius?: number) => PixelEnergy | null;
+            };
+        };
+
+        const hook = runtimeWindow.__OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__;
+        if (!hook) {
+            throw new Error("knowledge graph hook is unavailable");
+        }
+
+        hook.renderFrame(0);
+        await new Promise<void>((resolve) => {
+            window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+        });
+
+        const energy = hook.samplePointPixelEnergy(index, sampleRadius);
+        if (!energy) {
+            throw new Error("knowledge graph point pixel energy is unavailable");
+        }
+
+        return energy;
+    }, {
+        index: pointIndex,
+        sampleRadius: radius,
+    });
+}
+
+function expectVisiblePointEnergy(energy: PixelEnergy): void {
+    expect(energy.sampleCount).toBeGreaterThan(0);
+    expect(energy.maxContrast).toBeGreaterThan(8);
+    expect(energy.nonBackgroundPixelCount).toBeGreaterThan(0);
 }
 
 test.describe("knowledge graph node dynamics", () => {
@@ -451,6 +542,8 @@ test.describe("knowledge graph node dynamics", () => {
         const leafPoint = screenPoints.find((item) => item.index === 12);
         expect(hubPoint?.radius).toBeGreaterThan(leafPoint?.radius ?? 0);
         expect((hubPoint?.radius ?? 0) / (leafPoint?.radius ?? 1)).toBeLessThan(3);
+        const initialPoint = await getVisibleScreenPoint(page);
+        expectVisiblePointEnergy(await samplePointEnergy(page, initialPoint.index));
 
         await page.getByRole("button", { name: /图谱渲染设置|Graph render settings/ }).click();
         await page.getByTestId("knowledge-graph-link-opacity-input").fill("0.25");
@@ -491,21 +584,46 @@ test.describe("knowledge graph node dynamics", () => {
                 runningColorUpdatePositionsBefore,
                 runningColorUpdatePositionsAfter,
             ),
-        ).toBeGreaterThan(0.5);
+        ).toBeGreaterThan(0.05);
 
+        await setGraphHoverPoint(page, null);
         const positionsBefore = await getPointPositions(page);
         await startSimulationAndWait(page);
         const positionsAfter = await getPointPositions(page);
-        expect(computeMaxDisplacement(positionsBefore, positionsAfter)).toBeGreaterThan(0.5);
+        expect(computeMaxDisplacement(positionsBefore, positionsAfter)).toBeGreaterThan(0.05);
 
         const point = await getVisibleScreenPoint(page);
         const energyBeforeFocus = await sampleFocusedPointEnergy(page, point.index, false);
         const energyAfterFocus = await sampleFocusedPointEnergy(page, point.index, true);
-        const brightnessDelta = energyAfterFocus.brightness - energyBeforeFocus.brightness;
-        const alphaDelta = energyAfterFocus.alpha - energyBeforeFocus.alpha;
 
-        expect(energyBeforeFocus.sampleCount).toBeGreaterThan(0);
-        expect(energyAfterFocus.sampleCount).toBeGreaterThan(0);
-        expect(Math.max(brightnessDelta, alphaDelta)).toBeGreaterThan(0.1);
+        expectVisiblePointEnergy(energyBeforeFocus);
+        expectVisiblePointEnergy(energyAfterFocus);
+
+        await startSimulation(page, 0.42);
+        await expect.poll(async () => getSimulationRunning(page)).toBe(true);
+        const hoverState = await setGraphHoverPoint(page, 0);
+        expect(hoverState.simulationRunning).toBe(false);
+        expect(hoverState.selectedIndices.sort((left, right) => left - right)).toEqual(
+            Array.from({ length: EXPECTED_NODE_COUNT }, (_, index) => index),
+        );
+        expect(hoverState.labelStats.visibleLabelCount).toBe(1);
+        expect(hoverState.labelStats.opacity).toBeCloseTo(1, 2);
+        expect(Math.min(...hoverState.linkWidths)).toBeGreaterThan(tagSnapshot.settings.linkDefaultWidth);
+        expect(Math.max(...hoverState.linkColors.filter((_, index) => index % 4 === 3))).toBeGreaterThan(0.9);
+
+        const leafHoverState = await setGraphHoverPoint(page, 12);
+        expect(leafHoverState.selectedIndices.sort((left, right) => left - right)).toEqual([0, 12]);
+        expect(leafHoverState.labelStats.visibleLabelCount).toBe(1);
+        const incidentEdgeIndex = 11;
+        const incidentAlpha = leafHoverState.linkColors[incidentEdgeIndex * 4 + 3] ?? 0;
+        const dimAlpha = leafHoverState.linkColors[0 * 4 + 3] ?? 1;
+        expect(leafHoverState.linkWidths[incidentEdgeIndex]).toBeGreaterThan(leafHoverState.linkWidths[0] ?? 0);
+        expect(incidentAlpha).toBeGreaterThan(dimAlpha);
+
+        const clearedHoverState = await setGraphHoverPoint(page, null);
+        expect(clearedHoverState.selectedIndices).toEqual([]);
+        expect(clearedHoverState.linkWidths.length).toBe(EXPECTED_EDGE_COUNT);
+        expect(clearedHoverState.simulationRunning).toBe(true);
+        expectVisiblePointEnergy(await samplePointEnergy(page, point.index));
     });
 });

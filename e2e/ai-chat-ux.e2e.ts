@@ -17,7 +17,31 @@ async function waitForAiChatReady(page: Page): Promise<void> {
     await expect(page.locator(".ai-chat-model-option", { hasText: "mock-deep" })).toHaveCount(0);
 }
 
+async function waitForAiChatMissingApiKey(page: Page): Promise<void> {
+    await page.goto(`${MOCK_PAGE}&mockAiMissingApiKey=1`);
+    await page.locator(".ai-chat-panel").waitFor({ state: "visible" });
+    await expect(page.locator(".ai-chat-status-action")).toBeVisible();
+}
+
 test.describe("ai chat ux", () => {
+    test("missing api key prompt should open settings and focus api key", async ({ page }) => {
+        await waitForAiChatMissingApiKey(page);
+
+        const missingConfigAction = page.locator(".ai-chat-status-action");
+        await expect(missingConfigAction).toContainText(/尚未配置API Key|API Key is not configured/);
+        await missingConfigAction.click();
+
+        await expect(page.locator(".settings-tab")).toBeVisible();
+        await expect(page.locator(".settings-tab-sidebar-item.active")).toContainText(/AI Chat|AI 对话/);
+        await expect(page.locator("[data-settings-section-id='ai-chat']")).toBeVisible();
+
+        const apiKeyRow = page.locator("[data-ai-chat-settings-field='apiKey']");
+        const apiKeyInput = apiKeyRow.locator("input");
+        await expect(apiKeyInput).toBeVisible();
+        await expect(apiKeyInput).toBeFocused();
+        await expect(apiKeyRow).toHaveClass(/settings-focus-target-active/);
+    });
+
     test("composer should stay bottom-aligned in empty conversation state", async ({ page }) => {
         await waitForAiChatReady(page);
 
@@ -123,6 +147,17 @@ test.describe("ai chat ux", () => {
     });
 
     test("message actions should copy, retry, and edit from a prior user turn", async ({ page }) => {
+        await page.addInitScript(() => {
+            window.localStorage.removeItem("mock-ai-chat-clipboard-text");
+            Object.defineProperty(navigator, "clipboard", {
+                configurable: true,
+                value: {
+                    writeText: async (text: string) => {
+                        window.localStorage.setItem("mock-ai-chat-clipboard-text", text);
+                    },
+                },
+            });
+        });
         await waitForAiChatReady(page);
 
         await page.locator(".ai-chat-input").fill("first action prompt");
@@ -130,6 +165,15 @@ test.describe("ai chat ux", () => {
         const firstAssistant = page.locator(".ai-chat-message.assistant", { hasText: "Mock response for: first action prompt" }).first();
         await expect(firstAssistant.locator(".ai-chat-message-duration")).toBeVisible({ timeout: 3_000 });
         await expect(firstAssistant.locator(".ai-chat-message-action-button")).toHaveCount(2);
+
+        const assistantCopyButton = firstAssistant.locator(".ai-chat-message-action-button").first();
+        await assistantCopyButton.click();
+        await expect(assistantCopyButton).toHaveAttribute("aria-label", /Copied|已复制/);
+        await expect(assistantCopyButton).toHaveClass(/state-copied/);
+        await expect(assistantCopyButton).toHaveCSS("color", /rgb\(.+\)/);
+        await expect.poll(() => {
+            return page.evaluate(() => window.localStorage.getItem("mock-ai-chat-clipboard-text") ?? "");
+        }).toContain("Mock response for: first action prompt");
 
         await firstAssistant.locator(".ai-chat-message-action-button").nth(1).click();
         await expect(page.locator(".ai-chat-message.assistant", { hasText: "Mock response for: first action prompt" }).last()).toBeVisible({ timeout: 3_000 });

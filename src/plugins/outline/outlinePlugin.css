@@ -3,36 +3,17 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-}
-
-/* 大纲头部：显示当前追踪文章路径和持久化提示 */
-.outline-panel-header {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border-color);
-    color: var(--text-secondary);
-    font-size: 12px;
-    user-select: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-/* 持久化提示标签：弱化显示在标题栏右侧 */
-.outline-persisted-hint {
-    flex-shrink: 0;
-    font-size: 11px;
-    color: var(--text-tertiary, var(--text-secondary));
-    opacity: 0.7;
+    min-height: 0;
 }
 
 /* 大纲列表：滚动容器 */
 .outline-list {
     list-style: none;
     margin: 0;
-    padding: 8px;
+    padding: 6px 8px 8px;
     overflow: auto;
     flex: 1;
+    min-height: 0;
 }
 
 /* 大纲项按钮：点击区域与文本样式 */
@@ -119,11 +100,6 @@
 /* 桌面毛玻璃大纲面板：根容器保持透明，由侧栏容器承载玻璃。 */
 .app-runtime--tauri.app-effect--glass .outline-panel {
     background: transparent;
-}
-
-/* 桌面毛玻璃大纲面板头部：仅头部承载轻度结构表面。 */
-.app-runtime--tauri.app-effect--glass .outline-panel-header {
-    background: rgba(var(--window-glass-elevated-rgb), 0.08);
 }
 
 /* 桌面毛玻璃大纲空态卡片：维持轻量半透明结构感。 */

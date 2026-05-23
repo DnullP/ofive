@@ -1255,6 +1255,7 @@ textarea,
   background:
     linear-gradient(180deg, rgba(var(--window-glass-border-rgb), 0.08), rgba(var(--window-glass-border-rgb), 0.02)),
     linear-gradient(180deg, var(--floating-surface-bg-strong), var(--floating-surface-bg));
+  background-color: rgb(var(--window-glass-elevated-rgb));
   border-color: var(--floating-surface-border);
   box-shadow:
     var(--floating-surface-shadow),

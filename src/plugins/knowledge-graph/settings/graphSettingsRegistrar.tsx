@@ -10,7 +10,7 @@
 
 import type { ChangeEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { UiTextInput } from "../../../host/ui";
+import { UiNumberInput } from "../../../host/ui";
 import {
     KNOWLEDGE_GRAPH_SETTING_DEFINITIONS,
     type KnowledgeGraphSettingDefinition,
@@ -37,6 +37,21 @@ function toNumberValue(raw: string, fallback: number): number {
     return Number.isFinite(next) ? next : fallback;
 }
 
+function clampGraphNumberValue(
+    raw: string,
+    fallback: number,
+    definition: KnowledgeGraphSettingDefinition,
+): number | null {
+    if (raw.trim().length === 0) {
+        return null;
+    }
+
+    const parsed = toNumberValue(raw, fallback);
+    const min = definition.min ?? Number.NEGATIVE_INFINITY;
+    const max = definition.max ?? Number.POSITIVE_INFINITY;
+    return Math.max(min, Math.min(max, parsed));
+}
+
 /**
  * @function GraphSettingField
  * @description 渲染单个图谱设置字段。
@@ -52,10 +67,14 @@ function GraphSettingField({ definition }: { definition: KnowledgeGraphSettingDe
         updateGraphSetting(definition.key, event.target.checked as never);
     };
 
-    const onNumberChange = (event: ChangeEvent<HTMLInputElement>): void => {
-        updateGraphSetting(
+    const parseNumberValue = (rawValue: string): number | null => {
+        return clampGraphNumberValue(rawValue, Number(currentValue), definition);
+    };
+
+    const onNumberChange = (nextValue: number): void => {
+        void updateGraphSetting(
             definition.key,
-            toNumberValue(event.target.value, Number(currentValue)) as never,
+            nextValue as never,
         );
     };
 
@@ -79,16 +98,16 @@ function GraphSettingField({ definition }: { definition: KnowledgeGraphSettingDe
             <span className="settings-dense-title">{t(definition.title)}</span>
 
             <div className="settings-graph-control-row">
-                <UiTextInput
+                <UiNumberInput
                     className="settings-compact-number-input"
                     controlSize="compact"
                     variant="settings"
-                    type="number"
-                    value={String(currentValue)}
+                    value={Number(currentValue)}
                     min={definition.min}
                     max={definition.max}
                     step={definition.step ?? 1}
-                    onChange={onNumberChange}
+                    parseValue={parseNumberValue}
+                    onValueChange={onNumberChange}
                 />
             </div>
         </div>

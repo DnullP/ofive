@@ -60,6 +60,30 @@ export const WINDOW_COMMAND_DEFINITIONS = {
             }
         },
     },
+    "app.reload": {
+        id: "app.reload",
+        title: "commands.reloadApp",
+        routeClass: "frontend-window",
+        shortcut: {
+            defaultBinding: "Cmd+R",
+            editableInSettings: true,
+        },
+        execute(context) {
+            if (!context.reloadApplication) {
+                console.warn("[command-system] app.reload skipped: reload capability missing");
+                return;
+            }
+
+            const result = context.reloadApplication();
+            if (result instanceof Promise) {
+                void result.catch((error) => {
+                    console.error("[command-system] app.reload failed", {
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                });
+            }
+        },
+    },
     "sidebar.left.toggle": {
         id: "sidebar.left.toggle",
         title: "commands.toggleLeftSidebar",

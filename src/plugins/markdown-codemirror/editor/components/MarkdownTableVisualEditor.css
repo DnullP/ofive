@@ -372,6 +372,9 @@
     z-index: 2147483000;
     display: grid;
     min-width: 154px;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    overflow: auto;
     padding: 4px;
     border: 1px solid var(--editor-panel-border-color);
     border-radius: 7px;

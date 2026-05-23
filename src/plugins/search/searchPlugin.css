@@ -10,8 +10,8 @@
 .search-toolbar {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 14px 14px 12px;
+    gap: 8px;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--surface-card-border);
     background: var(--surface-card-bg-muted);
 }
@@ -19,76 +19,41 @@
 /* 搜索工具栏头部：展示标题文案与当前结果数。 */
 .search-toolbar-head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 12px;
-}
-
-/* 搜索工具栏文案区：承载标题与提示。 */
-.search-toolbar-copy {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    gap: 8px;
+    min-width: 0;
 }
 
 /* 搜索工具栏标题：强调搜索面板用途。 */
 .search-toolbar-title {
     color: var(--text-primary);
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-/* 搜索工具栏说明：补充可搜索内容范围。 */
-.search-toolbar-hint {
-    color: var(--text-secondary);
-    font-size: 12px;
-    line-height: 1.45;
-}
-
-/* 搜索工具栏网格：在宽屏下并排列出两个输入区域。 */
-.search-toolbar-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-    gap: 10px;
-}
-
-/* 搜索输入堆叠：让字段标签位于输入框上方。 */
-.search-input-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-/* 搜索输入标签：弱化显示字段名称。 */
-.search-input-label {
-    color: var(--text-secondary);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-}
-
-/* 主搜索框：横向对齐图标与输入元素。 */
-.search-query-field {
+/* 搜索工具栏状态：承载加载态与结果数量。 */
+.search-toolbar-status {
     display: flex;
     align-items: center;
-    gap: 8px;
-    border: 1px solid var(--surface-input-border);
-    border-radius: 0;
-    padding: 0 10px;
-    background: var(--surface-input-bg);
-    color: var(--text-secondary);
-    box-shadow: var(--surface-input-shadow);
+    justify-content: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
 }
 
-/* 标签过滤输入框：与主搜索框保持一致的视觉层级。 */
+/* 主搜索框与标签过滤输入框：横向对齐图标与输入元素。 */
+.search-query-field,
 .search-tag-field {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
+    min-width: 0;
     border: 1px solid var(--surface-input-border);
     border-radius: 0;
-    padding: 0 10px;
+    padding: 0 9px;
     background: var(--surface-input-bg);
     color: var(--text-secondary);
     box-shadow: var(--surface-input-shadow);
@@ -101,44 +66,52 @@
     border: 0;
     background: transparent;
     color: var(--text-primary);
-    font-size: 13px;
-    line-height: 34px;
+    font-size: 12px;
+    line-height: 30px;
     outline: none;
+}
+
+/* 搜索过滤行：把标签和范围控制压缩在一行。 */
+.search-filter-row {
+    display: grid;
+    grid-template-columns: minmax(72px, 1fr) max-content;
+    align-items: center;
+    gap: 8px;
 }
 
 /* 搜索范围切换容器：承载分段按钮。 */
 .search-scope-switch {
     display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
+    gap: 0;
+    align-items: center;
+    flex-shrink: 0;
+    border: 1px solid var(--surface-chip-border);
+    background: var(--surface-chip-bg);
 }
 
-/* 搜索范围按钮：未激活态为弱化描边按钮。 */
+/* 搜索范围按钮：未激活态为紧凑分段项。 */
 .search-scope-button {
-    border: 1px solid var(--surface-chip-border);
+    min-width: 48px;
+    border: 0;
+    border-left: 1px solid var(--surface-chip-border);
     border-radius: 0;
-    background: var(--surface-chip-bg);
+    background: transparent;
     color: var(--surface-chip-text);
-    font-size: 12px;
-    padding: 6px 10px;
+    font-size: 11px;
+    line-height: 28px;
+    padding: 0 8px;
     cursor: pointer;
+    white-space: nowrap;
+}
+
+.search-scope-button:first-child {
+    border-left: 0;
 }
 
 /* 搜索范围按钮激活态：强调当前搜索范围。 */
 .search-scope-button--active {
     background: var(--surface-chip-bg-strong);
-    border-color: var(--surface-list-active-border);
     color: var(--surface-chip-text-strong);
-}
-
-/* 元信息栏：显示结果计数与加载状态。 */
-.search-meta {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px 8px;
-    color: var(--text-secondary);
-    font-size: 12px;
 }
 
 /* 搜索状态徽章：统一展示统计和加载状态。 */
@@ -146,13 +119,15 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 5px 10px;
+    padding: 3px 7px;
     border: 1px solid var(--surface-chip-border);
     border-radius: 0;
     background: var(--surface-chip-bg);
     color: var(--surface-chip-text);
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
+    line-height: 16px;
+    white-space: nowrap;
 }
 
 /* 激活状态徽章：在加载时更明显。 */
@@ -163,34 +138,46 @@
 
 /* 错误提示：展示 API 或打开文件失败信息。 */
 .search-error {
-    padding: 0 12px 12px;
+    padding: 8px 12px 0;
     color: var(--error-color);
     font-size: 12px;
 }
 
 /* 空状态容器：展示搜索前或无结果时的提示。 */
 .search-empty {
-    padding: 20px 14px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    padding: 9px 12px;
     color: var(--text-secondary);
     font-size: 12px;
-    border: 1px dashed var(--surface-card-border);
+    border-bottom: 1px solid var(--surface-card-border);
     border-radius: 0;
-    background: var(--surface-card-bg-muted);
-    margin: 0 14px 12px;
+    background: transparent;
+    margin: 0;
 }
 
 /* 空状态标题：强化初始引导文本。 */
 .search-empty-title {
-    font-size: 13px;
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 6px;
+}
+
+.search-empty span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* 搜索结果列表：滚动承载所有命中项。 */
 .search-results {
     list-style: none;
     margin: 0;
-    padding: 0 10px 10px;
+    padding: 0 8px 8px;
     overflow: auto;
     flex: 1;
     min-height: 0;
@@ -347,13 +334,26 @@
 
 @media (max-width: 720px) {
 
-    /* 窄屏下工具栏：改为纵向排布避免输入框压缩。 */
-    .search-toolbar-grid,
-    .search-toolbar-head,
-    .search-meta {
-        display: flex;
-        flex-direction: column;
+    /* 窄屏下过滤行：允许标签和分段按钮换行避免挤压。 */
+    .search-filter-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .search-scope-switch {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .search-scope-button {
+        min-width: 0;
+        padding: 0 6px;
+    }
+
+    .search-empty {
         align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
     }
 
     /* 窄屏下结果头部：允许标题与徽章换行避免挤压。 */

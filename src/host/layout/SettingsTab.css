@@ -220,6 +220,10 @@
     background: var(--content-material-pill-bg);
 }
 
+.settings-focus-target-active {
+    transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
 /* 设置页空状态：用于无分区或搜索无结果时的占位说明。 */
 .settings-tab-empty-state {
     display: flex;

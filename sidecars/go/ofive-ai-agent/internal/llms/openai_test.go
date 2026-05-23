@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"google.golang.org/adk/model"
+	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/functiontool"
 	"google.golang.org/genai"
 )
 
@@ -158,5 +160,57 @@ func TestOpenAICompatibleGenerateContentParsesStreamingToolCalls(t *testing.T) {
 	}
 	if functionCall.Args["query"] != "" {
 		t.Fatalf("unexpected function call args: %+v", functionCall.Args)
+	}
+}
+
+func TestBuildOpenAIToolsPreservesJSONSchemaRequiredFields(t *testing.T) {
+	t.Parallel()
+
+	type loadSkillArgs struct {
+		Name string `json:"name" jsonschema:"The name of the skill to load."`
+	}
+
+	skillLoader, err := functiontool.New(
+		functiontool.Config{
+			Name:        "load_skill",
+			Description: "Loads the SKILL.md instructions for a given skill.",
+		},
+		func(tool.Context, loadSkillArgs) (map[string]any, error) {
+			return nil, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("create function tool: %v", err)
+	}
+
+	request := &model.LLMRequest{}
+	requestProcessor, ok := skillLoader.(interface {
+		ProcessRequest(tool.Context, *model.LLMRequest) error
+	})
+	if !ok {
+		t.Fatal("expected function tool to process LLM requests")
+	}
+	if err := requestProcessor.ProcessRequest(nil, request); err != nil {
+		t.Fatalf("process function tool request: %v", err)
+	}
+
+	tools := buildOpenAITools(request)
+
+	if len(tools) != 1 {
+		t.Fatalf("expected one tool, got %d", len(tools))
+	}
+
+	parameters := map[string]any(tools[0].Function.Parameters)
+	required, ok := parameters["required"].([]any)
+	if !ok || len(required) != 1 || required[0] != "name" {
+		t.Fatalf("expected required name parameter, got %#v", parameters["required"])
+	}
+	properties, ok := parameters["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected properties object, got %#v", parameters["properties"])
+	}
+	nameProperty, ok := properties["name"].(map[string]any)
+	if !ok || nameProperty["type"] != "string" {
+		t.Fatalf("expected string name property, got %#v", properties["name"])
 	}
 }

@@ -60,7 +60,7 @@
     display: grid;
     grid-template-columns: 230px 1px minmax(0, 1fr);
     gap: 8px;
-    align-items: center;
+    align-items: stretch;
     padding: 6px 0;
     transition: background-color 160ms ease, box-shadow 160ms ease;
 }
@@ -220,7 +220,9 @@
     display: inline-block;
     min-width: 0;
     width: 100%;
-    min-height: 1lh;
+    min-height: 100%;
+    height: 100%;
+    align-self: stretch;
 }
 
 /* Frontmatter 镜像文本层：负责稳定显示文本与自绘选区，不响应鼠标事件。 */
@@ -229,6 +231,8 @@
     pointer-events: none;
     white-space: pre;
     min-height: 1lh;
+    padding-top: calc((100% - 1lh) / 2);
+    box-sizing: border-box;
 }
 
 /* Frontmatter 真实输入控件：覆盖在镜像层上方，仅负责输入、选择和光标。 */
@@ -290,8 +294,9 @@
 .fmv-control-shell {
     min-width: 0;
     display: flex;
-    align-items: center;
+    align-items: stretch;
     gap: 0;
+    align-self: stretch;
 }
 
 /* Frontmatter 值编辑区：允许不同类型控件自适应占据剩余空间。 */
@@ -299,9 +304,11 @@
     min-width: 0;
     flex: 1 1 auto;
     display: flex;
-    align-items: center;
+    align-items: stretch;
     gap: 6px;
     flex-wrap: wrap;
+    min-height: 100%;
+    height: 100%;
 }
 
 /* Frontmatter 通用输入框：正文样式文本输入，不再使用额外边框包裹。 */
@@ -356,15 +363,6 @@
 /* Frontmatter 数字输入框：避免数值控件铺满整行。 */
 .fmv-input-number {
     width: 180px;
-    appearance: textfield;
-    -moz-appearance: textfield;
-}
-
-/* Frontmatter 数字输入框移除 WebKit 默认步进箭头。 */
-.fmv-input-number::-webkit-outer-spin-button,
-.fmv-input-number::-webkit-inner-spin-button {
-    margin: 0;
-    -webkit-appearance: none;
 }
 
 /* Frontmatter 日期输入框：保持与普通文本输入一致的轻量形态。 */

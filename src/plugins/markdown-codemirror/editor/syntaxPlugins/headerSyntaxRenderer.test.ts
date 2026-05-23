@@ -34,14 +34,17 @@ function createContext(selectionFrom: number, selectionTo = selectionFrom): {
 }
 
 describe("applyHeaderLineDecorations", () => {
-    test("editing 标题行时应完全回退源码，不添加任何装饰", () => {
+    test("editing 标题行时应回退源码并为 marker 添加非占位装饰", () => {
         const { context, ranges } = createContext(5);
 
         applyHeaderLineDecorations(context);
 
-        expect(ranges).toHaveLength(1);
-        expect(ranges[0]).toMatchObject({ from: 0, to: 0 });
+        expect(ranges).toHaveLength(2);
+        expect(ranges[0]).toMatchObject({ from: 0, to: 2 });
         expect((ranges[0]?.decoration as unknown as { spec?: { class?: string } }).spec?.class)
+            .toContain("cm-rendered-header-source-marker-h1");
+        expect(ranges[1]).toMatchObject({ from: 0, to: 0 });
+        expect((ranges[1]?.decoration as unknown as { spec?: { class?: string } }).spec?.class)
             .toContain("cm-rendered-header-source-line");
     });
 

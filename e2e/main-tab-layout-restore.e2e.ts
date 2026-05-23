@@ -489,7 +489,7 @@ test.describe("main tab layout restore regression", () => {
         await openMockNote(page, CANVAS_NOTE_PATH);
         await openMockNote(page, IMAGE_NOTE_PATH);
         await page.getByTestId("activity-bar-item-knowledge-graph").click();
-        await page.getByRole("button", { name: "知识图谱", exact: true }).first().waitFor({ state: "visible" });
+        await page.getByRole("button", { name: /^(知识图谱|Knowledge Graph)$/ }).first().waitFor({ state: "visible" });
 
         await expect.poll(
             async () => readPersistedWorkspaceLayoutProbe(page),
@@ -508,14 +508,14 @@ test.describe("main tab layout restore regression", () => {
                 return sections.flatMap((section) => section.titles);
             },
             { timeout: 5_000 },
-        ).toEqual(["glass-validation.canvas", "mock-image.png", "知识图谱"]);
+        ).toEqual(["glass-validation.canvas", "mock-image.png", expect.stringMatching(/^(知识图谱|Knowledge Graph)$/)]);
 
         await focusTab(page, "glass-validation.canvas");
         await expect(page.locator(".canvas-tab")).toBeVisible();
         await focusTab(page, "mock-image.png");
         await expect(page.locator(".image-viewer-tab")).toBeVisible();
         await expect(page.locator(".image-viewer-header")).toHaveText(IMAGE_NOTE_PATH);
-        await focusTab(page, "知识图谱");
+        await page.getByRole("button", { name: /^(知识图谱|Knowledge Graph)$/ }).first().click();
         await expect(page.locator(".knowledge-graph-tab")).toBeVisible();
         expect(pageErrors).toEqual([]);
     });

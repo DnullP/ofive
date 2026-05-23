@@ -287,7 +287,6 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
     if (loading && !hasActivePathSnapshot) {
         return (
             <div className="backlinks-panel">
-                <div className="backlinks-panel-header">{activeTarget.title}</div>
                 <div className="backlinks-empty">{t("backlinks.loading")}</div>
             </div>
         );
@@ -297,7 +296,6 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
     if (error && !hasActivePathSnapshot) {
         return (
             <div className="backlinks-panel">
-                <div className="backlinks-panel-header">{activeTarget.title}</div>
                 {/* backlinks-error: 错误提示文字 */}
                 <div className="backlinks-error">
                     {t("backlinks.loadFailed", { message: error })}
@@ -309,7 +307,6 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
     if (!hasActivePathSnapshot || !snapshot) {
         return (
             <div className="backlinks-panel">
-                <div className="backlinks-panel-header">{activeTarget.title}</div>
                 <div className="backlinks-empty">{t("backlinks.loading")}</div>
             </div>
         );
@@ -318,15 +315,12 @@ function BacklinksPanel({ context }: { context: PanelRenderContext }): ReactNode
     /* ── 正常渲染 ── */
     return (
         <div className="backlinks-panel">
-            <div className="backlinks-panel-header">
-                {snapshot.title}
-                {/* backlinks-count: 引用计数标签 */}
-                <span className="backlinks-count">
-                    {loading
-                        ? t("backlinks.loading")
-                        : t("backlinks.referencedBy", { count: snapshot.items.length })}
-                </span>
-            </div>
+            {/* backlinks-count: 引用计数标签，浮动在右上角避免占用独立行 */}
+            <span className="backlinks-count">
+                {loading
+                    ? t("backlinks.loading")
+                    : t("backlinks.referencedBy", { count: snapshot.items.length })}
+            </span>
             {snapshot.items.length === 0 ? (
                 <div className="backlinks-empty">
                     {t("backlinks.noBacklinks")}

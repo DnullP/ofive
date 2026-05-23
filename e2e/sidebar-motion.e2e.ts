@@ -48,13 +48,12 @@ function buildCollapsedSidebarVaultConfig(): Record<string, unknown> {
                         resizableEdges: { top: true, right: true, bottom: true, left: true },
                         split: {
                             direction: "horizontal",
-                            ratio: 0.15,
+                            ratio: 0.22,
                             children: [
                                 {
                                     id: "left-sidebar",
                                     title: "Left Sidebar",
                                     data: { role: "sidebar", component: { type: "panel-section", props: { panelSectionId: "left-panel-section" } } },
-                                    meta: { "layout-v2:fixedSize": 86 },
                                     resizableEdges: { top: true, right: true, bottom: true, left: true },
                                     split: null,
                                 },
@@ -65,7 +64,7 @@ function buildCollapsedSidebarVaultConfig(): Record<string, unknown> {
                                     resizableEdges: { top: true, right: true, bottom: true, left: true },
                                     split: {
                                         direction: "horizontal",
-                                        ratio: 0.78,
+                                        ratio: 0.74,
                                         children: [
                                             {
                                                 id: "main-tabs",
@@ -130,8 +129,8 @@ function buildCollapsedSidebarVaultConfig(): Record<string, unknown> {
                 convertiblePanelStates: [],
                 sectionRatios: {
                     root: 0.04,
-                    "workbench-shell": 0.15,
-                    "center-shell": 0.78,
+                    "workbench-shell": 0.22,
+                    "center-shell": 0.74,
                 },
                 panelLayout: collapsedPanelLayout,
             },
@@ -309,25 +308,54 @@ async function seedVaultConfig(page: Page, vaultPath: string, config: Record<str
     });
 }
 
+async function dragSidebarDivider(page: Page, dividerIndex: number, deltaX: number): Promise<void> {
+    const divider = page
+        .locator(".layout-v2__divider--horizontal[aria-label='Resize sections']")
+        .nth(dividerIndex);
+    await expect(divider).toBeVisible();
+
+    const box = await divider.boundingBox();
+    if (!box) {
+        throw new Error("dragSidebarDivider: divider bounds missing");
+    }
+
+    const startX = box.x + box.width / 2;
+    const startY = box.y + box.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + deltaX, startY, { steps: 12 });
+    await page.mouse.up();
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+}
+
 async function expectCollapsedSidebarControlsUsable(page: Page): Promise<void> {
     const leftSidebar = page.locator("[data-testid='sidebar-left']");
     const leftToggle = leftSidebar.getByRole("button", { name: "Expand pane content" });
     const rightToggle = page.locator("[data-testid='sidebar-right']").getByRole("button", { name: "Collapse pane content" });
+    const leftDivider = page.locator(".layout-v2__divider--horizontal[aria-label='Resize sections']").nth(1);
+    const rightDivider = page.locator(".layout-v2__divider--horizontal[aria-label='Resize sections']").nth(2);
 
     await expect(leftSidebar).toBeVisible();
     await expect(leftToggle).toBeVisible();
     await expect(rightToggle).toBeVisible();
+    await expect(page.getByTestId("activity-bar-item-files")).toBeVisible();
+    await expect(leftSidebar.locator("[data-layout-role='panel'][data-layout-panel-id='files']")).toBeVisible();
+    await expect(page.locator("[data-testid='sidebar-right'] [data-layout-role='panel'][data-layout-panel-id='ai-chat']")).toBeVisible();
+    await expect(leftDivider).toBeVisible();
+    await expect(rightDivider).toBeVisible();
 
     const before = await page.evaluate(() => {
         const left = document.querySelector<HTMLElement>("[data-testid='sidebar-left']");
+        const right = document.querySelector<HTMLElement>("[data-testid='sidebar-right']");
         const leftBar = document.querySelector<HTMLElement>("[data-testid='sidebar-left'] .layout-v2-panel-section__bar");
         const leftToggleButton = document.querySelector<HTMLElement>("[data-testid='sidebar-left'] .layout-v2-panel-section__toggle");
         const rightToggleButton = document.querySelector<HTMLElement>("[data-testid='sidebar-right'] .layout-v2-panel-section__toggle");
-        if (!left || !leftBar || !leftToggleButton || !rightToggleButton) {
+        if (!left || !right || !leftBar || !leftToggleButton || !rightToggleButton) {
             throw new Error("collapsed sidebar selectors missing");
         }
 
         const leftRect = left.getBoundingClientRect();
+        const rightRect = right.getBoundingClientRect();
         const leftToggleRect = leftToggleButton.getBoundingClientRect();
         const rightToggleRect = rightToggleButton.getBoundingClientRect();
         const leftTopElement = document.elementFromPoint(
@@ -341,6 +369,7 @@ async function expectCollapsedSidebarControlsUsable(page: Page): Promise<void> {
 
         return {
             leftWidth: leftRect.width,
+            rightWidth: rightRect.width,
             leftBarScrollWidth: leftBar.scrollWidth,
             leftToggleWidth: leftToggleRect.width,
             leftToggleInsideLeftSidebar: leftToggleRect.left >= leftRect.left && leftToggleRect.right <= leftRect.right,
@@ -349,12 +378,23 @@ async function expectCollapsedSidebarControlsUsable(page: Page): Promise<void> {
         };
     });
 
-    expect(before.leftWidth).toBeGreaterThanOrEqual(120);
+    expect(before.leftWidth).toBeGreaterThanOrEqual(220);
+    expect(before.rightWidth).toBeGreaterThanOrEqual(220);
     expect(before.leftBarScrollWidth).toBeLessThanOrEqual(before.leftWidth + 1);
     expect(before.leftToggleWidth).toBeGreaterThan(0);
     expect(before.leftToggleInsideLeftSidebar).toBe(true);
     expect(before.leftToggleReceivesPointer).toBe(true);
     expect(before.rightToggleReceivesPointer).toBe(true);
+
+    await dragSidebarDivider(page, 1, 70);
+    const resizedLeftWidth = await leftSidebar.evaluate((element) => element.getBoundingClientRect().width);
+    expect(resizedLeftWidth).toBeGreaterThan(before.leftWidth + 40);
+
+    await dragSidebarDivider(page, 2, -50);
+    const resizedRightWidth = await page
+        .locator("[data-testid='sidebar-right']")
+        .evaluate((element) => element.getBoundingClientRect().width);
+    expect(resizedRightWidth).toBeGreaterThan(before.rightWidth + 30);
 
     await leftToggle.click();
     await expect(leftSidebar.getByRole("button", { name: "Collapse pane content" })).toBeVisible();
@@ -530,7 +570,7 @@ test.describe("sidebar toggle regression", () => {
         await page.getByTestId("activity-bar-item-knowledge-graph").click();
 
         await expect(
-            page.locator(".layout-v2-tab-section__tab-title", { hasText: "知识图谱" }),
+            page.locator(".layout-v2-tab-section__tab-title").filter({ hasText: /知识图谱|Knowledge Graph/ }),
         ).toBeVisible();
         await expect(page.locator(".knowledge-graph-tab").first()).toBeVisible();
     });

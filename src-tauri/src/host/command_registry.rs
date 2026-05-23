@@ -140,6 +140,10 @@ define_app_commands![
         crate::host::commands::window_commands::update_main_window_acrylic_effect
     ),
     (
+        "reload_current_window",
+        crate::host::commands::window_commands::reload_current_window
+    ),
+    (
         "forward_frontend_log",
         crate::host::commands::frontend_log_commands::forward_frontend_log
     ),
@@ -372,7 +376,9 @@ pub(crate) use app_commands;
 #[cfg(test)]
 mod tests {
     use super::{validate_registered_app_commands, REGISTERED_APP_COMMAND_IDS};
-    use crate::host::commands::vault_commands::VAULT_COMMAND_IDS;
+    use crate::host::commands::{
+        vault_commands::VAULT_COMMAND_IDS, window_commands::WINDOW_COMMAND_IDS,
+    };
     use crate::module_contribution::{
         builtin_backend_module_contributions, BackendModuleContribution,
     };
@@ -477,5 +483,17 @@ mod tests {
                 "Host command registry must register {command_id}",
             );
         }
+    }
+
+    #[test]
+    fn reload_window_command_should_be_declared_and_registered_through_host_boundary() {
+        assert!(
+            WINDOW_COMMAND_IDS.contains(&"reload_current_window"),
+            "Window command fact source must declare reload_current_window",
+        );
+        assert!(
+            REGISTERED_APP_COMMAND_IDS.contains(&"reload_current_window"),
+            "Host command registry must register reload_current_window",
+        );
     }
 }

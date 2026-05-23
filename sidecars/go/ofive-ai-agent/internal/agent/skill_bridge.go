@@ -17,7 +17,7 @@ const (
 	ofiveSkillToolsetName = "ofive-skills"
 	ofiveSkillInstruction = `You can use specialized ofive skills to route local managed tools and external MCP tools.
 
-1. If a skill seems relevant to the current user query, you MUST use the load_skill tool with name="<SKILL_NAME>" before you continue.
+1. If a skill seems relevant to the current user query, you MUST use the load_skill tool before you continue. The arguments must be JSON like {"name":"managed-capability-routing"}.
 2. Use managed-capability-routing for local vault reads, searches, patches, canvas updates, and confirmation-aware write sequencing.
 3. Use mcp-tool-routing when a task involves external integrations or mixes external MCP tools with ofive's local managed capabilities.
 4. User-created skills from the current vault are available alongside the built-in routing skills.

@@ -106,6 +106,23 @@
     word-break: break-word;
 }
 
+.ai-chat-status-action {
+    width: 100%;
+    appearance: none;
+    text-align: left;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+}
+
+.ai-chat-status-action:hover,
+.ai-chat-status-action:focus-visible {
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--accent-primary) 58%, var(--border-color));
+    background: color-mix(in srgb, var(--bg-secondary) 88%, var(--accent-primary) 12%);
+    outline: none;
+}
+
 /* ai-chat-status.error：错误状态卡片 */
 .ai-chat-status.error {
     color: var(--error-color);
@@ -496,6 +513,13 @@
 .ai-chat-message-action-button:disabled {
     opacity: 0.46;
     cursor: not-allowed;
+}
+
+/* ai-chat-message-action-button.state-copied：消息复制成功态 */
+.ai-chat-message-action-button.state-copied {
+    color: var(--success-color);
+    border-color: color-mix(in srgb, var(--success-color) 42%, var(--border-color));
+    background: color-mix(in srgb, var(--success-color) 12%, var(--bg-primary));
 }
 
 /* ai-chat-message-edit-form：用户消息编辑态容器 */
@@ -892,7 +916,7 @@
     font-weight: 600;
     cursor: pointer;
     transition:
-        background 120ms ease,
+        background-color 120ms ease,
         border-color 120ms ease,
         color 120ms ease;
 }
@@ -913,7 +937,7 @@
 .ai-chat-confirm-menu-item:focus-visible {
     outline: none;
     border-color: color-mix(in srgb, var(--accent-primary) 46%, transparent);
-    background: color-mix(in srgb, var(--accent-primary) 22%, var(--bg-primary));
+    background-color: color-mix(in srgb, var(--accent-primary) 22%, var(--bg-primary));
     color: color-mix(in srgb, var(--text-primary) 88%, var(--accent-primary));
 }
 
@@ -1563,6 +1587,11 @@
     padding: 12px;
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-secondary);
+}
+
+.ai-chat-settings-row.settings-focus-target-active {
+    border-color: color-mix(in srgb, var(--accent-primary) 58%, var(--border-color));
+    background: color-mix(in srgb, var(--bg-secondary) 86%, var(--accent-primary) 14%);
 }
 
 /* ai-chat-settings-row:last-child：最后一行无底边 */

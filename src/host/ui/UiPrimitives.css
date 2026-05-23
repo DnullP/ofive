@@ -80,6 +80,17 @@
     resize: vertical;
 }
 
+.ofive-ui-number-input {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.ofive-ui-number-input::-webkit-outer-spin-button,
+.ofive-ui-number-input::-webkit-inner-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+}
+
 .ofive-ui-select {
     cursor: pointer;
 }
@@ -274,7 +285,8 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    background: var(--surface-overlay-panel-bg);
+    background-color: var(--bg-secondary);
+    background-image: linear-gradient(180deg, var(--surface-overlay-panel-bg), var(--surface-overlay-panel-bg));
     box-shadow: var(--surface-overlay-panel-shadow);
 }
 

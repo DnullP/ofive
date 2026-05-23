@@ -10,11 +10,10 @@
  */
 
 import React, { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
-import { CalendarDays, CheckSquare, Compass, FolderOpen, Hand, Orbit, Plus, Workflow } from "lucide-react";
+import { CalendarDays, CheckSquare, Compass, FolderOpen, Hand, Plus, Workflow } from "lucide-react";
 import { WorkbenchLayoutHost } from "../../src/host/layout";
 import { buildGlassRuntimeStyle } from "../../src/host/layout/glassRuntimeStyle";
 import { CodeMirrorEditorTab } from "../../src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab";
-import { KnowledgeGraphTab } from "../../src/plugins/knowledge-graph/tab/KnowledgeGraphTab";
 import { CanvasTab } from "../../src/plugins/canvas/CanvasTab";
 import { ImageViewerTab } from "../../src/plugins/image-viewer/tab/ImageViewerTab";
 import { CalendarPanel } from "../../src/plugins/calendar/CalendarPanel";
@@ -26,6 +25,8 @@ import { activatePlugin as activateAiChatPlugin } from "../../src/plugins/ai-cha
 import { activatePlugin as activateProjectReaderPlugin } from "../../src/plugins/project-reader/projectReaderPlugin";
 import { activatePlugin as activateAgentSkillsPlugin } from "../../src/plugins/agent-skills/agentSkillsPlugin";
 import { activatePlugin as activateBacklinksPlugin } from "../../src/plugins/backlinks/backlinksPlugin";
+import { activatePlugin as activateKnowledgeGraphPlugin } from "../../src/plugins/knowledge-graph/knowledgeGraphPlugin";
+import { OutlinePanelPlugin } from "../../src/plugins/outline/outlinePlugin";
 import { SettingsTab } from "../../src/host/layout/SettingsTab";
 import { useConfigSync } from "../../src/host/config/configStore";
 import { useVaultTreeSync } from "../../src/host/vault/vaultStore";
@@ -190,25 +191,6 @@ function resolveShouldShowControls(): boolean {
     }
 
     return true;
-}
-
-function MockOutlinePanel(): ReactNode {
-    return (
-        <div className="outline-panel">
-            <div className="outline-panel-header">
-                mock/article.md
-                <span className="outline-persisted-hint">Mock</span>
-            </div>
-            <ul className="outline-list">
-                <li>
-                    <button type="button" className="outline-item"># Section One</button>
-                </li>
-                <li>
-                    <button type="button" className="outline-item">## Section Two</button>
-                </li>
-            </ul>
-        </div>
-    );
 }
 
 function MockWorkbenchPlaceholder(props: {
@@ -442,8 +424,29 @@ const MOCK_AI_TOOLS: AiToolDescriptor[] = [
     },
 ];
 
-function createMockAiRuntime(): BrowserMockAiRuntime {
-    let settings: AiChatSettings = {
+function createInitialMockAiSettings(): AiChatSettings {
+    if (resolveInitialBooleanFlag("mockAiMissingApiKey", false)) {
+        return {
+            vendorId: MOCK_OPENAI_VENDOR.id,
+            model: MOCK_OPENAI_VENDOR.defaultModel,
+            fieldValues: {
+                baseUrl: "https://api.openai.com/v1",
+            },
+            activeProviderId: "mock-provider-openai-missing-key",
+            providers: [{
+                id: "mock-provider-openai-missing-key",
+                vendorId: MOCK_OPENAI_VENDOR.id,
+                title: MOCK_OPENAI_VENDOR.title,
+                model: MOCK_OPENAI_VENDOR.defaultModel,
+                fieldValues: {
+                    baseUrl: "https://api.openai.com/v1",
+                },
+            }],
+            toolApprovalPolicy: {},
+        };
+    }
+
+    return {
         vendorId: MOCK_AI_VENDOR.id,
         model: MOCK_AI_VENDOR.defaultModel,
         fieldValues: {
@@ -461,6 +464,10 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
         }],
         toolApprovalPolicy: {},
     };
+}
+
+function createMockAiRuntime(): BrowserMockAiRuntime {
+    let settings: AiChatSettings = createInitialMockAiSettings();
     let history: AiChatHistoryState = {
         activeConversationId: null,
         conversations: [],
@@ -814,9 +821,6 @@ function seedMockVaultConfig(mockVaultPath: string): void {
 }
 
 let mockRegistered = false;
-const MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID = "knowledgegraph";
-const MOCK_KNOWLEDGE_GRAPH_ACTIVITY_ID = "knowledge-graph";
-
 function ensureMockComponentsRegistered(): void {
     if (mockRegistered) return;
     mockRegistered = true;
@@ -828,6 +832,7 @@ function ensureMockComponentsRegistered(): void {
     activateProjectReaderPlugin();
     activateAgentSkillsPlugin();
     activateBacklinksPlugin();
+    activateKnowledgeGraphPlugin();
     registerCommands([
         {
             id: "fileTree.deleteSelected",
@@ -860,7 +865,6 @@ function ensureMockComponentsRegistered(): void {
 
     const filesIcon = React.createElement(FolderOpen, { size: 18, strokeWidth: 1.8 });
     const outlineIcon = React.createElement(Compass, { size: 18, strokeWidth: 1.8 });
-    const knowledgeGraphIcon = React.createElement(Orbit, { size: 18, strokeWidth: 1.8 });
     const calendarIcon = React.createElement(CalendarDays, { size: 18, strokeWidth: 1.8 });
     const architectureIcon = React.createElement(Workflow, { size: 18, strokeWidth: 1.8 });
     const taskBoardIcon = React.createElement(CheckSquare, { size: 18, strokeWidth: 1.8 });
@@ -883,22 +887,6 @@ function ensureMockComponentsRegistered(): void {
         defaultSection: "top",
         defaultBar: "right",
         defaultOrder: 2,
-    });
-    registerActivity({
-        type: "callback",
-        id: MOCK_KNOWLEDGE_GRAPH_ACTIVITY_ID,
-        title: () => "知识图谱",
-        icon: knowledgeGraphIcon,
-        defaultSection: "top",
-        defaultBar: "left",
-        defaultOrder: 3,
-        onActivate: (context) => {
-            context.openTab({
-                id: MOCK_KNOWLEDGE_GRAPH_ACTIVITY_ID,
-                title: "知识图谱",
-                component: MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID,
-            });
-        },
     });
     registerActivity({
         type: "callback",
@@ -975,7 +963,7 @@ function ensureMockComponentsRegistered(): void {
         activityId: "outline",
         defaultPosition: "right",
         defaultOrder: 1,
-        render: () => React.createElement(MockOutlinePanel),
+        render: () => React.createElement(OutlinePanelPlugin),
     });
     registerPanel({
         id: CALENDAR_PANEL_ID,
@@ -993,7 +981,6 @@ function ensureMockComponentsRegistered(): void {
     });
     registerTabComponent({ id: "canvas", component: CanvasTab as never, lifecycleScope: "vault" });
     registerTabComponent({ id: "imageviewer", component: ImageViewerTab as never, lifecycleScope: "vault" });
-    registerTabComponent({ id: MOCK_KNOWLEDGE_GRAPH_COMPONENT_ID, component: KnowledgeGraphTab as never, lifecycleScope: "vault" });
     registerTabComponent({ id: MOCK_CALENDAR_TAB_COMPONENT_ID, component: CalendarTab as never, lifecycleScope: "vault" });
     registerTabComponent({ id: MOCK_ARCHITECTURE_COMPONENT_ID, component: MockArchitectureDevtoolsTab as never, lifecycleScope: "global" });
     registerTabComponent({ id: MOCK_TASK_BOARD_COMPONENT_ID, component: MockTaskBoardTab as never, lifecycleScope: "vault" });

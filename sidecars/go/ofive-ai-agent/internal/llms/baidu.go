@@ -952,7 +952,33 @@ func sanitizeJSONSchemaValue(value any) any {
 		}
 		return items
 	default:
+		if normalized, ok := normalizeJSONSchemaValue(value); ok {
+			return sanitizeJSONSchemaValue(normalized)
+		}
 		return value
+	}
+}
+
+func normalizeJSONSchemaValue(value any) (any, bool) {
+	if value == nil {
+		return nil, false
+	}
+
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, false
+	}
+
+	var decoded any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		return nil, false
+	}
+
+	switch decoded.(type) {
+	case map[string]any, []any:
+		return decoded, true
+	default:
+		return nil, false
 	}
 }
 

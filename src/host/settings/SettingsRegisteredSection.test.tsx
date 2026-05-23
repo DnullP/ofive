@@ -47,6 +47,19 @@ describe("SettingsRegisteredSection", () => {
                             title: "settings.demoCustom",
                             render: () => <div>{SETTINGS_REGISTERED_SECTION_CUSTOM_PANEL}</div>,
                         },
+                        {
+                            id: "number-delay",
+                            sectionId: "demo",
+                            order: 30,
+                            kind: "number",
+                            title: "settings.demoNumber",
+                            description: "settings.demoNumberDesc",
+                            min: 500,
+                            max: 10000,
+                            step: 100,
+                            useValue: () => 1500,
+                            updateValue: () => undefined,
+                        },
                     ],
                 }}
             />, 
@@ -54,6 +67,11 @@ describe("SettingsRegisteredSection", () => {
 
         expect(markup).toContain("settings.demoToggle");
         expect(markup).toContain("settings.demoToggleDesc");
+        expect(markup).toContain("settings.demoNumber");
+        expect(markup).toContain("settings.demoNumberDesc");
+        expect(markup).toContain("ofive-ui-number-input");
+        expect(markup).toContain("type=\"text\"");
+        expect(markup).not.toContain("type=\"number\"");
         expect(markup).toContain(SETTINGS_REGISTERED_SECTION_CUSTOM_PANEL);
     });
 });

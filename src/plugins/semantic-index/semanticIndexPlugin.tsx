@@ -44,6 +44,7 @@ import {
 } from "../../host/notifications/notificationCenter";
 import { registerCommand } from "../../host/commands/commandSystem";
 import { registerSettingsItem } from "../../host/settings/settingsRegistry";
+import { UiNumberInput, UiSelect } from "../../host/ui";
 import { useVaultState } from "../../host/vault/vaultStore";
 
 import "./semanticIndexPlugin.css";
@@ -897,8 +898,7 @@ function SemanticIndexSettingsSection(): ReactNode {
                     <span className="settings-compact-desc">{t("semanticIndexPlugin.chunkingStrategyDescription")}</span>
                 </div>
                 <div className="semantic-index-settings-field-group">
-                    <select
-                        className="semantic-index-settings-select-input"
+                    <UiSelect
                         value={draftSettings.chunkingStrategy}
                         disabled={isLoading || isRefreshing || isSaving || installingModelId !== null}
                         onChange={(event) => {
@@ -918,7 +918,7 @@ function SemanticIndexSettingsSection(): ReactNode {
                                 {t(item.labelKey)}
                             </option>
                         ))}
-                    </select>
+                    </UiSelect>
                     <span className="semantic-index-settings-field-help">
                         {t(
                             SEMANTIC_INDEX_CHUNKING_STRATEGY_OPTIONS.find((item) => {
@@ -935,20 +935,27 @@ function SemanticIndexSettingsSection(): ReactNode {
                     <span className="settings-compact-desc">{t("semanticIndexPlugin.searchResultLimitDescription")}</span>
                 </div>
                 <div className="semantic-index-settings-field-group">
-                    <input
+                    <UiNumberInput
                         className="settings-compact-number-input"
-                        type="number"
+                        controlSize="compact"
+                        variant="settings"
                         min={MIN_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT}
                         max={MAX_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT}
                         step={1}
                         value={draftSettings.searchResultLimit}
                         disabled={isLoading || isRefreshing || isSaving || installingModelId !== null}
-                        onChange={(event) => {
-                            const nextSearchResultLimit = clampSemanticIndexSearchResultLimit(
-                                event.target.value,
+                        parseValue={(rawValue) => {
+                            if (rawValue.trim().length === 0) {
+                                return null;
+                            }
+
+                            return clampSemanticIndexSearchResultLimit(
+                                rawValue,
                                 draftSettings.searchResultLimit
                                     || DEFAULT_SEMANTIC_INDEX_SEARCH_RESULT_LIMIT,
                             );
+                        }}
+                        onValueChange={(nextSearchResultLimit) => {
                             console.info("[semanticIndexPlugin] search result limit draft changed", {
                                 currentVaultPath,
                                 nextSearchResultLimit,

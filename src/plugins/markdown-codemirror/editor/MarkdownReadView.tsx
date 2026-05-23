@@ -157,7 +157,11 @@ function sourceLineDataAttributes(
         : { "data-source-line": String(sourceLine) };
 }
 
-export function revealMarkdownReadViewLine(root: HTMLElement | null, line: number): boolean {
+export function revealMarkdownReadViewLine(
+    root: HTMLElement | null,
+    line: number,
+    options: { block?: "start" | "center" } = {},
+): boolean {
     if (!root || !Number.isFinite(line)) {
         return false;
     }
@@ -191,7 +195,7 @@ export function revealMarkdownReadViewLine(root: HTMLElement | null, line: numbe
         return false;
     }
 
-    target.element.scrollIntoView({ block: "start", inline: "nearest" });
+    target.element.scrollIntoView({ block: options.block ?? "start", inline: "nearest" });
     return true;
 }
 

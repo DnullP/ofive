@@ -254,6 +254,26 @@ const SCROLL_REGRESSION_ALT_SAMPLE = [
     }),
 ].join("\n");
 
+const OUTLINE_REVEAL_SAMPLE = [
+    "# Outline Reveal Demo",
+    "",
+    "This fixture keeps the target heading far enough from both document edges.",
+    "",
+    ...Array.from({ length: 120 }, (_, index) => {
+        const lineNumber = String(index + 1).padStart(3, "0");
+        return `${lineNumber}. Outline reveal prelude line ${lineNumber}.`;
+    }),
+    "",
+    "## Deep Outline Target",
+    "",
+    "The clicked outline item should land near the visual center.",
+    "",
+    ...Array.from({ length: 120 }, (_, index) => {
+        const lineNumber = String(index + 1).padStart(3, "0");
+        return `${lineNumber}. Outline reveal epilogue line ${lineNumber}.`;
+    }),
+].join("\n");
+
 const BULK_EDITOR_PERF_FILE_COUNT = 32;
 
 /**
@@ -340,6 +360,7 @@ const MOCK_FILE_CONTENTS: Record<string, string> = {
     "test-resources/notes/open-mode-source.md": "# Open Mode Source\n\n[[network-segment]]\n",
     "test-resources/notes/scroll-regression.md": SCROLL_REGRESSION_SAMPLE,
     "test-resources/notes/scroll-regression-alt.md": SCROLL_REGRESSION_ALT_SAMPLE,
+    "test-resources/notes/outline-reveal.md": OUTLINE_REVEAL_SAMPLE,
     "test-resources/notes/table-editor.md": TABLE_EDITOR_SAMPLE,
     "test-resources/notes/table-vim-boundary.md": TABLE_VIM_BOUNDARY_SAMPLE,
     "test-resources/notes/vim-inline-code-wikilink.md": VIM_INLINE_CODE_WIKILINK_SAMPLE,

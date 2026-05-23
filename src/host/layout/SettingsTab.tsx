@@ -16,6 +16,7 @@ import {
 } from "react";
 import { Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { WorkbenchTabProps } from "./workbenchContracts";
 import { ensureBuiltinSettingsRegistered } from "../settings/registerBuiltinSettings";
 import { SettingsRegisteredSection } from "../settings/SettingsRegisteredSection";
 import { useSettingsSections, type SettingsSectionSnapshot } from "../settings/settingsRegistry";
@@ -23,8 +24,34 @@ import "./SettingsTab.css";
 
 ensureBuiltinSettingsRegistered();
 
+const SETTINGS_FOCUS_TARGET_ACTIVE_CLASS = "settings-focus-target-active";
+const SETTINGS_FOCUS_TARGET_RETRY_COUNT = 40;
+const SETTINGS_FOCUS_TARGET_RETRY_DELAY_MS = 50;
+const SETTINGS_FOCUSABLE_SELECTOR = [
+    "input",
+    "textarea",
+    "select",
+    "button",
+    "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+export interface SettingsTabParams {
+    [key: string]: unknown;
+    sectionId?: string;
+    focusTarget?: string;
+    focusRequestId?: string;
+}
+
 function normalizeSettingsQuery(value: string): string {
     return value.trim().toLocaleLowerCase();
+}
+
+function readSettingsTabStringParam(
+    params: Record<string, unknown> | undefined,
+    key: keyof SettingsTabParams,
+): string {
+    const value = params?.[key];
+    return typeof value === "string" ? value : "";
 }
 
 function matchesSettingsSection(
@@ -52,17 +79,49 @@ function matchesSettingsSection(
     return candidates.some((candidate) => candidate.toLocaleLowerCase().includes(normalizedQuery));
 }
 
+function findSettingsFocusTarget(focusTarget: string): HTMLElement | null {
+    if (typeof document === "undefined") {
+        return null;
+    }
+
+    return Array
+        .from(document.querySelectorAll<HTMLElement>("[data-settings-focus-target]"))
+        .find((element) => element.getAttribute("data-settings-focus-target") === focusTarget)
+        ?? null;
+}
+
+function focusSettingsTargetElement(target: HTMLElement): number {
+    target.scrollIntoView({
+        block: "center",
+        inline: "nearest",
+        behavior: "auto",
+    });
+
+    const focusable = target.matches(SETTINGS_FOCUSABLE_SELECTOR)
+        ? target
+        : target.querySelector<HTMLElement>(SETTINGS_FOCUSABLE_SELECTOR);
+    focusable?.focus({ preventScroll: true });
+
+    target.classList.add(SETTINGS_FOCUS_TARGET_ACTIVE_CLASS);
+    return window.setTimeout(() => {
+        target.classList.remove(SETTINGS_FOCUS_TARGET_ACTIVE_CLASS);
+    }, 1_600);
+}
+
 /**
  * @function SettingsTab
  * @description 渲染设置页 Tab。
  * @returns React 节点。
  */
-export function SettingsTab(): ReactNode {
+export function SettingsTab(props: Partial<WorkbenchTabProps<SettingsTabParams>> = {}): ReactNode {
     const { t } = useTranslation();
     const sections = useSettingsSections();
     const [activeSectionId, setActiveSectionId] = useState<string>("");
     const [searchQuery, setSearchQuery] = useState<string>("");
     const deferredSearchQuery = useDeferredValue(searchQuery);
+    const requestedSectionId = readSettingsTabStringParam(props.params, "sectionId");
+    const requestedFocusTarget = readSettingsTabStringParam(props.params, "focusTarget");
+    const requestedFocusRequestId = readSettingsTabStringParam(props.params, "focusRequestId");
 
     const visibleSections = useMemo(() => {
         const normalizedQuery = normalizeSettingsQuery(deferredSearchQuery);
@@ -73,6 +132,24 @@ export function SettingsTab(): ReactNode {
         () => visibleSections.find((section) => section.id === activeSectionId) ?? visibleSections[0],
         [visibleSections, activeSectionId],
     );
+
+    useEffect(() => {
+        if (!requestedSectionId) {
+            return;
+        }
+
+        const requestedSectionExists = sections.some((section) => section.id === requestedSectionId);
+        if (!requestedSectionExists) {
+            return;
+        }
+
+        if (searchQuery) {
+            setSearchQuery("");
+        }
+        if (activeSectionId !== requestedSectionId) {
+            setActiveSectionId(requestedSectionId);
+        }
+    }, [activeSectionId, requestedSectionId, searchQuery, sections]);
 
     useEffect(() => {
         if (visibleSections.length === 0) {
@@ -87,6 +164,49 @@ export function SettingsTab(): ReactNode {
             setActiveSectionId(visibleSections[0].id);
         }
     }, [visibleSections, activeSectionId]);
+
+    useEffect(() => {
+        if (!requestedFocusTarget) {
+            return undefined;
+        }
+        if (requestedSectionId && activeSection?.id !== requestedSectionId) {
+            return undefined;
+        }
+
+        let disposed = false;
+        let retryTimer = 0;
+        let highlightTimer = 0;
+
+        const attemptFocus = (remainingAttempts: number): void => {
+            if (disposed) {
+                return;
+            }
+
+            const target = findSettingsFocusTarget(requestedFocusTarget);
+            if (target) {
+                highlightTimer = focusSettingsTargetElement(target);
+                return;
+            }
+
+            if (remainingAttempts <= 0) {
+                return;
+            }
+
+            retryTimer = window.setTimeout(() => {
+                attemptFocus(remainingAttempts - 1);
+            }, SETTINGS_FOCUS_TARGET_RETRY_DELAY_MS);
+        };
+
+        retryTimer = window.setTimeout(() => {
+            attemptFocus(SETTINGS_FOCUS_TARGET_RETRY_COUNT);
+        }, 0);
+
+        return () => {
+            disposed = true;
+            window.clearTimeout(retryTimer);
+            window.clearTimeout(highlightTimer);
+        };
+    }, [activeSection?.id, requestedFocusRequestId, requestedFocusTarget, requestedSectionId]);
 
     return (
         <div className="settings-tab">
@@ -165,7 +285,11 @@ export function SettingsTab(): ReactNode {
                     ) : null}
                 </header>
 
-                {activeSection ? <SettingsRegisteredSection section={activeSection} /> : (
+                {activeSection ? (
+                    <div data-settings-section-id={activeSection.id}>
+                        <SettingsRegisteredSection section={activeSection} />
+                    </div>
+                ) : (
                     <div className="settings-tab-empty-state">
                         <div className="settings-tab-empty-state-title">
                             {normalizeSettingsQuery(searchQuery).length > 0

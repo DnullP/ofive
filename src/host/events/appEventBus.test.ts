@@ -110,17 +110,20 @@ describe("appEventBus editor event flow", () => {
         let capturedArticleId = "";
         let capturedPath = "";
         let capturedLine = 0;
+        let capturedScrollAlignment: "center" | undefined;
 
         const unlisten = subscribeEditorRevealRequestedEvent((payload) => {
             capturedArticleId = payload.articleId;
             capturedPath = payload.path;
             capturedLine = payload.line;
+            capturedScrollAlignment = payload.scrollAlignment;
         });
 
         emitEditorRevealRequestedEvent({
             articleId: "file:notes/guide.md",
             path: "notes/guide.md",
             line: 12,
+            scrollAlignment: "center",
         });
 
         unlisten();
@@ -128,6 +131,7 @@ describe("appEventBus editor event flow", () => {
         expect(capturedArticleId).toBe("file:notes/guide.md");
         expect(capturedPath).toBe("notes/guide.md");
         expect(capturedLine).toBe(12);
+        expect(capturedScrollAlignment).toBe("center");
     });
 
     /**

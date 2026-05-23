@@ -24,17 +24,6 @@
     width: 100%;
 }
 
-/* semantic-index-settings-select-input：chunk 策略选择下拉框，提供稳定的可读输入样式。 */
-.semantic-index-settings-select-input {
-    width: 100%;
-    min-height: 32px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    background: var(--bg-elevated);
-    color: var(--text-primary);
-    padding: 0 10px;
-}
-
 /* semantic-index-settings-field-help：字段帮助文本，用于解释当前策略和数量范围。 */
 .semantic-index-settings-field-help {
     color: var(--text-secondary);

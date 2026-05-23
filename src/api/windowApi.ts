@@ -64,3 +64,17 @@ export async function updateMainWindowAcrylicEffect(
 
     await invoke("update_main_window_acrylic_effect", { config });
 }
+
+/**
+ * @function reloadCurrentWindow
+ * @description 请求 Tauri 宿主清理后端运行时资源并 reload 当前 WebView。
+ * @returns Promise<void>
+ */
+export async function reloadCurrentWindow(): Promise<void> {
+    if (!isTauriRuntime()) {
+        window.location.reload();
+        return;
+    }
+
+    await invoke("reload_current_window");
+}

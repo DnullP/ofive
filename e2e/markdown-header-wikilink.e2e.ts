@@ -70,6 +70,94 @@ async function readEditorHeaderWikiLinkStyles(page: Page): Promise<{
     });
 }
 
+async function readHeaderTextAlignment(page: Page, editing: boolean): Promise<{
+    textLeft: number;
+    fontSize: string;
+    markerText: string | null;
+}> {
+    return page.evaluate((shouldReadEditing) => {
+        const activeCard = document.querySelector<HTMLElement>(".layout-v2-tab-section__card--active");
+        if (!activeCard) {
+            throw new Error("Active tab card not found");
+        }
+
+        const selector = shouldReadEditing
+            ? ".cm-line.cm-rendered-header-source-line"
+            : ".cm-line.cm-rendered-header-line-h1";
+        const headerLine = activeCard.querySelector<HTMLElement>(selector);
+        if (!headerLine) {
+            throw new Error(`Header line not found: ${selector}`);
+        }
+
+        const marker = headerLine.querySelector<HTMLElement>(".cm-rendered-header-source-marker");
+        const range = document.createRange();
+        if (shouldReadEditing) {
+            const walker = document.createTreeWalker(headerLine, NodeFilter.SHOW_TEXT);
+            let textNode: Text | null = null;
+            while (walker.nextNode()) {
+                const candidate = walker.currentNode as Text;
+                if (candidate.nodeValue?.includes("Aligned Heading")) {
+                    textNode = candidate;
+                    break;
+                }
+            }
+            if (!textNode) {
+                throw new Error("Editing header text node not found");
+            }
+            const textIndex = textNode.nodeValue?.indexOf("Aligned Heading") ?? -1;
+            range.setStart(textNode, textIndex);
+            range.setEnd(textNode, textIndex + "Aligned Heading".length);
+        } else {
+            const walker = document.createTreeWalker(headerLine, NodeFilter.SHOW_TEXT);
+            let textNode: Text | null = null;
+            while (walker.nextNode()) {
+                const candidate = walker.currentNode as Text;
+                if (candidate.nodeValue?.includes("Aligned Heading")) {
+                    textNode = candidate;
+                    break;
+                }
+            }
+            if (!textNode) {
+                throw new Error("Rendered header text node not found");
+            }
+            const textIndex = textNode.nodeValue?.indexOf("Aligned Heading") ?? -1;
+            range.setStart(textNode, textIndex);
+            range.setEnd(textNode, textIndex + "Aligned Heading".length);
+        }
+        const rect = range.getBoundingClientRect();
+        range.detach();
+
+        return {
+            textLeft: rect.left,
+            fontSize: window.getComputedStyle(headerLine).fontSize,
+            markerText: marker?.textContent ?? null,
+        };
+    }, editing);
+}
+
+async function focusHeaderForSource(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as (HTMLElement & {
+            cmTile?: {
+                view?: {
+                    focus: () => void;
+                    dispatch: (spec: unknown) => void;
+                };
+            };
+        }) | null;
+        const view = content?.cmTile?.view;
+        if (!view) {
+            throw new Error("EditorView not found");
+        }
+
+        view.focus();
+        view.dispatch({
+            selection: { anchor: 4 },
+            scrollIntoView: true,
+        });
+    });
+}
+
 async function switchToReadMode(page: Page): Promise<void> {
     await page.locator(".layout-v2-tab-section__card--active .cm-tab-mode-toggle").click();
     await page.locator(".layout-v2-tab-section__card--active .cm-tab-reader").waitFor({ state: "visible" });
@@ -121,5 +209,51 @@ test.describe("markdown header wikilink rendering", () => {
         const readerStyles = await readReaderHeaderWikiLinkStyles(page);
         expect(readerStyles.readerWikiLinkFontSize).toBe(readerStyles.readerHeaderFontSize);
         expect(readerStyles.readerWikiLinkTextDecorationLine).toContain("underline");
+    });
+
+    test("标题展开源码后正文起点应与渲染态对齐", async ({ page }) => {
+        await waitForMockWorkbench(page);
+        await openMockHeaderWikiLinkNote(page);
+        await page.evaluate(() => {
+            const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as (HTMLElement & {
+                cmTile?: {
+                    view?: {
+                        focus: () => void;
+                        dispatch: (spec: unknown) => void;
+                        state: {
+                            doc: {
+                                length: number;
+                            };
+                        };
+                    };
+                };
+            }) | null;
+            const view = content?.cmTile?.view;
+            if (!view) {
+                throw new Error("EditorView not found");
+            }
+
+            view.focus();
+            view.dispatch({
+                changes: {
+                    from: 0,
+                    to: view.state.doc.length,
+                    insert: "# Aligned Heading\n\nbody",
+                },
+                selection: { anchor: "# Aligned Heading\n\nbody".length },
+                scrollIntoView: true,
+            });
+        });
+        await moveCursorAwayFromHeader(page);
+
+        const renderedAlignment = await readHeaderTextAlignment(page, false);
+        await focusHeaderForSource(page);
+        await page.locator(".layout-v2-tab-section__card--active .cm-line.cm-rendered-header-source-line")
+            .waitFor({ state: "visible" });
+
+        const sourceAlignment = await readHeaderTextAlignment(page, true);
+        expect(sourceAlignment.markerText).toBe("# ");
+        expect(sourceAlignment.fontSize).toBe(renderedAlignment.fontSize);
+        expect(Math.abs(sourceAlignment.textLeft - renderedAlignment.textLeft)).toBeLessThanOrEqual(1);
     });
 });

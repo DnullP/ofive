@@ -11,7 +11,7 @@ import { useMemo, type ChangeEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { updateFeatureSetting, useConfigState } from "../../config/configStore";
 import { updateThemeMode, type ThemeMode, useThemeState } from "../../theme/themeStore";
-import { UiTextInput } from "../../ui";
+import { UiNumberInput } from "../../ui";
 import { registerSettingsItems, registerSettingsSection } from "../settingsRegistry";
 
 const THEME_MODE_OPTIONS: Array<{ value: ThemeMode; labelKey: string; descKey: string }> = [
@@ -70,7 +70,19 @@ function GlassSettingNumberRow(props: {
     showRange?: boolean;
     onChange: (nextValue: number) => void;
 }): ReactNode {
-    const handleChange = (event: ChangeEvent<HTMLInputElement>): void => {
+    const parseValue = (rawValue: string): number | null => {
+        if (rawValue.trim().length === 0) {
+            return null;
+        }
+
+        return clampStepNumber(rawValue, props.min, props.max, props.step, props.value);
+    };
+
+    const handleValueChange = (nextValue: number): void => {
+        props.onChange(nextValue);
+    };
+
+    const handleRangeChange = (event: ChangeEvent<HTMLInputElement>): void => {
         props.onChange(clampStepNumber(event.target.value, props.min, props.max, props.step, props.value));
     };
 
@@ -91,20 +103,20 @@ function GlassSettingNumberRow(props: {
                         max={props.max}
                         step={props.step}
                         value={props.value}
-                        onChange={handleChange}
+                        onChange={handleRangeChange}
                     />
                 )}
                 <div className="settings-glass-value-group">
-                    <UiTextInput
+                    <UiNumberInput
                         className="settings-compact-number-input"
                         controlSize="compact"
                         variant="settings"
-                        type="number"
                         min={props.min}
                         max={props.max}
                         step={props.step}
                         value={props.value}
-                        onChange={handleChange}
+                        parseValue={parseValue}
+                        onValueChange={handleValueChange}
                     />
                     <span className="settings-glass-value-suffix">{props.suffix}</span>
                 </div>

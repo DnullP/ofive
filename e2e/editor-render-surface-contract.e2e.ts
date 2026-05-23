@@ -172,6 +172,70 @@ async function getActiveEditorDocText(page: Page): Promise<string> {
     });
 }
 
+async function readListTextAlignment(
+    page: Page,
+    contentText: string,
+    kind: "unordered" | "ordered" | "task",
+    editing: boolean,
+): Promise<{
+    textLeft: number;
+    markerText: string | null;
+}> {
+    return page.evaluate(({ targetText, listKind, shouldReadEditing }) => {
+        const activeCard = document.querySelector<HTMLElement>(".layout-v2-tab-section__card--active");
+        if (!activeCard) {
+            throw new Error("Active tab card not found.");
+        }
+
+        const lines = Array.from(activeCard.querySelectorAll<HTMLElement>(".cm-line"));
+        const line = lines.find((candidate) => {
+            if (!candidate.textContent?.includes(targetText)) {
+                return false;
+            }
+
+            if (shouldReadEditing) {
+                return candidate.classList.contains(`cm-list-source-line-${listKind}`);
+            }
+
+            return candidate.querySelector(".cm-rendered-list-item") !== null;
+        });
+        if (!line) {
+            throw new Error(`List line not found: ${targetText}`);
+        }
+
+        const markerText = shouldReadEditing
+            ? Array.from(line.querySelectorAll<HTMLElement>(".cm-list-syntax-marker-source"))
+                .map((marker) => marker.textContent ?? "")
+                .join("")
+            : null;
+
+        const range = document.createRange();
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+        let textNode: Text | null = null;
+        while (walker.nextNode()) {
+            const candidate = walker.currentNode as Text;
+            if (candidate.nodeValue?.includes(targetText)) {
+                textNode = candidate;
+                break;
+            }
+        }
+        if (!textNode) {
+            throw new Error(`List text node not found: ${targetText}`);
+        }
+
+        const textIndex = textNode.nodeValue?.indexOf(targetText) ?? -1;
+        range.setStart(textNode, textIndex);
+        range.setEnd(textNode, textIndex + targetText.length);
+        const rect = range.getBoundingClientRect();
+        range.detach();
+
+        return {
+            textLeft: rect.left,
+            markerText,
+        };
+    }, { targetText: contentText, listKind: kind, shouldReadEditing: editing });
+}
+
 async function dispatchPreviewHoverOnFirstWikiLink(page: Page): Promise<void> {
     await page.evaluate(() => {
         const activeCard = document.querySelector<HTMLElement>(".layout-v2-tab-section__card--active");
@@ -260,5 +324,52 @@ test.describe("editor render surface contract", () => {
         await page.keyboard.type(" [[gu");
         await expect(page.locator(".cm-wikilink-suggest-popup")).toBeVisible();
         await expect(page.locator(".cm-wikilink-suggest-item").first()).toContainText(/guide/i);
+    });
+
+    test("列表展开源码后正文起点应与渲染态对齐", async ({ page }) => {
+        await waitForMockWorkbench(page);
+        await openGuideNote(page);
+        await replaceActiveEditorDoc(
+            page,
+            [
+                "Intro",
+                "- Aligned unordered",
+                "1. Aligned ordered",
+                "- [ ] Aligned task",
+                "",
+                "Plain tail",
+            ].join("\n"),
+            "Plain tail",
+        );
+
+        const cases: Array<{
+            kind: "unordered" | "ordered" | "task";
+            text: string;
+            markerText: string;
+        }> = [
+            { kind: "unordered", text: "Aligned unordered", markerText: "- " },
+            { kind: "ordered", text: "Aligned ordered", markerText: "1. " },
+            { kind: "task", text: "Aligned task", markerText: "- [ ] " },
+        ];
+
+        const renderedAlignments = new Map<string, number>();
+        for (const entry of cases) {
+            renderedAlignments.set(
+                entry.text,
+                (await readListTextAlignment(page, entry.text, entry.kind, false)).textLeft,
+            );
+        }
+
+        for (const entry of cases) {
+            await setActiveEditorSelectionToNeedleEnd(page, entry.text);
+            await page.locator(`.layout-v2-tab-section__card--active .cm-line.cm-list-source-line-${entry.kind}`, {
+                hasText: entry.text,
+            }).waitFor({ state: "visible" });
+
+            const sourceAlignment = await readListTextAlignment(page, entry.text, entry.kind, true);
+            expect(sourceAlignment.markerText).toBe(entry.markerText);
+            expect(Math.abs(sourceAlignment.textLeft - renderedAlignments.get(entry.text)!))
+                .toBeLessThanOrEqual(1);
+        }
     });
 });

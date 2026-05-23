@@ -62,6 +62,7 @@ import {
 } from "../editor/activeBacklinkTargetStore";
 import { resetEditorContext } from "../editor/editorContextStore";
 import { requestApplicationQuit } from "../commands/systemShortcutSubsystem";
+import { requestApplicationReload } from "../lifecycle/appLifecycle";
 import {
     getSidebarLayoutFromVaultConfig,
     saveSidebarLayoutSnapshot,
@@ -1186,6 +1187,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             return true;
         },
         quitApplication: () => requestApplicationQuit(),
+        reloadApplication: () => requestApplicationReload(),
         getFileTreeSelectedItem: resolveFocusedFileTreeSelectedItem,
         getFileTreePasteTargetDirectory: resolveFocusedFileTreePasteTargetDirectory,
         requestDeleteConfirmation: requestVaultDeleteConfirmation,

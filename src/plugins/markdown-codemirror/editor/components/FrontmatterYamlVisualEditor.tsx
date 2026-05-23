@@ -43,6 +43,7 @@ import {
     createImeCompositionGuard,
     shouldSubmitPlainEnter,
 } from "../../../../utils/imeInputGuard";
+import { UiNumberInput } from "../../../../host/ui";
 import "./FrontmatterYamlVisualEditor.css";
 
 const FRONTMATTER_FIELD_CONTEXT_MENU_ID = "frontmatter.field";
@@ -1377,17 +1378,25 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
 
         if (typeof value === "number") {
             return (
-                <input
+                <UiNumberInput
                     className="fmv-input fmv-input-number"
                     data-frontmatter-field-focusable="true"
                     data-frontmatter-focus-role="value"
-                    type="number"
-                    value={String(value)}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                        const nextNumber = Number(event.target.value);
+                    controlSize="compact"
+                    variant="unstyled"
+                    value={value}
+                    parseValue={(rawValue) => {
+                        if (rawValue.trim().length === 0) {
+                            return null;
+                        }
+
+                        const nextNumber = Number(rawValue);
+                        return Number.isFinite(nextNumber) ? nextNumber : null;
+                    }}
+                    onValueChange={(nextNumber) => {
                         setRecordDraft((previous) => ({
                             ...previous,
-                            [key]: Number.isFinite(nextNumber) ? nextNumber : 0,
+                            [key]: nextNumber,
                         }));
                     }}
                     onCompositionStart={handleInputCompositionStart}
@@ -1685,12 +1694,6 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
                                         }}
                                         onKeyDown={(event) => {
                                             handleVimNavigationTargetKeyDown(event, key, value);
-                                        }}
-                                        onMouseDown={(event) => {
-                                            if (event.target === event.currentTarget) {
-                                                event.preventDefault();
-                                                event.currentTarget.focus();
-                                            }
                                         }}
                                     >
                                         <div className="fmv-field-meta">

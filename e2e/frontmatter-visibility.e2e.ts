@@ -323,6 +323,44 @@ test.describe("frontmatter 可见性", () => {
         expect(aliasState.hasListControl).toBe(true);
     });
 
+    test("frontmatter 字段行空白区域点击应进入值编辑态", async ({ page }) => {
+        await waitForMockLayoutReady(page);
+        await openMockFrontmatterNote(page);
+
+        const titleRow = page.locator(`${ACTIVE_FRONTMATTER_WIDGET_SELECTOR} [data-frontmatter-field-key="title"]`).first();
+        await expectVisibleWithPositiveRect(titleRow);
+
+        await titleRow.click({ position: { x: 460, y: 10 } });
+        await page.waitForFunction(() => {
+            const activeElement = document.activeElement as HTMLElement | null;
+            return activeElement?.matches?.(
+                '.layout-v2-tab-section__card--active [data-frontmatter-field-key="title"] [data-frontmatter-focus-role="value"].fmv-inline-text-control',
+            ) === true;
+        });
+
+        const focusState = await page.evaluate(() => {
+            const activeElement = document.activeElement as HTMLElement | null;
+            const valueControl = document.querySelector<HTMLTextAreaElement>(
+                '.layout-v2-tab-section__card--active [data-frontmatter-field-key="title"] [data-frontmatter-focus-role="value"].fmv-inline-text-control',
+            );
+
+            return {
+                activeTag: activeElement?.tagName ?? null,
+                activeParentFieldKey: activeElement?.closest?.("[data-frontmatter-field-key]")?.getAttribute("data-frontmatter-field-key") ?? null,
+                activeFocusRole: activeElement?.getAttribute?.("data-frontmatter-focus-role") ?? null,
+                selectionStart: valueControl?.selectionStart ?? null,
+                selectionEnd: valueControl?.selectionEnd ?? null,
+                valueLength: valueControl?.value.length ?? null,
+            };
+        });
+
+        expect(focusState.activeTag).toBe("TEXTAREA");
+        expect(focusState.activeParentFieldKey).toBe("title");
+        expect(focusState.activeFocusRole).toBe("value");
+        expect(focusState.selectionStart).toBe(focusState.valueLength);
+        expect(focusState.selectionEnd).toBe(focusState.valueLength);
+    });
+
     test("frontmatter 文本字段提交再按 j 不应展开源码或写入正文", async ({ page }) => {
         await waitForMockLayoutReady(page);
         await enableVimMode(page);

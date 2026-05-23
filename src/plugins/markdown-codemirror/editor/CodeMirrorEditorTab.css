@@ -143,11 +143,17 @@
    but the visual size must come from the whole `.cm-line`, not inline token
    spans, otherwise CodeMirror may split `#` and content into separate lines. */
 .cm-tab-editor .cm-line.cm-rendered-header-source-line {
+    position: relative;
     font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-weight: 700;
     color: var(--editor-header-text-color);
     line-height: 1.3;
+    padding-left: 6px;
     text-decoration: none;
+}
+
+.cm-tab-editor .cm-line.cm-rendered-header-source-line.cm-activeLine {
+    padding-left: 38px;
 }
 
 .cm-tab-editor .cm-line.cm-rendered-header-source-line span {
@@ -156,6 +162,15 @@
     color: inherit;
     line-height: inherit;
     text-decoration: none !important;
+}
+
+.cm-tab-editor .cm-line.cm-rendered-header-source-line .cm-rendered-header-source-marker {
+    position: absolute;
+    color: var(--editor-symbol-color);
+    opacity: 0.82;
+    white-space: pre;
+    transform: translateX(-100%);
+    text-shadow: 0 0 0.6px var(--editor-symbol-shadow-color);
 }
 
 /* Legacy safety net for any stale inline class left by old transactions. */
@@ -713,8 +728,37 @@
     user-select: none;
 }
 
-/* 编辑态列表语法 marker：仅抬高源码中的 `-` / `*` / `+` / `1.` 可见性，不影响普通正文。 */
+/* 编辑态列表行：源码 marker 可见，但正文仍从渲染态列表内容起点开始。 */
+.cm-tab-editor .cm-line.cm-list-source-line {
+    position: relative;
+    padding-left: calc(6px + 1.5em + 0.25em);
+}
+
+.cm-tab-editor .cm-line.cm-list-source-line-unordered {
+    padding-left: calc(6px + 1.25em + 0.25em);
+}
+
+.cm-tab-editor .cm-line.cm-list-source-line-task {
+    padding-left: calc(6px + 1.35em + 0.25em);
+}
+
+.cm-tab-editor .cm-line.cm-list-source-line.cm-activeLine {
+    padding-left: calc(38px + 1.5em + 0.25em);
+}
+
+.cm-tab-editor .cm-line.cm-list-source-line-unordered.cm-activeLine {
+    padding-left: calc(38px + 1.25em + 0.25em);
+}
+
+.cm-tab-editor .cm-line.cm-list-source-line-task.cm-activeLine {
+    padding-left: calc(38px + 1.35em + 0.25em);
+}
+
+/* 编辑态列表语法 marker：显示源码前缀，并让它不再挤压正文起点。 */
 .cm-tab-editor .cm-list-syntax-marker-source {
+    position: absolute;
+    transform: translateX(-100%);
+    white-space: pre;
     color: var(--editor-list-source-marker-color) !important;
     font-weight: 700;
     opacity: 1 !important;

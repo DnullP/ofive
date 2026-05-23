@@ -97,12 +97,14 @@ export interface CustomActivityRemovalRequestedBusEvent {
  * @field articleId - 目标文章 ID（通常为当前活跃 tab id）
  * @field path - 目标文件相对路径
  * @field line - 目标行号（1-based）
+ * @field scrollAlignment - 可选垂直滚动对齐方式；默认沿用各视图原有 reveal 策略。
  */
 export interface EditorRevealRequestedBusEvent {
     eventId: string;
     articleId: string;
     path: string;
     line: number;
+    scrollAlignment?: "center";
 }
 
 /**
@@ -510,6 +512,7 @@ export function emitEditorRevealRequestedEvent(payload: {
     articleId: string;
     path: string;
     line: number;
+    scrollAlignment?: "center";
 }): void {
     dispatchBusEvent("editor.reveal.requested", {
         eventId: nextFrontendEventId(),

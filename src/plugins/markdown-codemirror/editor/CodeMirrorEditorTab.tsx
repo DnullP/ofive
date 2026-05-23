@@ -78,6 +78,7 @@ import {
     setupVimEnhancedMotions,
 } from "./vimChineseMotionExtension";
 import { openFileInWorkbench } from "../../../host/layout/openFileService";
+import { requestApplicationReload } from "../../../host/lifecycle/appLifecycle";
 import {
     resolveMarkdownNoteTitle,
 } from "./noteTitleUtils";
@@ -262,6 +263,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
     const bindingsRef = useRef<Record<CommandId, string>>({
         "tab.closeFocused": "Ctrl+W",
         "app.quit": "Cmd+Q",
+        "app.reload": "Cmd+R",
         "sidebar.left.toggle": "Cmd+Shift+J",
         "sidebar.right.toggle": "Cmd+Shift+K",
         "file.saveFocused": "Cmd+S",
@@ -775,16 +777,22 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                 Math.max(1, totalLines),
             );
             const targetLine = view.state.doc.line(safeLineNumber);
+            const scrollY = payload.scrollAlignment === "center" ? "center" : "nearest";
 
             view.dispatch({
                 selection: { anchor: targetLine.from },
-                scrollIntoView: true,
+                effects: EditorView.scrollIntoView(targetLine.from, {
+                    y: scrollY,
+                    x: "nearest",
+                }),
             });
             if (displayModeRef.current === "edit") {
                 view.focus();
             } else {
                 window.requestAnimationFrame(() => {
-                    revealMarkdownReadViewLine(tabRootRef.current, safeLineNumber);
+                    revealMarkdownReadViewLine(tabRootRef.current, safeLineNumber, {
+                        block: payload.scrollAlignment === "center" ? "center" : "start",
+                    });
                 });
             }
 
@@ -793,6 +801,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                 path: payload.path,
                 line: payload.line,
                 safeLineNumber,
+                scrollAlignment: payload.scrollAlignment ?? null,
             });
         });
 
@@ -947,6 +956,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                     .filter((entry) => entry.path.endsWith(".md") || entry.path.endsWith(".markdown"))
                     .map((entry) => entry.path),
             requestDeleteConfirmation: requestVaultDeleteConfirmation,
+            reloadApplication: () => requestApplicationReload(),
             executeEditorNativeCommand,
         });
     };

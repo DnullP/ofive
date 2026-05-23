@@ -18,6 +18,7 @@
  * @exports
  *  - startAutoSaveService: 启动自动保存服务（订阅事件并开始调度）
  *  - stopAutoSaveService: 停止自动保存服务（取消订阅并清理定时器）
+ *  - stopAutoSaveServiceAsync: 停止自动保存服务并等待待保存内容写回
  *  - flushAutoSave: 立即保存所有待保存内容（用于编辑器失焦或应用退出前）
  *  - useAutoSaveLifecycle: React Hook，在组件挂载时启动，卸载时停止
  *  - getAutoSaveServiceState: 获取当前服务内部状态快照（仅测试/调试用）
@@ -355,7 +356,7 @@ export function startAutoSaveService(): void {
  * @description 停止自动保存服务：取消事件订阅，立即保存所有待保存内容，清理状态。
  * @sideEffects 设置 running = false，清理订阅和定时器，flush 所有待保存项。
  */
-export function stopAutoSaveService(): void {
+export async function stopAutoSaveServiceAsync(): Promise<void> {
     if (!running) {
         return;
     }
@@ -377,14 +378,22 @@ export function stopAutoSaveService(): void {
         unsubscribeVaultBeforeChangeEvent = null;
     }
 
-    // 停止前 flush 所有待保存内容
-    const flushing = Array.from(pendingMap.keys()).map((path) => flushEntry(path));
-    void Promise.all(flushing).then(() => {
-        console.info("[auto-save] service stopped, all pending flushed");
-    });
-
-    // 清理内部缓存
+    await flushAutoSave();
     lastSavedContentMap.clear();
+    console.info("[auto-save] service stopped, all pending flushed");
+}
+
+/**
+ * @function stopAutoSaveService
+ * @description 停止自动保存服务：取消事件订阅并异步写回待保存内容。
+ * @sideEffects 设置 running = false，清理订阅和定时器，flush 所有待保存项。
+ */
+export function stopAutoSaveService(): void {
+    void stopAutoSaveServiceAsync().catch((error) => {
+        console.error("[auto-save] service stop failed", {
+            message: error instanceof Error ? error.message : String(error),
+        });
+    });
 }
 
 /**

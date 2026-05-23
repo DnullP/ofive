@@ -31,6 +31,11 @@ import {
     buildKnowledgeGraphConfig,
     type KnowledgeGraphNodeColorGroup,
 } from "./knowledgeGraphSettings";
+import {
+    buildKnowledgeGraphHoverLinkStyle,
+    buildKnowledgeGraphHoverSelection,
+    type KnowledgeGraphRgbaColor,
+} from "./knowledgeGraphHoverHighlight";
 import type { GraphLabelItem, VisibleGraphLabel } from "./knowledgeGraphLabelSelector";
 import { KnowledgeGraphCanvasLabelRenderer } from "./knowledgeGraphCanvasLabelRenderer";
 import {
@@ -97,14 +102,25 @@ interface KnowledgeGraphPerfTestHook {
     renderFrame: (alpha?: number) => void;
     /** 将指定节点设为聚焦点，稳定触发节点高亮环渲染。 */
     focusPoint: (index: number | null) => void;
+    /** 将指定节点设为 hover 点，供交互高亮回归测试采样。 */
+    hoverPoint: (index: number | null) => void;
     /** 采样指定节点附近画布像素能量，用于锁定节点/高亮环渲染是否发生。 */
     samplePointPixelEnergy: (index: number, radius?: number) => {
         alpha: number;
         brightness: number;
+        maxContrast: number;
+        meanContrast: number;
+        nonBackgroundPixelCount: number;
         sampleCount: number;
     } | null;
     /** 读取当前节点颜色数组，供染色规则 e2e 验证。 */
     getPointColors: () => number[];
+    /** 读取当前边颜色数组，供 hover 高亮 e2e 验证。 */
+    getLinkColors: () => number[];
+    /** 读取当前边宽度数组，供 hover 高亮 e2e 验证。 */
+    getLinkWidths: () => number[];
+    /** 读取当前 Cosmos selection 索引，供 hover 一跳邻居 e2e 验证。 */
+    getSelectedIndices: () => number[];
     /** 读取当前图谱渲染设置摘要，供实时设置 e2e 验证。 */
     getRenderSettings: () => {
         linkDefaultWidth: number;
@@ -177,6 +193,20 @@ const LABEL_FADE_RANGE = 0.15;
 const ZOOM_IN_SCALE_AFTER_FIT = 1.2;
 
 const DEFAULT_COLOR_GROUP_COLOR = "#ff5252";
+
+const HOVER_NODE_GREYOUT_OPACITY = 0.16;
+
+const HOVER_LINK_GREYOUT_OPACITY = 0.08;
+
+const HOVER_LINK_DIM_ALPHA = 0.18;
+
+const HOVER_LINK_ACTIVE_ALPHA = 1;
+
+const HOVER_LINK_WIDTH_MULTIPLIER = 2.4;
+
+const HOVER_END_RESUME_ALPHA = 0.08;
+
+const COSMOS_DEFAULT_LINK_GREYOUT_OPACITY = 0.1;
 
 interface KnowledgeGraphColorQueryInputProps {
     group: KnowledgeGraphNodeColorGroup;
@@ -431,6 +461,86 @@ function computeLabelOpacity(currentZoom: number, threshold: number): number {
     return (currentZoom - threshold) / LABEL_FADE_RANGE;
 }
 
+function normalizeCanvasColorChannel(value: number | undefined): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+        return 0;
+    }
+
+    return Math.max(0, Math.min(1, value));
+}
+
+/**
+ * @function parseGraphColor
+ * @description 将 Cosmos 配置色解析成 0..1 RGBA，供动态 linkColors 使用。
+ * @param colorValue 颜色配置。
+ * @returns RGBA 元组。
+ */
+function parseGraphColor(
+    colorValue: GraphConfigInterface["linkDefaultColor"],
+): KnowledgeGraphRgbaColor {
+    if (Array.isArray(colorValue)) {
+        const [red, green, blue, alpha] = colorValue;
+        const normalizeRgbChannel = (value: number | undefined): number => {
+            if (typeof value !== "number" || !Number.isFinite(value)) {
+                return 0;
+            }
+
+            return value > 1
+                ? Math.max(0, Math.min(255, value)) / 255
+                : normalizeCanvasColorChannel(value);
+        };
+
+        return [
+            normalizeRgbChannel(red),
+            normalizeRgbChannel(green),
+            normalizeRgbChannel(blue),
+            normalizeCanvasColorChannel(alpha ?? 1),
+        ];
+    }
+
+    if (typeof document === "undefined") {
+        return [1, 1, 1, 1];
+    }
+
+    const probe = document.createElement("canvas");
+    const context = probe.getContext("2d");
+    if (!context || typeof colorValue !== "string" || colorValue.trim().length === 0) {
+        return [1, 1, 1, 1];
+    }
+
+    context.fillStyle = "#ffffff";
+    context.fillStyle = colorValue;
+    const normalized = context.fillStyle.trim();
+    const rgbaMatch = normalized.match(
+        /^rgba?\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)(?:,\s*(\d+(?:\.\d+)?))?\)$/i,
+    );
+    if (!rgbaMatch) {
+        const hexMatch = normalized.match(/^#([0-9a-f]{6}|[0-9a-f]{8})$/i);
+        const hex = hexMatch?.[1];
+        if (!hex) {
+            return [1, 1, 1, 1];
+        }
+
+        const alpha = hex.length === 8
+            ? Number.parseInt(hex.slice(6, 8), 16) / 255
+            : 1;
+        return [
+            Number.parseInt(hex.slice(0, 2), 16) / 255,
+            Number.parseInt(hex.slice(2, 4), 16) / 255,
+            Number.parseInt(hex.slice(4, 6), 16) / 255,
+            alpha,
+        ];
+    }
+
+    const [, red, green, blue, alpha] = rgbaMatch;
+    return [
+        Math.max(0, Math.min(255, Number(red))) / 255,
+        Math.max(0, Math.min(255, Number(green))) / 255,
+        Math.max(0, Math.min(255, Number(blue))) / 255,
+        alpha === undefined ? 1 : normalizeCanvasColorChannel(Number(alpha)),
+    ];
+}
+
 /**
  * @function createVisibleSpaceBounds
  * @description 根据当前屏幕视口生成图谱空间内的可见边界。
@@ -491,6 +601,8 @@ export function KnowledgeGraphTab(
     const nodePathsByIndexRef = useRef<Map<number, string>>(new Map());
     /** 标签显示缩放阈值引用，供交互回调闭包读取最新值 */
     const labelVisibleZoomLevelRef = useRef<number>(graphSettings.labelVisibleZoomLevel);
+    const hoveredNodeIndexRef = useRef<number | null>(null);
+    const shouldResumeSimulationAfterHoverRef = useRef(false);
     const [state, setState] = useState<GraphTabState>({
         loading: true,
         error: null,
@@ -560,6 +672,9 @@ export function KnowledgeGraphTab(
         const samplePointPixelEnergy = (index: number, radius = 8): {
             alpha: number;
             brightness: number;
+            maxContrast: number;
+            meanContrast: number;
+            nonBackgroundPixelCount: number;
             sampleCount: number;
         } | null => {
             const hostElement = hostRef.current;
@@ -598,6 +713,36 @@ export function KnowledgeGraphTab(
                 return null;
             }
 
+            const sampleRegionAverage = (
+                left: number,
+                top: number,
+                regionWidth: number,
+                regionHeight: number,
+            ): [number, number, number, number] => {
+                const region = context.getImageData(left, top, regionWidth, regionHeight);
+                const data = region.data;
+                let red = 0;
+                let green = 0;
+                let blue = 0;
+                let alpha = 0;
+                for (let offset = 0; offset < data.length; offset += 4) {
+                    red += data[offset] ?? 0;
+                    green += data[offset + 1] ?? 0;
+                    blue += data[offset + 2] ?? 0;
+                    alpha += data[offset + 3] ?? 0;
+                }
+
+                const pixelCount = Math.max(1, data.length / 4);
+                return [
+                    red / pixelCount,
+                    green / pixelCount,
+                    blue / pixelCount,
+                    alpha / pixelCount,
+                ];
+            };
+
+            const backgroundRegionSize = Math.max(1, Math.min(16, width, height));
+            const backgroundColor = sampleRegionAverage(0, 0, backgroundRegionSize, backgroundRegionSize);
             const imageData = context.getImageData(
                 startX,
                 startY,
@@ -606,21 +751,37 @@ export function KnowledgeGraphTab(
             );
             let alphaTotal = 0;
             let brightnessTotal = 0;
+            let contrastTotal = 0;
+            let maxContrast = 0;
+            let nonBackgroundPixelCount = 0;
             const data = imageData.data;
             for (let offset = 0; offset < data.length; offset += 4) {
                 const alpha = data[offset + 3] ?? 0;
+                const red = data[offset] ?? 0;
+                const green = data[offset + 1] ?? 0;
+                const blue = data[offset + 2] ?? 0;
                 alphaTotal += alpha;
-                brightnessTotal += (
-                    (data[offset] ?? 0)
-                    + (data[offset + 1] ?? 0)
-                    + (data[offset + 2] ?? 0)
-                ) / 3;
+                brightnessTotal += (red + green + blue) / 3;
+                const contrast = Math.max(
+                    Math.abs(red - backgroundColor[0]),
+                    Math.abs(green - backgroundColor[1]),
+                    Math.abs(blue - backgroundColor[2]),
+                    Math.abs(alpha - backgroundColor[3]),
+                );
+                contrastTotal += contrast;
+                maxContrast = Math.max(maxContrast, contrast);
+                if (contrast > 8) {
+                    nonBackgroundPixelCount += 1;
+                }
             }
 
             const sampleCount = data.length / 4;
             return {
                 alpha: alphaTotal / sampleCount,
                 brightness: brightnessTotal / sampleCount,
+                maxContrast,
+                meanContrast: contrastTotal / sampleCount,
+                nonBackgroundPixelCount,
                 sampleCount,
             };
         };
@@ -657,10 +818,11 @@ export function KnowledgeGraphTab(
             },
             startSimulation: (alpha = 0.18) => {
                 graph.start(alpha);
+                graph.render(alpha);
                 scheduleLabelLayoutUpdate(graph);
             },
-            renderFrame: (alpha = 0) => {
-                graph.render(alpha);
+            renderFrame: (alpha?: number) => {
+                graph.render(alpha ?? (graph.isSimulationRunning ? undefined : 0));
                 scheduleLabelLayoutUpdate(graph);
             },
             focusPoint: (index: number | null) => {
@@ -670,8 +832,19 @@ export function KnowledgeGraphTab(
                 graph.render(0);
                 scheduleLabelLayoutUpdate(graph);
             },
+            hoverPoint: (index: number | null) => {
+                if (index === null) {
+                    clearGraphHover(graph);
+                    return;
+                }
+
+                applyGraphHover(graph, index);
+            },
             samplePointPixelEnergy,
             getPointColors: () => Array.from(graph.getPointColors()),
+            getLinkColors: () => Array.from(graph.getLinkColors()),
+            getLinkWidths: () => Array.from(graph.getLinkWidths()),
+            getSelectedIndices: () => graph.getSelectedIndices() ?? [],
             getRenderSettings: () => {
                 const currentSettings = graphSettingsRef.current;
                 return {
@@ -722,17 +895,23 @@ export function KnowledgeGraphTab(
             const labelRenderer = labelRendererRef.current;
             labelRenderer.setTotalLabelCount(labelItemsRef.current.length);
 
-            const currentZoom = graph.getZoomLevel();
-            const threshold = labelVisibleZoomLevelRef.current;
-            const opacity = computeLabelOpacity(currentZoom, threshold);
-
-            if (opacity <= 0) {
+            const labelItems = labelItemsRef.current;
+            if (labelItems.length === 0) {
                 labelRenderer.reset();
                 return;
             }
 
-            const labelItems = labelItemsRef.current;
-            if (labelItems.length === 0) {
+            const hoveredNodeIndex = hoveredNodeIndexRef.current;
+            const hoveredLabelItem = hoveredNodeIndex === null
+                ? undefined
+                : labelItems.find((item) => item.index === hoveredNodeIndex);
+            const currentZoom = graph.getZoomLevel();
+            const threshold = labelVisibleZoomLevelRef.current;
+            const opacity = hoveredLabelItem
+                ? 1
+                : computeLabelOpacity(currentZoom, threshold);
+
+            if (opacity <= 0) {
                 labelRenderer.reset();
                 return;
             }
@@ -747,7 +926,7 @@ export function KnowledgeGraphTab(
             );
             const nextVisibleLabels: VisibleGraphLabel[] = [];
 
-            labelItems.forEach((item) => {
+            const pushVisibleLabel = (item: GraphLabelItem): void => {
                 const x = pointPositions[item.index * 2];
                 const y = pointPositions[item.index * 2 + 1];
                 if (x === undefined || y === undefined) {
@@ -782,7 +961,13 @@ export function KnowledgeGraphTab(
                     screenX,
                     screenY,
                 });
-            });
+            };
+
+            if (hoveredLabelItem) {
+                pushVisibleLabel(hoveredLabelItem);
+            } else {
+                labelItems.forEach(pushVisibleLabel);
+            }
 
             labelRenderer.render(nextVisibleLabels, opacity, viewWidth, viewHeight);
         });
@@ -844,6 +1029,78 @@ export function KnowledgeGraphTab(
         scheduleLabelLayoutUpdate(graph);
     };
 
+    const applyDefaultGraphLinkAppearance = (graph: Graph): void => {
+        const currentConfig = buildKnowledgeGraphConfig(graphSettingsRef.current);
+        graph.setLinkColors(new Float32Array());
+        graph.setLinkWidths(new Float32Array());
+        graph.setConfig({
+            linkGreyoutOpacity: currentConfig.linkGreyoutOpacity ?? COSMOS_DEFAULT_LINK_GREYOUT_OPACITY,
+        });
+    };
+
+    const applyGraphHover = (graph: Graph, index: number): void => {
+        if (hoveredNodeIndexRef.current === index) {
+            return;
+        }
+
+        const hoveredSelection = buildKnowledgeGraphHoverSelection(
+            graphNodesRef.current.length,
+            graphLinksRef.current,
+            index,
+        );
+        if (hoveredSelection.length === 0) {
+            return;
+        }
+
+        const currentConfig = buildKnowledgeGraphConfig(graphSettingsRef.current);
+        const linkStyle = buildKnowledgeGraphHoverLinkStyle({
+            links: graphLinksRef.current,
+            hoveredNodeIndex: index,
+            baseLinkWidth: graphSettingsRef.current.linkDefaultWidth,
+            defaultLinkColor: parseGraphColor(currentConfig.linkDefaultColor),
+            activeLinkColor: parseGraphColor(currentConfig.hoveredLinkColor ?? currentConfig.linkDefaultColor),
+            dimLinkAlpha: HOVER_LINK_DIM_ALPHA,
+            activeLinkAlpha: HOVER_LINK_ACTIVE_ALPHA,
+            activeLinkWidthMultiplier: HOVER_LINK_WIDTH_MULTIPLIER,
+        });
+
+        hoveredNodeIndexRef.current = index;
+        shouldResumeSimulationAfterHoverRef.current =
+            shouldResumeSimulationAfterHoverRef.current || graph.isSimulationRunning;
+        graph.stop();
+        graph.setConfig({
+            focusedPointIndex: index,
+            linkGreyoutOpacity: HOVER_LINK_GREYOUT_OPACITY,
+            pointGreyoutOpacity: HOVER_NODE_GREYOUT_OPACITY,
+        });
+        graph.selectPointsByIndices(hoveredSelection);
+        graph.setLinkColors(linkStyle.linkColors);
+        graph.setLinkWidths(linkStyle.linkWidths);
+        graph.render(0);
+        scheduleLabelLayoutUpdate(graph);
+    };
+
+    const clearGraphHover = (graph: Graph): void => {
+        if (hoveredNodeIndexRef.current === null) {
+            return;
+        }
+
+        hoveredNodeIndexRef.current = null;
+        graph.unselectPoints();
+        graph.setConfig({
+            focusedPointIndex: undefined,
+            pointGreyoutOpacity: undefined,
+        });
+        applyDefaultGraphLinkAppearance(graph);
+        const shouldResumeSimulation = shouldResumeSimulationAfterHoverRef.current;
+        if (shouldResumeSimulation) {
+            shouldResumeSimulationAfterHoverRef.current = false;
+            graph.start(HOVER_END_RESUME_ALPHA);
+        }
+        graph.render(shouldResumeSimulation ? undefined : 0);
+        scheduleLabelLayoutUpdate(graph);
+    };
+
     useEffect(() => {
         const hostElement = hostRef.current;
         if (!hostElement) {
@@ -882,6 +1139,12 @@ export function KnowledgeGraphTab(
             ) => {
                 void handleNodeClick(index, pointPosition, event);
             },
+            onPointMouseOver: (index: number) => {
+                applyGraphHover(graph, index);
+            },
+            onPointMouseOut: () => {
+                clearGraphHover(graph);
+            },
         });
 
         graphRef.current = graph;
@@ -917,6 +1180,11 @@ export function KnowledgeGraphTab(
 
         graph.setConfig(graphConfig);
         applyGraphNodeAppearance(graph);
+        if (hoveredNodeIndexRef.current !== null) {
+            const hoveredNodeIndex = hoveredNodeIndexRef.current;
+            hoveredNodeIndexRef.current = null;
+            applyGraphHover(graph, hoveredNodeIndex);
+        }
         registerPerfTestHook(graph);
         scheduleLabelLayoutUpdate(graph);
         console.info("[knowledge-graph] graph config updated by settings");
@@ -929,6 +1197,11 @@ export function KnowledgeGraphTab(
         }
 
         applyGraphNodeAppearance(graph);
+        if (hoveredNodeIndexRef.current !== null) {
+            const hoveredNodeIndex = hoveredNodeIndexRef.current;
+            hoveredNodeIndexRef.current = null;
+            applyGraphHover(graph, hoveredNodeIndex);
+        }
         registerPerfTestHook(graph);
     }, [graphSettings.pointDefaultSize, graphSettings.nodeColorGroups]);
 
@@ -1038,9 +1311,13 @@ export function KnowledgeGraphTab(
                 labelRendererRef.current?.setTotalLabelCount(nextLabels.length);
 
                 graph.stop();
+                hoveredNodeIndexRef.current = null;
+                shouldResumeSimulationAfterHoverRef.current = false;
+                graph.unselectPoints();
                 graph.setPointPositions(positions);
                 applyGraphNodeAppearance(graph);
                 graph.setLinks(new Float32Array(linksArray));
+                applyDefaultGraphLinkAppearance(graph);
                 graph.render(0.12);
                 graph.start(0.12);
                 if (response.nodes.length > 0) {
@@ -1076,6 +1353,11 @@ export function KnowledgeGraphTab(
                 }
                 labelItemsRef.current = [];
                 graphNodesRef.current = [];
+                graphLinksRef.current = [];
+                hoveredNodeIndexRef.current = null;
+                shouldResumeSimulationAfterHoverRef.current = false;
+                graph.unselectPoints();
+                applyDefaultGraphLinkAppearance(graph);
                 setSuggestionNodes([]);
                 labelRendererRef.current?.setTotalLabelCount(0);
                 labelRendererRef.current?.reset();

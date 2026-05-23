@@ -130,6 +130,48 @@ function isViewAlive(view: EditorView): boolean {
     return view.dom.isConnected;
 }
 
+function isDirectFrontmatterBlankClickControl(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) {
+        return false;
+    }
+
+    return Boolean(
+        target.closest(
+            "button, input, textarea, select, [contenteditable='true'], .fmv-field-suggest-popup",
+        ),
+    );
+}
+
+function focusFrontmatterRowValueFromBlankClick(event: MouseEvent): void {
+    if (isDirectFrontmatterBlankClickControl(event.target)) {
+        return;
+    }
+
+    const target = event.target instanceof Element ? event.target : null;
+    const rowElement = target?.closest<HTMLElement>("[data-frontmatter-field-key]");
+    if (!rowElement) {
+        return;
+    }
+
+    const valueTarget = rowElement.querySelector<HTMLElement>("[data-frontmatter-focus-role='value']");
+    const keyTarget = rowElement.querySelector<HTMLElement>("[data-frontmatter-focus-role='key']");
+    const focusTarget = valueTarget ?? keyTarget;
+    if (!focusTarget) {
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    window.requestAnimationFrame(() => {
+        focusTarget.focus();
+        if (focusTarget instanceof HTMLInputElement || focusTarget instanceof HTMLTextAreaElement) {
+            const caretOffset = focusTarget.value.length;
+            focusTarget.setSelectionRange(caretOffset, caretOffset);
+        }
+    });
+}
+
 function scheduleFrontmatterNavigationRedirect(
     view: EditorView,
     onRequestFocusVimNavigation?: (position: "first" | "last") => void,
@@ -356,6 +398,9 @@ class FrontmatterYamlWidget extends WidgetType {
         // 若此处抛出异常，DocView 构造中断，docView 永远不被赋值，
         // 而已调度的 cursorLayer RAF 会访问 undefined 的 docView 导致 TypeError。
         try {
+            wrapper.addEventListener("click", focusFrontmatterRowValueFromBlankClick, {
+                capture: true,
+            });
             this.root = createRoot(wrapper);
             this.root.render(
                 createElement(FrontmatterYamlVisualEditor, {
@@ -384,7 +429,10 @@ class FrontmatterYamlWidget extends WidgetType {
         }
     }
 
-    ignoreEvent(): boolean {
+    ignoreEvent(event: Event): boolean {
+        if (event instanceof MouseEvent && event.type === "mousedown") {
+            focusFrontmatterRowValueFromBlankClick(event);
+        }
         return true;
     }
 }

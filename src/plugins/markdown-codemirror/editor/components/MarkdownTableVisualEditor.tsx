@@ -88,6 +88,9 @@ import "./MarkdownTableVisualEditor.css";
 const TABLE_WIDGET_EDITOR_FOCUS_CLASS = "cm-table-widget-focused";
 const WIKILINK_SUGGEST_DEBOUNCE_MS = 150;
 const WIKILINK_SUGGEST_MAX_ITEMS = 15;
+const CONTEXT_MENU_VIEWPORT_MARGIN = 8;
+const CONTEXT_MENU_ESTIMATED_WIDTH = 220;
+const CONTEXT_MENU_ESTIMATED_HEIGHT = 116;
 
 /**
  * @interface TableWikiLinkSuggestState
@@ -153,6 +156,30 @@ type TableDragState = {
     fromIndex: number;
     overIndex: number;
 } | null;
+
+function clampContextMenuCoordinate(
+    value: number,
+    viewportSize: number,
+    estimatedMenuSize: number,
+): number {
+    if (!Number.isFinite(viewportSize) || viewportSize <= 0) {
+        return value;
+    }
+
+    const maxValue = viewportSize - estimatedMenuSize - CONTEXT_MENU_VIEWPORT_MARGIN;
+    return Math.max(CONTEXT_MENU_VIEWPORT_MARGIN, Math.min(value, maxValue));
+}
+
+function resolveContextMenuPosition(clientX: number, clientY: number): { x: number; y: number } {
+    if (typeof window === "undefined") {
+        return { x: clientX, y: clientY };
+    }
+
+    return {
+        x: clampContextMenuCoordinate(clientX, window.innerWidth, CONTEXT_MENU_ESTIMATED_WIDTH),
+        y: clampContextMenuCoordinate(clientY, window.innerHeight, CONTEXT_MENU_ESTIMATED_HEIGHT),
+    };
+}
 
 interface TableResizeDragState {
     kind: "column" | "row";
@@ -1539,10 +1566,11 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         event.stopPropagation();
         closeWikiLinkSuggest();
         setEdgeSelection(selection);
+        const position = resolveContextMenuPosition(event.clientX, event.clientY);
         setContextMenuState({
             ...selection,
-            x: event.clientX,
-            y: event.clientY,
+            x: position.x,
+            y: position.y,
         });
     };
 

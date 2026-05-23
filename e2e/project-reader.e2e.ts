@@ -175,7 +175,7 @@ test.describe("project reader", () => {
         await expect(codeTab.locator(".project-reader-code-reference")).toHaveCount(0);
 
         let backlinksPaneBody = await openBacklinksPanel(page);
-        await expect(backlinksPaneBody.locator(".backlinks-panel-header")).toContainText("src/main.ts");
+        await expect(backlinksPaneBody.locator(".backlinks-count")).toBeVisible();
         await expect(backlinksPaneBody.locator(".backlinks-item").filter({ hasText: "note1.md" })).toBeVisible();
         await backlinksPaneBody.locator(".backlinks-item").filter({ hasText: "note1.md" }).first().click();
         await waitForVisibleEditorTitle(page, "note1");
@@ -220,7 +220,7 @@ test.describe("project reader", () => {
         await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/alternate.ts");
 
         backlinksPaneBody = await openBacklinksPanel(page);
-        await expect(backlinksPaneBody.locator(".backlinks-panel-header")).toContainText("src/alternate.ts");
+        await expect(backlinksPaneBody.locator(".backlinks-count")).toBeVisible();
         await expect(backlinksPaneBody.locator(".backlinks-item").filter({ hasText: "note2.md" })).toBeVisible();
         await backlinksPaneBody.locator(".backlinks-item").filter({ hasText: "note2.md" }).first().click();
         await waitForVisibleEditorTitle(page, "note2");
@@ -279,7 +279,7 @@ test.describe("project reader", () => {
 
         const paneBody = await openBacklinksPanel(page);
 
-        await expect(paneBody.locator(".backlinks-panel-header")).toContainText("src/main.ts");
+        await expect(paneBody.locator(".backlinks-count")).toBeVisible();
         await expect(paneBody.locator(".backlinks-item").filter({ hasText: "note1.md" })).toBeVisible();
         await expect(paneBody.locator(".backlinks-item").filter({ hasText: "createMainRuntime" })).toBeVisible();
 

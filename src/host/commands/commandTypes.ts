@@ -37,6 +37,7 @@ import type { ShortcutBindingPolicy } from "./shortcutPolicies";
 export type BuiltinCommandId =
     | "tab.closeFocused"
     | "app.quit"
+    | "app.reload"
     | "sidebar.left.toggle"
     | "sidebar.right.toggle"
     | "file.saveFocused"
@@ -179,6 +180,8 @@ export interface CommandContext {
     executeEditorNativeCommand?: (commandId: EditorNativeCommandId) => boolean;
     /** 退出应用 */
     quitApplication?: () => void | Promise<void>;
+    /** 重载应用 */
+    reloadApplication?: () => void | Promise<void>;
     /** 切换左侧边栏显示/隐藏 */
     toggleLeftSidebarVisibility?: () => void;
     /** 切换右侧边栏显示/隐藏 */

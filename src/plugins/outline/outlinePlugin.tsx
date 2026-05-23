@@ -54,7 +54,7 @@ const REFRESH_DEBOUNCE_MS = 200;
  *   从后端加载大纲标题并渲染列表。
  * @returns 面板 ReactNode。
  */
-function OutlinePanelPlugin(): ReactNode {
+export function OutlinePanelPlugin(): ReactNode {
     const activeEditor = useActiveEditor();
     const [headings, setHeadings] = useState<OutlineHeading[]>([]);
     const [loading, setLoading] = useState(false);
@@ -80,12 +80,14 @@ function OutlinePanelPlugin(): ReactNode {
             articleId: activeEditor.articleId,
             path: activeEditor.path,
             line: heading.line,
+            scrollAlignment: "center",
         });
 
         console.info("[outlinePlugin] reveal requested from outline item", {
             articleId: activeEditor.articleId,
             path: activeEditor.path,
             line: heading.line,
+            scrollAlignment: "center",
             text: heading.text,
         });
     }, [activeEditor]);
@@ -202,7 +204,6 @@ function OutlinePanelPlugin(): ReactNode {
     if (loading && headings.length === 0) {
         return (
             <div className="outline-panel">
-                <div className="outline-panel-header">{activeEditor.path}</div>
                 <div className="outline-empty">{t("outlinePlugin.loading")}</div>
             </div>
         );
@@ -212,7 +213,6 @@ function OutlinePanelPlugin(): ReactNode {
     if (error) {
         return (
             <div className="outline-panel">
-                <div className="outline-panel-header">{activeEditor.path}</div>
                 {/* outline-error: 错误提示文字 */}
                 <div className="outline-error">
                     {t("outlinePlugin.loadFailed", { message: error })}
@@ -224,13 +224,6 @@ function OutlinePanelPlugin(): ReactNode {
     /* ── 正常渲染 ── */
     return (
         <div className="outline-panel">
-            <div className="outline-panel-header">
-                {activeEditor.path}
-                {/* outline-persisted-hint: 提示面板展示的是已保存内容 */}
-                <span className="outline-persisted-hint">
-                    {t("outlinePlugin.persistedBasis")}
-                </span>
-            </div>
             {headings.length === 0 ? (
                 <div className="outline-empty">{t("outlinePlugin.noHeadings")}</div>
             ) : (
