@@ -51,12 +51,11 @@ import { useTranslation } from "react-i18next";
 import type { WorkbenchTabProps } from "../../host/layout/workbenchContracts";
 import {
     readVaultCanvasFile,
-    saveVaultCanvasFile,
 } from "../../api/vaultApi";
 import {
-    emitPersistedContentUpdatedEvent,
     subscribePersistedContentUpdatedEvent,
 } from "../../host/events/appEventBus";
+import { savePersistedCanvasContent } from "../../host/editor/persistedMarkdownContentSync";
 import { CreateEntryModal } from "../../host/layout/CreateEntryModal";
 import {
     hasWorkspaceFileDragPayloadFiles,
@@ -770,13 +769,12 @@ export function CanvasTab(props: WorkbenchTabProps<Record<string, unknown>>): Re
                 nodeCount: document.nodes.length,
                 edgeCount: document.edges.length,
             });
-            void saveVaultCanvasFile(path, serialized)
+            void savePersistedCanvasContent({
+                relativePath: path,
+                content: serialized,
+            })
                 .then(() => {
                     setDirty(false);
-                    emitPersistedContentUpdatedEvent({
-                        relativePath: path,
-                        source: "save",
-                    });
                     console.info("[canvasTab] autosave success", { path });
                 })
                 .catch((saveError) => {

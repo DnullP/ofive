@@ -26,6 +26,27 @@ function createMockGraph(): { graph: GraphRuntimeLike; starts: number[] } {
     };
 }
 
+function createMockRenderableGraph(): {
+    graph: GraphRuntimeLike;
+    starts: number[];
+    renders: number[];
+} {
+    const starts: number[] = [];
+    const renders: number[] = [];
+    return {
+        graph: {
+            start(alpha?: number) {
+                starts.push(alpha ?? 0);
+            },
+            render(alpha?: number) {
+                renders.push(alpha ?? 0);
+            },
+        },
+        starts,
+        renders,
+    };
+}
+
 describe("createKnowledgeGraphInteractionCallbacksFor", () => {
     test("graph 未就绪时回调不抛错且不执行补能", () => {
         const graphRef = { current: null as GraphRuntimeLike | null };
@@ -123,5 +144,43 @@ describe("createKnowledgeGraphInteractionCallbacksFor", () => {
         scheduled[0]?.task();
         expect(starts.includes(0.12)).toBeTrue();
         expect(dragTailTimerRef.current).toBeNull();
+    });
+
+    test("hover 静态模式下拖拽只同步标签不补能且不重绘", () => {
+        const { graph, starts, renders } = createMockRenderableGraph();
+        const graphRef = { current: graph as GraphRuntimeLike | null };
+        const dragTailTimerRef = { current: null as ReturnType<typeof setTimeout> | null };
+        const lastDragReheatTimeRef = { current: 0 };
+        const updatedGraphs: GraphRuntimeLike[] = [];
+
+        const callbacks = createKnowledgeGraphInteractionCallbacksFor({
+            graphRef,
+            dragTailTimerRef,
+            lastDragReheatTimeRef,
+            scheduleLabelLayoutUpdate: (instance) => {
+                updatedGraphs.push(instance);
+            },
+            shouldKeepDragStatic: () => true,
+            dragReheatConfig: {
+                startAlpha: 0.24,
+                moveAlpha: 0.08,
+                endAlpha: 0.12,
+                moveIntervalMs: 120,
+                endDelayMs: 80,
+            },
+            now: () => 1000,
+            setTimeoutImpl: (() => 1) as unknown as typeof setTimeout,
+            clearTimeoutImpl: (() => { }) as typeof clearTimeout,
+        });
+
+        callbacks.onDragStart();
+        callbacks.onDrag();
+        callbacks.onDragEnd();
+
+        expect(starts).toEqual([]);
+        expect(renders).toEqual([]);
+        expect(updatedGraphs.length).toBe(3);
+        expect(dragTailTimerRef.current).toBeNull();
+        expect(lastDragReheatTimeRef.current).toBe(0);
     });
 });

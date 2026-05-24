@@ -14,6 +14,7 @@ export interface KnowledgeGraphHoverLinkStyleInput {
     dimLinkAlpha: number;
     activeLinkAlpha: number;
     activeLinkWidthMultiplier: number;
+    transitionProgress?: number;
 }
 
 export interface KnowledgeGraphHoverLinkStyle {
@@ -37,6 +38,10 @@ function clamp01(value: number): number {
     }
 
     return Math.max(0, Math.min(1, value));
+}
+
+function lerp(from: number, to: number, progress: number): number {
+    return from + (to - from) * progress;
 }
 
 /**
@@ -92,8 +97,13 @@ export function buildKnowledgeGraphHoverLinkStyle(
     const linkColors = new Float32Array(linkCount * 4);
     const linkWidths = new Float32Array(linkCount);
     const safeBaseWidth = Math.max(0.1, input.baseLinkWidth);
-    const activeWidth = safeBaseWidth * Math.max(1, input.activeLinkWidthMultiplier);
-    const dimAlpha = clamp01(input.dimLinkAlpha);
+    const progress = clamp01(input.transitionProgress ?? 1);
+    const activeWidth = safeBaseWidth * lerp(
+        1,
+        Math.max(1, input.activeLinkWidthMultiplier),
+        progress,
+    );
+    const dimAlpha = lerp(1, clamp01(input.dimLinkAlpha), progress);
     const activeAlpha = clamp01(input.activeLinkAlpha);
     let incidentLinkCount = 0;
 
@@ -103,13 +113,15 @@ export function buildKnowledgeGraphHoverLinkStyle(
         const isIncident =
             sourceIndex === input.hoveredNodeIndex
             || targetIndex === input.hoveredNodeIndex;
-        const color = isIncident ? input.activeLinkColor : input.defaultLinkColor;
-        const alpha = isIncident ? activeAlpha : dimAlpha;
+        const colorProgress = isIncident ? progress : 0;
+        const alpha = isIncident
+            ? lerp(input.defaultLinkColor[3], input.activeLinkColor[3] * activeAlpha, progress)
+            : input.defaultLinkColor[3] * dimAlpha;
 
-        linkColors[linkIndex * 4] = color[0];
-        linkColors[linkIndex * 4 + 1] = color[1];
-        linkColors[linkIndex * 4 + 2] = color[2];
-        linkColors[linkIndex * 4 + 3] = clamp01(color[3] * alpha);
+        linkColors[linkIndex * 4] = lerp(input.defaultLinkColor[0], input.activeLinkColor[0], colorProgress);
+        linkColors[linkIndex * 4 + 1] = lerp(input.defaultLinkColor[1], input.activeLinkColor[1], colorProgress);
+        linkColors[linkIndex * 4 + 2] = lerp(input.defaultLinkColor[2], input.activeLinkColor[2], colorProgress);
+        linkColors[linkIndex * 4 + 3] = clamp01(alpha);
         linkWidths[linkIndex] = isIncident ? activeWidth : safeBaseWidth;
 
         if (isIncident) {

@@ -59,6 +59,7 @@ interface HoverRenderState {
     selectedIndices: number[];
     linkColors: number[];
     linkWidths: number[];
+    hoverTransitionProgress: number;
     labelStats: {
         totalLabelCount: number;
         visibleLabelCount: number;
@@ -320,6 +321,7 @@ async function setGraphHoverPoint(page: Page, index: number | null): Promise<Hov
                 getSelectedIndices: () => number[];
                 getLinkColors: () => number[];
                 getLinkWidths: () => number[];
+                getHoverTransitionProgress: () => number;
                 getLabelStats: () => HoverRenderState["labelStats"];
                 getSimulationRunning: () => boolean;
             };
@@ -340,10 +342,52 @@ async function setGraphHoverPoint(page: Page, index: number | null): Promise<Hov
             selectedIndices: hook.getSelectedIndices(),
             linkColors: hook.getLinkColors(),
             linkWidths: hook.getLinkWidths(),
+            hoverTransitionProgress: hook.getHoverTransitionProgress(),
             labelStats: hook.getLabelStats(),
             simulationRunning: hook.getSimulationRunning(),
         };
     }, index);
+}
+
+async function waitForHoverTransition(page: Page): Promise<HoverRenderState> {
+    await expect.poll(async () => (
+        page.evaluate(() => {
+            const runtimeWindow = window as Window & {
+                __OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?: {
+                    getHoverTransitionProgress: () => number;
+                };
+            };
+
+            return runtimeWindow.__OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?.getHoverTransitionProgress() ?? 0;
+        })
+    )).toBeGreaterThan(0.99);
+
+    return page.evaluate(() => {
+        const runtimeWindow = window as Window & {
+            __OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?: {
+                getSelectedIndices: () => number[];
+                getLinkColors: () => number[];
+                getLinkWidths: () => number[];
+                getHoverTransitionProgress: () => number;
+                getLabelStats: () => HoverRenderState["labelStats"];
+                getSimulationRunning: () => boolean;
+            };
+        };
+
+        const hook = runtimeWindow.__OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__;
+        if (!hook) {
+            throw new Error("knowledge graph hook is unavailable");
+        }
+
+        return {
+            selectedIndices: hook.getSelectedIndices(),
+            linkColors: hook.getLinkColors(),
+            linkWidths: hook.getLinkWidths(),
+            hoverTransitionProgress: hook.getHoverTransitionProgress(),
+            labelStats: hook.getLabelStats(),
+            simulationRunning: hook.getSimulationRunning(),
+        };
+    });
 }
 
 async function selectColorGroupQueryWithKeyboard(
@@ -398,6 +442,58 @@ async function startSimulation(page: Page, alpha: number): Promise<void> {
     }, alpha);
 }
 
+async function dragKnowledgeGraphPoint(page: Page, pointIndex: number, deltaX: number, deltaY: number): Promise<void> {
+    const pointBeforeHover = (await getPointScreenPositions(page)).find((item) => item.index === pointIndex);
+    if (!pointBeforeHover) {
+        throw new Error(`knowledge graph point ${String(pointIndex)} is unavailable`);
+    }
+
+    const hostRect = await page.evaluate(() => {
+        const runtimeWindow = window as Window & {
+            __OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?: {
+                getHostRect: () => { left: number; top: number; width: number; height: number } | null;
+            };
+        };
+
+        const rect = runtimeWindow.__OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?.getHostRect();
+        if (!rect) {
+            throw new Error("knowledge graph host rect is unavailable");
+        }
+
+        return rect;
+    });
+
+    const startX = hostRect.left + pointBeforeHover.x;
+    const startY = hostRect.top + pointBeforeHover.y;
+    await page.mouse.move(startX, startY);
+    await waitForAnimationFrames(page, 8);
+    await expect.poll(async () => (
+        page.evaluate(() => {
+            const runtimeWindow = window as Window & {
+                __OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?: {
+                    getSelectedIndices: () => number[];
+                };
+            };
+
+            return runtimeWindow.__OFIVE_KNOWLEDGE_GRAPH_PERF_HOOK__?.getSelectedIndices() ?? [];
+        })
+    )).toContain(pointIndex);
+
+    const point = (await getPointScreenPositions(page)).find((item) => item.index === pointIndex);
+    if (!point) {
+        throw new Error(`knowledge graph point ${String(pointIndex)} is unavailable after hover`);
+    }
+
+    const hoverX = hostRect.left + point.x;
+    const hoverY = hostRect.top + point.y;
+    await page.mouse.move(hoverX, hoverY);
+    await waitForAnimationFrames(page, 2);
+    await page.mouse.down();
+    await page.mouse.move(hoverX + deltaX, hoverY + deltaY, { steps: 6 });
+    await page.mouse.up();
+    await waitForAnimationFrames(page, 4);
+}
+
 async function waitForAnimationFrames(page: Page, frameCount: number): Promise<void> {
     await page.evaluate(async (targetFrameCount) => {
         await new Promise<void>((resolve) => {
@@ -437,6 +533,53 @@ function computeMaxDisplacement(before: PointPositions, after: PointPositions): 
     }
 
     return maxDistance;
+}
+
+function getPointDisplacement(before: PointPositions, after: PointPositions, index: number): {
+    dx: number;
+    dy: number;
+    distance: number;
+} {
+    const beforeX = before[index * 2];
+    const beforeY = before[index * 2 + 1];
+    const afterX = after[index * 2];
+    const afterY = after[index * 2 + 1];
+    if (
+        beforeX === undefined
+        || beforeY === undefined
+        || afterX === undefined
+        || afterY === undefined
+    ) {
+        throw new Error(`knowledge graph point ${String(index)} position is unavailable`);
+    }
+
+    const dx = afterX - beforeX;
+    const dy = afterY - beforeY;
+    return {
+        dx,
+        dy,
+        distance: Math.hypot(dx, dy),
+    };
+}
+
+function getScreenPointDisplacement(before: ScreenPoint[], after: ScreenPoint[], index: number): {
+    dx: number;
+    dy: number;
+    distance: number;
+} {
+    const beforePoint = before.find((item) => item.index === index);
+    const afterPoint = after.find((item) => item.index === index);
+    if (!beforePoint || !afterPoint) {
+        throw new Error(`knowledge graph screen point ${String(index)} is unavailable`);
+    }
+
+    const dx = afterPoint.x - beforePoint.x;
+    const dy = afterPoint.y - beforePoint.y;
+    return {
+        dx,
+        dy,
+        distance: Math.hypot(dx, dy),
+    };
 }
 
 /**
@@ -603,22 +746,49 @@ test.describe("knowledge graph node dynamics", () => {
         await expect.poll(async () => getSimulationRunning(page)).toBe(true);
         const hoverState = await setGraphHoverPoint(page, 0);
         expect(hoverState.simulationRunning).toBe(false);
+        expect(hoverState.hoverTransitionProgress).toBeLessThan(1);
+        const settledHubHoverState = await waitForHoverTransition(page);
         expect(hoverState.selectedIndices.sort((left, right) => left - right)).toEqual(
             Array.from({ length: EXPECTED_NODE_COUNT }, (_, index) => index),
         );
-        expect(hoverState.labelStats.visibleLabelCount).toBe(1);
-        expect(hoverState.labelStats.opacity).toBeCloseTo(1, 2);
-        expect(Math.min(...hoverState.linkWidths)).toBeGreaterThan(tagSnapshot.settings.linkDefaultWidth);
-        expect(Math.max(...hoverState.linkColors.filter((_, index) => index % 4 === 3))).toBeGreaterThan(0.9);
+        expect(settledHubHoverState.labelStats.visibleLabelCount).toBe(EXPECTED_NODE_COUNT);
+        expect(settledHubHoverState.labelStats.opacity).toBeCloseTo(1, 2);
+        expect(Math.min(...settledHubHoverState.linkWidths)).toBeGreaterThan(tagSnapshot.settings.linkDefaultWidth);
+        expect(Math.max(...settledHubHoverState.linkColors.filter((_, index) => index % 4 === 3))).toBeGreaterThan(0.9);
 
         const leafHoverState = await setGraphHoverPoint(page, 12);
         expect(leafHoverState.selectedIndices.sort((left, right) => left - right)).toEqual([0, 12]);
-        expect(leafHoverState.labelStats.visibleLabelCount).toBe(1);
+        const settledLeafHoverState = await waitForHoverTransition(page);
+        expect(settledLeafHoverState.labelStats.visibleLabelCount).toBe(2);
         const incidentEdgeIndex = 11;
-        const incidentAlpha = leafHoverState.linkColors[incidentEdgeIndex * 4 + 3] ?? 0;
-        const dimAlpha = leafHoverState.linkColors[0 * 4 + 3] ?? 1;
-        expect(leafHoverState.linkWidths[incidentEdgeIndex]).toBeGreaterThan(leafHoverState.linkWidths[0] ?? 0);
+        const incidentAlpha = settledLeafHoverState.linkColors[incidentEdgeIndex * 4 + 3] ?? 0;
+        const dimAlpha = settledLeafHoverState.linkColors[0 * 4 + 3] ?? 1;
+        const earlyIncidentAlpha = leafHoverState.linkColors[incidentEdgeIndex * 4 + 3] ?? 0;
+        const earlyDimAlpha = leafHoverState.linkColors[0 * 4 + 3] ?? 1;
+        expect(settledLeafHoverState.linkWidths[incidentEdgeIndex]).toBeGreaterThan(settledLeafHoverState.linkWidths[0] ?? 0);
+        expect(settledLeafHoverState.linkWidths[incidentEdgeIndex]).toBeGreaterThan(
+            (leafHoverState.linkWidths[incidentEdgeIndex] ?? 0) + tagSnapshot.settings.linkDefaultWidth,
+        );
+        expect(earlyIncidentAlpha - earlyDimAlpha).toBeLessThan(incidentAlpha - dimAlpha);
+        expect(dimAlpha).toBeLessThan(earlyDimAlpha);
         expect(incidentAlpha).toBeGreaterThan(dimAlpha);
+
+        const draggedPositionsBefore = await getPointPositions(page);
+        const draggedScreenPositionsBefore = await getPointScreenPositions(page);
+        await dragKnowledgeGraphPoint(page, 12, 42, -26);
+        const draggedPositionsAfter = await getPointPositions(page);
+        const draggedScreenPositionsAfter = await getPointScreenPositions(page);
+        const draggedPointDelta = getPointDisplacement(draggedPositionsBefore, draggedPositionsAfter, 12);
+        const draggedScreenPointDelta = getScreenPointDisplacement(
+            draggedScreenPositionsBefore,
+            draggedScreenPositionsAfter,
+            12,
+        );
+        expect(draggedPointDelta.distance).toBeGreaterThan(0.05);
+        expect(draggedScreenPointDelta.distance).toBeGreaterThan(10);
+        expect(draggedScreenPointDelta.dx).toBeGreaterThan(0);
+        expect(draggedScreenPointDelta.dy).toBeLessThan(0);
+        expect(await getSimulationRunning(page)).toBe(false);
 
         const clearedHoverState = await setGraphHoverPoint(page, null);
         expect(clearedHoverState.selectedIndices).toEqual([]);

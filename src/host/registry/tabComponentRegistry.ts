@@ -43,6 +43,7 @@ export type TabLifecycleScope = "global" | "vault";
  * @field component - React 组件，接收宿主 workbench 的 Tab props
  * @field lifecycleScope - 仓库切换时的生命周期作用域
  * @field deferPresentationUntilReady - 是否等待组件自行提交首开 ready 后再展示
+ * @field showNavigationControls - 是否在宿主 tab 左上角显示编辑器历史导航按钮
  */
 export interface TabComponentDescriptor {
     /** 组件唯一标识（component key） */
@@ -53,6 +54,8 @@ export interface TabComponentDescriptor {
     lifecycleScope?: TabLifecycleScope;
     /** 是否等待组件通过 api.markContentReady 提交首开展示。 */
     deferPresentationUntilReady?: boolean;
+    /** 是否显示编辑器历史导航按钮；非编辑器 tab 默认不显示。 */
+    showNavigationControls?: boolean;
 }
 
 /* ────────────────── 内部状态 ────────────────── */

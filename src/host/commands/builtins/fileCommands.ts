@@ -25,7 +25,6 @@ import {
     deleteVaultCanvasFile,
     deleteVaultDirectory,
     deleteVaultMarkdownFile,
-    saveVaultMarkdownFile,
 } from "../../../api/vaultApi";
 import i18n from "../../../i18n";
 import {
@@ -35,11 +34,11 @@ import {
 import { buildCreatedMarkdownInitialContent } from "../../../utils/frontmatterTemplate";
 import { getConfigSnapshot } from "../../config/configStore";
 import { emitFileTreeRenameRequestedEvent } from "../../events/appEventBus";
-import { markContentAsSaved } from "../../editor/autoSaveService";
 import {
     getArticleSnapshotById,
     getFocusedArticleSnapshot,
 } from "../../editor/editorContextStore";
+import { savePersistedMarkdownContent } from "../../editor/persistedMarkdownContentSync";
 import type { CommandContext, CommandDefinition } from "../commandTypes";
 
 interface TargetArticleSnapshot {
@@ -310,8 +309,10 @@ export const FILE_COMMAND_DEFINITIONS = {
                 return;
             }
 
-            await saveVaultMarkdownFile(targetArticle.path, targetArticle.content);
-            markContentAsSaved(targetArticle.path, targetArticle.content);
+            await savePersistedMarkdownContent({
+                relativePath: targetArticle.path,
+                content: targetArticle.content,
+            });
             console.info("[command-system] saveFocused success", {
                 articleId: targetArticle.articleId,
                 path: targetArticle.path,

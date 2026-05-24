@@ -19,7 +19,9 @@ test.describe("日历刷新体验", () => {
         await waitForLayoutReady(page);
 
         await page.getByTestId("activity-bar-item-calendar").click();
-        const calendarTab = page.locator(".layout-v2-tab-section__card--active .calendar-tab");
+        const activeCard = page.locator(".layout-v2-tab-section__card--active");
+        await expect(activeCard.locator(".workbench-layout-v2__tab-navigation")).toHaveCount(0);
+        const calendarTab = activeCard.locator(".calendar-tab");
         const calendarSurface = calendarTab.locator(".calendar-tab__calendar-surface");
 
         await expect(calendarSurface).toBeVisible();

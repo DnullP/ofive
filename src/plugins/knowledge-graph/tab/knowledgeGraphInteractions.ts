@@ -23,6 +23,8 @@ export interface GraphRuntimeLike {
      * @param alpha 补能强度。
      */
     start(alpha?: number): void;
+    /** 仅重绘当前静态帧，不改变仿真状态。 */
+    render?(alpha?: number): void;
 }
 
 /**
@@ -82,6 +84,8 @@ export interface InteractionCallbackDeps {
     lastDragReheatTimeRef: NumberRef;
     /** 标签布局更新调度器 */
     scheduleLabelLayoutUpdate: (graph: GraphRuntimeLike) => void;
+    /** 当前是否处于 hover 静态模式；为 true 时拖拽不补能重启仿真。 */
+    shouldKeepDragStatic?: () => boolean;
     /** 拖拽补能配置 */
     dragReheatConfig: DragReheatConfig;
     /** 获取当前时间（可注入以便测试） */
@@ -126,8 +130,14 @@ export function createKnowledgeGraphInteractionCallbacks(
         dragTailTimerRef,
         lastDragReheatTimeRef,
         scheduleLabelLayoutUpdate,
+        shouldKeepDragStatic,
         dragReheatConfig,
     } = deps;
+
+    const syncStaticHoverDragFrame = (graph: GraphRuntimeLike): void => {
+        // Cosmos render() clears hoveredPoint, which is also the drag shader's target.
+        scheduleLabelLayoutUpdate(graph);
+    };
 
     /**
      * @function withGraphInstance
@@ -160,12 +170,22 @@ export function createKnowledgeGraphInteractionCallbacks(
                     dragTailTimerRef.current = null;
                 }
 
+                if (shouldKeepDragStatic?.()) {
+                    syncStaticHoverDragFrame(graph);
+                    return;
+                }
+
                 graph.start(dragReheatConfig.startAlpha);
                 scheduleLabelLayoutUpdate(graph);
             });
         },
         onDrag: () => {
             withGraphInstance((graph) => {
+                if (shouldKeepDragStatic?.()) {
+                    syncStaticHoverDragFrame(graph);
+                    return;
+                }
+
                 const currentTime = now();
                 if (currentTime - lastDragReheatTimeRef.current < dragReheatConfig.moveIntervalMs) {
                     scheduleLabelLayoutUpdate(graph);
@@ -181,6 +201,12 @@ export function createKnowledgeGraphInteractionCallbacks(
             withGraphInstance((graph) => {
                 if (dragTailTimerRef.current !== null) {
                     clearTimeoutImpl(dragTailTimerRef.current);
+                }
+
+                if (shouldKeepDragStatic?.()) {
+                    dragTailTimerRef.current = null;
+                    syncStaticHoverDragFrame(graph);
+                    return;
                 }
 
                 dragTailTimerRef.current = setTimeoutImpl(() => {
@@ -226,6 +252,7 @@ export function createKnowledgeGraphInteractionCallbacksFor<TGraph extends Graph
         dragTailTimerRef,
         lastDragReheatTimeRef,
         scheduleLabelLayoutUpdate,
+        shouldKeepDragStatic,
         dragReheatConfig,
     } = deps;
 
@@ -235,6 +262,11 @@ export function createKnowledgeGraphInteractionCallbacksFor<TGraph extends Graph
             return;
         }
         task(graph);
+    };
+
+    const syncStaticHoverDragFrame = (graph: TGraph): void => {
+        // Cosmos render() clears hoveredPoint, which is also the drag shader's target.
+        scheduleLabelLayoutUpdate(graph);
     };
 
     return {
@@ -255,12 +287,22 @@ export function createKnowledgeGraphInteractionCallbacksFor<TGraph extends Graph
                     dragTailTimerRef.current = null;
                 }
 
+                if (shouldKeepDragStatic?.()) {
+                    syncStaticHoverDragFrame(graph);
+                    return;
+                }
+
                 graph.start(dragReheatConfig.startAlpha);
                 scheduleLabelLayoutUpdate(graph);
             });
         },
         onDrag: () => {
             withGraphInstance((graph) => {
+                if (shouldKeepDragStatic?.()) {
+                    syncStaticHoverDragFrame(graph);
+                    return;
+                }
+
                 const currentTime = now();
                 if (currentTime - lastDragReheatTimeRef.current < dragReheatConfig.moveIntervalMs) {
                     scheduleLabelLayoutUpdate(graph);
@@ -276,6 +318,12 @@ export function createKnowledgeGraphInteractionCallbacksFor<TGraph extends Graph
             withGraphInstance((graph) => {
                 if (dragTailTimerRef.current !== null) {
                     clearTimeoutImpl(dragTailTimerRef.current);
+                }
+
+                if (shouldKeepDragStatic?.()) {
+                    dragTailTimerRef.current = null;
+                    syncStaticHoverDragFrame(graph);
+                    return;
                 }
 
                 dragTailTimerRef.current = setTimeoutImpl(() => {

@@ -90,6 +90,26 @@ test.describe("ai chat ux", () => {
         await expect(page.locator(".ai-chat-header-actions")).toHaveCount(0);
         await expect(page.locator(".ai-chat-tab-strip")).toHaveCount(0);
         await expect(page.locator(".ai-chat-new-button")).toBeVisible();
+        const conversationManagerButton = page.locator(".ai-chat-conversation-manager-button");
+        await expect(conversationManagerButton).toBeVisible();
+        await expect(conversationManagerButton).toContainText(/Manage|会话管理/);
+        const conversationManagerButtonBox = await conversationManagerButton.boundingBox();
+        if (!conversationManagerButtonBox) {
+            throw new Error("AI chat conversation manager button should be measurable.");
+        }
+        expect(conversationManagerButtonBox.width).toBeLessThanOrEqual(116);
+
+        await conversationManagerButton.click();
+        await expect(page.locator(".ai-chat-history-shell")).toBeVisible();
+        await expect(page.locator(".ai-chat-history-search")).toBeVisible();
+        const historyRow = page.locator(".ai-chat-history-item");
+        await expect(historyRow).toHaveCount(1);
+        await expect(historyRow).toHaveCSS("border-radius", "0px");
+        await expect(historyRow).toHaveCSS("border-left-width", "0px");
+        await expect(historyRow).toHaveCSS("border-right-width", "0px");
+        await expect(historyRow).toHaveCSS("border-bottom-width", "1px");
+        await page.locator(".ai-chat-conversation-manage", { hasText: /Back to chat|返回对话/ }).click();
+        await expect(page.locator(".ai-chat-thread-shell")).toBeVisible();
 
         const modelButton = page.locator(".ai-chat-model-button");
         await expect(modelButton).toContainText("mock-fast");

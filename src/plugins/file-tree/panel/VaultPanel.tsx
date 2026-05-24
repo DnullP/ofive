@@ -31,7 +31,6 @@ import {
     renameVaultCanvasFile,
     renameVaultDirectory,
     renameVaultMarkdownFile,
-    saveVaultMarkdownFile,
 } from "../../../api/vaultApi";
 import {
     buildCreatedCanvasInitialContent,
@@ -41,6 +40,7 @@ import {
 import { buildCreatedMarkdownInitialContent } from "../../../utils/frontmatterTemplate";
 import { getConfigSnapshot } from "../../../host/config/configStore";
 import { getArticleSnapshotById, useFocusedArticle } from "../../../host/editor/editorContextStore";
+import { savePersistedMarkdownContent } from "../../../host/editor/persistedMarkdownContentSync";
 import { useVaultState } from "../../../host/vault/vaultStore";
 import { openVaultWithSystemPicker } from "../../../host/vault/openVaultDialog";
 import {
@@ -366,7 +366,10 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             }
 
             if (sourceSnapshot && !isCanvasPath(item.path)) {
-                await saveVaultMarkdownFile(targetPath, sourceSnapshot.content);
+                await savePersistedMarkdownContent({
+                    relativePath: targetPath,
+                    content: sourceSnapshot.content,
+                });
             }
 
             closeTab?.(sourceTabId);
@@ -557,7 +560,10 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
         const targetPath = result.relativePath.replace(/\\/g, "/");
 
         if (sourceSnapshot && !isCanvasPath(item.path)) {
-            await saveVaultMarkdownFile(targetPath, sourceSnapshot.content);
+            await savePersistedMarkdownContent({
+                relativePath: targetPath,
+                content: sourceSnapshot.content,
+            });
             closeTab?.(sourceTabId);
             await openFileWithResolver({
                 relativePath: targetPath,

@@ -215,6 +215,29 @@ class EditorContextStore {
     }
 
     /**
+     * @function getArticleByPath
+     * @description 按路径获取最新文章快照。
+     * @param path 文章路径。
+     * @returns 同路径最新文章快照或 null。
+     */
+    getArticleByPath(path: string): ArticleState | null {
+        const targetPath = normalizeArticlePath(path);
+        let latestArticle: ArticleState | null = null;
+
+        for (const article of this.state.articles.values()) {
+            if (normalizeArticlePath(article.path) !== targetPath) {
+                continue;
+            }
+
+            if (!latestArticle || article.updatedAt >= latestArticle.updatedAt) {
+                latestArticle = article;
+            }
+        }
+
+        return latestArticle;
+    }
+
+    /**
      * @function reset
      * @description 重置全部编辑上下文缓存，用于仓库切换后的失效处理。
      */
@@ -237,6 +260,10 @@ class EditorContextStore {
 }
 
 const editorContextStore = new EditorContextStore();
+
+function normalizeArticlePath(path: string): string {
+    return path.replace(/\\/g, "/");
+}
 
 /**
  * @function reportArticleFocus
@@ -312,6 +339,16 @@ export function getArticleSnapshotById(articleId: string): ArticleState | null {
 }
 
 /**
+ * @function getArticleSnapshotByPath
+ * @description 按路径获取最新文章快照（非响应式）。
+ * @param path 文章路径。
+ * @returns 对应路径最新文章快照或 null。
+ */
+export function getArticleSnapshotByPath(path: string): ArticleState | null {
+    return editorContextStore.getArticleByPath(path);
+}
+
+/**
  * @function hasArticleSnapshotByPath
  * @description 判断指定路径是否存在已缓存文章快照。
  * @param path 文章路径。
@@ -319,9 +356,10 @@ export function getArticleSnapshotById(articleId: string): ArticleState | null {
  */
 export function hasArticleSnapshotByPath(path: string): boolean {
     const snapshot = editorContextStore.getSnapshot();
+    const targetPath = normalizeArticlePath(path);
 
     for (const article of snapshot.articles.values()) {
-        if (article.path === path) {
+        if (normalizeArticlePath(article.path) === targetPath) {
             return true;
         }
     }
@@ -337,15 +375,16 @@ export function hasArticleSnapshotByPath(path: string): boolean {
  */
 export function reportArticleContentByPath(path: string, content: string): void {
     const snapshot = editorContextStore.getSnapshot();
+    const targetPath = normalizeArticlePath(path);
 
     snapshot.articles.forEach((article) => {
-        if (article.path !== path) {
+        if (normalizeArticlePath(article.path) !== targetPath) {
             return;
         }
 
         editorContextStore.reportArticleContent({
             articleId: article.articleId,
-            path,
+            path: targetPath,
             content,
         });
     });

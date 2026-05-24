@@ -10,6 +10,58 @@
         linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 95%, var(--bg-hover) 5%), var(--bg-primary));
 }
 
+/* ai-chat-topbar：面板右上角紧凑操作区 */
+.ai-chat-topbar {
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 5px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
+    background: color-mix(in srgb, var(--bg-secondary) 94%, var(--bg-primary));
+}
+
+/* ai-chat-conversation-manager-button：会话管理入口 */
+.ai-chat-conversation-manager-button {
+    height: 24px;
+    max-width: 116px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 86%, transparent);
+    border-radius: 6px;
+    padding: 0 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--bg-primary) 90%, var(--bg-secondary));
+    cursor: pointer;
+}
+
+.ai-chat-conversation-manager-button:hover,
+.ai-chat-conversation-manager-button:focus-visible,
+.ai-chat-conversation-manager-button.active {
+    outline: none;
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--accent-primary) 32%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary) 9%, var(--bg-primary));
+}
+
+.ai-chat-conversation-manager-button:disabled {
+    opacity: 0.52;
+    cursor: not-allowed;
+}
+
+.ai-chat-conversation-manager-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* ai-chat-header：头部信息区 */
 .ai-chat-header {
     padding: 8px 10px;
@@ -157,8 +209,8 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 10px;
+    gap: 8px;
+    padding: 8px 10px 10px;
     overflow: hidden;
 }
 
@@ -194,30 +246,39 @@
     overflow: auto;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 0;
+    border-top: 1px solid color-mix(in srgb, var(--border-color) 86%, transparent);
 }
 
-/* ai-chat-history-item：会话页单条会话按钮 */
+/* ai-chat-history-item：会话页单条会话表格行 */
 .ai-chat-history-item {
     width: 100%;
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 10px;
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 86%, transparent);
+    border-radius: 0;
+    padding: 8px 2px;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 10px;
     text-align: left;
     color: var(--text-secondary);
-    background: color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary));
+    background: transparent;
     cursor: pointer;
 }
 
 /* ai-chat-history-item.active：当前会话高亮态 */
 .ai-chat-history-item.active {
     color: var(--text-primary);
-    border-color: color-mix(in srgb, var(--accent-primary) 28%, var(--border-color));
-    background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-primary));
+    background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent-primary) 70%, transparent);
+}
+
+.ai-chat-history-item:hover,
+.ai-chat-history-item:focus-visible {
+    outline: none;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-hover) 74%, transparent);
 }
 
 /* ai-chat-history-item:disabled：会话页按钮禁用态 */
@@ -268,10 +329,10 @@
 /* ai-chat-history-preview：会话页最近消息预览 */
 .ai-chat-history-preview {
     font-size: 11px;
-    line-height: 1.5;
+    line-height: 1.4;
     color: var(--text-secondary);
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
     word-break: break-word;
@@ -296,6 +357,17 @@
     color: var(--text-primary);
     border-color: color-mix(in srgb, var(--accent-primary) 28%, var(--border-color));
     background: color-mix(in srgb, var(--accent-primary) 13%, var(--bg-primary));
+}
+
+@media (max-width: 360px) {
+    .ai-chat-conversation-manager-button {
+        width: 26px;
+        padding: 0;
+    }
+
+    .ai-chat-conversation-manager-label {
+        display: none;
+    }
 }
 
 /* ai-chat-thread-shell：对话区域容器 */

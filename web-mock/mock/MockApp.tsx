@@ -18,6 +18,7 @@ import { CanvasTab } from "../../src/plugins/canvas/CanvasTab";
 import { ImageViewerTab } from "../../src/plugins/image-viewer/tab/ImageViewerTab";
 import { CalendarPanel } from "../../src/plugins/calendar/CalendarPanel";
 import { CalendarTab } from "../../src/plugins/calendar/CalendarTab";
+import { TaskBoardTab } from "../../src/plugins/tasks/task-board/TaskBoardTab";
 import { activatePlugin as activateCommandPalettePlugin } from "../../src/plugins/command-palette/commandPalettePlugin";
 import { activatePlugin as activateQuickSwitcherPlugin } from "../../src/plugins/quick-switcher/quickSwitcherPlugin";
 import { activatePlugin as activateSearchPlugin } from "../../src/plugins/search/searchPlugin";
@@ -252,20 +253,6 @@ function MockArchitectureDevtoolsTab(): ReactNode {
                 "Plugin inventory",
                 "Event dependency graph",
                 "Workbench host contract inspection",
-            ]}
-        />
-    );
-}
-
-function MockTaskBoardTab(): ReactNode {
-    return (
-        <MockWorkbenchPlaceholder
-            title="任务看板"
-            description="任务看板在 mock 中先占位到和 Tauri 相同的入口位置，避免 web-mock 和真实工作台结构分叉。"
-            points={[
-                "In Progress: 对齐 mock 与 Tauri workbench 壳",
-                "Review: editor view-state regression coverage",
-                "Done: layout-v2 keep-mounted tab cards",
             ]}
         />
     );
@@ -978,12 +965,13 @@ function ensureMockComponentsRegistered(): void {
         component: CodeMirrorEditorTab as never,
         lifecycleScope: "vault",
         deferPresentationUntilReady: true,
+        showNavigationControls: true,
     });
     registerTabComponent({ id: "canvas", component: CanvasTab as never, lifecycleScope: "vault" });
     registerTabComponent({ id: "imageviewer", component: ImageViewerTab as never, lifecycleScope: "vault" });
     registerTabComponent({ id: MOCK_CALENDAR_TAB_COMPONENT_ID, component: CalendarTab as never, lifecycleScope: "vault" });
     registerTabComponent({ id: MOCK_ARCHITECTURE_COMPONENT_ID, component: MockArchitectureDevtoolsTab as never, lifecycleScope: "global" });
-    registerTabComponent({ id: MOCK_TASK_BOARD_COMPONENT_ID, component: MockTaskBoardTab as never, lifecycleScope: "vault" });
+    registerTabComponent({ id: MOCK_TASK_BOARD_COMPONENT_ID, component: TaskBoardTab as never, lifecycleScope: "vault" });
     registerTabComponent({ id: "settings", component: SettingsTab as never, lifecycleScope: "global" });
     registerFileOpener({
         id: "mock.markdown.codemirror",

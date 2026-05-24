@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 import {
     createVaultMarkdownFile,
     queryVaultMarkdownFrontmatter,
@@ -516,46 +517,40 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
     return (
         <section ref={rootRef} className={`calendar-tab calendar-tab--${mode}`}>
             <header className="calendar-tab__header">
-                <div className="calendar-tab__header-copy">
-                    {mode === "tab" ? (
-                        <>
-                            <h2 className="calendar-tab__title">{t("calendar.title")}</h2>
-                            <p className="calendar-tab__description">{t("calendar.description")}</p>
-                            <p className="calendar-tab__description">{t("calendar.sourceHint")}</p>
-                            <p className="calendar-tab__description">{t("calendar.clickDayHint")}</p>
-                        </>
-                    ) : null}
-                </div>
-
                 <div className="calendar-tab__month-nav">
                     <button
                         type="button"
-                        className="calendar-tab__nav-button"
+                        className="calendar-tab__nav-button calendar-tab__nav-button--icon"
+                        aria-label={t("calendar.previousMonth")}
+                        title={t("calendar.previousMonth")}
                         onClick={() => {
                             setAnchorDate((previous) => shiftCalendarMonth(previous, -1));
                         }}
                     >
-                        {t("calendar.previousMonth")}
+                        <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
+                    </button>
+                    <span className="calendar-tab__month-label">{monthLabel}</span>
+                    <button
+                        type="button"
+                        className="calendar-tab__nav-button calendar-tab__nav-button--icon"
+                        aria-label={t("calendar.nextMonth")}
+                        title={t("calendar.nextMonth")}
+                        onClick={() => {
+                            setAnchorDate((previous) => shiftCalendarMonth(previous, 1));
+                        }}
+                    >
+                        <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
                     </button>
                     <button
                         type="button"
-                        className="calendar-tab__nav-button"
+                        className="calendar-tab__nav-button calendar-tab__nav-button--today"
                         onClick={() => {
                             setAnchorDate(today);
                             setSelectedDayKey(toCalendarDayKey(today));
                         }}
                     >
+                        <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
                         {t("calendar.today")}
-                    </button>
-                    <span className="calendar-tab__month-label">{monthLabel}</span>
-                    <button
-                        type="button"
-                        className="calendar-tab__nav-button"
-                        onClick={() => {
-                            setAnchorDate((previous) => shiftCalendarMonth(previous, 1));
-                        }}
-                    >
-                        {t("calendar.nextMonth")}
                     </button>
                 </div>
             </header>
@@ -624,12 +619,7 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                                         }}
                                     >
                                         <span className="calendar-tab__day-number">{cell.date.getDate()}</span>
-                                        {isPanelMode ? null : (
-                                            <div className="calendar-tab__day-meta">
-                                                {noteCount > 0 ? <span className="calendar-tab__day-count">{noteCount}</span> : null}
-                                                <span className="calendar-tab__day-key">{cell.dayKey}</span>
-                                            </div>
-                                        )}
+                                        {!isPanelMode && noteCount > 0 ? <span className="calendar-tab__day-count">{noteCount}</span> : null}
                                     </button>
                                 );
                             })}
@@ -641,7 +631,7 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                     {isPanelMode ? null : (
                         <section className="calendar-tab__details">
                             <div className="calendar-tab__details-header">
-                                <h3 className="calendar-tab__details-title">{t("calendar.notesForDay", { day: selectedDayKey })}</h3>
+                                <h3 className="calendar-tab__details-title">{selectedDayKey}</h3>
                                 <span className="calendar-tab__details-subtitle">{t("calendar.notesForDayCount", { count: selectedNotes.length })}</span>
                             </div>
 

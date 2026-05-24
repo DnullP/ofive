@@ -603,8 +603,9 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
     api: { id: string; close: () => void; setActive: () => void; markContentReady?: () => void };
     workbenchApiRef: MutableRefObject<WorkbenchApi | null>;
     decorateTabDefinition: DecorateWorkbenchTabDefinition;
+    showNavigationControls: boolean;
 }): ReactNode {
-    const { Component, params, api, workbenchApiRef, decorateTabDefinition } = props;
+    const { Component, params, api, workbenchApiRef, decorateTabDefinition, showNavigationControls } = props;
     const navigationHistory = readTabNavigationHistory(params);
     const canNavigateBack = Boolean(navigationHistory && navigationHistory.index > 0);
     const canNavigateForward = Boolean(
@@ -676,28 +677,30 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
 
     return (
         <div className="workbench-layout-v2__tab-shell">
-            <div className="workbench-layout-v2__tab-navigation" aria-label={i18n.t("workbenchLayout.tabNavigation")}>
-                <button
-                    type="button"
-                    className="workbench-layout-v2__tab-navigation-button"
-                    aria-label={i18n.t("workbenchLayout.navigateBack")}
-                    title={i18n.t("workbenchLayout.navigateBack")}
-                    disabled={!canNavigateBack}
-                    onClick={() => navigateHistory(-1)}
-                >
-                    <ChevronLeft size={15} strokeWidth={2} aria-hidden="true" />
-                </button>
-                <button
-                    type="button"
-                    className="workbench-layout-v2__tab-navigation-button"
-                    aria-label={i18n.t("workbenchLayout.navigateForward")}
-                    title={i18n.t("workbenchLayout.navigateForward")}
-                    disabled={!canNavigateForward}
-                    onClick={() => navigateHistory(1)}
-                >
-                    <ChevronRight size={15} strokeWidth={2} aria-hidden="true" />
-                </button>
-            </div>
+            {showNavigationControls ? (
+                <div className="workbench-layout-v2__tab-navigation" aria-label={i18n.t("workbenchLayout.tabNavigation")}>
+                    <button
+                        type="button"
+                        className="workbench-layout-v2__tab-navigation-button"
+                        aria-label={i18n.t("workbenchLayout.navigateBack")}
+                        title={i18n.t("workbenchLayout.navigateBack")}
+                        disabled={!canNavigateBack}
+                        onClick={() => navigateHistory(-1)}
+                    >
+                        <ChevronLeft size={15} strokeWidth={2} aria-hidden="true" />
+                    </button>
+                    <button
+                        type="button"
+                        className="workbench-layout-v2__tab-navigation-button"
+                        aria-label={i18n.t("workbenchLayout.navigateForward")}
+                        title={i18n.t("workbenchLayout.navigateForward")}
+                        disabled={!canNavigateForward}
+                        onClick={() => navigateHistory(1)}
+                    >
+                        <ChevronRight size={15} strokeWidth={2} aria-hidden="true" />
+                    </button>
+                </div>
+            ) : null}
             <Component {...({ params, api: stableApi, containerApi } satisfies WorkbenchTabProps<Record<string, unknown>>)} />
         </div>
     );
@@ -826,6 +829,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                         api={api}
                         workbenchApiRef={workbenchApiRef}
                         decorateTabDefinition={decorateTabDefinition}
+                        showNavigationControls={descriptor.showNavigationControls === true}
                     />
                 </div>
             );

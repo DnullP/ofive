@@ -54,4 +54,24 @@ describe("knowledgeGraphHoverHighlight", () => {
         expect(rounded(style.linkColors.slice(8, 12))).toEqual([0.8, 0.7, 0.6, 1]);
         expect(rounded(style.linkColors.slice(12, 16))).toEqual([0.2, 0.3, 0.4, 0.2]);
     });
+
+    test("hover 过渡进度会插值边透明度和宽度", () => {
+        const style = buildKnowledgeGraphHoverLinkStyle({
+            links: [
+                0, 1,
+                1, 2,
+            ],
+            hoveredNodeIndex: 1,
+            baseLinkWidth: 2,
+            defaultLinkColor: [0.2, 0.2, 0.2, 0.5],
+            activeLinkColor: [1, 0.6, 0.4, 1],
+            dimLinkAlpha: 0.2,
+            activeLinkAlpha: 1,
+            activeLinkWidthMultiplier: 3,
+            transitionProgress: 0.5,
+        });
+
+        expect(Array.from(style.linkWidths)).toEqual([4, 4]);
+        expect(rounded(style.linkColors.slice(0, 4))).toEqual([0.6, 0.4, 0.3, 0.75]);
+    });
 });

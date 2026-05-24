@@ -33,7 +33,6 @@ import { useShortcutState } from "../../../host/commands/shortcutStore";
 import { useVaultState } from "../../../host/vault/vaultStore";
 import {
     renameVaultMarkdownFile,
-    saveVaultMarkdownFile,
     segmentChineseText,
 } from "../../../api/vaultApi";
 import { useConfigState, getConfigSnapshot, DEFAULT_EDITOR_FONT_FAMILY } from "../../../host/config/configStore";
@@ -42,6 +41,7 @@ import {
     subscribeEditorRevealRequestedEvent,
 } from "../../../host/events/appEventBus";
 import { reportActiveEditor, useActiveEditor } from "../../../host/editor/activeEditorStore";
+import { savePersistedMarkdownContent } from "../../../host/editor/persistedMarkdownContentSync";
 import i18n from "../../../i18n";
 import { createRegisteredLineSyntaxRenderExtension } from "./syntaxRenderRegistry";
 import { ensureBuiltinSyntaxRenderersRegistered } from "./registerBuiltinSyntaxRenderers";
@@ -1055,7 +1055,11 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                 focusEditorBodyStart,
                 dependencies: {
                     renameMarkdownFile: renameVaultMarkdownFile,
-                    saveMarkdownFile: saveVaultMarkdownFile,
+                    saveMarkdownFile: (path, content) => savePersistedMarkdownContent({
+                        containerApi: props.containerApi,
+                        relativePath: path,
+                        content,
+                    }),
                     openFile: openFileInWorkbench,
                     reportArticleContent,
                     reportArticleFocus,

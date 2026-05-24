@@ -18,7 +18,7 @@ import type {
     WorkbenchContainerApi,
     WorkbenchTabProps,
 } from "../../host/layout/workbenchContracts";
-import { ArrowUp, Bot, Check, ChevronDown, Copy, Pencil, Plus, RotateCcw, Sparkles, Timer, X } from "lucide-react";
+import { ArrowUp, Bot, Check, ChevronDown, Copy, History, Pencil, Plus, RotateCcw, Sparkles, Timer, X } from "lucide-react";
 import {
     getAiChatHistory,
     getAiToolCatalog,
@@ -77,8 +77,6 @@ import {
     readVaultCanvasFile,
     readVaultMarkdownFile,
     resolveWikiLinkTarget,
-    saveVaultCanvasFile,
-    saveVaultMarkdownFile,
 } from "../../api/vaultApi";
 import { openFileInWorkbench } from "../../host/layout/openFileService";
 import {
@@ -139,7 +137,11 @@ import { registerSettingsItem, registerSettingsSection } from "../../host/settin
 import { registerPluginOwnedStore } from "../../host/store/storeRegistry";
 import { useVaultState } from "../../host/vault/vaultStore";
 import { useActiveEditor } from "../../host/editor/activeEditorStore";
-import { emitPersistedContentUpdatedEvent } from "../../host/events/appEventBus";
+import {
+    notifyPersistedContentSaved,
+    savePersistedCanvasContent,
+    savePersistedMarkdownContent,
+} from "../../host/editor/persistedMarkdownContentSync";
 import i18n from "../../i18n";
 import "./aiChatPlugin.css";
 
@@ -1899,9 +1901,11 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         }
 
         let result: { deletedPaths: string[]; restoredPaths: string[]; skippedPaths?: string[] };
+        let restoredThroughBackend = true;
         try {
             result = await restoreAiChatRollbackCheckpointInBackend(normalizedCheckpointId);
         } catch (backendError) {
+            restoredThroughBackend = false;
             const checkpoint = rollbackCheckpointsRef.current[normalizedCheckpointId];
             const canUseLocalFallback = Boolean(checkpoint)
                 && !(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
@@ -1912,8 +1916,14 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             }
             result = await restoreAiChatRollbackCheckpoint(checkpoint, {
                 files,
-                saveMarkdownFile: saveVaultMarkdownFile,
-                saveCanvasFile: saveVaultCanvasFile,
+                saveMarkdownFile: (relativePath, content) => savePersistedMarkdownContent({
+                    relativePath,
+                    content,
+                }),
+                saveCanvasFile: (relativePath, content) => savePersistedCanvasContent({
+                    relativePath,
+                    content,
+                }),
                 deleteMarkdownFile: deleteVaultMarkdownFile,
                 deleteCanvasFile: deleteVaultCanvasFile,
             });
@@ -1925,8 +1935,11 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             }));
         }
 
-        [...result.deletedPaths, ...result.restoredPaths].forEach((relativePath) => {
-            emitPersistedContentUpdatedEvent({ relativePath, source: "save" });
+        const pathsToNotify = restoredThroughBackend
+            ? [...result.deletedPaths, ...result.restoredPaths]
+            : result.deletedPaths;
+        pathsToNotify.forEach((relativePath) => {
+            notifyPersistedContentSaved(relativePath);
         });
     };
 
@@ -2377,6 +2390,25 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
 
     return (
         <div className="ai-chat-panel">
+            <div className="ai-chat-topbar">
+                <button
+                    type="button"
+                    className={`ai-chat-conversation-manager-button${activeTab === "history" ? " active" : ""}`}
+                    aria-label={i18n.t("aiChatPlugin.conversationManager")}
+                    aria-pressed={activeTab === "history"}
+                    title={i18n.t("aiChatPlugin.conversationManagerHint")}
+                    disabled={!historyState}
+                    onClick={() => {
+                        setActiveTab("history");
+                    }}
+                >
+                    <History size={13} strokeWidth={1.9} />
+                    <span className="ai-chat-conversation-manager-label">
+                        {i18n.t("aiChatPlugin.conversationManager")}
+                    </span>
+                </button>
+            </div>
+
             {formattedError ? (
                 <div className="ai-chat-header">
                     <div className="ai-chat-status error" title={error ?? undefined}>

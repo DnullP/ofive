@@ -360,6 +360,10 @@ export const storeConsumerCoverage = {
         "src/host/commands/commandSystem.rename.test.ts",
         "src/host/commands/commandSystem.delete.test.ts",
     ],
+    "src/host/editor/persistedMarkdownContentSync.ts": [
+        "src/host/editor/persistedMarkdownContentSync.test.ts",
+        "e2e/task-board.e2e.ts",
+    ],
     "src/host/commands/shortcutDispatcher.ts": [
         "src/host/commands/shortcutDispatcher.test.ts",
     ],
@@ -399,6 +403,9 @@ export const storeConsumerCoverage = {
     ],
     "src/plugins/ai-chat/aiChatPlugin.tsx": [
         "src/plugins/ai-chat/aiChatSettingsStore.test.ts",
+    ],
+    "src/plugins/tasks/task-board/TaskBoardTab.tsx": [
+        "e2e/task-board.e2e.ts",
     ],
     "src/host/settings/registrars/generalSettingsRegistrar.tsx": [
         "src/host/settings/registrars/builtinSettingsRegistrars.test.tsx",

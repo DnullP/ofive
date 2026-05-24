@@ -10,6 +10,7 @@ const guardCommands = [
     { label: "theme-guard", args: ["scripts/check-theme-colors.mjs"] },
     { label: "i18n-guard", args: ["scripts/check-i18n-copy.mjs"] },
     { label: "editor-read-parity-guard", args: ["scripts/check-editor-read-parity.mjs"] },
+    { label: "persisted-content-guard", args: ["scripts/check-persisted-content-guards.mjs"] },
     { label: "store-state-test-guard", args: ["scripts/check-store-state-tests.mjs"] },
     { label: "settings-test-guard", args: ["scripts/check-settings-tests.mjs"] },
 ];

@@ -572,7 +572,9 @@ test.describe("sidebar toggle regression", () => {
         await expect(
             page.locator(".layout-v2-tab-section__tab-title").filter({ hasText: /知识图谱|Knowledge Graph/ }),
         ).toBeVisible();
-        await expect(page.locator(".knowledge-graph-tab").first()).toBeVisible();
+        const activeCard = page.locator(".layout-v2-tab-section__card--active");
+        await expect(activeCard.locator(".knowledge-graph-tab")).toBeVisible();
+        await expect(activeCard.locator(".workbench-layout-v2__tab-navigation")).toHaveCount(0);
     });
 
     test("collapsed sidebar panel bars stay visible and can expand after restore", async ({ page }) => {

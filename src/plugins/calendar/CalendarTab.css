@@ -2,133 +2,119 @@
 .calendar-tab {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 0;
     height: 100%;
-    padding: 16px;
-    background: radial-gradient(circle at top left, var(--bg-hover), transparent 48%), var(--bg-primary);
+    padding: 0;
+    background: var(--bg-primary);
     color: var(--text-primary);
-    overflow: auto;
+    overflow: hidden;
     container-type: inline-size;
 }
 
 /* Panel 模式根容器：降低间距与内边距，以适配窄侧栏。 */
 .calendar-tab--panel {
-    gap: 10px;
-    padding: 10px;
+    gap: 0;
+    padding: 0;
 }
 
 /* 日历头部：容纳标题说明和月份切换动作。 */
 .calendar-tab__header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+    background: color-mix(in srgb, var(--bg-primary) 94%, var(--bg-secondary));
     user-select: none;
 }
 
 /* Panel 模式头部：改为纵向堆叠，适配窄宽度。 */
 .calendar-tab--panel .calendar-tab__header {
-    flex-direction: column;
-    gap: 10px;
-}
-
-/* 头部标题组：垂直排列标题与说明。 */
-.calendar-tab__header-copy {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-/* 主标题：强调当前 tab 的主要语义。 */
-.calendar-tab__title {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 700;
-}
-
-/* Panel 模式主标题：略微收紧字号，避免占用过多垂直空间。 */
-.calendar-tab--panel .calendar-tab__title {
-    font-size: 18px;
-}
-
-/* 说明文本：提示数据来源和交互方式。 */
-.calendar-tab__description {
-    margin: 0;
-    font-size: 13px;
-    color: var(--text-secondary);
-}
-
-/* Panel 模式说明文本：限制行宽并收紧字号，优先保留操作区空间。 */
-.calendar-tab--panel .calendar-tab__description {
-    max-width: 30ch;
-    font-size: 12px;
+    min-height: 40px;
+    padding: 0 8px;
 }
 
 /* 月份导航区：排列上月、今天、下月按钮与月份标题。 */
 .calendar-tab__month-nav {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    gap: 4px;
+    min-width: 0;
+    width: 100%;
 }
 
 /* Panel 模式月份导航：左对齐并允许更紧凑地换行。 */
 .calendar-tab--panel .calendar-tab__month-nav {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    width: 100%;
+    gap: 3px;
 }
 
 /* 导航按钮：统一月历操作按钮的尺寸、边框和悬浮态。 */
 .calendar-tab__nav-button {
-    border: 1px solid var(--border-color);
-    background: var(--bg-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 28px;
+    min-width: 28px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+    background: transparent;
     color: var(--text-primary);
-    border-radius: 10px;
-    padding: 8px 12px;
+    border-radius: 6px;
+    padding: 0 8px;
     cursor: pointer;
+}
+
+.calendar-tab__nav-button--icon {
+    width: 28px;
+    padding: 0;
+}
+
+.calendar-tab__nav-button--today {
+    margin-left: auto;
 }
 
 /* 导航按钮悬浮态：提升操作可见性。 */
 .calendar-tab__nav-button:hover {
-    background: var(--bg-hover);
+    background: color-mix(in srgb, var(--bg-hover) 82%, transparent);
 }
 
 /* Panel 模式导航按钮：缩小内边距。 */
 .calendar-tab--panel .calendar-tab__nav-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
     min-width: 0;
-    padding: 6px 8px;
+    height: 26px;
+    padding: 0 7px;
 }
 
 /* 月份标签：展示当前正在查看的年月。 */
 .calendar-tab__month-label {
-    min-width: 160px;
-    text-align: center;
-    font-size: 15px;
+    display: inline-flex;
+    align-items: center;
+    min-width: 156px;
+    height: 28px;
+    padding: 0 8px;
+    text-align: left;
+    font-size: 14px;
     font-weight: 600;
+    white-space: nowrap;
 }
 
 /* Panel 模式月份标签：缩短最小宽度避免换行挤压。 */
 .calendar-tab--panel .calendar-tab__month-label {
-    order: -1;
-    grid-column: 1 / -1;
     min-width: 0;
-    text-align: left;
-    font-size: 18px;
+    flex: 1 1 auto;
+    padding: 0 4px;
+    font-size: 13px;
 }
 
 /* 状态卡片：用于加载、错误和空状态提示。 */
 .calendar-tab__status {
-    border: 1px solid var(--border-color);
+    margin: 12px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
     background: var(--bg-secondary);
-    border-radius: 14px;
-    padding: 16px;
+    border-radius: 6px;
+    padding: 12px;
     color: var(--text-secondary);
 }
 
@@ -136,15 +122,15 @@
 .calendar-tab__body {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 0;
     min-height: 0;
     flex: 1;
-    overflow: auto;
+    overflow: hidden;
 }
 
 /* Panel 模式主体：缩小区块间距。 */
 .calendar-tab--panel .calendar-tab__body {
-    gap: 10px;
+    gap: 0;
     overflow: visible;
 }
 
@@ -152,38 +138,40 @@
 .calendar-tab__calendar-surface {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 16px;
+    gap: 0;
+    padding: 12px 14px 14px;
     position: relative;
-    border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
-    border-radius: 18px;
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 92%, transparent), var(--bg-secondary)),
-        radial-gradient(circle at top center, var(--accent-primary-soft-weak), transparent 60%);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 8%, transparent);
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 /* Panel 模式月历面板：压缩内边距与圆角，适配侧栏宽度。 */
 .calendar-tab--panel .calendar-tab__calendar-surface {
-    gap: 8px;
-    padding: 10px;
-    border-radius: 14px;
+    gap: 0;
+    padding: 8px;
+    border-bottom: 0;
 }
 
 /* 星期标题行：7 列网格承载周一到周日标题。 */
 .calendar-tab__weekdays {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 8px;
+    gap: 0;
+    border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+    border-bottom: 0;
 }
 
 /* Panel 模式星期标题行：进一步缩小列间距。 */
 .calendar-tab--panel .calendar-tab__weekdays {
-    gap: 4px;
+    gap: 0;
 }
 
 /* 星期标题单元：展示周标题并与日期网格对齐。 */
 .calendar-tab__weekday {
+    padding: 6px 0;
     font-size: 12px;
     font-weight: 600;
     color: var(--text-secondary);
@@ -192,34 +180,40 @@
 
 /* Panel 模式星期标题：收紧字号，避免标题挤压日期单元。 */
 .calendar-tab--panel .calendar-tab__weekday {
-    font-size: 11px;
+    padding: 5px 0;
+    font-size: 10px;
 }
 
 /* 日期网格：固定 7 列，用于渲染 6 周月历。 */
 .calendar-tab__grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 8px;
+    gap: 0;
     flex: 0 0 auto;
+    border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+    border-left: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
 }
 
 /* Panel 模式日期网格：减小间距以容纳窄栏。 */
 .calendar-tab--panel .calendar-tab__grid {
-    gap: 4px;
+    gap: 0;
 }
 
 /* 日期按钮：单天单元格，支持点击展开与右键创建每日笔记。 */
 .calendar-tab__day {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 8px;
-    min-height: 88px;
-    padding: 10px;
-    border: 1px solid var(--border-color);
-    border-radius: 14px;
-    background: var(--bg-secondary);
+    gap: 6px;
+    min-height: 82px;
+    padding: 8px;
+    border: 0;
+    border-right: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+    border-radius: 0;
+    background: transparent;
     color: var(--text-primary);
     cursor: pointer;
     text-align: left;
@@ -227,115 +221,83 @@
 
 /* Panel 模式日期单元：降低高度与内边距，突出数字和数量。 */
 .calendar-tab--panel .calendar-tab__day {
-    position: relative;
     width: 100%;
-    max-width: 34px;
-    min-width: 34px;
-    min-height: 34px;
-    height: 34px;
+    max-width: none;
+    min-width: 0;
+    min-height: 30px;
+    height: 30px;
     align-items: center;
     justify-content: center;
     justify-self: center;
     gap: 0;
     padding: 0;
-    border-radius: 999px;
+    border-radius: 0;
     box-sizing: border-box;
     text-align: center;
 }
 
 /* 日期按钮悬浮态：提示单元格可点击。 */
 .calendar-tab__day:hover {
-    background: var(--bg-hover);
+    background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
 }
 
 /* 非当前月日期：降低视觉权重，但仍可选中和右键。 */
 .calendar-tab__day--outside {
-    opacity: 0.58;
+    color: var(--text-tertiary);
+    opacity: 0.72;
 }
 
 /* 当前选中日期：高亮当前展开的日期。 */
 .calendar-tab__day--selected {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 1px var(--accent-primary-soft);
+    background: color-mix(in srgb, var(--accent-primary-soft-weak) 72%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 62%, transparent);
 }
 
 /* 今天日期：提供额外边框强调。 */
 .calendar-tab__day--today {
-    background: var(--accent-primary-soft-weak);
+    background: color-mix(in srgb, var(--accent-primary-soft-weak) 56%, transparent);
 }
 
 /* 日期数字：展示当月中的日号。 */
 .calendar-tab__day-number {
-    font-size: 18px;
-    font-weight: 700;
+    font-size: 15px;
+    font-weight: 650;
+    line-height: 1;
 }
 
 /* Panel 模式日期数字：略微缩小字号。 */
 .calendar-tab--panel .calendar-tab__day-number {
-    font-size: 15px;
+    font-size: 12px;
     line-height: 1;
 }
 
 /* Panel 模式含笔记日期：通过底色和边框提升信息密度，不再显示数量。 */
 .calendar-tab--panel .calendar-tab__day--has-notes {
-    background: color-mix(in srgb, var(--accent-primary-soft) 78%, var(--bg-secondary));
-    border-color: color-mix(in srgb, var(--accent-primary) 32%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary-soft) 54%, transparent);
+    box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent-primary) 48%, transparent);
 }
 
 /* Panel 模式已选中日期：强化边框与阴影，作为当前浮窗锚点。 */
 .calendar-tab--panel .calendar-tab__day--selected {
-    border-color: color-mix(in srgb, var(--accent-primary) 72%, var(--border-color));
-    box-shadow:
-        0 0 0 1px color-mix(in srgb, var(--accent-primary) 22%, transparent),
-        0 6px 14px color-mix(in srgb, var(--accent-primary-soft) 48%, transparent);
-}
-
-/* 日期附加信息区：显示当日笔记数量和提示。 */
-.calendar-tab__day-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    width: 100%;
-}
-
-/* Panel 模式日期附加信息：将数量贴齐右下，提升窄列可读性。 */
-.calendar-tab--panel .calendar-tab__day-meta {
-    display: none;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 70%, transparent);
 }
 
 /* 笔记数量徽标：显示该日期关联笔记数量。 */
 .calendar-tab__day-count {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 28px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: var(--accent-primary-soft);
+    min-width: 20px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--accent-primary-soft) 72%, var(--bg-primary));
     color: var(--text-primary);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
-}
-
-/* Panel 模式数量徽标：进一步压缩尺寸，避免覆盖日期主体。 */
-.calendar-tab--panel .calendar-tab__day-count {
-    position: absolute;
-    right: 4px;
-    bottom: 4px;
-    min-width: 22px;
-    padding: 1px 6px;
-    font-size: 11px;
-}
-
-/* 日期键文本：展示 YYYY-MM-DD，便于识别跨月单元格。 */
-.calendar-tab__day-key {
-    font-size: 11px;
-    color: var(--text-tertiary);
-}
-
-/* Panel 模式日期键：隐藏长日期字符串，避免横向拥挤。 */
-.calendar-tab--panel .calendar-tab__day-key {
-    display: none;
 }
 
 /* Panel 浮动笔记窗：锚定到选中日期附近显示，不再占用下半区布局。 */
@@ -405,13 +367,14 @@
 .calendar-tab__details {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     min-height: 180px;
     flex: 0 0 220px;
-    padding: 16px;
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    background: var(--bg-secondary);
+    padding: 14px;
+    border: 0;
+    border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+    border-radius: 0;
+    background: color-mix(in srgb, var(--bg-secondary) 70%, var(--bg-primary));
     overflow: hidden;
 }
 
@@ -420,7 +383,7 @@
     min-height: 0;
     flex: 1;
     padding: 12px;
-    border-radius: 14px;
+    border-radius: 0;
 }
 
 /* 明细标题行：排列选中日期标题与数量。 */
@@ -442,8 +405,8 @@
 /* 明细标题：展示当前展开日期。 */
 .calendar-tab__details-title {
     margin: 0;
-    font-size: 16px;
-    font-weight: 700;
+    font-size: 14px;
+    font-weight: 650;
 }
 
 /* Panel 模式详情标题：收紧字号。 */
@@ -461,7 +424,7 @@
 .calendar-tab__note-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 0;
     min-height: 0;
     overflow: auto;
     flex: 1;
@@ -492,17 +455,18 @@
     gap: 4px;
     align-items: flex-start;
     width: 100%;
-    padding: 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    background: var(--bg-primary);
+    padding: 10px 0;
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 64%, transparent);
+    border-radius: 0;
+    background: transparent;
     color: var(--text-primary);
     cursor: pointer;
 }
 
 /* Panel 模式笔记按钮：缩小卡片内边距。 */
 .calendar-tab--panel .calendar-tab__note-button {
-    padding: 10px;
+    padding: 8px 0;
 }
 
 /* Panel 模式笔记标题：微调字号避免列表卡片过高。 */
@@ -525,28 +489,31 @@
 
     .calendar-tab--tab .calendar-tab__calendar-surface {
         min-height: 0;
+        border-right: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+        border-bottom: 0;
     }
 
     .calendar-tab--tab .calendar-tab__details {
         min-height: 0;
         flex: 1 1 auto;
+        border-top: 0;
     }
 }
 
 /* 超窄 panel 容器：进一步压缩日期格与操作按钮，避免侧栏出现溢出。 */
 @container (max-width: 360px) {
     .calendar-tab--panel .calendar-tab__month-nav {
-        gap: 6px;
+        gap: 2px;
     }
 
     .calendar-tab--panel .calendar-tab__nav-button {
-        padding: 6px;
+        padding: 0 5px;
         font-size: 12px;
     }
 
     .calendar-tab--panel .calendar-tab__day {
-        max-width: 30px;
-        min-width: 30px;
+        max-width: none;
+        min-width: 0;
         min-height: 30px;
         height: 30px;
         padding: 0;
@@ -562,18 +529,11 @@
         padding: 10px;
     }
 
-    .calendar-tab--panel .calendar-tab__day-count {
-        right: 3px;
-        bottom: 3px;
-        min-width: 18px;
-        padding: 1px 5px;
-        font-size: 10px;
-    }
 }
 
 /* 笔记按钮悬浮态：提升可点击反馈。 */
 .calendar-tab__note-button:hover {
-    background: var(--bg-hover);
+    background: color-mix(in srgb, var(--bg-hover) 78%, transparent);
 }
 
 /* 笔记标题：突出显示笔记名。 */

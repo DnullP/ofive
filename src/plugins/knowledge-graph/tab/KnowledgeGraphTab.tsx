@@ -121,6 +121,8 @@ interface KnowledgeGraphPerfTestHook {
     getLinkWidths: () => number[];
     /** 读取当前 Cosmos selection 索引，供 hover 一跳邻居 e2e 验证。 */
     getSelectedIndices: () => number[];
+    /** 读取 hover 透明度过渡进度，供 e2e 验证动画状态。 */
+    getHoverTransitionProgress: () => number;
     /** 读取当前图谱渲染设置摘要，供实时设置 e2e 验证。 */
     getRenderSettings: () => {
         linkDefaultWidth: number;
@@ -194,19 +196,21 @@ const ZOOM_IN_SCALE_AFTER_FIT = 1.2;
 
 const DEFAULT_COLOR_GROUP_COLOR = "#ff5252";
 
-const HOVER_NODE_GREYOUT_OPACITY = 0.16;
+const HOVER_NODE_GREYOUT_OPACITY = 0.1;
 
-const HOVER_LINK_GREYOUT_OPACITY = 0.08;
+const HOVER_LINK_GREYOUT_OPACITY = 0.04;
 
-const HOVER_LINK_DIM_ALPHA = 0.18;
+const HOVER_LINK_DIM_ALPHA = 0.08;
 
 const HOVER_LINK_ACTIVE_ALPHA = 1;
 
-const HOVER_LINK_WIDTH_MULTIPLIER = 2.4;
+const HOVER_LINK_WIDTH_MULTIPLIER = 3;
 
 const HOVER_END_RESUME_ALPHA = 0.08;
 
 const COSMOS_DEFAULT_LINK_GREYOUT_OPACITY = 0.1;
+
+const HOVER_TRANSITION_DURATION_MS = 320;
 
 interface KnowledgeGraphColorQueryInputProps {
     group: KnowledgeGraphNodeColorGroup;
@@ -469,6 +473,23 @@ function normalizeCanvasColorChannel(value: number | undefined): number {
     return Math.max(0, Math.min(1, value));
 }
 
+function clamp01(value: number): number {
+    if (!Number.isFinite(value)) {
+        return 0;
+    }
+
+    return Math.max(0, Math.min(1, value));
+}
+
+function lerpNumber(from: number, to: number, progress: number): number {
+    return from + (to - from) * progress;
+}
+
+function easeInOutSine(progress: number): number {
+    const clamped = clamp01(progress);
+    return (1 - Math.cos(Math.PI * clamped)) / 2;
+}
+
 /**
  * @function parseGraphColor
  * @description 将 Cosmos 配置色解析成 0..1 RGBA，供动态 linkColors 使用。
@@ -595,6 +616,7 @@ export function KnowledgeGraphTab(
     const graphLinksRef = useRef<number[]>([]);
     const dragTailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const labelRafRef = useRef<number | null>(null);
+    const hoverTransitionRafRef = useRef<number | null>(null);
     const lastDragReheatTimeRef = useRef<number>(0);
     const graphSettingsRef = useRef(graphSettings);
     /** 节点索引到相对路径的映射表，用于点击节点时打开对应笔记 */
@@ -602,6 +624,9 @@ export function KnowledgeGraphTab(
     /** 标签显示缩放阈值引用，供交互回调闭包读取最新值 */
     const labelVisibleZoomLevelRef = useRef<number>(graphSettings.labelVisibleZoomLevel);
     const hoveredNodeIndexRef = useRef<number | null>(null);
+    const hoveredSelectionRef = useRef<number[]>([]);
+    const hoverTransitionProgressRef = useRef(0);
+    const isClearingHoverRef = useRef(false);
     const shouldResumeSimulationAfterHoverRef = useRef(false);
     const [state, setState] = useState<GraphTabState>({
         loading: true,
@@ -845,6 +870,7 @@ export function KnowledgeGraphTab(
             getLinkColors: () => Array.from(graph.getLinkColors()),
             getLinkWidths: () => Array.from(graph.getLinkWidths()),
             getSelectedIndices: () => graph.getSelectedIndices() ?? [],
+            getHoverTransitionProgress: () => hoverTransitionProgressRef.current,
             getRenderSettings: () => {
                 const currentSettings = graphSettingsRef.current;
                 return {
@@ -901,13 +927,10 @@ export function KnowledgeGraphTab(
                 return;
             }
 
-            const hoveredNodeIndex = hoveredNodeIndexRef.current;
-            const hoveredLabelItem = hoveredNodeIndex === null
-                ? undefined
-                : labelItems.find((item) => item.index === hoveredNodeIndex);
+            const hoveredLabelIndices = new Set(hoveredSelectionRef.current);
             const currentZoom = graph.getZoomLevel();
             const threshold = labelVisibleZoomLevelRef.current;
-            const opacity = hoveredLabelItem
+            const opacity = hoveredLabelIndices.size > 0
                 ? 1
                 : computeLabelOpacity(currentZoom, threshold);
 
@@ -963,8 +986,12 @@ export function KnowledgeGraphTab(
                 });
             };
 
-            if (hoveredLabelItem) {
-                pushVisibleLabel(hoveredLabelItem);
+            if (hoveredLabelIndices.size > 0) {
+                labelItems.forEach((item) => {
+                    if (hoveredLabelIndices.has(item.index)) {
+                        pushVisibleLabel(item);
+                    }
+                });
             } else {
                 labelItems.forEach(pushVisibleLabel);
             }
@@ -1029,13 +1056,92 @@ export function KnowledgeGraphTab(
         scheduleLabelLayoutUpdate(graph);
     };
 
-    const applyDefaultGraphLinkAppearance = (graph: Graph): void => {
+    const cancelHoverTransition = (): void => {
+        if (hoverTransitionRafRef.current !== null) {
+            window.cancelAnimationFrame(hoverTransitionRafRef.current);
+            hoverTransitionRafRef.current = null;
+        }
+    };
+
+    const getCurrentGraphColorConfig = (): {
+        defaultLinkColor: KnowledgeGraphRgbaColor;
+        activeLinkColor: KnowledgeGraphRgbaColor;
+        linkGreyoutOpacity: number;
+    } => {
         const currentConfig = buildKnowledgeGraphConfig(graphSettingsRef.current);
+        return {
+            defaultLinkColor: parseGraphColor(currentConfig.linkDefaultColor),
+            activeLinkColor: parseGraphColor(currentConfig.hoveredLinkColor ?? currentConfig.linkDefaultColor),
+            linkGreyoutOpacity: currentConfig.linkGreyoutOpacity ?? COSMOS_DEFAULT_LINK_GREYOUT_OPACITY,
+        };
+    };
+
+    const renderStaticGraphFrame = (graph: Graph): void => {
+        graph.render(0);
+    };
+
+    const applyDefaultGraphLinkAppearance = (graph: Graph): void => {
+        const { linkGreyoutOpacity } = getCurrentGraphColorConfig();
         graph.setLinkColors(new Float32Array());
         graph.setLinkWidths(new Float32Array());
         graph.setConfig({
-            linkGreyoutOpacity: currentConfig.linkGreyoutOpacity ?? COSMOS_DEFAULT_LINK_GREYOUT_OPACITY,
+            linkGreyoutOpacity,
         });
+    };
+
+    const applyHoverVisualFrame = (graph: Graph, hoveredNodeIndex: number, progress: number): void => {
+        const easedProgress = easeInOutSine(progress);
+        const { defaultLinkColor, activeLinkColor, linkGreyoutOpacity } = getCurrentGraphColorConfig();
+        const linkStyle = buildKnowledgeGraphHoverLinkStyle({
+            links: graphLinksRef.current,
+            hoveredNodeIndex,
+            baseLinkWidth: graphSettingsRef.current.linkDefaultWidth,
+            defaultLinkColor,
+            activeLinkColor,
+            dimLinkAlpha: HOVER_LINK_DIM_ALPHA,
+            activeLinkAlpha: HOVER_LINK_ACTIVE_ALPHA,
+            activeLinkWidthMultiplier: HOVER_LINK_WIDTH_MULTIPLIER,
+            transitionProgress: easedProgress,
+        });
+
+        graph.setConfig({
+            focusedPointIndex: hoveredNodeIndex,
+            linkGreyoutOpacity: lerpNumber(linkGreyoutOpacity, HOVER_LINK_GREYOUT_OPACITY, easedProgress),
+            pointGreyoutOpacity: lerpNumber(1, HOVER_NODE_GREYOUT_OPACITY, easedProgress),
+        });
+        graph.selectPointsByIndices(hoveredSelectionRef.current);
+        graph.setLinkColors(linkStyle.linkColors);
+        graph.setLinkWidths(linkStyle.linkWidths);
+        hoverTransitionProgressRef.current = easedProgress;
+        if (!isClearingHoverRef.current) {
+            renderStaticGraphFrame(graph);
+        }
+        scheduleLabelLayoutUpdate(graph);
+    };
+
+    const animateHoverVisualFrame = (graph: Graph, hoveredNodeIndex: number): void => {
+        cancelHoverTransition();
+        const startedAt = window.performance.now();
+
+        const tick = (timestamp: number): void => {
+            if (hoveredNodeIndexRef.current !== hoveredNodeIndex) {
+                hoverTransitionRafRef.current = null;
+                return;
+            }
+
+            const progress = clamp01((timestamp - startedAt) / HOVER_TRANSITION_DURATION_MS);
+            applyHoverVisualFrame(graph, hoveredNodeIndex, progress);
+
+            if (progress < 1) {
+                hoverTransitionRafRef.current = window.requestAnimationFrame(tick);
+                return;
+            }
+
+            hoverTransitionRafRef.current = null;
+            graph.stop();
+        };
+
+        hoverTransitionRafRef.current = window.requestAnimationFrame(tick);
     };
 
     const applyGraphHover = (graph: Graph, index: number): void => {
@@ -1052,32 +1158,15 @@ export function KnowledgeGraphTab(
             return;
         }
 
-        const currentConfig = buildKnowledgeGraphConfig(graphSettingsRef.current);
-        const linkStyle = buildKnowledgeGraphHoverLinkStyle({
-            links: graphLinksRef.current,
-            hoveredNodeIndex: index,
-            baseLinkWidth: graphSettingsRef.current.linkDefaultWidth,
-            defaultLinkColor: parseGraphColor(currentConfig.linkDefaultColor),
-            activeLinkColor: parseGraphColor(currentConfig.hoveredLinkColor ?? currentConfig.linkDefaultColor),
-            dimLinkAlpha: HOVER_LINK_DIM_ALPHA,
-            activeLinkAlpha: HOVER_LINK_ACTIVE_ALPHA,
-            activeLinkWidthMultiplier: HOVER_LINK_WIDTH_MULTIPLIER,
-        });
-
         hoveredNodeIndexRef.current = index;
+        hoveredSelectionRef.current = hoveredSelection;
+        hoverTransitionProgressRef.current = 0;
+        isClearingHoverRef.current = false;
         shouldResumeSimulationAfterHoverRef.current =
             shouldResumeSimulationAfterHoverRef.current || graph.isSimulationRunning;
         graph.stop();
-        graph.setConfig({
-            focusedPointIndex: index,
-            linkGreyoutOpacity: HOVER_LINK_GREYOUT_OPACITY,
-            pointGreyoutOpacity: HOVER_NODE_GREYOUT_OPACITY,
-        });
-        graph.selectPointsByIndices(hoveredSelection);
-        graph.setLinkColors(linkStyle.linkColors);
-        graph.setLinkWidths(linkStyle.linkWidths);
-        graph.render(0);
-        scheduleLabelLayoutUpdate(graph);
+        applyHoverVisualFrame(graph, index, 0);
+        animateHoverVisualFrame(graph, index);
     };
 
     const clearGraphHover = (graph: Graph): void => {
@@ -1085,7 +1174,11 @@ export function KnowledgeGraphTab(
             return;
         }
 
+        cancelHoverTransition();
+        isClearingHoverRef.current = true;
         hoveredNodeIndexRef.current = null;
+        hoveredSelectionRef.current = [];
+        hoverTransitionProgressRef.current = 0;
         graph.unselectPoints();
         graph.setConfig({
             focusedPointIndex: undefined,
@@ -1099,6 +1192,7 @@ export function KnowledgeGraphTab(
         }
         graph.render(shouldResumeSimulation ? undefined : 0);
         scheduleLabelLayoutUpdate(graph);
+        isClearingHoverRef.current = false;
     };
 
     useEffect(() => {
@@ -1121,6 +1215,7 @@ export function KnowledgeGraphTab(
                 dragTailTimerRef,
                 lastDragReheatTimeRef,
                 scheduleLabelLayoutUpdate,
+                shouldKeepDragStatic: () => hoveredNodeIndexRef.current !== null,
                 dragReheatConfig: {
                     startAlpha: DRAG_START_REHEAT_ALPHA,
                     moveAlpha: DRAG_MOVE_REHEAT_ALPHA,
@@ -1162,6 +1257,7 @@ export function KnowledgeGraphTab(
                 window.cancelAnimationFrame(labelRafRef.current);
                 labelRafRef.current = null;
             }
+            cancelHoverTransition();
             labelRendererRef.current?.dispose();
             labelRendererRef.current = null;
             labelItemsRef.current = [];
@@ -1313,6 +1409,9 @@ export function KnowledgeGraphTab(
                 graph.stop();
                 hoveredNodeIndexRef.current = null;
                 shouldResumeSimulationAfterHoverRef.current = false;
+                hoveredSelectionRef.current = [];
+                hoverTransitionProgressRef.current = 0;
+                cancelHoverTransition();
                 graph.unselectPoints();
                 graph.setPointPositions(positions);
                 applyGraphNodeAppearance(graph);
@@ -1356,6 +1455,9 @@ export function KnowledgeGraphTab(
                 graphLinksRef.current = [];
                 hoveredNodeIndexRef.current = null;
                 shouldResumeSimulationAfterHoverRef.current = false;
+                hoveredSelectionRef.current = [];
+                hoverTransitionProgressRef.current = 0;
+                cancelHoverTransition();
                 graph.unselectPoints();
                 applyDefaultGraphLinkAppearance(graph);
                 setSuggestionNodes([]);

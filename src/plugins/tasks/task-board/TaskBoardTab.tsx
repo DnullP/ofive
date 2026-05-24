@@ -36,9 +36,10 @@ import {
 import {
     queryVaultTasks,
     readVaultMarkdownFile,
-    saveVaultMarkdownFile,
     type VaultTaskItem,
 } from "../../../api/vaultApi";
+import { getArticleSnapshotByPath } from "../../../host/editor/editorContextStore";
+import { savePersistedMarkdownContent } from "../../../host/editor/persistedMarkdownContentSync";
 import { subscribePersistedContentUpdatedEvent } from "../../../host/events/appEventBus";
 import { openFileInWorkbench } from "../../../host/layout/openFileService";
 import i18n from "../../../i18n";
@@ -347,8 +348,11 @@ export function TaskBoardTab(
         });
 
         try {
-            const file = await readVaultMarkdownFile(editingTask.relativePath);
-            const replacement = replaceTaskBoardMetadataInMarkdown(file.content, {
+            const articleSnapshot = getArticleSnapshotByPath(editingTask.relativePath);
+            const baseContent = articleSnapshot?.hasContentSnapshot
+                ? articleSnapshot.content
+                : await readVaultMarkdownFile(editingTask.relativePath).then((file) => file.content);
+            const replacement = replaceTaskBoardMetadataInMarkdown(baseContent, {
                 line: editingTask.line,
                 rawLine: editingTask.rawLine,
             }, {
@@ -356,7 +360,11 @@ export function TaskBoardTab(
                 priority: nextPriority,
             });
 
-            await saveVaultMarkdownFile(editingTask.relativePath, replacement.content);
+            await savePersistedMarkdownContent({
+                containerApi: props.containerApi,
+                relativePath: editingTask.relativePath,
+                content: replacement.content,
+            });
 
             setTasks((previousTasks) => previousTasks.map((task) => {
                 if (
@@ -392,7 +400,7 @@ export function TaskBoardTab(
         } finally {
             setSaving(false);
         }
-    }, [dueInput, editingTask, priorityInput]);
+    }, [dueInput, editingTask, priorityInput, props.containerApi]);
 
     const totalTaskCount = tasks.length;
 

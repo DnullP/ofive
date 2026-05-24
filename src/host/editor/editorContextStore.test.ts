@@ -12,6 +12,7 @@
 import { describe, expect, it } from "bun:test";
 import {
     getArticleSnapshotById,
+    getArticleSnapshotByPath,
     getFocusedArticleSnapshot,
     hasArticleSnapshotByPath,
     reportArticleContent,
@@ -123,6 +124,30 @@ describe("editorContextStore content snapshot boundary", () => {
         expect(snapshot2?.content).toBe(content);
         expect(snapshot1?.hasContentSnapshot).toBe(true);
         expect(snapshot2?.hasContentSnapshot).toBe(true);
+    });
+
+    /**
+     * @function should_return_latest_article_snapshot_by_path
+     * @description 按路径读取快照时，应返回同路径中最新的一份。
+     */
+    it("should return latest article snapshot by path", () => {
+        resetEditorContext();
+
+        const path = "notes/latest.md";
+        reportArticleContent({
+            articleId: "test-latest-old",
+            path,
+            content: "# old",
+        });
+        reportArticleContent({
+            articleId: "test-latest-new",
+            path,
+            content: "# new",
+        });
+
+        const snapshot = getArticleSnapshotByPath(path);
+        expect(snapshot?.articleId).toBe("test-latest-new");
+        expect(snapshot?.content).toBe("# new");
     });
 
     /**

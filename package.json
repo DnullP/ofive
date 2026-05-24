@@ -22,6 +22,7 @@
     "check:theme-colors": "bun scripts/check-theme-colors.mjs",
     "check:i18n-copy": "bun scripts/check-i18n-copy.mjs",
     "check:editor-read-parity": "bun scripts/check-editor-read-parity.mjs",
+    "check:persisted-content": "bun scripts/check-persisted-content-guards.mjs",
     "check:layout-v2-update": "bun scripts/check-layout-v2-update.mjs",
     "web:build": "bun run check:guards && bun run check:layout-v2-update && bun run build:layout-v2 && tsc && vite build",
     "web:preview": "vite preview --host 127.0.0.1 --port 4174 --strictPort",
