@@ -17,9 +17,15 @@ import type {
     WorkbenchTabDefinition,
     WorkbenchTabSectionLayoutSnapshot,
 } from "layout-v2";
+import { stableStringify } from "../../utils/stableJson";
 
 /** 主工作区布局配置键。 */
 export const WORKSPACE_LAYOUT_CONFIG_KEY = "workspaceLayout";
+const WORKSPACE_LAYOUT_COMPARISON_SPLIT_RATIOS: Record<string, number> = {
+    root: 0.04,
+    "workbench-shell": 0.22,
+    "center-shell": 0.78,
+};
 
 type SafeRecord = Record<string, unknown>;
 
@@ -154,6 +160,52 @@ function normalizeWorkspaceSectionNode(value: unknown): SectionNode<WorkbenchSec
     };
 }
 
+/**
+ * @function isTabSectionNode
+ * @description 判断 section 是否承载主编辑区 tab section。
+ */
+function isTabSectionNode(node: SectionNode<WorkbenchSectionData>): boolean {
+    return node.data.component.type === "tab-section";
+}
+
+/**
+ * @function isTabOnlySectionSubtree
+ * @description 判断当前 subtree 是否只包含 tab section，用于保留主编辑区 split 比例。
+ */
+function isTabOnlySectionSubtree(node: SectionNode<WorkbenchSectionData>): boolean {
+    if (!node.split) {
+        return isTabSectionNode(node);
+    }
+
+    return node.split.children.every((child) => isTabOnlySectionSubtree(child));
+}
+
+/**
+ * @function normalizeWorkspaceRootForComparison
+ * @description 生成 workspace 持久化比较用 root，忽略 sidebar/main 边界比例，仅保留主编辑区 split 比例。
+ */
+function normalizeWorkspaceRootForComparison(
+    node: SectionNode<WorkbenchSectionData>,
+): SectionNode<WorkbenchSectionData> {
+    if (!node.split) {
+        return node;
+    }
+
+    const children = node.split.children.map((child) => normalizeWorkspaceRootForComparison(child));
+    const ratio = isTabOnlySectionSubtree(node)
+        ? node.split.ratio
+        : (WORKSPACE_LAYOUT_COMPARISON_SPLIT_RATIOS[node.id] ?? 0.5);
+
+    return {
+        ...node,
+        split: {
+            ...node.split,
+            ratio,
+            children: [children[0], children[1]],
+        },
+    };
+}
+
 function normalizeWorkspaceTab(value: unknown): WorkbenchTabDefinition | null {
     const item = toSafeObject(value);
     if (!item) {
@@ -281,6 +333,37 @@ export function buildWorkspaceLayoutConfigValue(
 }
 
 /**
+ * @function buildWorkspaceLayoutComparisonValue
+ * @description 生成去重比较用值，避免 sidebar resize 触发 workspaceLayout 重复保存。
+ */
+function buildWorkspaceLayoutComparisonValue(snapshot: WorkbenchLayoutSnapshot): Record<string, unknown> {
+    const value = buildWorkspaceLayoutConfigValue(snapshot);
+    const root = normalizeWorkspaceSectionNode(value.root);
+
+    return {
+        ...value,
+        root: root ? normalizeWorkspaceRootForComparison(root) : value.root,
+    };
+}
+
+/**
+ * @function buildWorkspaceLayoutPersistenceKey
+ * @description 生成 workspace layout 持久化去重键。
+ */
+export function buildWorkspaceLayoutPersistenceKey(snapshot: WorkbenchLayoutSnapshot): string {
+    return stableStringify(buildWorkspaceLayoutComparisonValue(snapshot));
+}
+
+/**
+ * @function buildWorkspaceLayoutConfigEntryPersistenceKey
+ * @description 从已有 config entry 生成 workspace layout 去重键。
+ */
+function buildWorkspaceLayoutConfigEntryPersistenceKey(entry: unknown): string {
+    const snapshot = parseWorkspaceLayoutConfig({ [WORKSPACE_LAYOUT_CONFIG_KEY]: entry });
+    return snapshot ? buildWorkspaceLayoutPersistenceKey(snapshot) : stableStringify(entry);
+}
+
+/**
  * @function hydrateWorkspaceLayoutSnapshot
  * @description 重新解析快照中的文件 tab，使文件内容、绝对路径等运行时参数来自当前仓库。
  * @param snapshot 持久化快照。
@@ -323,14 +406,25 @@ export async function hydrateWorkspaceLayoutSnapshot(
  */
 export async function saveWorkspaceLayoutSnapshot(snapshot: WorkbenchLayoutSnapshot): Promise<VaultConfig> {
     const { updateBackendConfig } = await import("../config/configStore");
+    const nextWorkspaceLayout = buildWorkspaceLayoutConfigValue(snapshot);
+    const nextWorkspaceLayoutPersistenceKey = buildWorkspaceLayoutPersistenceKey(snapshot);
 
-    return updateBackendConfig((currentConfig) => ({
-        ...currentConfig,
-        entries: {
-            ...currentConfig.entries,
-            [WORKSPACE_LAYOUT_CONFIG_KEY]: buildWorkspaceLayoutConfigValue(snapshot),
-        },
-    }), {
+    return updateBackendConfig((currentConfig) => {
+        if (
+            buildWorkspaceLayoutConfigEntryPersistenceKey(currentConfig.entries[WORKSPACE_LAYOUT_CONFIG_KEY]) ===
+            nextWorkspaceLayoutPersistenceKey
+        ) {
+            return currentConfig;
+        }
+
+        return {
+            ...currentConfig,
+            entries: {
+                ...currentConfig.entries,
+                [WORKSPACE_LAYOUT_CONFIG_KEY]: nextWorkspaceLayout,
+            },
+        };
+    }, {
         logLabel: "workspace-layout.save",
     });
 }

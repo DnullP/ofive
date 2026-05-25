@@ -15,6 +15,7 @@ import {
     type TextareaHTMLAttributes,
 } from "react";
 import { X } from "lucide-react";
+import { OptionalWorkbenchOverlayPortal } from "../layout/workbenchOverlayLayer";
 import { modalPlainTextAreaProps, modalPlainTextInputProps } from "./textInputBehaviors";
 import "./UiPrimitives.css";
 
@@ -295,6 +296,7 @@ export interface UiModalProps {
     onSubmit?: FormEventHandler<HTMLFormElement>;
     panelClassName?: string;
     placement?: "center" | "top";
+    portal?: boolean;
     showCloseButton?: boolean;
     size?: "sm" | "md" | "lg" | "xl";
     title?: ReactNode;
@@ -315,6 +317,7 @@ export function UiModal(props: UiModalProps): ReactNode {
         onSubmit,
         panelClassName,
         placement = "center",
+        portal = true,
         showCloseButton = true,
         size = "md",
         title,
@@ -365,7 +368,7 @@ export function UiModal(props: UiModalProps): ReactNode {
         role: "dialog",
     } as const;
 
-    return (
+    const modal = (
         <div
             className={cx("ofive-ui-modal-backdrop", `ofive-ui-modal-backdrop--${placement}`, className)}
             data-floating-backdrop="true"
@@ -388,6 +391,12 @@ export function UiModal(props: UiModalProps): ReactNode {
             )}
         </div>
     );
+
+    return portal ? (
+        <OptionalWorkbenchOverlayPortal interactive>
+            {modal}
+        </OptionalWorkbenchOverlayPortal>
+    ) : modal;
 }
 
 export interface UiDropdownMenuProps extends HTMLAttributes<HTMLDivElement> {

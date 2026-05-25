@@ -95,6 +95,8 @@ async function createCustomPanelContainer(page: Page, activityName: string): Pro
 
     const modal = page.locator(".custom-activity-modal");
     await expect(modal).toBeVisible();
+    await expect(modal.locator("xpath=ancestor::*[@data-workbench-overlay-layer='true']")).toHaveCount(1);
+    await expect(modal.locator("xpath=ancestor::*[contains(@class, 'layout-v2__leaf-content')]")).toHaveCount(0);
     await modal.locator(".custom-activity-modal__input").fill(activityName);
     await modal.locator(".custom-activity-modal__button.primary").click();
     await expect(modal).toHaveCount(0);

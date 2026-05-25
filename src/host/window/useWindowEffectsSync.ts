@@ -26,7 +26,7 @@
  *   - useWindowEffectsSync
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     updateMainWindowAcrylicEffect,
     type WindowsAcrylicEffectConfig,
@@ -97,6 +97,27 @@ export function buildWindowEffectConfig(
     };
 }
 
+export function areWindowEffectConfigsEqual(
+    left: WindowsAcrylicEffectConfig,
+    right: WindowsAcrylicEffectConfig,
+): boolean {
+    return left.enabled === right.enabled
+        && left.appThemeMode === right.appThemeMode
+        && left.disableSystemBackdrop === right.disableSystemBackdrop
+        && left.focusedAccentFlags === right.focusedAccentFlags
+        && left.focusedAnimationId === right.focusedAnimationId
+        && left.inactiveAccentFlags === right.inactiveAccentFlags
+        && left.inactiveAnimationId === right.inactiveAnimationId
+        && left.focusedColor.red === right.focusedColor.red
+        && left.focusedColor.green === right.focusedColor.green
+        && left.focusedColor.blue === right.focusedColor.blue
+        && left.focusedColor.alpha === right.focusedColor.alpha
+        && left.inactiveColor.red === right.inactiveColor.red
+        && left.inactiveColor.green === right.inactiveColor.green
+        && left.inactiveColor.blue === right.inactiveColor.blue
+        && left.inactiveColor.alpha === right.inactiveColor.alpha;
+}
+
 /**
  * @function useWindowEffectsSync
  * @description 宿主窗口效果同步 Hook。
@@ -110,6 +131,7 @@ export function useWindowEffectsSync(): void {
     const configState = useConfigState();
     const themeState = useThemeState();
     const runtimeInfo = useMemo(() => detectWindowRuntimeInfo(), []);
+    const lastNativeWindowEffectConfigRef = useRef<WindowsAcrylicEffectConfig | null>(null);
     const isGlassEffectEnabled =
         runtimeInfo.isTauriRuntime && configState.featureSettings.glassEffectEnabled;
     const [isWindowFocused, setIsWindowFocused] = useState<boolean>(() => {
@@ -213,11 +235,19 @@ export function useWindowEffectsSync(): void {
             isGlassEffectEnabled,
         );
 
+        const lastConfig = lastNativeWindowEffectConfigRef.current;
+        if (lastConfig && areWindowEffectConfigsEqual(lastConfig, nextConfig)) {
+            return;
+        }
+
+        lastNativeWindowEffectConfigRef.current = nextConfig;
+
         void updateMainWindowAcrylicEffect(nextConfig)
             .then(() => {
                 console.info("[window-effects] native window effect applied", nextConfig);
             })
             .catch((error) => {
+                lastNativeWindowEffectConfigRef.current = null;
                 console.warn("[window-effects] failed to apply native window effect", {
                     message: error instanceof Error ? error.message : String(error),
                 });

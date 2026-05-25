@@ -3,6 +3,7 @@
     display: grid;
     grid-template-columns: 280px 1fr;
     min-height: 0;
+    overflow: hidden;
 }
 
 .settings-tab-sidebar {
@@ -12,6 +13,8 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .app-runtime--tauri.app-effect--glass .settings-tab-sidebar {
@@ -24,6 +27,7 @@
     flex-direction: column;
     gap: 4px;
     padding: 4px 6px 0;
+    flex-shrink: 0;
 }
 
 .settings-tab-sidebar-caption {
@@ -48,6 +52,7 @@
     border-radius: 0;
     background: var(--content-material-input-bg);
     box-shadow: var(--content-material-shadow);
+    flex-shrink: 0;
 }
 
 .settings-tab-search-icon {
@@ -67,8 +72,11 @@
 }
 
 .settings-tab-sidebar-list {
+    flex: 1 1 auto;
     min-height: 0;
-    overflow: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
     gap: 0;

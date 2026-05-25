@@ -127,6 +127,32 @@ pub(crate) fn get_ai_vendor_catalog() -> Vec<AiVendorDefinition> {
             ],
         },
         AiVendorDefinition {
+            id: "codex-compatible".to_string(),
+            title: "Codex Compatible".to_string(),
+            description: "Use Codex/agent-compatible gateways that expose a Chat Completions-shaped endpoint but require top-level instructions.".to_string(),
+            default_model: "gpt-5.5".to_string(),
+            fields: vec![
+                AiVendorFieldDefinition {
+                    key: "apiKey".to_string(),
+                    label: "API Key".to_string(),
+                    description: "API key sent as a Bearer token.".to_string(),
+                    field_type: "password".to_string(),
+                    required: true,
+                    placeholder: Some("Codex-compatible API key".to_string()),
+                    default_value: None,
+                },
+                AiVendorFieldDefinition {
+                    key: "baseUrl".to_string(),
+                    label: "Base URL".to_string(),
+                    description: "Codex-compatible API base URL. The sidecar calls /chat/completions and sends top-level instructions.".to_string(),
+                    field_type: "text".to_string(),
+                    required: true,
+                    placeholder: Some("https://www.api-for-ai.com/v1".to_string()),
+                    default_value: Some("https://www.api-for-ai.com/v1".to_string()),
+                },
+            ],
+        },
+        AiVendorDefinition {
             id: "minimax-anthropic".to_string(),
             title: "MiniMax (Anthropic Compatible)".to_string(),
             description: "Preset for MiniMax text generation through its Anthropic-compatible API.".to_string(),
@@ -612,6 +638,7 @@ fn sanitize_ai_chat_provider(
     fallback_vendor: &AiVendorDefinition,
     index: usize,
 ) -> Option<AiChatProviderConfig> {
+    let provider = migrate_ai_chat_provider_vendor(provider);
     let vendor =
         find_ai_vendor(provider.vendor_id.trim()).unwrap_or_else(|| fallback_vendor.clone());
     let id = provider.id.trim();
@@ -684,6 +711,35 @@ fn sanitize_ai_chat_provider(
         },
         field_values: next_field_values,
     })
+}
+
+fn migrate_ai_chat_provider_vendor(mut provider: AiChatProviderConfig) -> AiChatProviderConfig {
+    if provider.vendor_id.trim() == "openai-compatible"
+        && provider_uses_api_for_ai_base_url(&provider)
+    {
+        provider.vendor_id = "codex-compatible".to_string();
+        if provider.title.trim() == "OpenAI Compatible" || provider.title.trim().is_empty() {
+            provider.title = "Codex Compatible".to_string();
+        }
+    }
+    provider
+}
+
+fn provider_uses_api_for_ai_base_url(provider: &AiChatProviderConfig) -> bool {
+    provider
+        .field_values
+        .get("baseUrl")
+        .or_else(|| provider.field_values.get("endpoint"))
+        .map(|value| is_api_for_ai_base_url(value))
+        .unwrap_or(false)
+}
+
+fn is_api_for_ai_base_url(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    normalized.contains("://api-for-ai.com/")
+        || normalized.contains("://www.api-for-ai.com/")
+        || normalized.ends_with("://api-for-ai.com")
+        || normalized.ends_with("://www.api-for-ai.com")
 }
 
 /// 从 vault config 条目中读取并清洗 AI 设置。
@@ -1304,6 +1360,40 @@ mod tests {
             Some("provider-openai")
         );
         assert_eq!(settings.providers.len(), 2);
+    }
+
+    #[test]
+    fn sanitize_ai_chat_settings_should_migrate_api_for_ai_openai_provider_to_codex() {
+        let settings = sanitize_ai_chat_settings(AiChatSettings {
+            vendor_id: "openai-compatible".to_string(),
+            model: "gpt-5.5".to_string(),
+            field_values: HashMap::from([
+                ("apiKey".to_string(), " test-key ".to_string()),
+                (
+                    "baseUrl".to_string(),
+                    " https://www.api-for-ai.com/v1 ".to_string(),
+                ),
+            ]),
+            active_provider_id: None,
+            providers: Vec::new(),
+            tool_approval_policy: HashMap::new(),
+        });
+
+        assert_eq!(settings.vendor_id, "codex-compatible");
+        assert_eq!(settings.model, "gpt-5.5");
+        assert_eq!(
+            settings.active_provider_id.as_deref(),
+            Some("provider-openai-compatible")
+        );
+        assert_eq!(
+            settings.field_values.get("apiKey").map(String::as_str),
+            Some("test-key")
+        );
+        assert_eq!(
+            settings.field_values.get("baseUrl").map(String::as_str),
+            Some("https://www.api-for-ai.com/v1")
+        );
+        assert_eq!(settings.providers[0].vendor_id, "codex-compatible");
     }
 
     #[test]

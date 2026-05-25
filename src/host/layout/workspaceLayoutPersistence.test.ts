@@ -7,6 +7,7 @@ import { describe, expect, it } from "bun:test";
 import type { WorkbenchLayoutSnapshot } from "layout-v2";
 import {
     buildWorkspaceLayoutConfigValue,
+    buildWorkspaceLayoutPersistenceKey,
     countWorkspaceLayoutTabs,
     hydrateWorkspaceLayoutSnapshot,
     parseWorkspaceLayoutConfig,
@@ -81,6 +82,76 @@ const snapshot: WorkbenchLayoutSnapshot = {
     activeGroupId: "main-tabs",
 };
 
+const workbenchShellSnapshot: WorkbenchLayoutSnapshot = {
+    ...snapshot,
+    root: {
+        id: "root",
+        title: "Workbench Root",
+        data: {
+            role: "root",
+            component: {
+                type: "empty",
+                props: { label: "Root", description: "workbench root" },
+            },
+        },
+        resizableEdges: { top: true, right: true, bottom: true, left: true },
+        split: {
+            direction: "horizontal",
+            ratio: 0.15,
+            children: [
+                {
+                    id: "left-activity-bar",
+                    title: "Left Activity Bar",
+                    data: {
+                        role: "activity-bar",
+                        component: { type: "activity-rail", props: {} },
+                    },
+                    resizableEdges: { top: true, right: false, bottom: true, left: true },
+                    split: null,
+                },
+                {
+                    id: "workbench-shell",
+                    title: "Workbench Shell",
+                    data: {
+                        role: "container",
+                        component: {
+                            type: "empty",
+                            props: { label: "Workbench", description: "workbench container" },
+                        },
+                    },
+                    resizableEdges: { top: true, right: true, bottom: true, left: true },
+                    split: {
+                        direction: "horizontal",
+                        ratio: 0.31,
+                        children: [
+                            {
+                                id: "left-sidebar",
+                                title: "Left Sidebar",
+                                data: {
+                                    role: "sidebar",
+                                    component: { type: "panel-section", props: { panelSectionId: "left-panel-section" } },
+                                },
+                                resizableEdges: { top: true, right: true, bottom: true, left: true },
+                                split: null,
+                            },
+                            {
+                                id: "main-tabs",
+                                title: "Main Tabs",
+                                data: {
+                                    role: "main",
+                                    component: { type: "tab-section", props: { tabSectionId: "main-tabs" } },
+                                },
+                                resizableEdges: { top: true, right: true, bottom: true, left: true },
+                                split: null,
+                            },
+                        ],
+                    },
+                },
+            ],
+        },
+    },
+};
+
 describe("workspace layout persistence", () => {
     it("写入配置时应移除文件内容和运行时参数", () => {
         const value = buildWorkspaceLayoutConfigValue(snapshot);
@@ -96,6 +167,124 @@ describe("workspace layout persistence", () => {
         expect(parsed).not.toBeNull();
         expect(countWorkspaceLayoutTabs(parsed)).toBe(2);
         expect(JSON.stringify(buildWorkspaceLayoutConfigValue(parsed!))).toBe(JSON.stringify(value));
+    });
+
+    it("比较键应忽略 sidebar/main 边界比例变化", () => {
+        const resizedShellSnapshot: WorkbenchLayoutSnapshot = {
+            ...workbenchShellSnapshot,
+            root: {
+                ...workbenchShellSnapshot.root,
+                split: {
+                    ...workbenchShellSnapshot.root.split!,
+                    ratio: 0.27,
+                    children: [
+                        workbenchShellSnapshot.root.split!.children[0],
+                        {
+                            ...workbenchShellSnapshot.root.split!.children[1],
+                            split: {
+                                ...workbenchShellSnapshot.root.split!.children[1].split!,
+                                ratio: 0.48,
+                            },
+                        },
+                    ],
+                },
+            },
+        };
+
+        expect(buildWorkspaceLayoutPersistenceKey(resizedShellSnapshot)).toBe(
+            buildWorkspaceLayoutPersistenceKey(workbenchShellSnapshot),
+        );
+    });
+
+    it("比较键应保留主编辑区 split 比例变化", () => {
+        const splitMainSnapshot: WorkbenchLayoutSnapshot = {
+            ...workbenchShellSnapshot,
+            root: {
+                ...workbenchShellSnapshot.root,
+                split: {
+                    ...workbenchShellSnapshot.root.split!,
+                    children: [
+                        workbenchShellSnapshot.root.split!.children[0],
+                        {
+                            ...workbenchShellSnapshot.root.split!.children[1],
+                            split: {
+                                ...workbenchShellSnapshot.root.split!.children[1].split!,
+                                children: [
+                                    workbenchShellSnapshot.root.split!.children[1].split!.children[0],
+                                    {
+                                        id: "main-tabs",
+                                        title: "Main Tabs",
+                                        data: {
+                                            role: "main",
+                                            component: { type: "tab-section", props: { tabSectionId: "main-tabs" } },
+                                        },
+                                        resizableEdges: { top: true, right: true, bottom: true, left: true },
+                                        split: {
+                                            direction: "horizontal",
+                                            ratio: 0.35,
+                                            children: [
+                                                {
+                                                    id: "main-tabs-section",
+                                                    title: "Main Tabs",
+                                                    data: {
+                                                        role: "main",
+                                                        component: { type: "tab-section", props: { tabSectionId: "main-tabs" } },
+                                                    },
+                                                    resizableEdges: { top: true, right: true, bottom: true, left: true },
+                                                    split: null,
+                                                },
+                                                {
+                                                    id: "main-tabs-split",
+                                                    title: "Main Tabs",
+                                                    data: {
+                                                        role: "main",
+                                                        component: { type: "tab-section", props: { tabSectionId: "main-tabs-split" } },
+                                                    },
+                                                    resizableEdges: { top: true, right: true, bottom: true, left: true },
+                                                    split: null,
+                                                },
+                                            ],
+                                        },
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                },
+            },
+        };
+        const resizedMainSnapshot: WorkbenchLayoutSnapshot = {
+            ...splitMainSnapshot,
+            root: {
+                ...splitMainSnapshot.root,
+                split: {
+                    ...splitMainSnapshot.root.split!,
+                    children: [
+                        splitMainSnapshot.root.split!.children[0],
+                        {
+                            ...splitMainSnapshot.root.split!.children[1],
+                            split: {
+                                ...splitMainSnapshot.root.split!.children[1].split!,
+                                children: [
+                                    splitMainSnapshot.root.split!.children[1].split!.children[0],
+                                    {
+                                        ...splitMainSnapshot.root.split!.children[1].split!.children[1],
+                                        split: {
+                                            ...splitMainSnapshot.root.split!.children[1].split!.children[1].split!,
+                                            ratio: 0.62,
+                                        },
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                },
+            },
+        };
+
+        expect(buildWorkspaceLayoutPersistenceKey(resizedMainSnapshot)).not.toBe(
+            buildWorkspaceLayoutPersistenceKey(splitMainSnapshot),
+        );
     });
 
     it("hydrate 时应使用 resolver 重建文件 tab，并丢弃无法恢复的文件 tab", async () => {

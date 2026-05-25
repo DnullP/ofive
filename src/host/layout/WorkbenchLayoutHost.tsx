@@ -84,7 +84,7 @@ import {
     readWorkspaceFileDragPayload,
 } from "./workspaceFileDragPayload";
 import {
-    buildWorkspaceLayoutConfigValue,
+    buildWorkspaceLayoutPersistenceKey,
     countWorkspaceLayoutTabs,
     getWorkspaceLayoutFromVaultConfig,
     hydrateWorkspaceLayoutSnapshot,
@@ -142,6 +142,7 @@ import i18n from "../../i18n";
 import { CreateEntryModal } from "./CreateEntryModal";
 import { WorkbenchOverlayLayerProvider } from "./workbenchOverlayLayer";
 import { CodeMirrorEditorPreviewMirror } from "../../plugins/markdown-codemirror/editor/CodeMirrorEditorPreviewMirror";
+import { stableStringify } from "../../utils/stableJson";
 import "../../../node_modules/layout-v2/dist/layout-v2.css";
 import "./WorkbenchLayoutHost.tokens.css";
 import "./WorkbenchLayoutHost.css";
@@ -155,6 +156,7 @@ const CUSTOM_ACTIVITY_CREATE_COMMAND_ID = "customActivity.create";
 const KEEP_ALIVE_INACTIVE_TAB_COMPONENT_IDS = new Set(["knowledgegraph"]);
 const WORKBENCH_TITLEBAR_OFFSET_ATTR = "data-workbench-titlebar-offset";
 const WORKBENCH_MAC_LEFT_TITLEBAR_OFFSET = "mac-left";
+const LAYOUT_PERSIST_DEBOUNCE_MS = 300;
 
 function waitForWorkbenchLayoutCommit(): Promise<void> {
     return new Promise((resolve) => {
@@ -870,6 +872,9 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     const panelLayoutSnapshotRef = useRef<WorkbenchPanelLayoutSnapshot | undefined>(sidebarSnapshot?.panelLayout);
     const sidebarSnapshotRef = useRef(sidebarSnapshot);
     const syncedPanelLayoutSidebarSnapshotRef = useRef(sidebarSnapshot);
+    const pendingSidebarLayoutSnapshotRef = useRef<SidebarLayoutSnapshot | null>(null);
+    const sectionRatioPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const workspaceLayoutPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const persistedWorkspaceLayoutRef = useRef<string | null>(null);
     const workspaceLayoutRestorePendingRef = useRef(false);
     const workspaceLayoutInitialDecisionVaultPathRef = useRef<string | null>(null);
@@ -907,7 +912,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
     useEffect(() => {
         persistedWorkspaceLayoutRef.current = workspaceSnapshot
-            ? JSON.stringify(buildWorkspaceLayoutConfigValue(workspaceSnapshot))
+            ? buildWorkspaceLayoutPersistenceKey(workspaceSnapshot)
             : null;
     }, [workspaceSnapshot]);
 
@@ -1417,6 +1422,30 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         },
     }), [buildCommandContext, decorateTabDefinition, openFileHelper]);
 
+    const scheduleSidebarLayoutPersist = useCallback((snapshot: SidebarLayoutSnapshot): void => {
+        const serializedSnapshot = stableStringify(snapshot);
+        if (persistedSnapshotRef.current === serializedSnapshot) return;
+
+        persistedSnapshotRef.current = serializedSnapshot;
+        pendingSidebarLayoutSnapshotRef.current = snapshot;
+
+        if (sectionRatioPersistTimerRef.current) {
+            clearTimeout(sectionRatioPersistTimerRef.current);
+        }
+
+        sectionRatioPersistTimerRef.current = setTimeout(() => {
+            sectionRatioPersistTimerRef.current = null;
+            const pendingSnapshot = pendingSidebarLayoutSnapshotRef.current;
+            pendingSidebarLayoutSnapshotRef.current = null;
+
+            if (!pendingSnapshot) {
+                return;
+            }
+
+            void saveSidebarLayoutSnapshot(pendingSnapshot);
+        }, LAYOUT_PERSIST_DEBOUNCE_MS);
+    }, []);
+
     /* ── Right sidebar toggle bridge ── */
 
     useEffect(() => {
@@ -1463,40 +1492,30 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 panelLayout: panelLayoutSnapshotRef.current,
             };
 
-            const serializedSnapshot = JSON.stringify(snapshot);
-            if (persistedSnapshotRef.current === serializedSnapshot) return;
-
-            persistedSnapshotRef.current = serializedSnapshot;
-            void saveSidebarLayoutSnapshot(snapshot);
+            scheduleSidebarLayoutPersist(snapshot);
         },
         [
             hasRightSidebar,
             configState.backendConfig,
             configState.loadedVaultPath,
             configState.featureSettings.restoreWorkspaceLayout,
+            scheduleSidebarLayoutPersist,
             vaultState.currentVaultPath,
         ],
     );
 
-    /* ── Section ratio persistence (debounced) ── */
-
-    const sectionRatioPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const panelLayoutPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const workspaceLayoutPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    /* ── Layout persistence (debounced) ── */
 
     const clearLayoutPersistTimers = useCallback((): void => {
         if (sectionRatioPersistTimerRef.current) {
             clearTimeout(sectionRatioPersistTimerRef.current);
             sectionRatioPersistTimerRef.current = null;
         }
-        if (panelLayoutPersistTimerRef.current) {
-            clearTimeout(panelLayoutPersistTimerRef.current);
-            panelLayoutPersistTimerRef.current = null;
-        }
         if (workspaceLayoutPersistTimerRef.current) {
             clearTimeout(workspaceLayoutPersistTimerRef.current);
             workspaceLayoutPersistTimerRef.current = null;
         }
+        pendingSidebarLayoutSnapshotRef.current = null;
     }, []);
 
     useEffect(() => {
@@ -1543,52 +1562,41 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         (ratios: Record<string, number>) => {
             sectionRatiosRef.current = ratios;
 
-            if (sectionRatioPersistTimerRef.current) {
-                clearTimeout(sectionRatioPersistTimerRef.current);
-            }
+            const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
+            if (!currentVaultPath || !configState.backendConfig) return;
+            if (workspaceLayoutBlockedVaultPathRef.current === currentVaultPath && configState.loadedVaultPath !== currentVaultPath) return;
+            if (!configState.featureSettings.restoreWorkspaceLayout) return;
 
-            sectionRatioPersistTimerRef.current = setTimeout(() => {
-                sectionRatioPersistTimerRef.current = null;
+            const snap = sidebarSnapshotRef.current;
+            const snapshot: SidebarLayoutSnapshot = {
+                version: 1,
+                left: {
+                    width: snap?.left.width ?? DEFAULT_LEFT_RAIL_WIDTH,
+                    visible: leftSidebarVisibleRef.current,
+                    activeActivityId: snap?.left.activeActivityId ?? null,
+                    activePanelId: snap?.left.activePanelId ?? null,
+                },
+                right: {
+                    width: snap?.right.width ?? DEFAULT_RIGHT_RAIL_WIDTH,
+                    visible: hasRightSidebar ? rightSidebarVisibleRef.current : false,
+                    activeActivityId: snap?.right.activeActivityId ?? null,
+                    activePanelId: snap?.right.activePanelId ?? null,
+                },
+                panelStates: snap?.panelStates ?? [],
+                paneStates: snap?.paneStates ?? [],
+                convertiblePanelStates: snap?.convertiblePanelStates ?? [],
+                sectionRatios: sectionRatiosRef.current,
+                panelLayout: panelLayoutSnapshotRef.current,
+            };
 
-                const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
-                if (!currentVaultPath || !configState.backendConfig) return;
-                if (workspaceLayoutBlockedVaultPathRef.current === currentVaultPath && configState.loadedVaultPath !== currentVaultPath) return;
-                if (!configState.featureSettings.restoreWorkspaceLayout) return;
-
-                const snap = sidebarSnapshotRef.current;
-                const snapshot: SidebarLayoutSnapshot = {
-                    version: 1,
-                    left: {
-                        width: snap?.left.width ?? DEFAULT_LEFT_RAIL_WIDTH,
-                        visible: leftSidebarVisibleRef.current,
-                        activeActivityId: snap?.left.activeActivityId ?? null,
-                        activePanelId: snap?.left.activePanelId ?? null,
-                    },
-                    right: {
-                        width: snap?.right.width ?? DEFAULT_RIGHT_RAIL_WIDTH,
-                        visible: hasRightSidebar ? rightSidebarVisibleRef.current : false,
-                        activeActivityId: snap?.right.activeActivityId ?? null,
-                        activePanelId: snap?.right.activePanelId ?? null,
-                    },
-                    panelStates: snap?.panelStates ?? [],
-                    paneStates: snap?.paneStates ?? [],
-                    convertiblePanelStates: snap?.convertiblePanelStates ?? [],
-                    sectionRatios: sectionRatiosRef.current,
-                    panelLayout: panelLayoutSnapshotRef.current,
-                };
-
-                const serializedSnapshot = JSON.stringify(snapshot);
-                if (persistedSnapshotRef.current === serializedSnapshot) return;
-
-                persistedSnapshotRef.current = serializedSnapshot;
-                void saveSidebarLayoutSnapshot(snapshot);
-            }, 300);
+            scheduleSidebarLayoutPersist(snapshot);
         },
         [
             hasRightSidebar,
             configState.backendConfig,
             configState.loadedVaultPath,
             configState.featureSettings.restoreWorkspaceLayout,
+            scheduleSidebarLayoutPersist,
             vaultState.currentVaultPath,
         ],
     );
@@ -1602,47 +1610,36 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
             panelLayoutSnapshotRef.current = panelLayout;
 
-            if (panelLayoutPersistTimerRef.current) {
-                clearTimeout(panelLayoutPersistTimerRef.current);
-            }
+            const snap = sidebarSnapshotRef.current;
+            const snapshot: SidebarLayoutSnapshot = {
+                version: 1,
+                left: {
+                    width: snap?.left.width ?? DEFAULT_LEFT_RAIL_WIDTH,
+                    visible: leftSidebarVisibleRef.current,
+                    activeActivityId: snap?.left.activeActivityId ?? null,
+                    activePanelId: snap?.left.activePanelId ?? null,
+                },
+                right: {
+                    width: snap?.right.width ?? DEFAULT_RIGHT_RAIL_WIDTH,
+                    visible: hasRightSidebar ? rightSidebarVisibleRef.current : false,
+                    activeActivityId: snap?.right.activeActivityId ?? null,
+                    activePanelId: snap?.right.activePanelId ?? null,
+                },
+                panelStates: snap?.panelStates ?? [],
+                paneStates: snap?.paneStates ?? [],
+                convertiblePanelStates: snap?.convertiblePanelStates ?? [],
+                sectionRatios: sectionRatiosRef.current,
+                panelLayout,
+            };
 
-            panelLayoutPersistTimerRef.current = setTimeout(() => {
-                panelLayoutPersistTimerRef.current = null;
-
-                const snap = sidebarSnapshotRef.current;
-                const snapshot: SidebarLayoutSnapshot = {
-                    version: 1,
-                    left: {
-                        width: snap?.left.width ?? DEFAULT_LEFT_RAIL_WIDTH,
-                        visible: leftSidebarVisibleRef.current,
-                        activeActivityId: snap?.left.activeActivityId ?? null,
-                        activePanelId: snap?.left.activePanelId ?? null,
-                    },
-                    right: {
-                        width: snap?.right.width ?? DEFAULT_RIGHT_RAIL_WIDTH,
-                        visible: hasRightSidebar ? rightSidebarVisibleRef.current : false,
-                        activeActivityId: snap?.right.activeActivityId ?? null,
-                        activePanelId: snap?.right.activePanelId ?? null,
-                    },
-                    panelStates: snap?.panelStates ?? [],
-                    paneStates: snap?.paneStates ?? [],
-                    convertiblePanelStates: snap?.convertiblePanelStates ?? [],
-                    sectionRatios: sectionRatiosRef.current,
-                    panelLayout,
-                };
-
-                const serializedSnapshot = JSON.stringify(snapshot);
-                if (persistedSnapshotRef.current === serializedSnapshot) return;
-
-                persistedSnapshotRef.current = serializedSnapshot;
-                void saveSidebarLayoutSnapshot(snapshot);
-            }, 300);
+            scheduleSidebarLayoutPersist(snapshot);
         },
         [
             hasRightSidebar,
             configState.backendConfig,
             configState.loadedVaultPath,
             configState.featureSettings.restoreWorkspaceLayout,
+            scheduleSidebarLayoutPersist,
             vaultState.currentVaultPath,
         ],
     );
@@ -1658,7 +1655,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             if (workspaceSnapshot && !workspaceLayoutHydrationComplete) return;
             if (workspaceLayoutRestorePendingRef.current) return;
 
-            const serializedSnapshot = JSON.stringify(buildWorkspaceLayoutConfigValue(snapshot));
+            const serializedSnapshot = buildWorkspaceLayoutPersistenceKey(snapshot);
             if (persistedWorkspaceLayoutRef.current === serializedSnapshot) return;
 
             persistedWorkspaceLayoutRef.current = serializedSnapshot;
@@ -1674,7 +1671,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                         message: error instanceof Error ? error.message : String(error),
                     });
                 });
-            }, 300);
+            }, LAYOUT_PERSIST_DEBOUNCE_MS);
         },
         [
             configState.backendConfig,
@@ -1948,6 +1945,8 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                     renderPanelContentInDragPreviewLayout={false}
                     renderTabDragPreviewContent={renderTabDragPreviewContent}
                     externalTabDragResolver={workspaceFileExternalTabDragResolver}
+                    emitSnapshotsOnSectionResize={false}
+                    sectionResizeStrategy="dom-flex"
                     renderActivityIcon={renderActivityIcon}
                     renderPanelContent={renderPanelContent}
                     onActivateActivity={handleActivateActivity}

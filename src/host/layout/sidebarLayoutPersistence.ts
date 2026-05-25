@@ -23,6 +23,7 @@ import type {
     WorkbenchSectionData,
     WorkbenchSectionRole,
 } from "layout-v2";
+import { stableStringify } from "../../utils/stableJson";
 
 /** 侧边栏布局配置键。 */
 export const SIDEBAR_LAYOUT_CONFIG_KEY = "sidebarLayout";
@@ -600,14 +601,22 @@ export function mergePanelStatesWithSidebarLayoutFallback(
  */
 export async function saveSidebarLayoutSnapshot(snapshot: SidebarLayoutSnapshot): Promise<VaultConfig> {
     const { updateBackendConfig } = await import("../config/configStore");
+    const nextSidebarLayout = buildSidebarLayoutConfigValue(snapshot);
+    const nextSidebarLayoutJson = stableStringify(nextSidebarLayout);
 
-    return updateBackendConfig((currentConfig) => ({
-        ...currentConfig,
-        entries: {
-            ...currentConfig.entries,
-            [SIDEBAR_LAYOUT_CONFIG_KEY]: buildSidebarLayoutConfigValue(snapshot),
-        },
-    }), {
+    return updateBackendConfig((currentConfig) => {
+        if (stableStringify(currentConfig.entries[SIDEBAR_LAYOUT_CONFIG_KEY]) === nextSidebarLayoutJson) {
+            return currentConfig;
+        }
+
+        return {
+            ...currentConfig,
+            entries: {
+                ...currentConfig.entries,
+                [SIDEBAR_LAYOUT_CONFIG_KEY]: nextSidebarLayout,
+            },
+        };
+    }, {
         logLabel: "sidebar-layout.save",
     });
 }

@@ -1,5 +1,5 @@
 import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
-import { FileText, Folder, Lock, Plus, X } from "lucide-react";
+import { FileText, Folder, Lock, Plus } from "lucide-react";
 import {
     createAgentSkill,
     listAgentSkills,
@@ -7,6 +7,7 @@ import {
     type AgentSkillSummary,
 } from "../../api/vaultApi";
 import type { PanelRenderContext } from "../../host/layout/workbenchContracts";
+import { UiButton, UiModal, UiTextArea, UiTextInput } from "../../host/ui";
 import i18n from "../../i18n";
 import "./agentSkillsPlugin.css";
 
@@ -293,60 +294,45 @@ export function AgentSkillsPanel({ context }: AgentSkillsPanelProps): ReactNode 
             {selectedSkill?.error ? <div className="agent-skills-warning">{selectedSkill.error}</div> : null}
             {message ? <div className="agent-skills-status">{message}</div> : null}
 
-            {isCreateOpen ? (
-                <div
-                    className="agent-skills-modal-backdrop"
-                    role="presentation"
-                    onMouseDown={(event) => {
-                        if (event.target === event.currentTarget) {
-                            closeCreateModal();
-                        }
-                    }}
-                >
-                    <form className="agent-skills-create-modal" onSubmit={(event) => void handleCreateSkill(event)}>
-                        <div className="agent-skills-modal-header">
-                            <span>{i18n.t("agentSkills.createDialogTitle")}</span>
-                            <button
-                                type="button"
-                                className="agent-skills-icon-button"
-                                title={i18n.t("common.close")}
-                                aria-label={i18n.t("common.close")}
-                                onClick={closeCreateModal}
-                            >
-                                <X size={15} />
-                            </button>
-                        </div>
-                        <label className="agent-skills-field">
-                            <span>{i18n.t("agentSkills.nameLabel")}</span>
-                            <input
-                                data-testid="agent-skills-name-input"
-                                value={newSkillName}
-                                onChange={(event) => setNewSkillName(event.target.value)}
-                                placeholder={i18n.t("agentSkills.namePlaceholder")}
-                                autoFocus
-                            />
-                        </label>
-                        <label className="agent-skills-field">
-                            <span>{i18n.t("agentSkills.descriptionLabel")}</span>
-                            <textarea
-                                data-testid="agent-skills-description-input"
-                                value={newSkillDescription}
-                                onChange={(event) => setNewSkillDescription(event.target.value)}
-                                placeholder={i18n.t("agentSkills.descriptionPlaceholder")}
-                                rows={4}
-                            />
-                        </label>
-                        <div className="agent-skills-modal-actions">
-                            <button type="button" className="agent-skills-secondary-button" onClick={closeCreateModal}>
-                                {i18n.t("common.cancel")}
-                            </button>
-                            <button type="submit" className="agent-skills-primary-button" disabled={isSaving}>
-                                {i18n.t("agentSkills.createSkill")}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            ) : null}
+            <UiModal
+                footer={(
+                    <>
+                        <UiButton onClick={closeCreateModal}>
+                            {i18n.t("common.cancel")}
+                        </UiButton>
+                        <UiButton type="submit" variant="primary" disabled={isSaving}>
+                            {i18n.t("agentSkills.createSkill")}
+                        </UiButton>
+                    </>
+                )}
+                isOpen={isCreateOpen}
+                panelClassName="agent-skills-create-modal"
+                size="sm"
+                title={i18n.t("agentSkills.createDialogTitle")}
+                onClose={closeCreateModal}
+                onSubmit={(event) => void handleCreateSkill(event)}
+            >
+                <label className="agent-skills-field">
+                    <span>{i18n.t("agentSkills.nameLabel")}</span>
+                    <UiTextInput
+                        data-testid="agent-skills-name-input"
+                        value={newSkillName}
+                        onChange={(event) => setNewSkillName(event.target.value)}
+                        placeholder={i18n.t("agentSkills.namePlaceholder")}
+                        autoFocus
+                    />
+                </label>
+                <label className="agent-skills-field">
+                    <span>{i18n.t("agentSkills.descriptionLabel")}</span>
+                    <UiTextArea
+                        data-testid="agent-skills-description-input"
+                        value={newSkillDescription}
+                        onChange={(event) => setNewSkillDescription(event.target.value)}
+                        placeholder={i18n.t("agentSkills.descriptionPlaceholder")}
+                        rows={4}
+                    />
+                </label>
+            </UiModal>
         </div>
     );
 }

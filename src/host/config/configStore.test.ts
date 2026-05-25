@@ -279,4 +279,26 @@ describe("configStore defaults", () => {
             activeGroupId: "main-tabs",
         });
     });
+
+    it("后端配置内容未变化时不应重复保存", async () => {
+        currentVaultConfig = {
+            schemaVersion: 1,
+            entries: {
+                sidebarLayout: {
+                    version: 1,
+                    left: { visible: true },
+                },
+            },
+        };
+
+        await syncConfigStateForVault("/tmp/unchanged-config-write", true);
+        savedVaultConfigs.length = 0;
+
+        const result = await updateBackendConfig((config) => structuredClone(config), {
+            logLabel: "noop",
+        });
+
+        expect(result).toEqual(currentVaultConfig);
+        expect(savedVaultConfigs).toHaveLength(0);
+    });
 });

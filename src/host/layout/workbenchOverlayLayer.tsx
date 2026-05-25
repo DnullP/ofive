@@ -41,3 +41,24 @@ export function WorkbenchOverlayPortal(props: WorkbenchOverlayPortalProps): Reac
         target,
     );
 }
+
+export interface OptionalWorkbenchOverlayPortalProps extends WorkbenchOverlayPortalProps {
+    fallback?: ReactNode;
+}
+
+export function OptionalWorkbenchOverlayPortal(props: OptionalWorkbenchOverlayPortalProps): ReactNode {
+    const target = useWorkbenchOverlayLayer();
+    if (!target) {
+        return props.fallback ?? props.children;
+    }
+
+    return createPortal(
+        <div
+            data-workbench-overlay-portal="true"
+            data-workbench-overlay-interactive={props.interactive === true ? "true" : undefined}
+        >
+            {props.children}
+        </div>,
+        target,
+    );
+}

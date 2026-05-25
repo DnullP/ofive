@@ -43,7 +43,22 @@ pub(crate) async fn fetch_ai_vendor_models(
         "anthropic-compatible" | "minimax-anthropic" => {
             fetch_anthropic_vendor_models(active_settings).await
         }
-        "openai-compatible" => fetch_openai_vendor_models(active_settings).await,
+        "openai-compatible" => {
+            fetch_openai_vendor_models(
+                active_settings,
+                "OpenAI-compatible provider",
+                "https://api.openai.com/v1",
+            )
+            .await
+        }
+        "codex-compatible" => {
+            fetch_openai_vendor_models(
+                active_settings,
+                "Codex-compatible provider",
+                "https://www.api-for-ai.com/v1",
+            )
+            .await
+        }
         "baidu-qianfan" => fetch_baidu_vendor_models(active_settings).await,
         other => Err(format!("当前 vendor 暂不支持获取模型列表: {other}")),
     }
@@ -88,13 +103,15 @@ async fn fetch_anthropic_vendor_models(
 /// 从 OpenAI-compatible base URL 拉取模型列表。
 async fn fetch_openai_vendor_models(
     settings: AiChatSettings,
+    vendor_label: &str,
+    default_endpoint: &str,
 ) -> Result<Vec<AiVendorModelDefinition>, String> {
     let api_key = settings
         .field_values
         .get("apiKey")
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| "OpenAI-compatible provider 需要 API Key 才能获取模型列表".to_string())?;
+        .ok_or_else(|| format!("{vendor_label} 需要 API Key 才能获取模型列表"))?;
 
     let endpoint = settings
         .field_values
@@ -102,14 +119,14 @@ async fn fetch_openai_vendor_models(
         .or_else(|| settings.field_values.get("endpoint"))
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
-        .unwrap_or("https://api.openai.com/v1");
+        .unwrap_or(default_endpoint);
     let list_endpoint = resolve_models_endpoint(endpoint);
     let mut headers = HeaderMap::new();
     let authorization_header = HeaderValue::from_str(&format!("Bearer {api_key}"))
         .map_err(|error| format!("OpenAI-compatible API Key 不能作为 HTTP header 发送: {error}"))?;
     headers.insert(AUTHORIZATION, authorization_header);
 
-    fetch_openai_style_models(list_endpoint, headers, "OpenAI-compatible provider").await
+    fetch_openai_style_models(list_endpoint, headers, vendor_label).await
 }
 
 /// 从百度千帆接口拉取模型列表。
@@ -340,5 +357,63 @@ mod tests {
         assert_eq!(models[0].id, "MiniMax-M2.7");
         assert_eq!(models[0].owned_by.as_deref(), Some("MiniMax"));
         assert_eq!(models[0].created, Some(1777300000));
+    }
+
+    #[tokio::test]
+    async fn fetch_ai_vendor_models_should_request_codex_models_from_configured_base_url() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("test server should bind");
+        let address = listener
+            .local_addr()
+            .expect("test server address should exist");
+        let router = Router::new().route(
+            "/v1/models",
+            get(|headers: HeaderMap| async move {
+                let authorization = headers
+                    .get("authorization")
+                    .and_then(|value| value.to_str().ok());
+                match authorization {
+                    Some("Bearer test-key") => (
+                        StatusCode::OK,
+                        Json(json!({
+                            "data": [{
+                                "id": "gpt-5.5",
+                                "object": "model",
+                                "owned_by": "api-for-ai",
+                                "created": 1777300000
+                            }]
+                        })),
+                    ),
+                    _ => (
+                        StatusCode::UNAUTHORIZED,
+                        Json(json!({ "error": "missing authorization" })),
+                    ),
+                }
+            }),
+        );
+        tokio::spawn(async move {
+            axum::serve(listener, router)
+                .await
+                .expect("test server should run");
+        });
+
+        let models = fetch_ai_vendor_models(AiChatSettings {
+            vendor_id: "codex-compatible".to_string(),
+            model: "gpt-5.5".to_string(),
+            field_values: HashMap::from([
+                ("apiKey".to_string(), "test-key".to_string()),
+                ("baseUrl".to_string(), format!("http://{address}/v1")),
+            ]),
+            active_provider_id: None,
+            providers: Vec::new(),
+            tool_approval_policy: HashMap::new(),
+        })
+        .await
+        .expect("Codex-compatible 模型列表应从配置 base URL 拉取");
+
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "gpt-5.5");
+        assert_eq!(models[0].owned_by.as_deref(), Some("api-for-ai"));
     }
 }

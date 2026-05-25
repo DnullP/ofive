@@ -18,32 +18,84 @@ import (
 	"google.golang.org/genai"
 )
 
+const maxOpenAICompatibleStreamRetries = 2
+
 // OpenAICompatibleLLM implements ADK's model.LLM through OpenAI Chat Completions.
 type OpenAICompatibleLLM struct {
-	name    string
-	baseURL string
-	model   string
-	apiKey  string
-	client  openai.Client
-	trace   func(title string, text string) error
+	name                 string
+	providerLabel        string
+	baseURL              string
+	model                string
+	apiKey               string
+	includeInstructions  bool
+	missingModelHintName string
+	client               openai.Client
+	trace                func(title string, text string) error
 }
 
 // NewOpenAICompatibleLLM creates an OpenAI Chat Completions-compatible adapter.
 func NewOpenAICompatibleLLM(name, baseURL, modelName, apiKey string) *OpenAICompatibleLLM {
-	baseURL = strings.TrimSpace(baseURL)
+	return newOpenAICompatibleLLM(openAICompatibleConfig{
+		name:                 ifEmpty(name, "openai-compatible"),
+		providerLabel:        "openai-compatible",
+		baseURL:              baseURL,
+		modelName:            modelName,
+		apiKey:               apiKey,
+		defaultBaseURL:       "https://api.openai.com/v1",
+		modelEnv:             "OPENAI_MODEL",
+		baseURLEnv:           "OPENAI_BASE_URL",
+		apiKeyEnv:            "OPENAI_API_KEY",
+		missingModelHintName: "openai-compatible",
+	})
+}
+
+// NewCodexCompatibleLLM creates a Codex/agent-compatible adapter backed by a
+// Chat Completions-shaped endpoint that also requires top-level instructions.
+func NewCodexCompatibleLLM(name, baseURL, modelName, apiKey string) *OpenAICompatibleLLM {
+	return newOpenAICompatibleLLM(openAICompatibleConfig{
+		name:                 ifEmpty(name, "codex-compatible"),
+		providerLabel:        "codex-compatible",
+		baseURL:              baseURL,
+		modelName:            modelName,
+		apiKey:               apiKey,
+		defaultBaseURL:       "https://www.api-for-ai.com/v1",
+		modelEnv:             "CODEX_MODEL",
+		baseURLEnv:           "CODEX_BASE_URL",
+		apiKeyEnv:            "CODEX_API_KEY",
+		includeInstructions:  true,
+		missingModelHintName: "codex-compatible",
+	})
+}
+
+type openAICompatibleConfig struct {
+	name                 string
+	providerLabel        string
+	baseURL              string
+	modelName            string
+	apiKey               string
+	defaultBaseURL       string
+	modelEnv             string
+	baseURLEnv           string
+	apiKeyEnv            string
+	includeInstructions  bool
+	missingModelHintName string
+}
+
+func newOpenAICompatibleLLM(config openAICompatibleConfig) *OpenAICompatibleLLM {
+	baseURL := strings.TrimSpace(config.baseURL)
 	if baseURL == "" {
-		baseURL = strings.TrimSpace(os.Getenv("OPENAI_BASE_URL"))
+		baseURL = strings.TrimSpace(os.Getenv(config.baseURLEnv))
 	}
 	if baseURL == "" {
-		baseURL = "https://api.openai.com/v1"
+		baseURL = config.defaultBaseURL
 	}
-	modelName = strings.TrimSpace(modelName)
+	modelName := strings.TrimSpace(config.modelName)
 	if modelName == "" {
-		modelName = strings.TrimSpace(os.Getenv("OPENAI_MODEL"))
+		modelName = strings.TrimSpace(os.Getenv(config.modelEnv))
 	}
-	apiKey = strings.TrimSpace(apiKey)
+	apiKey := strings.TrimSpace(config.apiKey)
 	if apiKey == "" {
-		apiKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+		apiKey = strings.TrimSpace(os.Getenv(config.apiKeyEnv))
 	}
 
 	client := openai.NewClient(
@@ -54,11 +106,14 @@ func NewOpenAICompatibleLLM(name, baseURL, modelName, apiKey string) *OpenAIComp
 	)
 
 	return &OpenAICompatibleLLM{
-		name:    ifEmpty(name, "openai-compatible"),
-		baseURL: baseURL,
-		model:   modelName,
-		apiKey:  apiKey,
-		client:  client,
+		name:                 ifEmpty(config.name, "openai-compatible"),
+		providerLabel:        ifEmpty(config.providerLabel, "openai-compatible"),
+		baseURL:              baseURL,
+		model:                modelName,
+		apiKey:               apiKey,
+		includeInstructions:  config.includeInstructions,
+		missingModelHintName: ifEmpty(config.missingModelHintName, "openai-compatible"),
+		client:               client,
 	}
 }
 
@@ -79,7 +134,7 @@ func (o *OpenAICompatibleLLM) GenerateContent(
 	return func(yield func(*model.LLMResponse, error) bool) {
 		requestModel := o.resolveRequestModel(req.Model)
 		if strings.TrimSpace(requestModel) == "" {
-			yield(nil, fmt.Errorf("openai-compatible model is required; refresh the model list and save a supported model first"))
+			yield(nil, fmt.Errorf("%s model is required; refresh the model list and save a supported model first", o.missingModelHintName))
 			return
 		}
 
@@ -87,6 +142,7 @@ func (o *OpenAICompatibleLLM) GenerateContent(
 			Messages: buildOpenAIMessages(req),
 			Model:    shared.ChatModel(requestModel),
 		}
+		o.applyProviderSpecificParams(&params, req)
 		params.Tools = buildOpenAITools(req)
 		if len(params.Tools) > 0 {
 			params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
@@ -105,14 +161,44 @@ func (o *OpenAICompatibleLLM) GenerateContent(
 			return
 		}
 
-		stream := o.client.Chat.Completions.NewStreaming(ctx, params)
-		raw, err := o.streamResponse(stream, yield)
-		if traceErr := o.emitTrace("Model HTTP response", raw); traceErr != nil {
-			yield(nil, traceErr)
+		var rawAttempts []string
+		for attempt := 0; attempt <= maxOpenAICompatibleStreamRetries; attempt++ {
+			stream := o.client.Chat.Completions.NewStreaming(ctx, params)
+			allowEmptyTailRecovery := attempt == maxOpenAICompatibleStreamRetries
+			result := o.streamResponse(stream, yield, allowEmptyTailRecovery)
+			rawAttempts = append(rawAttempts, formatOpenAIStreamAttempt(attempt+1, result.Raw))
+
+			if result.Err == nil {
+				if traceErr := o.emitTrace("Model HTTP response", strings.Join(rawAttempts, "\n")); traceErr != nil {
+					yield(nil, traceErr)
+				}
+				return
+			}
+
+			if shouldRetryOpenAIStream(ctx, result.Err, result.Emitted) &&
+				attempt < maxOpenAICompatibleStreamRetries {
+				if err := o.emitTrace(
+					"Model HTTP retry",
+					fmt.Sprintf(
+						"attempt=%d next_attempt=%d error=%s",
+						attempt+1,
+						attempt+2,
+						result.Err.Error(),
+					),
+				); err != nil {
+					yield(nil, err)
+					return
+				}
+				continue
+			}
+
+			raw := strings.Join(rawAttempts, "\n")
+			if traceErr := o.emitTrace("Model HTTP response", raw); traceErr != nil {
+				yield(nil, traceErr)
+				return
+			}
+			yield(nil, o.wrapStreamError(requestModel, raw, result.Err))
 			return
-		}
-		if err != nil {
-			yield(nil, err)
 		}
 	}
 }
@@ -123,10 +209,17 @@ type openAIStream interface {
 	Err() error
 }
 
+type openAIStreamResult struct {
+	Raw     string
+	Err     error
+	Emitted bool
+}
+
 func (o *OpenAICompatibleLLM) streamResponse(
 	stream openAIStream,
 	yield func(*model.LLMResponse, error) bool,
-) (string, error) {
+	allowEmptyTailRecovery bool,
+) openAIStreamResult {
 	state := openAIStreamState{
 		toolCalls: make(map[int]*openAIStreamToolCall),
 	}
@@ -135,6 +228,7 @@ func (o *OpenAICompatibleLLM) streamResponse(
 
 	for stream.Next() {
 		chunk := stream.Current()
+		state.receivedChunks++
 		if chunk.RawJSON() != "" {
 			raw.WriteString(chunk.RawJSON())
 			raw.WriteByte('\n')
@@ -168,19 +262,23 @@ func (o *OpenAICompatibleLLM) streamResponse(
 		if textUpdated {
 			emitted = true
 			if !yield(buildOpenAILLMResponse(state.snapshotMessage(), state.finishReason, state.promptTokens, state.completionTokens, state.totalTokens, false), nil) {
-				return raw.String(), nil
+				return openAIStreamResult{Raw: raw.String(), Emitted: emitted}
 			}
 		}
 	}
 
+	rawText := raw.String()
 	if err := stream.Err(); err != nil {
-		return raw.String(), err
+		if !allowEmptyTailRecovery || !isRecoverableOpenAIEmptyTailError(err, rawText, state) {
+			return openAIStreamResult{Raw: rawText, Err: err, Emitted: emitted}
+		}
 	}
 
 	if !emitted || strings.TrimSpace(state.text.String()) != "" || len(state.toolCalls) > 0 {
+		emitted = true
 		yield(buildOpenAILLMResponse(state.snapshotMessage(), state.finishReason, state.promptTokens, state.completionTokens, state.totalTokens, true), nil)
 	}
-	return raw.String(), nil
+	return openAIStreamResult{Raw: rawText, Emitted: emitted}
 }
 
 func (o *OpenAICompatibleLLM) emitTrace(title string, text string) error {
@@ -188,6 +286,89 @@ func (o *OpenAICompatibleLLM) emitTrace(title string, text string) error {
 		return nil
 	}
 	return o.trace(title, text)
+}
+
+func (o *OpenAICompatibleLLM) wrapStreamError(model string, raw string, err error) error {
+	if err == nil {
+		return nil
+	}
+	summary := summarizeOpenAIStreamRaw(raw, 800)
+	if summary == "" {
+		return fmt.Errorf("%s stream failed for model %s: %w", o.providerLabel, model, err)
+	}
+	return fmt.Errorf(
+		"%s stream failed for model %s: %w; response_tail=%q",
+		o.providerLabel,
+		model,
+		err,
+		summary,
+	)
+}
+
+func summarizeOpenAIStreamRaw(raw string, limit int) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || limit <= 0 {
+		return ""
+	}
+	if len(trimmed) <= limit {
+		return trimmed
+	}
+	return trimmed[len(trimmed)-limit:]
+}
+
+func formatOpenAIStreamAttempt(attempt int, raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fmt.Sprintf("[attempt %d] <empty response>", attempt)
+	}
+	return fmt.Sprintf("[attempt %d]\n%s", attempt, trimmed)
+}
+
+func shouldRetryOpenAIStream(ctx context.Context, err error, emitted bool) bool {
+	if err == nil || emitted {
+		return false
+	}
+	if ctx != nil && ctx.Err() != nil {
+		return false
+	}
+	return isRetryableOpenAIStreamError(err)
+}
+
+func isRetryableOpenAIStreamError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	for _, fragment := range []string{
+		"unexpected end of json input",
+		"unexpected eof",
+		"connection reset",
+		"connection refused",
+		"broken pipe",
+		"stream closed",
+		"server closed",
+	} {
+		if strings.Contains(message, fragment) {
+			return true
+		}
+	}
+	return strings.TrimSpace(message) == "eof"
+}
+
+func isRecoverableOpenAIEmptyTailError(err error, raw string, state openAIStreamState) bool {
+	if err == nil {
+		return false
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "unexpected end of json input") {
+		return false
+	}
+	if strings.TrimSpace(raw) == "" {
+		return false
+	}
+	if state.receivedChunks == 0 {
+		return false
+	}
+	return strings.TrimSpace(state.text.String()) == "" && len(state.toolCalls) == 0
 }
 
 func (o *OpenAICompatibleLLM) resolveRequestModel(requestModel string) string {
@@ -241,6 +422,20 @@ func applyOpenAIRequestConfig(params *openai.ChatCompletionNewParams, req *model
 			OfJSONObject: &responseFormat,
 		}
 	}
+}
+
+func (o *OpenAICompatibleLLM) applyProviderSpecificParams(params *openai.ChatCompletionNewParams, req *model.LLMRequest) {
+	if params == nil || req == nil || req.Config == nil || req.Config.SystemInstruction == nil {
+		return
+	}
+	if !o.includeInstructions {
+		return
+	}
+	systemText := extractText(req.Config.SystemInstruction)
+	if systemText == "" {
+		return
+	}
+	params.SetExtraFields(map[string]any{"instructions": systemText})
 }
 
 func buildOpenAIMessages(req *model.LLMRequest) []openai.ChatCompletionMessageParamUnion {
@@ -393,6 +588,7 @@ type openAIStreamState struct {
 	promptTokens     int
 	completionTokens int
 	totalTokens      int
+	receivedChunks   int
 }
 
 func (s *openAIStreamState) mergeToolCalls(toolCalls []openai.ChatCompletionChunkChoiceDeltaToolCall) {

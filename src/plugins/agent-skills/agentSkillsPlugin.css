@@ -196,36 +196,8 @@
     color: var(--text-warning);
 }
 
-.agent-skills-modal-backdrop {
-    position: absolute;
-    inset: 0;
-    z-index: 5;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 42px 12px 12px;
-    background: color-mix(in srgb, var(--chrome-sidebar-bg) 78%, transparent);
-}
-
 .agent-skills-create-modal {
-    display: grid;
-    gap: 12px;
-    width: min(360px, 100%);
-    padding: 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--surface-overlay-panel-bg);
-    box-shadow: var(--surface-overlay-panel-shadow);
-}
-
-.agent-skills-modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    min-height: 28px;
-    font-size: 13px;
-    font-weight: 600;
+    --ofive-ui-modal-width: 360px;
 }
 
 .agent-skills-field {
@@ -234,61 +206,4 @@
     min-width: 0;
     color: var(--text-secondary);
     font-size: 12px;
-}
-
-.agent-skills-field input,
-.agent-skills-field textarea {
-    width: 100%;
-    min-width: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    color: var(--text-primary);
-    background: var(--surface-input-bg);
-    font: inherit;
-}
-
-.agent-skills-field input {
-    height: 30px;
-    padding: 0 8px;
-}
-
-.agent-skills-field textarea {
-    min-height: 76px;
-    padding: 8px;
-    line-height: 1.45;
-    resize: vertical;
-}
-
-.agent-skills-modal-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-}
-
-.agent-skills-primary-button,
-.agent-skills-secondary-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 30px;
-    padding: 0 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    color: var(--text-primary);
-    font: inherit;
-    cursor: pointer;
-}
-
-.agent-skills-primary-button {
-    border-color: color-mix(in srgb, var(--accent-primary) 72%, var(--border-color));
-    background: color-mix(in srgb, var(--accent-primary) 28%, transparent);
-}
-
-.agent-skills-secondary-button {
-    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
-}
-
-.agent-skills-primary-button:disabled {
-    opacity: 0.55;
-    cursor: default;
 }

@@ -143,6 +143,98 @@ func TestPendingConfirmationPersistenceRoundTrip(t *testing.T) {
 	}
 }
 
+func TestClearCompletedPendingConfirmationAfterStreamFailureDeletesState(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	stored := map[string]any{}
+	var actions []string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		defer request.Body.Close()
+
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+
+		var persistenceRequest sidecarpersistence.Request
+		if err := json.Unmarshal(body, &persistenceRequest); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+
+		mu.Lock()
+		actions = append(actions, string(persistenceRequest.Action))
+		mu.Unlock()
+
+		writer.Header().Set("Content-Type", "application/json")
+		switch persistenceRequest.Action {
+		case sidecarpersistence.ActionSave:
+			mu.Lock()
+			stored[persistenceRequest.StateKey] = persistenceRequest.Payload
+			mu.Unlock()
+			_, _ = writer.Write([]byte(`{"status":"ok","owner":"ai-chat","stateKey":"history"}`))
+		case sidecarpersistence.ActionDelete:
+			mu.Lock()
+			delete(stored, persistenceRequest.StateKey)
+			mu.Unlock()
+			_, _ = writer.Write([]byte(`{"status":"ok","owner":"ai-chat","stateKey":"history"}`))
+		default:
+			t.Fatalf("unexpected action: %s", persistenceRequest.Action)
+		}
+	}))
+	defer server.Close()
+
+	config := CapabilityBridgeConfig{
+		PersistenceCallbackURL:   server.URL,
+		PersistenceCallbackToken: "test-token",
+	}
+	confirmation := pendingToolConfirmation{
+		ID:           "confirm-1",
+		ToolName:     "vault_create_directory",
+		ToolArgsJSON: `{"relativeDirectoryPath":"Tauri"}`,
+	}
+
+	if err := savePendingConfirmation(context.Background(), "session-1", confirmation, config); err != nil {
+		t.Fatalf("savePendingConfirmation returned error: %v", err)
+	}
+
+	var chunks []StreamChunk
+	err := clearCompletedPendingConfirmationAfterStreamFailure(
+		context.Background(),
+		"session-1",
+		"confirm-1",
+		true,
+		config,
+		&streamADKState{
+			historyContentBlocks: []HistoryContentBlock{{
+				Kind:       "tool-result",
+				ToolUseID:  "call-1",
+				ToolName:   "vault_create_directory",
+				ResultJSON: `{"success":true}`,
+			}},
+		},
+		func(chunk StreamChunk) error {
+			chunks = append(chunks, chunk)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("clearCompletedPendingConfirmationAfterStreamFailure returned error: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(stored) != 0 {
+		t.Fatalf("expected stored pending confirmation to be deleted, got %d entries", len(stored))
+	}
+	if strings.Join(actions, ",") != "save,delete" {
+		t.Fatalf("expected save then delete actions, got %v", actions)
+	}
+	if len(chunks) != 1 || chunks[0].DebugTitle != "Cleared completed pending confirmation" {
+		t.Fatalf("expected cleanup debug chunk, got %+v", chunks)
+	}
+}
+
 func TestLoadPersistedPendingConfirmationReturnsNilForNotFound(t *testing.T) {
 	t.Parallel()
 

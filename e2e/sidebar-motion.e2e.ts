@@ -328,6 +328,30 @@ async function dragSidebarDivider(page: Page, dividerIndex: number, deltaX: numb
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 }
 
+async function readPersistedLayoutRatios(page: Page): Promise<{
+    sidebarWorkbenchShellRatio: number | null;
+    workspaceWorkbenchShellRatio: number | null;
+}> {
+    return page.evaluate(async () => {
+        const configStoreModule = await import("/src/host/config/configStore.ts");
+        const entries = configStoreModule.getConfigSnapshot().backendConfig?.entries ?? {};
+        const sidebarLayout = entries.sidebarLayout as { sectionRatios?: Record<string, unknown> } | undefined;
+        const workspaceLayout = entries.workspaceLayout as {
+            root?: { split?: { children?: Array<{ id?: string; split?: { ratio?: unknown } }> } };
+        } | undefined;
+        const workbenchShell = workspaceLayout?.root?.split?.children?.find((child) => child.id === "workbench-shell");
+
+        return {
+            sidebarWorkbenchShellRatio: typeof sidebarLayout?.sectionRatios?.["workbench-shell"] === "number"
+                ? sidebarLayout.sectionRatios["workbench-shell"]
+                : null,
+            workspaceWorkbenchShellRatio: typeof workbenchShell?.split?.ratio === "number"
+                ? workbenchShell.split.ratio
+                : null,
+        };
+    });
+}
+
 async function expectCollapsedSidebarControlsUsable(page: Page): Promise<void> {
     const leftSidebar = page.locator("[data-testid='sidebar-left']");
     const leftToggle = leftSidebar.getByRole("button", { name: "Expand pane content" });
@@ -583,6 +607,37 @@ test.describe("sidebar toggle regression", () => {
 
         await page.goto(`${MOCK_PAGE}&mockVaultPath=${encodeURIComponent(vaultPath)}`);
         await expectCollapsedSidebarControlsUsable(page);
+    });
+
+    test("sidebar resize should not persist through workspace layout", async ({ page }) => {
+        const workspaceSaveLogs: string[] = [];
+        page.on("console", (message) => {
+            if (message.type() === "info" && message.text().includes("workspace-layout.save")) {
+                workspaceSaveLogs.push(message.text());
+            }
+        });
+
+        await openMockNote(page, GUIDE_NOTE_PATH);
+        await expect.poll(
+            async () => readPersistedLayoutRatios(page),
+            { timeout: 5_000 },
+        ).toEqual(expect.objectContaining({
+            workspaceWorkbenchShellRatio: expect.any(Number),
+        }));
+        await page.waitForTimeout(450);
+        workspaceSaveLogs.length = 0;
+
+        const before = await readPersistedLayoutRatios(page);
+        await dragSidebarDivider(page, 1, 80);
+
+        await expect.poll(
+            async () => readPersistedLayoutRatios(page),
+            { timeout: 3_000 },
+        ).toEqual(expect.objectContaining({
+            sidebarWorkbenchShellRatio: expect.any(Number),
+            workspaceWorkbenchShellRatio: before.workspaceWorkbenchShellRatio,
+        }));
+        expect(workspaceSaveLogs).toEqual([]);
     });
 
     test("collapsed panel in a vertical split releases height while sidebar width stays stable", async ({ page }) => {

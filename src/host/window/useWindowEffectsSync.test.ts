@@ -26,6 +26,7 @@ mock.module("../theme/themeStore", () => ({
 }));
 
 const {
+    areWindowEffectConfigsEqual,
     buildWindowEffectConfig,
     detectWindowRuntimeInfo,
     shouldSyncNativeWindowEffects,
@@ -159,5 +160,20 @@ describe("useWindowEffectsSync helpers", () => {
             inactiveAccentFlags: 5,
             inactiveAnimationId: 3,
         });
+    });
+
+    it("应能判断原生窗口效果配置是否真的变化", () => {
+        const baseConfig = buildWindowEffectConfig(createFeatureSettings(), "kraft", true);
+        const sameConfig = buildWindowEffectConfig(createFeatureSettings(), "kraft", true);
+        const changedConfig = {
+            ...sameConfig,
+            focusedColor: {
+                ...sameConfig.focusedColor,
+                alpha: sameConfig.focusedColor.alpha + 1,
+            },
+        };
+
+        expect(areWindowEffectConfigsEqual(baseConfig, sameConfig)).toBe(true);
+        expect(areWindowEffectConfigsEqual(baseConfig, changedConfig)).toBe(false);
     });
 });

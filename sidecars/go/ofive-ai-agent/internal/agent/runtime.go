@@ -26,6 +26,8 @@ import (
 const (
 	appName   = "ofive-ai-sidecar"
 	agentName = "ofive_helper_agent"
+
+	maxEmptyToolResponseContinuationAttempts = 2
 )
 
 var markdownPathPattern = regexp.MustCompile(`([A-Za-z0-9_./-]+\.md)`)
@@ -575,7 +577,7 @@ func (r *Runtime) StreamConfirmation(
 		}},
 	}
 
-	if err := streamADKContent(
+	state, streamErr := streamADKContentWithState(
 		ctx,
 		runnerInstance,
 		adkAgent,
@@ -585,8 +587,20 @@ func (r *Runtime) StreamConfirmation(
 		bridgeConfig,
 		content,
 		emit,
-	); err != nil {
-		return err
+	)
+	if streamErr != nil {
+		if clearErr := clearCompletedPendingConfirmationAfterStreamFailure(
+			ctx,
+			sessionID,
+			confirmationID,
+			confirmed,
+			bridgeConfig,
+			state,
+			emit,
+		); clearErr != nil {
+			return fmt.Errorf("%w; additionally failed to clear completed pending confirmation: %v", streamErr, clearErr)
+		}
+		return streamErr
 	}
 
 	return deletePersistedPendingConfirmation(
@@ -595,6 +609,47 @@ func (r *Runtime) StreamConfirmation(
 		confirmationID,
 		bridgeConfig,
 	)
+}
+
+func clearCompletedPendingConfirmationAfterStreamFailure(
+	ctx context.Context,
+	sessionID string,
+	confirmationID string,
+	confirmed bool,
+	bridgeConfig CapabilityBridgeConfig,
+	state *streamADKState,
+	emit func(StreamChunk) error,
+) error {
+	if !shouldClearCompletedPendingConfirmation(confirmed, state) {
+		return nil
+	}
+	if err := deletePersistedPendingConfirmation(ctx, sessionID, confirmationID, bridgeConfig); err != nil {
+		return err
+	}
+	return emitDebugTrace(emitDebugEvent(emit), DebugTraceEvent{
+		Level: "warn",
+		Title: "Cleared completed pending confirmation",
+		Text: fmt.Sprintf(
+			"confirmationId=%s already produced a tool result before the follow-up model stream failed",
+			strings.TrimSpace(confirmationID),
+		),
+	})
+}
+
+func shouldClearCompletedPendingConfirmation(confirmed bool, state *streamADKState) bool {
+	if !confirmed || state == nil {
+		return false
+	}
+	for _, block := range state.historyContentBlocks {
+		if strings.TrimSpace(block.Kind) != "tool-result" {
+			continue
+		}
+		toolName := strings.TrimSpace(block.ToolName)
+		if toolName != "" && toolName != toolconfirmation.FunctionCallName {
+			return true
+		}
+	}
+	return false
 }
 
 func historyEntryToGenAIContent(entry HistoryEntry) *genai.Content {
@@ -778,8 +833,89 @@ func streamADKContent(
 	content *genai.Content,
 	emit func(StreamChunk) error,
 ) error {
-	state := streamADKState{}
+	_, err := streamADKContentWithState(
+		ctx,
+		runnerInstance,
+		adkAgent,
+		agentDisplayName,
+		userID,
+		sessionID,
+		bridgeConfig,
+		content,
+		emit,
+	)
+	return err
+}
 
+func streamADKContentWithState(
+	ctx context.Context,
+	runnerInstance *runner.Runner,
+	adkAgent agent.Agent,
+	agentDisplayName string,
+	userID string,
+	sessionID string,
+	bridgeConfig CapabilityBridgeConfig,
+	content *genai.Content,
+	emit func(StreamChunk) error,
+) (*streamADKState, error) {
+	state := &streamADKState{}
+
+	if err := runADKContentTurn(
+		ctx,
+		runnerInstance,
+		adkAgent,
+		agentDisplayName,
+		userID,
+		sessionID,
+		content,
+		state,
+		emit,
+	); err != nil {
+		return state, err
+	}
+
+	for attempt := 1; shouldContinueEmptyToolResponse(state) &&
+		attempt <= maxEmptyToolResponseContinuationAttempts; attempt++ {
+		if err := emitDebugTrace(emitDebugEvent(emit), DebugTraceEvent{
+			Level: "warn",
+			Title: "Recovering empty response after tool activity",
+			Text:  "model stream ended after tool results without final assistant text; requesting continuation",
+		}); err != nil {
+			return state, err
+		}
+		recoveryContent := genai.NewContentFromText(
+			buildEmptyToolResponseContinuationPrompt(content, state.historyContentBlocks),
+			genai.RoleUser,
+		)
+		if err := runADKContentTurn(
+			ctx,
+			runnerInstance,
+			adkAgent,
+			agentDisplayName,
+			userID,
+			sessionID,
+			recoveryContent,
+			state,
+			emit,
+		); err != nil {
+			return state, err
+		}
+	}
+
+	return state, finishStreamADKContent(ctx, sessionID, bridgeConfig, agentDisplayName, state, emit)
+}
+
+func runADKContentTurn(
+	ctx context.Context,
+	runnerInstance *runner.Runner,
+	adkAgent agent.Agent,
+	agentDisplayName string,
+	userID string,
+	sessionID string,
+	content *genai.Content,
+	state *streamADKState,
+	emit func(StreamChunk) error,
+) error {
 	for event, err := range runnerInstance.Run(ctx, userID, sessionID, content, agent.RunConfig{
 		StreamingMode: agent.StreamingModeSSE,
 	}) {
@@ -798,14 +934,13 @@ func streamADKContent(
 		if err := processADKEventContent(
 			agentDisplayName,
 			event.LLMResponse.Content,
-			&state,
+			state,
 			emit,
 		); err != nil {
 			return err
 		}
 	}
-
-	return finishStreamADKContent(ctx, sessionID, bridgeConfig, agentDisplayName, &state, emit)
+	return nil
 }
 
 func finishStreamADKContent(
@@ -1016,10 +1151,17 @@ func emptyADKToolResponseFallbackText(blocks []HistoryContentBlock) string {
 	if !hasToolHistoryContentBlock(blocks) {
 		return ""
 	}
+	details := summarizeToolActivityForUser(blocks)
 	if hasToolResultHistoryContentBlock(blocks) {
-		return "工具调用已返回，但模型没有返回最终回复。请查看上方工具调用记录，或重试这条消息。"
+		if details != "" {
+			return "工具调用已返回，但模型没有返回最终回复。\n\n已记录的工具结果：\n" + details + "\n\n请重试这条消息，或根据上述结果继续补全未完成的步骤。"
+		}
+		return "工具调用已返回，但模型没有返回最终回复。请重试这条消息，或继续补全未完成的步骤。"
 	}
-	return "模型发起了工具调用，但没有返回最终回复。请查看上方工具调用记录，或重试这条消息。"
+	if details != "" {
+		return "模型发起了工具调用，但没有返回最终回复。\n\n已记录的工具调用：\n" + details + "\n\n请重试这条消息，或继续补全未完成的步骤。"
+	}
+	return "模型发起了工具调用，但没有返回最终回复。请重试这条消息，或继续补全未完成的步骤。"
 }
 
 func hasToolHistoryContentBlock(blocks []HistoryContentBlock) bool {
@@ -1039,6 +1181,260 @@ func hasToolResultHistoryContentBlock(blocks []HistoryContentBlock) bool {
 		}
 	}
 	return false
+}
+
+func shouldContinueEmptyToolResponse(state *streamADKState) bool {
+	return state != nil &&
+		state.confirmation == nil &&
+		strings.TrimSpace(state.responseText) == "" &&
+		hasToolResultHistoryContentBlock(state.historyContentBlocks)
+}
+
+func buildEmptyToolResponseContinuationPrompt(
+	originalContent *genai.Content,
+	blocks []HistoryContentBlock,
+) string {
+	var builder strings.Builder
+	builder.WriteString("上一轮已经执行了工具，但模型没有生成最终回复。请继续完成同一个用户请求。\n")
+	builder.WriteString("如果任务还没完成，请继续使用可用工具完成它；如果已经完成，请直接给出简洁的最终回复，说明创建或修改了哪些内容。不要重复已经成功完成的工具调用，除非为了验证或继续完成任务确有必要。")
+
+	if originalText := contentTextForPrompt(originalContent); originalText != "" {
+		builder.WriteString("\n\n原始用户请求：\n")
+		builder.WriteString(originalText)
+	}
+	if toolSummary := summarizeToolActivityForPrompt(blocks, 8); toolSummary != "" {
+		builder.WriteString("\n\n已记录的工具活动：\n")
+		builder.WriteString(toolSummary)
+	}
+
+	return builder.String()
+}
+
+func contentTextForPrompt(content *genai.Content) string {
+	if content == nil {
+		return ""
+	}
+	parts := make([]string, 0, len(content.Parts))
+	for _, part := range content.Parts {
+		if part == nil || strings.TrimSpace(part.Text) == "" {
+			continue
+		}
+		parts = append(parts, strings.TrimSpace(part.Text))
+	}
+	return strings.Join(parts, "\n")
+}
+
+func summarizeToolActivityForPrompt(blocks []HistoryContentBlock, limit int) string {
+	summaries := summarizeToolActivity(blocks, limit)
+	if len(summaries) == 0 {
+		return ""
+	}
+	return "- " + strings.Join(summaries, "\n- ")
+}
+
+func summarizeToolActivityForUser(blocks []HistoryContentBlock) string {
+	summaries := summarizeToolActivity(blocks, 6)
+	if len(summaries) == 0 {
+		return ""
+	}
+	return "- " + strings.Join(summaries, "\n- ")
+}
+
+func summarizeToolActivity(blocks []HistoryContentBlock, limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
+
+	calls := map[string]HistoryContentBlock{}
+	summaries := make([]string, 0)
+	for _, block := range blocks {
+		switch strings.TrimSpace(block.Kind) {
+		case "tool-use":
+			if strings.TrimSpace(block.ToolUseID) != "" {
+				calls[strings.TrimSpace(block.ToolUseID)] = block
+			}
+		case "tool-result":
+			summary := summarizeToolResultBlock(block, calls[strings.TrimSpace(block.ToolUseID)])
+			if summary == "" {
+				continue
+			}
+			summaries = append(summaries, summary)
+		}
+	}
+
+	if len(summaries) == 0 {
+		for _, block := range blocks {
+			if strings.TrimSpace(block.Kind) != "tool-use" {
+				continue
+			}
+			summary := summarizeToolUseBlock(block)
+			if summary == "" {
+				continue
+			}
+			summaries = append(summaries, summary)
+		}
+	}
+
+	if len(summaries) <= limit {
+		return summaries
+	}
+	return append(summaries[:limit], fmt.Sprintf("还有 %d 条工具活动未显示", len(summaries)-limit))
+}
+
+func summarizeToolUseBlock(block HistoryContentBlock) string {
+	toolName := strings.TrimSpace(block.ToolName)
+	if toolName == "" {
+		toolName = "tool"
+	}
+	if input := summarizeJSONValue(block.InputJSON); input != "" {
+		return fmt.Sprintf("%s 调用参数：%s", toolName, input)
+	}
+	return fmt.Sprintf("%s 已调用", toolName)
+}
+
+func summarizeToolResultBlock(result HistoryContentBlock, call HistoryContentBlock) string {
+	toolName := strings.TrimSpace(result.ToolName)
+	if toolName == "" {
+		toolName = strings.TrimSpace(call.ToolName)
+	}
+	if toolName == "" {
+		toolName = "tool"
+	}
+
+	input := summarizeJSONValue(call.InputJSON)
+	output := summarizeJSONValue(result.ResultJSON)
+	switch {
+	case input != "" && output != "":
+		return fmt.Sprintf("%s 参数：%s；结果：%s", toolName, input, output)
+	case output != "":
+		return fmt.Sprintf("%s 结果：%s", toolName, output)
+	case input != "":
+		return fmt.Sprintf("%s 参数：%s", toolName, input)
+	default:
+		return fmt.Sprintf("%s 已返回结果", toolName)
+	}
+}
+
+func summarizeJSONValue(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	var value any
+	if err := json.Unmarshal([]byte(trimmed), &value); err == nil {
+		if summary := summarizeDecodedJSONValue(value); summary != "" {
+			return summary
+		}
+	}
+	return truncateSingleLine(trimmed, 160)
+}
+
+func summarizeDecodedJSONValue(value any) string {
+	switch typed := value.(type) {
+	case map[string]any:
+		return summarizeJSONObject(typed)
+	case []any:
+		return fmt.Sprintf("%d 项", len(typed))
+	case string:
+		return truncateSingleLine(typed, 120)
+	case bool:
+		if typed {
+			return "true"
+		}
+		return "false"
+	case float64:
+		return fmt.Sprintf("%g", typed)
+	default:
+		return ""
+	}
+}
+
+func summarizeJSONObject(object map[string]any) string {
+	parts := make([]string, 0)
+	for _, key := range []string{
+		"success",
+		"capabilityId",
+		"relativePath",
+		"relativeDirectoryPath",
+		"path",
+		"title",
+		"name",
+		"query",
+		"ok",
+	} {
+		if value, ok := object[key]; ok {
+			if summary := summarizeDecodedJSONValue(value); summary != "" {
+				parts = append(parts, fmt.Sprintf("%s=%s", key, summary))
+			}
+		}
+	}
+
+	if output, ok := object["output"]; ok {
+		if summary := summarizeToolOutput(output); summary != "" {
+			parts = append(parts, "output="+summary)
+		}
+	}
+	if errValue, ok := object["error"]; ok {
+		if summary := summarizeDecodedJSONValue(errValue); summary != "" {
+			parts = append(parts, "error="+summary)
+		}
+	}
+
+	if len(parts) == 0 {
+		encoded, err := json.Marshal(object)
+		if err != nil {
+			return ""
+		}
+		return truncateSingleLine(string(encoded), 160)
+	}
+	return truncateSingleLine(strings.Join(parts, ", "), 160)
+}
+
+func summarizeToolOutput(value any) string {
+	switch typed := value.(type) {
+	case []any:
+		if len(typed) == 0 {
+			return "0 项"
+		}
+		paths := make([]string, 0, min(len(typed), 3))
+		for _, item := range typed {
+			object, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if path, ok := object["relativePath"].(string); ok && strings.TrimSpace(path) != "" {
+				paths = append(paths, strings.TrimSpace(path))
+				continue
+			}
+			if title, ok := object["title"].(string); ok && strings.TrimSpace(title) != "" {
+				paths = append(paths, strings.TrimSpace(title))
+			}
+		}
+		if len(paths) == 0 {
+			return fmt.Sprintf("%d 项", len(typed))
+		}
+		extra := ""
+		if len(typed) > len(paths) {
+			extra = fmt.Sprintf(" 等 %d 项", len(typed))
+		}
+		return strings.Join(paths, ", ") + extra
+	case map[string]any:
+		return summarizeJSONObject(typed)
+	default:
+		return summarizeDecodedJSONValue(value)
+	}
+}
+
+func truncateSingleLine(value string, limit int) string {
+	normalized := strings.Join(strings.Fields(value), " ")
+	if limit <= 0 || len(normalized) <= limit {
+		return normalized
+	}
+	if limit <= 3 {
+		return normalized[:limit]
+	}
+	return normalized[:limit-3] + "..."
 }
 
 func isToolOnlyHistoryContentBlocks(blocks []HistoryContentBlock) bool {
@@ -1207,6 +1603,14 @@ func (r *Runtime) buildAgent(
 			vendorConfig.FieldValues["apiKey"],
 		)
 		providerLabel = "openai-compatible"
+	case "codex-compatible":
+		llm = llms.NewCodexCompatibleLLM(
+			"codex-compatible",
+			firstNonEmptyString(vendorConfig.FieldValues["baseUrl"], vendorConfig.FieldValues["endpoint"]),
+			vendorConfig.Model,
+			vendorConfig.FieldValues["apiKey"],
+		)
+		providerLabel = "codex-compatible"
 	case "baidu-qianfan":
 		llm = llms.NewBaiduLLM(
 			"baidu-qianfan",

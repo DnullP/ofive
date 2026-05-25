@@ -405,9 +405,10 @@
 .cm-read-frontmatter-panel {
     margin: 0 0 1.2em;
     padding: 12px 14px;
-    border: 1px solid var(--editor-panel-border-color);
+    border: 1px solid var(--content-material-border);
     border-radius: 10px;
-    background: var(--editor-panel-bg-soft-color);
+    background: var(--content-material-bg);
+    box-shadow: var(--content-material-shadow);
 }
 
 /* 阅读态 frontmatter 标题：标识当前块为结构化元数据。 */

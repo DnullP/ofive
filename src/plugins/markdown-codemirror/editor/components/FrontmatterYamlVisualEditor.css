@@ -3,8 +3,23 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
-    padding: 10px 0 2px;
+    padding: 12px 14px;
+    border: 1px solid var(--content-material-border);
+    border-radius: 14px;
+    background: var(--content-material-bg);
     color: var(--text-primary);
+    box-shadow: var(--content-material-shadow);
+    background-clip: padding-box;
+}
+
+.app-runtime--tauri.app-effect--glass .fmv-editor {
+    backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.72)) saturate(1.04);
+    -webkit-backdrop-filter: blur(calc(var(--glass-blur-radius) * 0.72)) saturate(1.04);
+}
+
+.app-runtime--tauri.app-effect--glass.app-window--dragging .fmv-editor {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 /* Frontmatter 折叠头部：作为属性区域的唯一标题与显隐开关。 */
@@ -173,6 +188,7 @@
     background: var(--floating-surface-bg-strong);
     box-shadow: var(--floating-surface-shadow);
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
 /* Frontmatter 字段名建议项：保留 key 和类型两个扫描点。 */

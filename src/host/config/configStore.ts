@@ -20,6 +20,7 @@ import {
     type EditorTabRestoreMode,
 } from "./editorTabRestoreMode";
 import i18n from "../../i18n";
+import { stableStringify } from "../../utils/stableJson";
 
 export type FileOpenMode = "new-tab" | "replace-active-tab";
 
@@ -219,6 +220,10 @@ interface UpdateBackendConfigOptions {
  */
 interface ConfigChangedEventDetail {
     state: ConfigState;
+}
+
+function serializeVaultConfig(config: VaultConfig | null): string {
+    return config ? stableStringify(config) : "null";
 }
 
 type ConfigStoreGlobalScope = typeof globalThis & {
@@ -1178,6 +1183,20 @@ class ConfigStore {
 
         const rawNextConfig = recipe(currentConfig);
         const { nextConfig, featureSettings } = normalizeBackendConfig(rawNextConfig);
+
+        if (serializeVaultConfig(nextConfig) === serializeVaultConfig(currentConfig)) {
+            if (serializeVaultConfig(this.state.backendConfig) !== serializeVaultConfig(nextConfig)) {
+                this.state = {
+                    ...this.state,
+                    backendConfig: nextConfig,
+                    featureSettings,
+                    error: null,
+                };
+                this.emit();
+            }
+
+            return nextConfig;
+        }
 
         this.state = {
             ...this.state,

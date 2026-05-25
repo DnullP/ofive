@@ -2,9 +2,14 @@ package agentruntime
 
 import (
 	"context"
+	"fmt"
+	"iter"
 	"strings"
 	"testing"
 
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/runner"
 	"google.golang.org/adk/session"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/toolconfirmation"
@@ -222,9 +227,221 @@ func TestFinishStreamADKContentReturnsDoneForToolOnlyEmptyResponse(t *testing.T)
 	if !strings.Contains(done.AccumulatedText, "工具调用已返回") {
 		t.Fatalf("expected fallback text to explain the empty final response, got %q", done.AccumulatedText)
 	}
+	if !strings.Contains(done.AccumulatedText, "vault_list_tasks") ||
+		!strings.Contains(done.AccumulatedText, "success=true") {
+		t.Fatalf("expected fallback text to summarize tool activity, got %q", done.AccumulatedText)
+	}
 	if !strings.Contains(done.HistoryContentBlocksJSON, `"kind":"tool-result"`) ||
 		!strings.Contains(done.HistoryContentBlocksJSON, `"kind":"text"`) {
 		t.Fatalf("expected history blocks to preserve tool result and fallback text, got %q", done.HistoryContentBlocksJSON)
+	}
+}
+
+func TestStreamADKContentContinuesAfterToolOnlyEmptyResponse(t *testing.T) {
+	t.Parallel()
+
+	var prompts []string
+	adkAgent, err := agent.New(agent.Config{
+		Name: "test_agent",
+		Run: func(invocation agent.InvocationContext) iter.Seq2[*session.Event, error] {
+			return func(yield func(*session.Event, error) bool) {
+				prompts = append(prompts, contentTextForPrompt(invocation.UserContent()))
+				event := session.NewEvent(invocation.InvocationID())
+				event.Author = "test_agent"
+				if len(prompts) == 1 {
+					event.LLMResponse = model.LLMResponse{
+						Content: &genai.Content{
+							Role: genai.RoleUser,
+							Parts: []*genai.Part{{
+								FunctionResponse: &genai.FunctionResponse{
+									ID:   "call-1",
+									Name: "vault_create_directory",
+									Response: map[string]any{
+										"success":      true,
+										"capabilityId": "vault.create_directory",
+										"output":       map[string]any{"ok": true},
+									},
+								},
+							}},
+						},
+						TurnComplete: true,
+					}
+				} else {
+					event.LLMResponse = model.LLMResponse{
+						Content:      genai.NewContentFromText("已创建 Tauri 词条。", genai.RoleModel),
+						TurnComplete: true,
+					}
+				}
+				yield(event, nil)
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("create test agent: %v", err)
+	}
+
+	sessionService := session.InMemoryService()
+	if _, err := sessionService.Create(context.Background(), &session.CreateRequest{
+		AppName:   appName,
+		UserID:    "user-1",
+		SessionID: "session-1",
+	}); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	runnerInstance, err := runner.New(runner.Config{
+		AppName:        appName,
+		Agent:          adkAgent,
+		SessionService: sessionService,
+	})
+	if err != nil {
+		t.Fatalf("create runner: %v", err)
+	}
+
+	var chunks []StreamChunk
+	_, err = streamADKContentWithState(
+		context.Background(),
+		runnerInstance,
+		adkAgent,
+		"test_agent",
+		"user-1",
+		"session-1",
+		CapabilityBridgeConfig{},
+		genai.NewContentFromText("创建 Tauri 词条", genai.RoleUser),
+		func(chunk StreamChunk) error {
+			chunks = append(chunks, chunk)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("streamADKContentWithState returned error: %v", err)
+	}
+	if len(prompts) != 2 {
+		t.Fatalf("expected original turn plus one continuation turn, got %d prompts: %v", len(prompts), prompts)
+	}
+	if !strings.Contains(prompts[1], "上一轮已经执行了工具") ||
+		!strings.Contains(prompts[1], "vault_create_directory") {
+		t.Fatalf("expected continuation prompt to include recovery instruction and tool summary, got %q", prompts[1])
+	}
+
+	var done StreamChunk
+	for _, chunk := range chunks {
+		if chunk.EventType == "done" {
+			done = chunk
+		}
+	}
+	if done.AccumulatedText != "已创建 Tauri 词条。" {
+		t.Fatalf("expected recovered final text, got %+v", done)
+	}
+	if strings.Contains(done.AccumulatedText, "模型没有返回最终回复") {
+		t.Fatalf("expected recovered answer instead of fallback, got %q", done.AccumulatedText)
+	}
+	if !strings.Contains(done.HistoryContentBlocksJSON, `"toolName":"vault_create_directory"`) ||
+		!strings.Contains(done.HistoryContentBlocksJSON, `"text":"已创建 Tauri 词条。"`) {
+		t.Fatalf("expected history blocks to preserve tool result and recovered text, got %q", done.HistoryContentBlocksJSON)
+	}
+}
+
+func TestBuildEmptyToolResponseContinuationPromptIncludesOriginalRequestAndToolSummary(t *testing.T) {
+	t.Parallel()
+
+	prompt := buildEmptyToolResponseContinuationPrompt(
+		genai.NewContentFromText("给我创建 tauri 架构词条", genai.RoleUser),
+		[]HistoryContentBlock{
+			{
+				Kind:      "tool-use",
+				ToolUseID: "call-1",
+				ToolName:  "vault_create_directory",
+				InputJSON: `{"relativeDirectoryPath":"Tauri"}`,
+			},
+			{
+				Kind:       "tool-result",
+				ToolUseID:  "call-1",
+				ToolName:   "vault_create_directory",
+				ResultJSON: `{"capabilityId":"vault.create_directory","output":{"ok":true},"success":true}`,
+			},
+		},
+	)
+
+	for _, expected := range []string{
+		"上一轮已经执行了工具",
+		"给我创建 tauri 架构词条",
+		"vault_create_directory",
+		"relativeDirectoryPath=Tauri",
+		"success=true",
+	} {
+		if !strings.Contains(prompt, expected) {
+			t.Fatalf("expected continuation prompt to contain %q, got %q", expected, prompt)
+		}
+	}
+}
+
+func TestSummarizeToolActivityLimitsLargeResultSets(t *testing.T) {
+	t.Parallel()
+
+	blocks := make([]HistoryContentBlock, 0, 8)
+	for index := range 8 {
+		callID := fmt.Sprintf("call-%d", index+1)
+		blocks = append(blocks, HistoryContentBlock{
+			Kind:      "tool-use",
+			ToolUseID: callID,
+			ToolName:  "vault_search_markdown_files",
+			InputJSON: fmt.Sprintf(`{"query":"q%d"}`, index+1),
+		}, HistoryContentBlock{
+			Kind:       "tool-result",
+			ToolUseID:  callID,
+			ToolName:   "vault_search_markdown_files",
+			ResultJSON: `{"success":true,"output":[]}`,
+		})
+	}
+
+	summary := summarizeToolActivityForPrompt(blocks, 3)
+	if strings.Count(summary, "\n- ") != 3 {
+		t.Fatalf("expected three visible bullets plus overflow bullet, got %q", summary)
+	}
+	if !strings.Contains(summary, "还有 5 条工具活动未显示") {
+		t.Fatalf("expected overflow summary, got %q", summary)
+	}
+}
+
+func TestShouldClearCompletedPendingConfirmationAfterToolResult(t *testing.T) {
+	t.Parallel()
+
+	state := &streamADKState{
+		historyContentBlocks: []HistoryContentBlock{{
+			Kind:       "tool-result",
+			ToolUseID:  "call-1",
+			ToolName:   "vault_create_directory",
+			ResultJSON: `{"success":true}`,
+		}},
+	}
+
+	if !shouldClearCompletedPendingConfirmation(true, state) {
+		t.Fatal("expected completed confirmed tool result to clear pending confirmation")
+	}
+}
+
+func TestShouldClearCompletedPendingConfirmationIgnoresUnexecutedConfirmationResponse(t *testing.T) {
+	t.Parallel()
+
+	state := &streamADKState{
+		historyContentBlocks: []HistoryContentBlock{{
+			Kind:       "tool-result",
+			ToolUseID:  "confirm-1",
+			ToolName:   toolconfirmation.FunctionCallName,
+			ResultJSON: `{"confirmed":true}`,
+		}},
+	}
+
+	if shouldClearCompletedPendingConfirmation(true, state) {
+		t.Fatal("expected confirmation protocol response alone to keep pending confirmation")
+	}
+	if shouldClearCompletedPendingConfirmation(false, &streamADKState{
+		historyContentBlocks: []HistoryContentBlock{{
+			Kind:     "tool-result",
+			ToolName: "vault_create_directory",
+		}},
+	}) {
+		t.Fatal("expected rejected confirmation to keep pending confirmation")
 	}
 }
 

@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"google.golang.org/adk/model"
@@ -121,6 +123,149 @@ func TestOpenAICompatibleGenerateContentSendsToolsAndToolMessages(t *testing.T) 
 	}
 }
 
+func TestCodexCompatibleGenerateContentSendsTopLevelInstructions(t *testing.T) {
+	t.Parallel()
+
+	var capturedRequest map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		defer request.Body.Close()
+
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		if err := json.Unmarshal(body, &capturedRequest); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"\"}]}\n\n"))
+		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	llm := NewCodexCompatibleLLM("codex-compatible", server.URL, "gpt-5.5", "test-key")
+	request := &model.LLMRequest{
+		Model: "codex-compatible",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("你好", genai.RoleUser),
+		},
+		Config: &genai.GenerateContentConfig{
+			SystemInstruction: genai.NewContentFromText("You are ofive.", genai.RoleUser),
+		},
+	}
+
+	for _, err := range collectResponses(llm.GenerateContent(context.Background(), request, false)) {
+		if err != nil {
+			t.Fatalf("GenerateContent returned error: %v", err)
+		}
+	}
+
+	if capturedRequest["instructions"] != "You are ofive." {
+		t.Fatalf("expected top-level instructions, got %#v", capturedRequest["instructions"])
+	}
+	messages, ok := capturedRequest["messages"].([]any)
+	if !ok || len(messages) != 2 {
+		t.Fatalf("expected system and user messages, got %#v", capturedRequest["messages"])
+	}
+	systemMessage, _ := messages[0].(map[string]any)
+	if systemMessage["role"] != "system" || systemMessage["content"] != "You are ofive." {
+		t.Fatalf("expected system message to be preserved, got %#v", systemMessage)
+	}
+}
+
+func TestOpenAICompatibleGenerateContentOmitsTopLevelInstructions(t *testing.T) {
+	t.Parallel()
+
+	var capturedRequest map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		defer request.Body.Close()
+
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		if err := json.Unmarshal(body, &capturedRequest); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-4.1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"\"}]}\n\n"))
+		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	llm := NewOpenAICompatibleLLM("openai-compatible", server.URL, "gpt-4.1", "test-key")
+	request := &model.LLMRequest{
+		Model: "openai-compatible",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("你好", genai.RoleUser),
+		},
+		Config: &genai.GenerateContentConfig{
+			SystemInstruction: genai.NewContentFromText("You are ofive.", genai.RoleUser),
+		},
+	}
+
+	for _, err := range collectResponses(llm.GenerateContent(context.Background(), request, false)) {
+		if err != nil {
+			t.Fatalf("GenerateContent returned error: %v", err)
+		}
+	}
+
+	if _, ok := capturedRequest["instructions"]; ok {
+		t.Fatalf("expected no top-level instructions for default-compatible request, got %#v", capturedRequest["instructions"])
+	}
+}
+
+func TestOpenAICompatibleGenerateContentOmitsTopLevelInstructionsForAPIForAIBaseURL(t *testing.T) {
+	t.Parallel()
+
+	var capturedRequest map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		defer request.Body.Close()
+
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		if err := json.Unmarshal(body, &capturedRequest); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"\"}]}\n\n"))
+		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	llm := NewOpenAICompatibleLLM(
+		"openai-compatible",
+		strings.Replace(server.URL, "127.0.0.1", "www.api-for-ai.com", 1),
+		"gpt-5.5",
+		"test-key",
+	)
+	llm.client = NewOpenAICompatibleLLM("openai-compatible", server.URL, "gpt-5.5", "test-key").client
+	request := &model.LLMRequest{
+		Model: "openai-compatible",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("你好", genai.RoleUser),
+		},
+		Config: &genai.GenerateContentConfig{
+			SystemInstruction: genai.NewContentFromText("You are ofive.", genai.RoleUser),
+		},
+	}
+
+	for _, err := range collectResponses(llm.GenerateContent(context.Background(), request, false)) {
+		if err != nil {
+			t.Fatalf("GenerateContent returned error: %v", err)
+		}
+	}
+
+	if _, ok := capturedRequest["instructions"]; ok {
+		t.Fatalf("expected OpenAI-compatible provider not to infer Codex instructions, got %#v", capturedRequest["instructions"])
+	}
+}
+
 func TestOpenAICompatibleGenerateContentParsesStreamingToolCalls(t *testing.T) {
 	t.Parallel()
 
@@ -160,6 +305,168 @@ func TestOpenAICompatibleGenerateContentParsesStreamingToolCalls(t *testing.T) {
 	}
 	if functionCall.Args["query"] != "" {
 		t.Fatalf("unexpected function call args: %+v", functionCall.Args)
+	}
+}
+
+func TestOpenAICompatibleGenerateContentWrapsMalformedStreamErrors(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-4.1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\"},\"finish_reason\":\"\"}]}\n\n"))
+		_, _ = writer.Write([]byte("data: {\n\n"))
+	}))
+	defer server.Close()
+
+	llm := NewOpenAICompatibleLLM("openai-compatible", server.URL, "gpt-4.1", "test-key")
+	request := &model.LLMRequest{
+		Model: "openai-compatible",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("继续", genai.RoleUser),
+		},
+	}
+
+	var gotErr error
+	for _, err := range collectResponses(llm.GenerateContent(context.Background(), request, false)) {
+		if err != nil {
+			gotErr = err
+		}
+	}
+
+	if gotErr == nil {
+		t.Fatal("expected malformed stream error")
+	}
+	message := gotErr.Error()
+	if !strings.Contains(message, "openai-compatible stream failed for model gpt-4.1") {
+		t.Fatalf("expected wrapped provider/model context, got %v", gotErr)
+	}
+	if !strings.Contains(message, "response_tail=") || !strings.Contains(message, "chatcmpl-test") {
+		t.Fatalf("expected response tail context, got %v", gotErr)
+	}
+}
+
+func TestOpenAICompatibleGenerateContentRetriesRoleOnlyMalformedTail(t *testing.T) {
+	t.Parallel()
+
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		count := requestCount.Add(1)
+		writer.Header().Set("Content-Type", "text/event-stream")
+		if count == 1 {
+			_, _ = writer.Write([]byte("data: {\"id\":\"resp-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\n"))
+			_, _ = writer.Write([]byte("data: {\n\n"))
+			return
+		}
+		_, _ = writer.Write([]byte("data: {\"id\":\"resp-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"完成\"},\"finish_reason\":\"\"}]}\n\n"))
+		_, _ = writer.Write([]byte("data: {\"id\":\"resp-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"))
+		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	llm := NewOpenAICompatibleLLM("openai-compatible", server.URL, "gpt-5.5", "test-key")
+	request := &model.LLMRequest{
+		Model: "openai-compatible",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("继续", genai.RoleUser),
+		},
+	}
+
+	var responses []*model.LLMResponse
+	for response, err := range llm.GenerateContent(context.Background(), request, false) {
+		if err != nil {
+			t.Fatalf("GenerateContent returned error: %v", err)
+		}
+		responses = append(responses, response)
+	}
+
+	if requestCount.Load() != 2 {
+		t.Fatalf("expected one retry after role-only malformed tail, got %d requests", requestCount.Load())
+	}
+	if len(responses) != 2 {
+		t.Fatalf("expected streaming delta and final response, got %d", len(responses))
+	}
+	if got := responses[len(responses)-1].Content.Parts[0].Text; got != "完成" {
+		t.Fatalf("expected recovered final response text, got %q", got)
+	}
+}
+
+func TestOpenAICompatibleGenerateContentFallsBackAfterRepeatedRoleOnlyMalformedTail(t *testing.T) {
+	t.Parallel()
+
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requestCount.Add(1)
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: {\"id\":\"resp-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\n"))
+		_, _ = writer.Write([]byte("data: {\n\n"))
+	}))
+	defer server.Close()
+
+	llm := NewOpenAICompatibleLLM("openai-compatible", server.URL, "gpt-5.5", "test-key")
+	request := &model.LLMRequest{
+		Model: "openai-compatible",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("继续", genai.RoleUser),
+		},
+	}
+
+	var responses []*model.LLMResponse
+	for response, err := range llm.GenerateContent(context.Background(), request, false) {
+		if err != nil {
+			t.Fatalf("GenerateContent returned error: %v", err)
+		}
+		responses = append(responses, response)
+	}
+
+	if requestCount.Load() != maxOpenAICompatibleStreamRetries+1 {
+		t.Fatalf("expected retries to be exhausted, got %d requests", requestCount.Load())
+	}
+	if len(responses) != 1 {
+		t.Fatalf("expected one empty final response for runtime fallback, got %d", len(responses))
+	}
+	if got := responses[0].Content.Parts[0].Text; got != "" {
+		t.Fatalf("expected empty final response text, got %q", got)
+	}
+}
+
+func TestOpenAICompatibleGenerateContentDoesNotRetryAfterEmittedText(t *testing.T) {
+	t.Parallel()
+
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requestCount.Add(1)
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-4.1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\"},\"finish_reason\":\"\"}]}\n\n"))
+		_, _ = writer.Write([]byte("data: {\n\n"))
+	}))
+	defer server.Close()
+
+	llm := NewOpenAICompatibleLLM("openai-compatible", server.URL, "gpt-4.1", "test-key")
+	request := &model.LLMRequest{
+		Model: "openai-compatible",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("继续", genai.RoleUser),
+		},
+	}
+
+	var responses []*model.LLMResponse
+	var gotErr error
+	for response, err := range llm.GenerateContent(context.Background(), request, false) {
+		if err != nil {
+			gotErr = err
+			continue
+		}
+		responses = append(responses, response)
+	}
+
+	if requestCount.Load() != 1 {
+		t.Fatalf("expected no retry after emitted text, got %d requests", requestCount.Load())
+	}
+	if len(responses) != 1 || responses[0].Content.Parts[0].Text != "partial" {
+		t.Fatalf("expected partial response to be emitted once, got %+v", responses)
+	}
+	if gotErr == nil {
+		t.Fatal("expected malformed stream error after emitted text")
 	}
 }
 
