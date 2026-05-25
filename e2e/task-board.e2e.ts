@@ -85,6 +85,23 @@ test.describe("任务看板", () => {
 
         const popover = page.locator(".task-board__popover.is-positioned");
         await expect(popover).toBeVisible();
+        await expect(page.locator(".task-board .task-board__popover")).toHaveCount(0);
+        await expect.poll(async () => popover.evaluate((element) => {
+            return Boolean(element.closest("[data-workbench-overlay-layer='true']"));
+        })).toBe(true);
+        await expect.poll(async () => popover.evaluate((element) => {
+            const overlayLayer = element.closest("[data-workbench-overlay-layer='true']");
+            if (!(overlayLayer instanceof HTMLElement)) {
+                return false;
+            }
+
+            const overlayRect = overlayLayer.getBoundingClientRect();
+            const popoverRect = element.getBoundingClientRect();
+            return popoverRect.top >= overlayRect.top
+                && popoverRect.left >= overlayRect.left
+                && popoverRect.right <= overlayRect.right
+                && popoverRect.bottom <= overlayRect.bottom;
+        })).toBe(true);
         await expect(popover.getByText(/Due time|截止时间/)).toHaveCount(0);
         await popover.locator(".task-board__input").last().fill("2026-03-26T18:45");
         await popover.getByRole("button", { name: /Low|低/ }).click();
@@ -211,6 +228,9 @@ test.describe("任务看板", () => {
         }).click();
         const editDialog = page.getByRole("dialog", { name: /Edit column|编辑列/ });
         await expect(editDialog).toBeVisible();
+        await expect.poll(async () => editDialog.evaluate((element) => {
+            return Boolean(element.closest("[data-workbench-overlay-layer='true']"));
+        })).toBe(true);
         await expect(editDialog.locator(".task-board__custom-column-editor")).toHaveCount(1);
         await editDialog.locator(".task-board__custom-column-name input").fill("Board focus");
         await editDialog.getByRole("button", { name: /Save column|保存列/ }).click();

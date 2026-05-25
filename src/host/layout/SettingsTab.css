@@ -1,4 +1,3 @@
-/* 设置页容器：左侧分类 + 右侧内容双栏布局 */
 .settings-tab {
     height: 100%;
     display: grid;
@@ -6,7 +5,6 @@
     min-height: 0;
 }
 
-/* 设置页左侧栏：分类菜单容器 */
 .settings-tab-sidebar {
     border-right: 1px solid var(--content-material-border);
     background: var(--content-material-bg-strong);
@@ -16,13 +14,11 @@
     gap: 12px;
 }
 
-/* 桌面毛玻璃设置侧栏：比内容面板更实一些，方便做导航。 */
 .app-runtime--tauri.app-effect--glass .settings-tab-sidebar {
     background: var(--content-material-bg-strong);
     box-shadow: inset -1px 0 0 color-mix(in srgb, var(--content-material-border) 92%, transparent);
 }
 
-/* 设置页侧栏头部：展示导航标签和命中统计。 */
 .settings-tab-sidebar-header {
     display: flex;
     flex-direction: column;
@@ -30,7 +26,6 @@
     padding: 4px 6px 0;
 }
 
-/* 设置页侧栏标签：弱化显示，提示当前为导航区。 */
 .settings-tab-sidebar-caption {
     color: var(--text-tertiary);
     font-size: 11px;
@@ -39,13 +34,11 @@
     text-transform: uppercase;
 }
 
-/* 设置页侧栏统计：展示当前筛选命中数。 */
 .settings-tab-sidebar-summary {
     color: var(--text-secondary);
     font-size: 12px;
 }
 
-/* 设置页搜索框容器：承载图标和输入框。 */
 .settings-tab-search {
     display: flex;
     align-items: center;
@@ -57,7 +50,6 @@
     box-shadow: var(--content-material-shadow);
 }
 
-/* 设置页搜索图标：弱化显示，不抢输入焦点。 */
 .settings-tab-search-icon {
     width: 16px;
     height: 16px;
@@ -65,7 +57,6 @@
     flex-shrink: 0;
 }
 
-/* 设置页搜索输入框：无额外边框，突出内容输入。 */
 .settings-tab-search-input {
     width: 100%;
     border: 0;
@@ -75,7 +66,6 @@
     outline: none;
 }
 
-/* 设置页侧栏列表：滚动承载所有分区项。 */
 .settings-tab-sidebar-list {
     min-height: 0;
     overflow: auto;
@@ -85,7 +75,6 @@
     padding-right: 2px;
 }
 
-/* 设置页分类按钮：单根底部分隔线的开放式导航项。 */
 .settings-tab-sidebar-item {
     position: relative;
     text-align: left;
@@ -94,11 +83,24 @@
     border: 0;
     padding: 14px 10px;
     cursor: pointer;
-    display: block;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
     transition: background-color 0.16s ease, color 0.16s ease;
 }
 
-/* 设置页分类按钮底部分隔线：静态时只保留一根开放横线。 */
+.settings-tab-sidebar-section.has-children .settings-tab-sidebar-item {
+    padding-left: 6px;
+}
+
+.settings-tab-sidebar-disclosure {
+    width: 14px; height: 14px;
+    margin-top: 2px;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+}
+
 .settings-tab-sidebar-item::after {
     content: "";
     position: absolute;
@@ -109,16 +111,15 @@
     background: color-mix(in srgb, var(--content-material-border) 86%, transparent);
 }
 
-/* 设置页分类内容：保证文本在横线之上并维持竖向排布。 */
 .settings-tab-sidebar-item-body {
     position: relative;
     z-index: 1;
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-width: 0;
 }
 
-/* 设置页分类标题：强调当前分区名称。 */
 .settings-tab-sidebar-item-title {
     color: var(--text-primary);
     font-size: 13px;
@@ -126,35 +127,89 @@
     line-height: 1.4;
 }
 
-/* 设置页分类描述：补充当前分区关注点。 */
 .settings-tab-sidebar-item-desc {
     color: var(--text-secondary);
     font-size: 12px;
     line-height: 1.45;
 }
 
-/* 设置页分类按钮悬停态：与文件树一致，使用方形浅底。 */
 .settings-tab-sidebar-item:hover {
     background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
-/* 设置页分类按钮激活态：与文件树 selected 一致，方形浅色背景，无动画边线。 */
 .settings-tab-sidebar-item.active {
     background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 
-/* 设置页分类标题激活态：只提高可读性，不引入额外动画。 */
 .settings-tab-sidebar-item.active .settings-tab-sidebar-item-title {
     color: var(--text-primary);
     font-weight: 700;
 }
 
-/* 设置页分类说明激活态：保持次级信息弱化。 */
 .settings-tab-sidebar-item.active .settings-tab-sidebar-item-desc {
     color: var(--text-secondary);
 }
 
-/* 设置页右侧内容区容器 */
+.settings-tab-sidebar-sublist {
+    display: flex;
+    flex-direction: column;
+    padding: 0 0 4px 28px;
+}
+
+.settings-tab-sidebar-subitem {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 100%;
+    min-height: 36px;
+    padding: 8px 9px;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.settings-tab-sidebar-subitem::before {
+    content: "";
+    position: absolute;
+    left: -12px; top: 8px; bottom: 8px;
+    width: 1px;
+    background: color-mix(in srgb, var(--content-material-border) 86%, transparent);
+}
+
+.settings-tab-sidebar-subitem-title {
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 560;
+    line-height: 1.35;
+}
+
+.settings-tab-sidebar-subitem-desc {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.settings-tab-sidebar-subitem:hover {
+    background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+
+.settings-tab-sidebar-subitem.active {
+    background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+    color: var(--text-primary);
+}
+
+.settings-tab-sidebar-subitem.active .settings-tab-sidebar-subitem-title {
+    font-weight: 700;
+}
+
+.settings-tab-sidebar-subitem.active::before {
+    background: var(--accent-primary);
+}
+
 .settings-tab-content {
     min-width: 0;
     min-height: 0;
@@ -163,12 +218,10 @@
     background: linear-gradient(135deg, color-mix(in srgb, var(--content-material-bg-muted) 88%, transparent), transparent 28%);
 }
 
-/* 桌面毛玻璃设置内容区：保持透明，让中心区域不要整块发黑。 */
 .app-runtime--tauri.app-effect--glass .settings-tab-content {
     background: linear-gradient(135deg, color-mix(in srgb, var(--content-material-bg-muted) 88%, transparent), transparent 28%);
 }
 
-/* 设置页标题 */
 .settings-tab-content-header {
     display: flex;
     align-items: flex-start;
@@ -177,14 +230,12 @@
     margin-bottom: 18px;
 }
 
-/* 设置页标题组：承载 kicker、标题和说明。 */
 .settings-tab-content-title-group {
     display: flex;
     flex-direction: column;
     gap: 6px;
 }
 
-/* 设置页标题 kicker：弱提示当前位于设置中。 */
 .settings-tab-content-kicker {
     color: var(--text-tertiary);
     font-size: 11px;
@@ -193,7 +244,6 @@
     text-transform: uppercase;
 }
 
-/* 设置页主标题：强调当前分区。 */
 .settings-tab-content-title {
     font-size: 22px;
     font-weight: 700;
@@ -201,7 +251,6 @@
     line-height: 1.2;
 }
 
-/* 设置页副标题：补充当前分区作用。 */
 .settings-tab-content-subtitle {
     max-width: 560px;
     color: var(--text-secondary);
@@ -209,7 +258,6 @@
     line-height: 1.5;
 }
 
-/* 设置页筛选统计：在搜索时提示命中情况。 */
 .settings-tab-content-summary {
     flex-shrink: 0;
     color: var(--text-secondary);
@@ -224,7 +272,6 @@
     transition: border-color 0.16s ease, background-color 0.16s ease;
 }
 
-/* 设置页空状态：用于无分区或搜索无结果时的占位说明。 */
 .settings-tab-empty-state {
     display: flex;
     flex-direction: column;
@@ -238,21 +285,18 @@
     box-shadow: var(--content-material-shadow);
 }
 
-/* 设置页空状态标题：突出无结果结论。 */
 .settings-tab-empty-state-title {
     color: var(--text-primary);
     font-size: 16px;
     font-weight: 600;
 }
 
-/* 设置页空状态描述：补充下一步提示。 */
 .settings-tab-empty-state-desc {
     color: var(--text-secondary);
     font-size: 13px;
     line-height: 1.5;
 }
 
-/* 设置项组：纵向排列，无间距，由行分隔线连接 */
 .settings-item-group {
     display: flex;
     flex-direction: column;
@@ -264,7 +308,6 @@
     box-shadow: var(--content-material-shadow);
 }
 
-/* 桌面毛玻璃设置卡片：将玻璃感收敛到卡片层，而不是整页遮罩。 */
 .app-runtime--tauri.app-effect--glass .settings-item-group {
     background: var(--content-material-bg);
     box-shadow: var(--content-material-shadow);
@@ -275,9 +318,7 @@
     backdrop-filter: none;
 }
 
-/* ========== 紧凑行风格（新统一样式） ========== */
 
-/* 紧凑设置行：表格行风格，底部分隔线 */
 .settings-compact-row {
     display: flex;
     align-items: center;
@@ -290,28 +331,23 @@
     transition: background-color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
-/* 紧凑设置行堆叠布局：用于带滑块的双层配置项。 */
 .settings-compact-row--stacked {
     align-items: stretch;
     flex-direction: column;
 }
 
-/* 桌面毛玻璃设置行：跟随卡片透明，不再额外叠深色底。 */
 .app-runtime--tauri.app-effect--glass .settings-compact-row {
     background: transparent;
 }
 
-/* 紧凑设置行最后一项去掉底部分隔线 */
 .settings-compact-row:last-child {
     border-bottom: none;
 }
 
-/* 紧凑设置行悬浮态 */
 .settings-compact-row:hover {
     background: var(--content-material-hover-bg);
 }
 
-/* 紧凑行纵向布局变体：用于包含子控件区域（如主题按钮、图谱输入） */
 .settings-compact-row-column {
     display: flex;
     flex-direction: column;
@@ -323,17 +359,14 @@
     transition: background-color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
-/* 桌面毛玻璃纵向设置行：保持透明以体现卡片材质。 */
 .app-runtime--tauri.app-effect--glass .settings-compact-row-column {
     background: transparent;
 }
 
-/* 纵向行最后一项去掉底部分隔线 */
 .settings-compact-row-column:last-child {
     border-bottom: none;
 }
 
-/* 紧凑行信息区：标题和描述靠左 */
 .settings-compact-info {
     display: flex;
     flex-direction: column;
@@ -341,7 +374,6 @@
     min-width: 0;
 }
 
-/* 紧凑行标题 */
 .settings-compact-title {
     color: var(--text-primary);
     font-size: 13px;
@@ -349,14 +381,12 @@
     line-height: 1.4;
 }
 
-/* 紧凑行描述 */
 .settings-compact-desc {
     color: var(--text-secondary);
     font-size: 11px;
     line-height: 1.4;
 }
 
-/* 紧凑行数值输入框 */
 .settings-compact-number-input {
     width: 64px;
     border: 1px solid var(--content-material-border);
@@ -368,34 +398,29 @@
     text-align: center;
 }
 
-/* 毛玻璃控制行：滑块和数值框并排显示。 */
 .settings-glass-control-row {
     display: flex;
     align-items: center;
     gap: 10px;
 }
 
-/* 毛玻璃滑块：占据主体空间，便于快速调整效果。 */
 .settings-glass-range-input {
     flex: 1;
     margin: 0;
 }
 
-/* 毛玻璃数值组：承载数值输入和单位。 */
 .settings-glass-value-group {
     display: flex;
     align-items: center;
     gap: 6px;
 }
 
-/* 毛玻璃数值单位：弱化显示，避免干扰主信息。 */
 .settings-glass-value-suffix {
     min-width: 18px;
     color: var(--text-secondary);
     font-size: 12px;
 }
 
-/* Frontmatter 模板编辑器：多行文本输入框。 */
 .settings-frontmatter-template-textarea {
     width: 100%;
     min-height: 120px;
@@ -420,9 +445,7 @@
     border-color: var(--accent-primary);
 }
 
-/* ========== 旧 settings-item 保留兼容（逐步迁移后可移除） ========== */
 
-/* 单个设置项：标题描述 + 开关（旧样式，兼容未迁移组件） */
 .settings-item {
     display: flex;
     align-items: center;
@@ -433,32 +456,27 @@
     border-bottom: 1px solid var(--border-color);
 }
 
-/* 旧设置项最后一个去掉底线 */
 .settings-item:last-child {
     border-bottom: none;
 }
 
-/* 单个设置项纵向布局：用于包含输入编辑区域 */
 .settings-item-column {
     align-items: flex-start;
     flex-direction: column;
 }
 
-/* 设置项标题 */
 .settings-item-title {
     color: var(--text-primary);
     font-size: 13px;
     font-weight: 500;
 }
 
-/* 设置项描述 */
 .settings-item-desc {
     color: var(--text-secondary);
     font-size: 12px;
     margin-top: 4px;
 }
 
-/* 快捷键设置表格容器：直角边框，保持列表式设置面板风格。 */
 .settings-shortcut-table-wrapper {
     width: 100%;
     border: 1px solid var(--content-material-border);
@@ -467,14 +485,12 @@
     background: var(--content-material-bg-muted);
 }
 
-/* 快捷键设置表格：仿 VS Code Keyboard Shortcuts 列表风格 */
 .settings-shortcut-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
 }
 
-/* 快捷键表头单元格 */
 .settings-shortcut-th {
     text-align: left;
     color: var(--text-secondary);
@@ -486,45 +502,37 @@
     user-select: none;
 }
 
-/* 快捷键表头操作列：收窄宽度 */
 .settings-shortcut-th-actions {
     width: 1%;
     text-align: right;
 }
 
-/* 快捷键表格行默认态 */
 .settings-shortcut-row {
     border-bottom: 1px solid var(--content-material-border);
 }
 
-/* 快捷键表格行悬浮态 */
 .settings-shortcut-row:hover {
     background: var(--content-material-hover-bg);
 }
 
-/* 快捷键表格行录制态：轻微高亮 */
 .settings-shortcut-row.recording {
     background: var(--accent-primary-soft);
 }
 
-/* 快捷键表格单元格通用样式 */
 .settings-shortcut-td {
     padding: 6px 10px;
     vertical-align: middle;
     color: var(--text-primary);
 }
 
-/* 快捷键表格-命令列：主文本 */
 .settings-shortcut-td-command {
     font-weight: 400;
 }
 
-/* 快捷键表格-绑定列 */
 .settings-shortcut-td-keybinding {
     white-space: nowrap;
 }
 
-/* 快捷键键位徽章：仿 VS Code 键位标签 */
 .settings-shortcut-kbd {
     display: inline-block;
     background: var(--content-material-pill-bg);
@@ -537,7 +545,6 @@
     line-height: 1.4;
 }
 
-/* 快捷键内联录制输入框 */
 .settings-shortcut-inline-input {
     width: 120px;
     border: 1px solid var(--accent-primary);
@@ -549,20 +556,17 @@
     outline: none;
 }
 
-/* 快捷键表格-条件列：次要文本 */
 .settings-shortcut-td-when {
     color: var(--text-secondary);
     font-size: 12px;
     white-space: nowrap;
 }
 
-/* 快捷键表格-操作列：按钮右对齐 */
 .settings-shortcut-td-actions {
     text-align: right;
     white-space: nowrap;
 }
 
-/* 快捷键操作按钮：紧凑文字按钮 */
 .settings-shortcut-action-btn {
     border: none;
     border-radius: 0;
@@ -573,27 +577,22 @@
     cursor: pointer;
 }
 
-/* 快捷键操作按钮悬浮态 */
 .settings-shortcut-action-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
 }
 
-/* 快捷键保存按钮：强调色 */
 .settings-shortcut-action-save {
     color: var(--accent-primary);
     font-weight: 500;
 }
 
-/* 快捷键保存按钮禁用态 */
 .settings-shortcut-action-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
 }
 
-/* ========== 密集行风格（图谱等大量设置项场景） ========== */
 
-/* 密集设置行：左侧标题自适应宽度 + 右侧控件固定宽度，描述移至 title 属性（tooltip）以节省纵向空间 */
 .settings-dense-row {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -607,17 +606,14 @@
     transition: background-color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
-/* 密集行最后一项去掉底部分隔线 */
 .settings-dense-row:last-child {
     border-bottom: none;
 }
 
-/* 密集行悬浮态 */
 .settings-dense-row:hover {
     background: var(--content-material-hover-bg);
 }
 
-/* 密集行标题：不截断，允许自然宽度展示 */
 .settings-dense-title {
     color: var(--text-primary);
     font-size: 13px;
@@ -625,7 +621,6 @@
     line-height: 1.3;
 }
 
-/* 图谱设置控件行：容纳输入框/颜色选择/开关，固定在行右侧。 */
 .settings-graph-control-row {
     display: flex;
     align-items: center;
@@ -633,7 +628,6 @@
     flex-shrink: 0;
 }
 
-/* 图谱设置通用输入框：数值/文本输入。 */
 .settings-graph-input {
     min-width: 140px;
     border: 1px solid var(--content-material-border);
@@ -643,7 +637,6 @@
     padding: 6px 8px;
 }
 
-/* 图谱颜色输入框：颜色选择器尺寸规范。 */
 .settings-graph-color-input {
     width: 38px;
     height: 30px;
@@ -653,14 +646,12 @@
     padding: 2px;
 }
 
-/* 设置页错误文本 */
 .settings-tab-error {
     margin-top: 12px;
     color: var(--text-secondary);
     font-size: 12px;
 }
 
-/* 风格模式按钮容器：用于并排展示日间/夜间选项。 */
 .settings-theme-mode-row {
     width: 100%;
     display: grid;
@@ -668,7 +659,6 @@
     gap: 8px;
 }
 
-/* 风格模式按钮：展示主题名称与说明。 */
 .settings-theme-mode-button {
     border: 1px solid var(--content-material-border);
     border-radius: 0;
@@ -685,38 +675,32 @@
         border-color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
-/* 风格模式按钮标题：强调主题名称。 */
 .settings-theme-mode-button-title {
     font-size: 13px;
     font-weight: 600;
     color: var(--text-primary);
 }
 
-/* 风格模式按钮描述：补充使用场景说明。 */
 .settings-theme-mode-button-desc {
     font-size: 12px;
     color: var(--text-secondary);
 }
 
-/* 风格模式按钮悬浮态：增强可交互反馈。 */
 .settings-theme-mode-button:hover {
     background: var(--content-material-hover-bg);
 }
 
-/* 风格模式按钮激活态：标记当前生效主题。 */
 .settings-theme-mode-button.active {
     border-color: var(--accent-primary);
     background: color-mix(in srgb, var(--accent-primary-soft) 54%, var(--content-material-input-bg));
 }
 
-/* 设置页小屏适配：先收窄导航栏，再切为上下布局。 */
 @media (max-width: 1080px) {
     .settings-tab {
         grid-template-columns: 240px 1fr;
     }
 }
 
-/* 设置页窄屏布局：导航切换为顶部区域，内容保持完整可读。 */
 @media (max-width: 860px) {
     .settings-tab {
         grid-template-columns: 1fr;

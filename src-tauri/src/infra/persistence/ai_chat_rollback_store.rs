@@ -237,8 +237,8 @@ mod tests {
         )
         .expect("append should succeed");
 
-        let records = load_ai_chat_edit_rollback_records(&root, "checkpoint-1")
-            .expect("load should succeed");
+        let records =
+            load_ai_chat_edit_rollback_records(&root, "checkpoint-1").expect("load should succeed");
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].id, "record-1");
 

@@ -140,6 +140,7 @@ import { dispatchShortcut } from "../commands/shortcutDispatcher";
 import { createConditionContext } from "../conditions/conditionEvaluator";
 import i18n from "../../i18n";
 import { CreateEntryModal } from "./CreateEntryModal";
+import { WorkbenchOverlayLayerProvider } from "./workbenchOverlayLayer";
 import { CodeMirrorEditorPreviewMirror } from "../../plugins/markdown-codemirror/editor/CodeMirrorEditorPreviewMirror";
 import "../../../node_modules/layout-v2/dist/layout-v2.css";
 import "./WorkbenchLayoutHost.tokens.css";
@@ -714,6 +715,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     const registeredPanels = usePanels();
     const registeredTabComponents = useTabComponents();
     const registeredOverlays = useOverlays();
+    const [overlayLayerTarget, setOverlayLayerTarget] = useState<HTMLDivElement | null>(null);
     const activityBarConfigState = useActivityBarConfig();
     const configState = useConfigState();
     const vaultState = useVaultState();
@@ -1925,40 +1927,42 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             ].filter(Boolean).join(" ")}
             data-workbench-layout-mode="layout-v2"
         >
-            <VSCodeWorkbench
-                activities={activityDefinitions}
-                panels={panelDefinitions}
-                tabComponents={tabComponents}
-                initialTabs={initialTabs}
-                hasRightSidebar={hasRightSidebar}
-                initialSidebarState={initialSidebarState}
-                initialSectionRatios={sidebarSnapshot?.sectionRatios}
-                initialPanelLayoutSnapshot={sidebarSnapshot?.panelLayout}
-                initialLayoutSnapshot={hydratedWorkspaceSnapshot}
-                hideEmptyPanelBar
-                renderInactiveTabContent={shouldRenderInactiveTabContent}
-                deferTabContentPresentation={shouldDeferTabContentPresentation}
-                deferPanelContentPresentation={shouldDeferPanelContentPresentation}
-                tabDragPreviewRenderMode="overlay"
-                preserveActiveTabContentDuringDrag
-                renderTabContentInDragPreviewLayout={false}
-                renderPanelContentInDragPreviewLayout={false}
-                renderTabDragPreviewContent={renderTabDragPreviewContent}
-                externalTabDragResolver={workspaceFileExternalTabDragResolver}
-                renderActivityIcon={renderActivityIcon}
-                renderPanelContent={renderPanelContent}
-                onActivateActivity={handleActivateActivity}
-                onSidebarStateChange={handleSidebarStateChange}
-                onSectionRatioChange={handleSectionRatioChange}
-                onPanelLayoutChange={handlePanelLayoutChange}
-                onLayoutSnapshotChange={handleWorkspaceLayoutSnapshotChange}
-                onActivityIconContextMenu={handleActivityIconContextMenu}
-                onActivityBarsChange={handleActivityBarsChange}
-                onActiveTabChange={handleActiveTabChange}
-                onActivityBarBackgroundContextMenu={handleActivityBarBackgroundContextMenu}
-                apiRef={workbenchApiRef}
-                className="workbench-layout-v2__layout"
-            />
+            <WorkbenchOverlayLayerProvider target={overlayLayerTarget}>
+                <VSCodeWorkbench
+                    activities={activityDefinitions}
+                    panels={panelDefinitions}
+                    tabComponents={tabComponents}
+                    initialTabs={initialTabs}
+                    hasRightSidebar={hasRightSidebar}
+                    initialSidebarState={initialSidebarState}
+                    initialSectionRatios={sidebarSnapshot?.sectionRatios}
+                    initialPanelLayoutSnapshot={sidebarSnapshot?.panelLayout}
+                    initialLayoutSnapshot={hydratedWorkspaceSnapshot}
+                    hideEmptyPanelBar
+                    renderInactiveTabContent={shouldRenderInactiveTabContent}
+                    deferTabContentPresentation={shouldDeferTabContentPresentation}
+                    deferPanelContentPresentation={shouldDeferPanelContentPresentation}
+                    tabDragPreviewRenderMode="overlay"
+                    preserveActiveTabContentDuringDrag
+                    renderTabContentInDragPreviewLayout={false}
+                    renderPanelContentInDragPreviewLayout={false}
+                    renderTabDragPreviewContent={renderTabDragPreviewContent}
+                    externalTabDragResolver={workspaceFileExternalTabDragResolver}
+                    renderActivityIcon={renderActivityIcon}
+                    renderPanelContent={renderPanelContent}
+                    onActivateActivity={handleActivateActivity}
+                    onSidebarStateChange={handleSidebarStateChange}
+                    onSectionRatioChange={handleSectionRatioChange}
+                    onPanelLayoutChange={handlePanelLayoutChange}
+                    onLayoutSnapshotChange={handleWorkspaceLayoutSnapshotChange}
+                    onActivityIconContextMenu={handleActivityIconContextMenu}
+                    onActivityBarsChange={handleActivityBarsChange}
+                    onActiveTabChange={handleActiveTabChange}
+                    onActivityBarBackgroundContextMenu={handleActivityBarBackgroundContextMenu}
+                    apiRef={workbenchApiRef}
+                    className="workbench-layout-v2__layout"
+                />
+            </WorkbenchOverlayLayerProvider>
             {shouldShowHomeEmptyState && homeEmptyStateTarget ? createPortal(
                 <WorkbenchHomeEmptyState
                     vaultLabel={homeVaultLabel}
@@ -1972,31 +1976,37 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 />,
                 homeEmptyStateTarget,
             ) : null}
-            {registeredOverlays.map((overlay) => (
-                <div key={overlay.id} data-overlay-id={overlay.id}>
-                    {overlay.render(overlayRenderContext)}
-                </div>
-            ))}
-            <CreateEntryModal
-                isOpen={createEntryDraftRequest !== null}
-                kind={createEntryDraftRequest?.kind ?? "file"}
-                baseDirectory={createEntryDraftRequest?.baseDirectory ?? ""}
-                title={createEntryDraftRequest?.title ?? ""}
-                placeholder={createEntryDraftRequest?.placeholder ?? ""}
-                initialValue={createEntryDraftRequest?.initialValue ?? ""}
-                onClose={() => {
-                    console.info("[workbench-layout-host] close create-entry modal");
-                    settleCreateEntryDraftRequest(null);
-                }}
-                onConfirm={(draftName) => {
-                    console.info("[workbench-layout-host] confirm create-entry modal", {
-                        kind: createEntryDraftRequest?.kind,
-                        baseDirectory: createEntryDraftRequest?.baseDirectory,
-                        draftName,
-                    });
-                    settleCreateEntryDraftRequest(draftName);
-                }}
-            />
+            <div
+                ref={setOverlayLayerTarget}
+                className="workbench-layout-v2__overlay-layer"
+                data-workbench-overlay-layer="true"
+            >
+                {registeredOverlays.map((overlay) => (
+                    <div key={overlay.id} data-overlay-id={overlay.id}>
+                        {overlay.render(overlayRenderContext)}
+                    </div>
+                ))}
+                <CreateEntryModal
+                    isOpen={createEntryDraftRequest !== null}
+                    kind={createEntryDraftRequest?.kind ?? "file"}
+                    baseDirectory={createEntryDraftRequest?.baseDirectory ?? ""}
+                    title={createEntryDraftRequest?.title ?? ""}
+                    placeholder={createEntryDraftRequest?.placeholder ?? ""}
+                    initialValue={createEntryDraftRequest?.initialValue ?? ""}
+                    onClose={() => {
+                        console.info("[workbench-layout-host] close create-entry modal");
+                        settleCreateEntryDraftRequest(null);
+                    }}
+                    onConfirm={(draftName) => {
+                        console.info("[workbench-layout-host] confirm create-entry modal", {
+                            kind: createEntryDraftRequest?.kind,
+                            baseDirectory: createEntryDraftRequest?.baseDirectory,
+                            draftName,
+                        });
+                        settleCreateEntryDraftRequest(draftName);
+                    }}
+                />
+            </div>
         </div>
     );
 }

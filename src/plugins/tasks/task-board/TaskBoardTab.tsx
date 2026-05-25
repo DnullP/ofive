@@ -52,6 +52,7 @@ import { getArticleSnapshotByPath } from "../../../host/editor/editorContextStor
 import { savePersistedMarkdownContent } from "../../../host/editor/persistedMarkdownContentSync";
 import { subscribePersistedContentUpdatedEvent } from "../../../host/events/appEventBus";
 import { openFileInWorkbench } from "../../../host/layout/openFileService";
+import { useWorkbenchOverlayLayer, WorkbenchOverlayPortal } from "../../../host/layout/workbenchOverlayLayer";
 import i18n from "../../../i18n";
 import {
     dateTimeLocalInputToTaskDue,
@@ -555,7 +556,7 @@ export function TaskBoardTab(
     });
     const [resizeState, setResizeState] = useState<ColumnResizeState | null>(null);
     const [reorderState, setReorderState] = useState<ColumnReorderState | null>(null);
-    const surfaceRef = useRef<HTMLDivElement | null>(null);
+    const overlayLayer = useWorkbenchOverlayLayer();
     const popoverRef = useRef<HTMLDivElement | null>(null);
     const editButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
     const columnRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -760,12 +761,12 @@ export function TaskBoardTab(
         };
     }, [columnSettingsModal]);
 
-    useLayoutEffect(() => {
+    const updatePopoverPosition = useCallback(() => {
         if (!editingTask) {
             return;
         }
 
-        const surface = surfaceRef.current;
+        const surface = overlayLayer;
         const popover = popoverRef.current;
         const anchor = editButtonRefs.current.get(getTaskKey(editingTask));
         if (!surface || !popover || !anchor) {
@@ -786,7 +787,8 @@ export function TaskBoardTab(
         left = Math.min(Math.max(horizontalPadding, left), maxLeft);
 
         let placement: "above" | "below" = "below";
-        let top = anchorRect.bottom - surfaceRect.top + verticalGap;
+        const belowTop = anchorRect.bottom - surfaceRect.top + verticalGap;
+        let top = belowTop;
         if (
             top + popoverRect.height > surfaceRect.height
             && anchorRect.top - surfaceRect.top > popoverRect.height + verticalGap
@@ -798,6 +800,11 @@ export function TaskBoardTab(
         if (top < horizontalPadding) {
             top = anchorRect.bottom - surfaceRect.top + verticalGap;
             placement = "below";
+        }
+        const maxTop = Math.max(horizontalPadding, surfaceRect.height - popoverRect.height - horizontalPadding);
+        top = Math.min(Math.max(horizontalPadding, top), maxTop);
+        if (top < belowTop) {
+            placement = "above";
         }
 
         setPopoverPosition((previous) => {
@@ -816,7 +823,40 @@ export function TaskBoardTab(
                 placement,
             };
         });
-    }, [editingTask, tasks, statusFilter]);
+    }, [editingTask, overlayLayer]);
+
+    useLayoutEffect(() => {
+        updatePopoverPosition();
+    }, [updatePopoverPosition, tasks, statusFilter]);
+
+    useEffect(() => {
+        if (!editingTask) {
+            return;
+        }
+
+        const frameId = window.requestAnimationFrame(updatePopoverPosition);
+        const resizeObserver = typeof ResizeObserver === "undefined"
+            ? null
+            : new ResizeObserver(updatePopoverPosition);
+
+        if (popoverRef.current) {
+            resizeObserver?.observe(popoverRef.current);
+        }
+
+        if (overlayLayer) {
+            resizeObserver?.observe(overlayLayer);
+        }
+
+        window.addEventListener("resize", updatePopoverPosition);
+        window.addEventListener("scroll", updatePopoverPosition, true);
+
+        return () => {
+            window.cancelAnimationFrame(frameId);
+            resizeObserver?.disconnect();
+            window.removeEventListener("resize", updatePopoverPosition);
+            window.removeEventListener("scroll", updatePopoverPosition, true);
+        };
+    }, [editingTask, overlayLayer, updatePopoverPosition]);
 
     const activeCustomColumns = isBoardEditing ? draftCustomColumns : customColumns;
     const activeColumnOrder = isBoardEditing ? draftColumnOrder : columnOrder;
@@ -1229,14 +1269,15 @@ export function TaskBoardTab(
                 </div>
             </header>
 
-            {columnSettingsModal ? (
-                <div className="task-board__modal-backdrop">
-                    <section
-                        className="task-board__column-settings"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="task-board-column-settings-title"
-                    >
+            <WorkbenchOverlayPortal interactive>
+                {columnSettingsModal ? (
+                    <div className="task-board__modal-backdrop">
+                        <section
+                            className="task-board__column-settings"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="task-board-column-settings-title"
+                        >
                         <div className="task-board__column-settings-header">
                             <div className="task-board__column-settings-title-group">
                                 <h2
@@ -1447,9 +1488,10 @@ export function TaskBoardTab(
                                 </button>
                             </div>
                         </div>
-                    </section>
-                </div>
-            ) : null}
+                        </section>
+                    </div>
+                ) : null}
+            </WorkbenchOverlayPortal>
 
             {loading ? (
                 /* task-board__status: 加载状态 */
@@ -1472,7 +1514,6 @@ export function TaskBoardTab(
 
             {/* task-board__grid: 看板列容器，同时作为编辑气泡定位参考面 */}
             <div
-                ref={surfaceRef}
                 className="task-board__grid"
                 style={{ gridTemplateColumns }}
             >
@@ -1650,18 +1691,19 @@ export function TaskBoardTab(
                     );
                 })}
 
-                {editingTask ? (
-                    /* task-board__popover: 任务编辑气泡 */
-                    <div
-                        ref={popoverRef}
-                        className={`task-board__popover${popoverPosition ? " is-positioned" : ""}`}
-                        data-floating-surface="true"
-                        style={popoverPosition ? {
-                            left: `${popoverPosition.left}px`,
-                            top: `${popoverPosition.top}px`,
-                        } : undefined}
-                        data-placement={popoverPosition?.placement ?? "below"}
-                    >
+                <WorkbenchOverlayPortal>
+                    {editingTask ? (
+                        /* task-board__popover: 任务编辑气泡 */
+                        <div
+                            ref={popoverRef}
+                            className={`task-board__popover${popoverPosition ? " is-positioned" : ""}`}
+                            data-floating-surface="true"
+                            style={popoverPosition ? {
+                                left: `${popoverPosition.left}px`,
+                                top: `${popoverPosition.top}px`,
+                            } : undefined}
+                            data-placement={popoverPosition?.placement ?? "below"}
+                        >
                         {/* task-board__popover-header: 气泡头部 */}
                         <div className="task-board__popover-header">
                             {/* task-board__popover-title-group: 标题组 */}
@@ -1806,8 +1848,9 @@ export function TaskBoardTab(
                                 {saving ? t("taskBoard.saving") : t("taskBoard.save")}
                             </button>
                         </div>
-                    </div>
-                ) : null}
+                        </div>
+                    ) : null}
+                </WorkbenchOverlayPortal>
             </div>
         </section>
     );

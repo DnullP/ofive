@@ -7,7 +7,9 @@ use serde_json::Value;
 
 use crate::app::project_reader::project_reader_app_service;
 use crate::domain::capability::{CapabilityExecutionContext, CapabilityExecutionRequest};
-use crate::shared::project_reader_contracts::ProjectReaderSymbolResolveContext;
+use crate::shared::project_reader_contracts::{
+    ProjectReaderSearchMode, ProjectReaderSearchRequest, ProjectReaderSymbolResolveContext,
+};
 
 /// 尝试执行一条由 Project Reader 模块负责的平台能力请求。
 ///
@@ -27,6 +29,7 @@ pub(crate) fn execute_project_reader_capability(
             Some(execute_get_code_references(request.input.clone(), context))
         }
         "project_reader.resolve_symbol" => Some(execute_resolve_symbol(request.input.clone())),
+        "project_reader.search_project" => Some(execute_search_project(request.input.clone())),
         _ => None,
     }
 }
@@ -60,6 +63,15 @@ struct ProjectSymbolResolveContextInput {
     current_column_number: Option<usize>,
     current_line_text: Option<String>,
     current_file_content: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectSearchInput {
+    project_id: String,
+    query: String,
+    mode: ProjectReaderSearchMode,
+    limit: Option<usize>,
 }
 
 fn execute_list_projects() -> Result<Value, String> {
@@ -113,6 +125,19 @@ fn execute_resolve_symbol(input: Value) -> Result<Value, String> {
     serialize_output(
         project_reader_app_service::resolve_symbol(input.project_id, input.symbol, context)?,
         "project_reader.resolve_symbol",
+    )
+}
+
+fn execute_search_project(input: Value) -> Result<Value, String> {
+    let input: ProjectSearchInput = parse_input(input, "project_reader.search_project")?;
+    serialize_output(
+        project_reader_app_service::search_project(ProjectReaderSearchRequest {
+            project_id: input.project_id,
+            query: input.query,
+            mode: input.mode,
+            limit: input.limit,
+        })?,
+        "project_reader.search_project",
     )
 }
 

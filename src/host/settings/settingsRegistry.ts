@@ -43,6 +43,8 @@ export interface SettingsSectionRegistration {
     description?: string;
     /** 选栏搜索关键词（用于设置页快速筛选） */
     searchTerms?: string[];
+    /** 是否在设置页左侧导航中把该分类下的设置项展示为可折叠子项 */
+    exposeItemsInNavigation?: boolean;
     /** 选栏自定义渲染器：适用于复杂表格或非标准设置块 */
     render?: () => ReactNode;
 }

@@ -80,6 +80,50 @@ pub(crate) struct ProjectReaderSymbolResolveContext {
     pub current_file_content: Option<String>,
 }
 
+/// 外部项目搜索模式。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum ProjectReaderSearchMode {
+    Text,
+    Symbol,
+    AstGrep,
+}
+
+/// 外部项目搜索请求。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectReaderSearchRequest {
+    pub project_id: String,
+    pub query: String,
+    pub mode: ProjectReaderSearchMode,
+    pub limit: Option<usize>,
+}
+
+/// 外部项目搜索命中。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectReaderSearchMatch {
+    pub project_id: String,
+    pub relative_path: String,
+    pub line_number: usize,
+    pub column_number: usize,
+    pub end_line_number: usize,
+    pub end_column_number: usize,
+    pub kind: String,
+    pub language: Option<String>,
+    pub preview: String,
+}
+
+/// 外部项目搜索响应。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectReaderSearchResponse {
+    pub project_id: String,
+    pub query: String,
+    pub mode: ProjectReaderSearchMode,
+    pub matches: Vec<ProjectReaderSearchMatch>,
+}
+
 /// 外部项目源码片段被当前 vault 笔记引用的位置。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]

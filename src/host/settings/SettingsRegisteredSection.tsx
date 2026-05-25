@@ -254,8 +254,12 @@ function RegisteredSettingsItem(props: { item: SettingsItemRegistration }): Reac
  */
 export function SettingsRegisteredSection(props: {
     section: SettingsSectionSnapshot;
+    activeItemId?: string;
 }): ReactNode {
-    const hasRegisteredItems = props.section.items.length > 0;
+    const visibleItems = props.activeItemId
+        ? props.section.items.filter((item) => item.id === props.activeItemId)
+        : props.section.items;
+    const hasRegisteredItems = visibleItems.length > 0;
 
     if (!hasRegisteredItems && !props.section.render) {
         return null;
@@ -265,7 +269,7 @@ export function SettingsRegisteredSection(props: {
         <>
             {hasRegisteredItems ? (
                 <div className="settings-item-group">
-                    {props.section.items.map((item) => (
+                    {visibleItems.map((item) => (
                         <RegisteredSettingsItem key={`${item.sectionId}:${item.id}`} item={item} />
                     ))}
                 </div>

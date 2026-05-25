@@ -3,6 +3,8 @@
 //! 外部项目只读阅读器的应用服务：记录项目根目录、维护 SQLite 文件索引，
 //! 并用 Tree-sitter 建立轻量级符号索引。
 
+use ast_grep_core::Pattern;
+use ast_grep_language::{LanguageExt, SupportLang};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
@@ -17,7 +19,8 @@ use crate::infra::fs::fs_helpers::collect_markdown_relative_paths;
 use crate::shared::project_reader_contracts::{
     ProjectReaderCodeReference, ProjectReaderCodeReferenceResponse, ProjectReaderFileResponse,
     ProjectReaderLinkTarget, ProjectReaderProject, ProjectReaderProjectListResponse,
-    ProjectReaderSymbolLocation, ProjectReaderSymbolResolveContext,
+    ProjectReaderSearchMatch, ProjectReaderSearchMode, ProjectReaderSearchRequest,
+    ProjectReaderSearchResponse, ProjectReaderSymbolLocation, ProjectReaderSymbolResolveContext,
     ProjectReaderSymbolResolveResponse, ProjectReaderTreeEntry, ProjectReaderTreeResponse,
 };
 
@@ -30,6 +33,10 @@ const MAX_INDEXED_SYMBOLS: usize = 200_000;
 const MAX_READ_FILE_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_PARSE_FILE_BYTES: u64 = 512 * 1024;
 const MAX_SYMBOL_LOCATIONS: usize = 80;
+const MAX_SEARCH_FILE_BYTES: u64 = 1 * 1024 * 1024;
+const DEFAULT_SEARCH_LIMIT: usize = 80;
+const MAX_SEARCH_LIMIT: usize = 200;
+const MAX_SEARCH_QUERY_LENGTH: usize = 512;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -198,6 +205,27 @@ pub(crate) fn resolve_symbol(
         project_id: project.id,
         symbol: normalized_symbol,
         locations,
+    })
+}
+
+/// 在外部项目中按文本、符号索引或 ast-grep 结构模式搜索。
+pub(crate) fn search_project(
+    request: ProjectReaderSearchRequest,
+) -> Result<ProjectReaderSearchResponse, String> {
+    let project = require_project(&request.project_id)?;
+    let query = normalize_search_query(&request.query)?;
+    let limit = normalize_search_limit(request.limit);
+    let matches = match request.mode {
+        ProjectReaderSearchMode::Text => search_project_text(&project, &query, limit)?,
+        ProjectReaderSearchMode::Symbol => search_project_symbols(&project, &query, limit)?,
+        ProjectReaderSearchMode::AstGrep => search_project_ast_grep(&project, &query, limit)?,
+    };
+
+    Ok(ProjectReaderSearchResponse {
+        project_id: project.id,
+        query,
+        mode: request.mode,
+        matches,
     })
 }
 
@@ -1004,6 +1032,364 @@ fn load_symbol_locations_from_index(
 
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("解析外部项目符号索引失败 project_id={project_id}: {error}"))
+}
+
+fn search_project_text(
+    project: &ProjectReaderProject,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<ProjectReaderSearchMatch>, String> {
+    let normalized_query = query.to_lowercase();
+    let entries = load_searchable_file_entries(&project.id)?;
+    let root = canonicalize_existing_directory(&project.root_path)?;
+    let mut matches = Vec::new();
+
+    for entry in entries {
+        if matches.len() >= limit {
+            break;
+        }
+
+        let Some(size_bytes) = entry.size_bytes else {
+            continue;
+        };
+        if size_bytes < 0 || size_bytes as u64 > MAX_SEARCH_FILE_BYTES {
+            continue;
+        }
+
+        let path = root.join(&entry.relative_path);
+        let content = match fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(error) => {
+                log::warn!(
+                    "[project-reader] skip text search for unreadable file path={} error={}",
+                    path.display(),
+                    error
+                );
+                continue;
+            }
+        };
+
+        for (line_index, line) in content.lines().enumerate() {
+            if matches.len() >= limit {
+                break;
+            }
+
+            let line_lowercase = line.to_lowercase();
+            let Some(byte_index) = line_lowercase.find(&normalized_query) else {
+                continue;
+            };
+            let column_number = line[..byte_index].chars().count() + 1;
+            let end_column_number = column_number
+                + line[byte_index..]
+                    .chars()
+                    .take(query.chars().count())
+                    .count();
+
+            matches.push(ProjectReaderSearchMatch {
+                project_id: project.id.clone(),
+                relative_path: entry.relative_path.clone(),
+                line_number: line_index + 1,
+                column_number,
+                end_line_number: line_index + 1,
+                end_column_number,
+                kind: "text".to_string(),
+                language: entry.language.clone(),
+                preview: truncate_preview(line.trim(), 220),
+            });
+        }
+    }
+
+    Ok(matches)
+}
+
+fn search_project_symbols(
+    project: &ProjectReaderProject,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<ProjectReaderSearchMatch>, String> {
+    let mut locations = load_symbol_locations_like_from_index(&project.id, query, limit)?;
+    if locations.is_empty() {
+        rebuild_file_index(project)?;
+        locations = load_symbol_locations_like_from_index(&project.id, query, limit)?;
+    }
+
+    Ok(locations
+        .into_iter()
+        .map(|location| ProjectReaderSearchMatch {
+            project_id: location.project_id,
+            relative_path: location.relative_path,
+            line_number: location.line_number,
+            column_number: location.column_number,
+            end_line_number: location.end_line_number,
+            end_column_number: location.end_column_number,
+            kind: location.kind,
+            language: None,
+            preview: location.preview,
+        })
+        .collect())
+}
+
+fn search_project_ast_grep(
+    project: &ProjectReaderProject,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<ProjectReaderSearchMatch>, String> {
+    let entries = load_searchable_file_entries(&project.id)?;
+    let root = canonicalize_existing_directory(&project.root_path)?;
+    let mut matches = Vec::new();
+
+    for entry in entries {
+        if matches.len() >= limit {
+            break;
+        }
+
+        let Some(size_bytes) = entry.size_bytes else {
+            continue;
+        };
+        if size_bytes < 0 || size_bytes as u64 > MAX_SEARCH_FILE_BYTES {
+            continue;
+        }
+
+        let path = root.join(&entry.relative_path);
+        let content = match fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(error) => {
+                log::warn!(
+                    "[project-reader] skip ast-grep search for unreadable file path={} error={}",
+                    path.display(),
+                    error
+                );
+                continue;
+            }
+        };
+
+        matches.extend(search_source_with_ast_grep_pattern(
+            &project.id,
+            &entry.relative_path,
+            entry.language.as_deref(),
+            &content,
+            query,
+            limit.saturating_sub(matches.len()),
+        )?);
+    }
+
+    Ok(matches)
+}
+
+fn load_searchable_file_entries(project_id: &str) -> Result<Vec<IndexedProjectEntry>, String> {
+    let conn = open_index_connection()?;
+    ensure_index_schema(&conn)?;
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT relative_path, size_bytes, modified_at_unix_ms, extension, language
+            FROM project_files
+            WHERE project_id = ?1 AND is_dir = 0
+            ORDER BY relative_path COLLATE NOCASE ASC
+            "#,
+        )
+        .map_err(|error| format!("准备读取外部项目搜索文件索引失败: {error}"))?;
+
+    let rows = stmt
+        .query_map(params![project_id], |row| {
+            Ok(IndexedProjectEntry {
+                relative_path: row.get(0)?,
+                is_dir: false,
+                size_bytes: row.get(1)?,
+                modified_at_unix_ms: row.get(2)?,
+                extension: row.get(3)?,
+                language: row.get(4)?,
+            })
+        })
+        .map_err(|error| {
+            format!("读取外部项目搜索文件索引失败 project_id={project_id}: {error}")
+        })?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("解析外部项目搜索文件索引失败 project_id={project_id}: {error}"))
+}
+
+fn load_symbol_locations_like_from_index(
+    project_id: &str,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<ProjectReaderSymbolLocation>, String> {
+    let conn = open_index_connection()?;
+    ensure_index_schema(&conn)?;
+    load_symbol_locations_like_from_connection(&conn, project_id, query, limit)
+}
+
+fn load_symbol_locations_like_from_connection(
+    conn: &Connection,
+    project_id: &str,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<ProjectReaderSymbolLocation>, String> {
+    let escaped_query = escape_sql_like_pattern(query);
+    let starts_with_pattern = format!("{escaped_query}%");
+    let contains_pattern = format!("%{escaped_query}%");
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT
+                relative_path,
+                line_number,
+                column_number,
+                name,
+                kind,
+                preview,
+                end_line_number,
+                end_column_number
+            FROM project_symbols
+            WHERE project_id = ?1 AND name LIKE ?3 ESCAPE '\'
+            ORDER BY
+                CASE WHEN name = ?2 THEN 0 WHEN name LIKE ?4 ESCAPE '\' THEN 1 ELSE 2 END,
+                CASE kind WHEN 'implementation' THEN 1 ELSE 0 END,
+                relative_path COLLATE NOCASE ASC,
+                line_number ASC,
+                column_number ASC
+            LIMIT ?5
+            "#,
+        )
+        .map_err(|error| format!("准备搜索外部项目符号索引失败: {error}"))?;
+
+    let rows = stmt
+        .query_map(
+            params![
+                project_id,
+                query,
+                contains_pattern,
+                starts_with_pattern,
+                limit as i64
+            ],
+            |row| {
+                Ok(ProjectReaderSymbolLocation {
+                    project_id: project_id.to_string(),
+                    relative_path: row.get(0)?,
+                    line_number: row.get::<_, i64>(1)? as usize,
+                    column_number: row.get::<_, i64>(2)? as usize,
+                    end_line_number: row.get::<_, i64>(6)? as usize,
+                    end_column_number: row.get::<_, i64>(7)? as usize,
+                    symbol_name: row.get(3)?,
+                    kind: row.get(4)?,
+                    preview: row.get(5)?,
+                })
+            },
+        )
+        .map_err(|error| format!("搜索外部项目符号索引失败 project_id={project_id}: {error}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("解析外部项目符号搜索结果失败 project_id={project_id}: {error}"))
+}
+
+fn normalize_search_query(query: &str) -> Result<String, String> {
+    let normalized = query.trim();
+    if normalized.is_empty() {
+        return Err("搜索内容不能为空".to_string());
+    }
+    if normalized.chars().count() > MAX_SEARCH_QUERY_LENGTH {
+        return Err(format!(
+            "搜索内容过长 length={} limit={}",
+            normalized.chars().count(),
+            MAX_SEARCH_QUERY_LENGTH
+        ));
+    }
+    Ok(normalized.to_string())
+}
+
+fn normalize_search_limit(limit: Option<usize>) -> usize {
+    limit
+        .unwrap_or(DEFAULT_SEARCH_LIMIT)
+        .clamp(1, MAX_SEARCH_LIMIT)
+}
+
+fn escape_sql_like_pattern(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
+fn ast_grep_language_for_entry(relative_path: &str, language: Option<&str>) -> Option<SupportLang> {
+    match extension_from_path(relative_path).as_deref() {
+        Some("rs") => Some(SupportLang::Rust),
+        Some("go") => Some(SupportLang::Go),
+        Some("py") => Some(SupportLang::Python),
+        Some("tsx") => Some(SupportLang::Tsx),
+        Some("ts") => Some(SupportLang::TypeScript),
+        Some("js" | "jsx" | "mjs" | "cjs") => Some(SupportLang::JavaScript),
+        _ => match language {
+            Some("rust") => Some(SupportLang::Rust),
+            Some("typescript") if relative_path.ends_with(".tsx") => Some(SupportLang::Tsx),
+            Some("typescript") => Some(SupportLang::TypeScript),
+            Some("javascript") => Some(SupportLang::JavaScript),
+            Some("go") => Some(SupportLang::Go),
+            Some("python") => Some(SupportLang::Python),
+            _ => None,
+        },
+    }
+}
+
+fn search_source_with_ast_grep_pattern(
+    project_id: &str,
+    relative_path: &str,
+    language: Option<&str>,
+    content: &str,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<ProjectReaderSearchMatch>, String> {
+    if limit == 0 {
+        return Ok(Vec::new());
+    }
+
+    let Some(lang) = ast_grep_language_for_entry(relative_path, language) else {
+        return Ok(Vec::new());
+    };
+    let pattern =
+        Pattern::try_new(query, lang).map_err(|error| format!("ast-grep 模式解析失败: {error}"))?;
+    let ast = lang.ast_grep(content);
+    let mut matches = Vec::new();
+
+    for node_match in ast.root().find_all(pattern) {
+        if matches.len() >= limit {
+            break;
+        }
+
+        let node = node_match.get_node();
+        let start = node.start_pos();
+        let end = node.end_pos();
+        matches.push(ProjectReaderSearchMatch {
+            project_id: project_id.to_string(),
+            relative_path: relative_path.to_string(),
+            line_number: start.line() + 1,
+            column_number: start.column(&node) + 1,
+            end_line_number: end.line() + 1,
+            end_column_number: end.column(&node) + 1,
+            kind: format!("ast-grep:{}", node.kind()),
+            language: language.map(ToString::to_string),
+            preview: ast_grep_match_preview(content, node.range()),
+        });
+    }
+
+    Ok(matches)
+}
+
+fn ast_grep_match_preview(source: &str, range: std::ops::Range<usize>) -> String {
+    let start = range.start.min(source.len());
+    let end = range.end.min(source.len()).max(start);
+    let line_start = source[..start]
+        .rfind('\n')
+        .map(|index| index + 1)
+        .unwrap_or(0);
+    let line_end = source[end..]
+        .find('\n')
+        .map(|index| end + index)
+        .unwrap_or(source.len());
+    truncate_preview(source[line_start..line_end].trim(), 220)
+}
+
+fn truncate_preview(value: &str, limit: usize) -> String {
+    value.chars().take(limit).collect()
 }
 
 fn rank_symbol_locations(
@@ -2020,5 +2406,81 @@ impl Store for SqlStore {
         assert!(symbols
             .iter()
             .any(|symbol| symbol.name == "Store" && symbol.kind == "implementation"));
+    }
+
+    #[test]
+    fn search_project_symbols_should_match_partial_names_from_index() {
+        let conn = Connection::open_in_memory().expect("memory db should open");
+        ensure_index_schema(&conn).expect("schema should initialize");
+        conn.execute(
+            r#"
+            INSERT INTO project_symbols (
+                project_id,
+                name,
+                kind,
+                language,
+                relative_path,
+                line_number,
+                column_number,
+                end_line_number,
+                end_column_number,
+                preview
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            "#,
+            params![
+                "project",
+                "createRuntime",
+                "function",
+                "typescript",
+                "src/runtime.ts",
+                3_i64,
+                17_i64,
+                5_i64,
+                2_i64,
+                "export function createRuntime() {"
+            ],
+        )
+        .expect("symbol fixture should insert");
+
+        let locations = load_symbol_locations_like_from_connection(&conn, "project", "Runtime", 10)
+            .expect("symbol search should succeed");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].relative_path, "src/runtime.ts");
+        assert_eq!(locations[0].symbol_name, "createRuntime");
+    }
+
+    #[test]
+    fn ast_grep_search_source_should_match_structural_patterns() {
+        let matches = search_source_with_ast_grep_pattern(
+            "project",
+            "src/runtime.ts",
+            Some("typescript"),
+            "export function createRuntime() {\n  return new Runtime();\n}\n",
+            "function $NAME() { $$$BODY }",
+            10,
+        )
+        .expect("ast-grep search should succeed");
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].relative_path, "src/runtime.ts");
+        assert_eq!(matches[0].line_number, 1);
+        assert!(matches[0].kind.starts_with("ast-grep:"));
+        assert!(matches[0].preview.contains("createRuntime"));
+    }
+
+    #[test]
+    fn ast_grep_search_source_should_skip_languages_without_enabled_parser() {
+        let matches = search_source_with_ast_grep_pattern(
+            "project",
+            "package.json",
+            Some("json"),
+            r#"{"name":"demo"}"#,
+            "$A",
+            10,
+        )
+        .expect("unsupported ast-grep language should be skipped, not panic");
+
+        assert!(matches.is_empty());
     }
 }

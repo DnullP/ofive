@@ -136,6 +136,10 @@ define_app_commands![
         crate::host::commands::project_reader_commands::resolve_project_reader_symbol
     ),
     (
+        "search_project_reader",
+        crate::host::commands::project_reader_commands::search_project_reader
+    ),
+    (
         "update_main_window_acrylic_effect",
         crate::host::commands::window_commands::update_main_window_acrylic_effect
     ),

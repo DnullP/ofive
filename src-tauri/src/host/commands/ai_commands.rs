@@ -9,8 +9,8 @@ use crate::app::ai::{
 };
 use crate::domain::ai::tool::AiToolDescriptor;
 use crate::shared::ai_service::{
-    AiChatHistoryMessage, AiChatHistoryState, AiChatSettings, AiChatStreamStartResponse,
-    AiChatRollbackRestoreResponse, AiSidecarHealthResponse, AiVendorDefinition,
+    AiChatHistoryMessage, AiChatHistoryState, AiChatRollbackRestoreResponse, AiChatSettings,
+    AiChatStreamStartResponse, AiSidecarHealthResponse, AiVendorDefinition,
     AiVendorModelDefinition,
 };
 use crate::shared::backend_plugin_contracts::BackendPluginConfig;

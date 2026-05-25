@@ -14,7 +14,7 @@ import {
     useState,
     type ReactNode,
 } from "react";
-import { Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { WorkbenchTabProps } from "./workbenchContracts";
 import { ensureBuiltinSettingsRegistered } from "../settings/registerBuiltinSettings";
@@ -38,8 +38,14 @@ const SETTINGS_FOCUSABLE_SELECTOR = [
 export interface SettingsTabParams {
     [key: string]: unknown;
     sectionId?: string;
+    itemId?: string;
     focusTarget?: string;
     focusRequestId?: string;
+}
+
+interface SettingsActiveSelection {
+    sectionId: string;
+    itemId?: string;
 }
 
 function normalizeSettingsQuery(value: string): string {
@@ -52,6 +58,46 @@ function readSettingsTabStringParam(
 ): string {
     const value = params?.[key];
     return typeof value === "string" ? value : "";
+}
+
+function buildSettingsSelectionId(sectionId: string, itemId?: string): string {
+    return itemId ? `${sectionId}:${itemId}` : sectionId;
+}
+
+function getDefaultSelection(sections: SettingsSectionSnapshot[]): SettingsActiveSelection {
+    const firstSection = sections[0];
+    if (!firstSection) {
+        return { sectionId: "" };
+    }
+
+    if (firstSection.exposeItemsInNavigation && firstSection.items[0]) {
+        return {
+            sectionId: firstSection.id,
+            itemId: firstSection.items[0].id,
+        };
+    }
+
+    return { sectionId: firstSection.id };
+}
+
+function resolveSelection(
+    sections: SettingsSectionSnapshot[],
+    selection: SettingsActiveSelection,
+): SettingsActiveSelection {
+    const section = sections.find((candidate) => candidate.id === selection.sectionId);
+    if (!section) {
+        return getDefaultSelection(sections);
+    }
+
+    if (!section.exposeItemsInNavigation) {
+        return { sectionId: section.id };
+    }
+
+    const item = section.items.find((candidate) => candidate.id === selection.itemId) ?? section.items[0];
+    return {
+        sectionId: section.id,
+        itemId: item?.id,
+    };
 }
 
 function matchesSettingsSection(
@@ -116,21 +162,42 @@ function focusSettingsTargetElement(target: HTMLElement): number {
 export function SettingsTab(props: Partial<WorkbenchTabProps<SettingsTabParams>> = {}): ReactNode {
     const { t } = useTranslation();
     const sections = useSettingsSections();
-    const [activeSectionId, setActiveSectionId] = useState<string>("");
-    const [searchQuery, setSearchQuery] = useState<string>("");
-    const deferredSearchQuery = useDeferredValue(searchQuery);
     const requestedSectionId = readSettingsTabStringParam(props.params, "sectionId");
+    const requestedItemId = readSettingsTabStringParam(props.params, "itemId");
     const requestedFocusTarget = readSettingsTabStringParam(props.params, "focusTarget");
     const requestedFocusRequestId = readSettingsTabStringParam(props.params, "focusRequestId");
+    const [activeSelection, setActiveSelection] = useState<SettingsActiveSelection>(() => (
+        requestedSectionId
+            ? resolveSelection(sections, {
+                sectionId: requestedSectionId,
+                itemId: requestedItemId || undefined,
+            })
+            : { sectionId: "" }
+    ));
+    const [expandedSectionIds, setExpandedSectionIds] = useState<ReadonlySet<string>>(() => (
+        requestedSectionId ? new Set([requestedSectionId]) : new Set()
+    ));
+    const [searchQuery, setSearchQuery] = useState<string>("");
+    const deferredSearchQuery = useDeferredValue(searchQuery);
 
     const visibleSections = useMemo(() => {
         const normalizedQuery = normalizeSettingsQuery(deferredSearchQuery);
         return sections.filter((section) => matchesSettingsSection(section, normalizedQuery, t));
     }, [deferredSearchQuery, sections, t]);
 
+    const resolvedActiveSelection = useMemo(
+        () => resolveSelection(visibleSections, activeSelection),
+        [visibleSections, activeSelection],
+    );
+
     const activeSection = useMemo(
-        () => visibleSections.find((section) => section.id === activeSectionId) ?? visibleSections[0],
-        [visibleSections, activeSectionId],
+        () => visibleSections.find((section) => section.id === resolvedActiveSelection.sectionId) ?? null,
+        [resolvedActiveSelection.sectionId, visibleSections],
+    );
+
+    const activeItem = useMemo(
+        () => activeSection?.items.find((item) => item.id === resolvedActiveSelection.itemId) ?? null,
+        [activeSection, resolvedActiveSelection.itemId],
     );
 
     useEffect(() => {
@@ -138,38 +205,83 @@ export function SettingsTab(props: Partial<WorkbenchTabProps<SettingsTabParams>>
             return;
         }
 
-        const requestedSectionExists = sections.some((section) => section.id === requestedSectionId);
-        if (!requestedSectionExists) {
+        const requestedSection = sections.find((section) => section.id === requestedSectionId);
+        if (!requestedSection) {
             return;
         }
+
+        const requestedSelection = resolveSelection(sections, {
+            sectionId: requestedSectionId,
+            itemId: requestedItemId || undefined,
+        });
 
         if (searchQuery) {
             setSearchQuery("");
         }
-        if (activeSectionId !== requestedSectionId) {
-            setActiveSectionId(requestedSectionId);
+        setExpandedSectionIds((current) => {
+            if (current.has(requestedSectionId)) {
+                return current;
+            }
+
+            return new Set([...current, requestedSectionId]);
+        });
+        if (
+            activeSelection.sectionId !== requestedSelection.sectionId
+            || activeSelection.itemId !== requestedSelection.itemId
+        ) {
+            setActiveSelection(requestedSelection);
         }
-    }, [activeSectionId, requestedSectionId, searchQuery, sections]);
+    }, [activeSelection, requestedItemId, requestedSectionId, searchQuery, sections]);
 
     useEffect(() => {
         if (visibleSections.length === 0) {
-            if (activeSectionId !== "") {
-                setActiveSectionId("");
+            if (activeSelection.sectionId !== "") {
+                setActiveSelection({ sectionId: "" });
             }
             return;
         }
 
-        const currentExists = visibleSections.some((section) => section.id === activeSectionId);
-        if (!currentExists) {
-            setActiveSectionId(visibleSections[0].id);
+        if (
+            activeSelection.sectionId !== resolvedActiveSelection.sectionId
+            || activeSelection.itemId !== resolvedActiveSelection.itemId
+        ) {
+            setActiveSelection(resolvedActiveSelection);
         }
-    }, [visibleSections, activeSectionId]);
+    }, [activeSelection, resolvedActiveSelection, visibleSections]);
+
+    useEffect(() => {
+        const sectionsToExpand = visibleSections
+            .filter((section) => (
+                (section.exposeItemsInNavigation && section.items.length > 0)
+                && (
+                    normalizeSettingsQuery(deferredSearchQuery).length > 0
+                    || section.id === resolvedActiveSelection.sectionId
+                )
+            ))
+            .map((section) => section.id);
+
+        if (sectionsToExpand.length === 0) {
+            return;
+        }
+
+        setExpandedSectionIds((current) => {
+            const next = new Set(current);
+            sectionsToExpand.forEach((sectionId) => {
+                next.add(sectionId);
+            });
+
+            return next.size === current.size ? current : next;
+        });
+    }, [deferredSearchQuery, resolvedActiveSelection.sectionId, visibleSections]);
 
     useEffect(() => {
         if (!requestedFocusTarget) {
             return undefined;
         }
         if (requestedSectionId && activeSection?.id !== requestedSectionId) {
+            return undefined;
+        }
+        if (requestedItemId && activeItem?.id !== requestedItemId) {
             return undefined;
         }
 
@@ -206,7 +318,14 @@ export function SettingsTab(props: Partial<WorkbenchTabProps<SettingsTabParams>>
             window.clearTimeout(retryTimer);
             window.clearTimeout(highlightTimer);
         };
-    }, [activeSection?.id, requestedFocusRequestId, requestedFocusTarget, requestedSectionId]);
+    }, [
+        activeItem?.id,
+        activeSection?.id,
+        requestedFocusRequestId,
+        requestedFocusTarget,
+        requestedItemId,
+        requestedSectionId,
+    ]);
 
     return (
         <div className="settings-tab">
@@ -238,26 +357,98 @@ export function SettingsTab(props: Partial<WorkbenchTabProps<SettingsTabParams>>
                 <div className="settings-tab-sidebar-list">
                     {visibleSections.map((section) => {
                         const isActive = section.id === activeSection?.id;
+                        const exposesItems = section.exposeItemsInNavigation && section.items.length > 0;
+                        const isExpanded = expandedSectionIds.has(section.id) || (exposesItems && isActive);
 
                         return (
-                            <button
+                            <div
                                 key={section.id}
-                                type="button"
                                 className={[
-                                    "settings-tab-sidebar-item",
+                                    "settings-tab-sidebar-section",
                                     isActive ? "active" : "",
+                                    exposesItems ? "has-children" : "",
+                                    isExpanded ? "expanded" : "",
                                 ].filter(Boolean).join(" ")}
-                                onClick={() => {
-                                    setActiveSectionId(section.id);
-                                }}
                             >
-                                <span className="settings-tab-sidebar-item-body">
-                                    <span className="settings-tab-sidebar-item-title">{t(section.title)}</span>
-                                    {section.description ? (
-                                        <span className="settings-tab-sidebar-item-desc">{t(section.description)}</span>
+                                <button
+                                    type="button"
+                                    className={[
+                                        "settings-tab-sidebar-item",
+                                        isActive ? "active" : "",
+                                    ].filter(Boolean).join(" ")}
+                                    aria-expanded={exposesItems ? isExpanded : undefined}
+                                    onClick={() => {
+                                        if (!exposesItems) {
+                                            setActiveSelection({ sectionId: section.id });
+                                            return;
+                                        }
+
+                                        const willExpand = !expandedSectionIds.has(section.id);
+                                        setExpandedSectionIds((current) => {
+                                            const next = new Set(current);
+                                            if (next.has(section.id)) {
+                                                next.delete(section.id);
+                                            } else {
+                                                next.add(section.id);
+                                            }
+                                            return next;
+                                        });
+                                        if (willExpand) {
+                                            setActiveSelection(resolveSelection(sections, { sectionId: section.id }));
+                                        }
+                                    }}
+                                >
+                                    {exposesItems ? (
+                                        isExpanded
+                                            ? <ChevronDown className="settings-tab-sidebar-disclosure" aria-hidden="true" />
+                                            : <ChevronRight className="settings-tab-sidebar-disclosure" aria-hidden="true" />
                                     ) : null}
-                                </span>
-                            </button>
+                                    <span className="settings-tab-sidebar-item-body">
+                                        <span className="settings-tab-sidebar-item-title">{t(section.title)}</span>
+                                        {section.description ? (
+                                            <span className="settings-tab-sidebar-item-desc">{t(section.description)}</span>
+                                        ) : null}
+                                    </span>
+                                </button>
+
+                                {exposesItems && isExpanded ? (
+                                    <div className="settings-tab-sidebar-sublist">
+                                        {section.items.map((item) => {
+                                            const isItemActive = section.id === activeSection?.id
+                                                && item.id === resolvedActiveSelection.itemId;
+
+                                            return (
+                                                <button
+                                                    key={item.id}
+                                                    type="button"
+                                                    className={[
+                                                        "settings-tab-sidebar-subitem",
+                                                        isItemActive ? "active" : "",
+                                                    ].filter(Boolean).join(" ")}
+                                                    onClick={() => {
+                                                        setActiveSelection({
+                                                            sectionId: section.id,
+                                                            itemId: item.id,
+                                                        });
+                                                        setExpandedSectionIds((current) => {
+                                                            if (current.has(section.id)) {
+                                                                return current;
+                                                            }
+
+                                                            return new Set([...current, section.id]);
+                                                        });
+                                                    }}
+                                                >
+                                                    <span className="settings-tab-sidebar-subitem-title">{t(item.title)}</span>
+                                                    {item.description ? (
+                                                        <span className="settings-tab-sidebar-subitem-desc">{t(item.description)}</span>
+                                                    ) : null}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                ) : null}
+                            </div>
                         );
                     })}
                 </div>
@@ -268,10 +459,12 @@ export function SettingsTab(props: Partial<WorkbenchTabProps<SettingsTabParams>>
                     <div className="settings-tab-content-title-group">
                         <div className="settings-tab-content-kicker">{t("settings.title")}</div>
                         <div className="settings-tab-content-title">
-                            {activeSection ? t(activeSection.title) : t("settings.title")}
+                            {activeItem ? t(activeItem.title) : activeSection ? t(activeSection.title) : t("settings.title")}
                         </div>
-                        {activeSection?.description ? (
-                            <div className="settings-tab-content-subtitle">{t(activeSection.description)}</div>
+                        {(activeItem?.description ?? activeSection?.description) ? (
+                            <div className="settings-tab-content-subtitle">
+                                {t(activeItem?.description ?? activeSection?.description ?? "")}
+                            </div>
                         ) : null}
                     </div>
 
@@ -286,8 +479,18 @@ export function SettingsTab(props: Partial<WorkbenchTabProps<SettingsTabParams>>
                 </header>
 
                 {activeSection ? (
-                    <div data-settings-section-id={activeSection.id}>
-                        <SettingsRegisteredSection section={activeSection} />
+                    <div
+                        data-settings-section-id={activeSection.id}
+                        data-settings-item-id={resolvedActiveSelection.itemId}
+                        data-settings-active-selection={buildSettingsSelectionId(
+                            activeSection.id,
+                            resolvedActiveSelection.itemId,
+                        )}
+                    >
+                        <SettingsRegisteredSection
+                            section={activeSection}
+                            activeItemId={resolvedActiveSelection.itemId}
+                        />
                     </div>
                 ) : (
                     <div className="settings-tab-empty-state">

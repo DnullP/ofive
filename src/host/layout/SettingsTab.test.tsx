@@ -21,6 +21,7 @@ const STUBBED_LUCIDE_ICON_NAMES = [
     "Bot",
     "Check",
     "ChevronDown",
+    "ChevronRight",
     "Copy",
     "CornerDownLeft",
     "FileText",
@@ -95,5 +96,54 @@ describe("SettingsTab", () => {
         expect(markup).toContain("settings-tab-sidebar-item active");
         expect(markup).not.toContain("settings-tab-sidebar-active-line");
         expect(markup).not.toContain("settings-tab-sidebar-item--separator-hidden");
+    });
+
+    test("应在左侧展开复杂 section 的设置子项，并只渲染当前子项内容", async () => {
+        const { __resetBuiltinSettingsRegistrationForTests } = await import("../settings/registerBuiltinSettings");
+        const { SettingsTab } = await import("./SettingsTab");
+
+        __resetBuiltinSettingsRegistrationForTests();
+        __resetSettingsRegistryForTests();
+        __resetManagedStoreRegistryForTests();
+        __resetBuiltinManagedStoresRegistrationForTests();
+
+        registerSettingsSection({
+            id: "ai-chat",
+            title: "settings.aiSection",
+            order: 45,
+            exposeItemsInNavigation: true,
+        });
+
+        registerSettingsItem({
+            id: "providers",
+            sectionId: "ai-chat",
+            order: 10,
+            kind: "custom",
+            title: "aiChatPlugin.providerLabel",
+            description: "aiChatPlugin.providerDescription",
+            render: () => <div data-test-settings-panel="provider" />,
+        });
+
+        registerSettingsItem({
+            id: "tool-approval",
+            sectionId: "ai-chat",
+            order: 20,
+            kind: "custom",
+            title: "aiChatPlugin.toolApprovalTitle",
+            description: "aiChatPlugin.toolApprovalDescription",
+            render: () => <div data-test-settings-panel="tool-approval" />,
+        });
+
+        const markup = renderToStaticMarkup(
+            <SettingsTab params={{ sectionId: "ai-chat", itemId: "tool-approval" }} />,
+        );
+
+        expect(markup).toContain("settings-tab-sidebar-section active has-children expanded");
+        expect(markup).toContain("settings-tab-sidebar-subitem active");
+        expect(markup).toContain("aiChatPlugin.providerLabel");
+        expect(markup).toContain("aiChatPlugin.toolApprovalTitle");
+        expect(markup).toContain("data-settings-active-selection=\"ai-chat:tool-approval\"");
+        expect(markup).toContain("data-test-settings-panel=\"tool-approval\"");
+        expect(markup).not.toContain("data-test-settings-panel=\"provider\"");
     });
 });

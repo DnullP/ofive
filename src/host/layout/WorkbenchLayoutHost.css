@@ -1,6 +1,7 @@
 .workbench-layout-v2 {
     --workbench-left-activity-bar-width: 48px;
     --workbench-mac-left-tabstrip-padding: max(0px, calc(var(--shell-window-control-width) - var(--workbench-left-activity-bar-width)));
+    position: relative;
     display: flex;
     width: 100%;
     height: 100%;
@@ -19,6 +20,18 @@
     border-radius: 0;
     overflow: hidden;
     box-shadow: none;
+}
+
+.workbench-layout-v2__overlay-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 1100;
+    pointer-events: none;
+}
+
+.workbench-layout-v2__overlay-layer [data-overlay-id],
+.workbench-layout-v2__overlay-layer [data-workbench-overlay-interactive="true"] {
+    pointer-events: auto;
 }
 
 .workbench-layout-v2__empty-section {

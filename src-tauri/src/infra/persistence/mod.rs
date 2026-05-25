@@ -3,8 +3,8 @@
 //! 提供基于 vault config 等底层存储的持久化适配层，
 //! 供应用服务读取和保存产品状态。
 
-pub(crate) mod ai_chat_store;
 pub(crate) mod ai_chat_rollback_store;
+pub(crate) mod ai_chat_store;
 pub(crate) mod app_private_store;
 pub(crate) mod atomic_write;
 pub(crate) mod backend_plugin_store;

@@ -246,6 +246,39 @@ test.describe("project reader", () => {
         await expect(codeTab.locator(".project-reader-code-line.is-target-line")).toBeVisible();
     });
 
+    test("should search imported project text, symbols and ast-grep patterns", async ({ page }) => {
+        await gotoMockVaultPage(page, "project-reader-search", "/web-mock/mock-tauri-test.html?showControls=0");
+        await waitForWorkbench(page);
+
+        await openProjectReaderPanel(page);
+        const panel = page.locator(".project-reader-panel");
+        await expect(panel).toBeVisible();
+
+        const searchInput = panel.locator(".project-reader-search-input");
+        await searchInput.fill("createMainRuntime");
+        const mainResult = panel.locator(".project-reader-search-result", {
+            has: page.locator(".project-reader-search-result__path", { hasText: "src/main.ts:7" }),
+        });
+        await expect(mainResult).toBeVisible();
+
+        await mainResult.click();
+        const codeTab = page.locator(".project-reader-code-tab");
+        await expect(codeTab.locator(".project-reader-code-meta")).toContainText("src/main.ts");
+        await expect(codeTab.locator(".project-reader-code-line.is-target-line")).toBeVisible();
+
+        await panel.locator(".project-reader-search-mode-button").click();
+        await panel.locator(".project-reader-search-mode-menu-item", { hasText: "Symbol" }).click();
+        await searchInput.fill("Runtime");
+        await expect(panel.locator(".project-reader-search-result", {
+            has: page.locator(".project-reader-search-result__path", { hasText: "src/runtime.ts:" }),
+        })).toBeVisible();
+
+        await panel.locator(".project-reader-search-mode-button").click();
+        await panel.locator(".project-reader-search-mode-menu-item", { hasText: "AST" }).click();
+        await searchInput.fill("function $NAME() { $$$BODY }");
+        await expect(panel.locator(".project-reader-search-result").filter({ hasText: "function" }).first()).toBeVisible();
+    });
+
     test("should keep long project source tabs vertically scrollable", async ({ page }) => {
         await gotoMockVaultPage(page, "project-reader-scroll", "/web-mock/mock-tauri-test.html?showControls=0");
         await waitForWorkbench(page);

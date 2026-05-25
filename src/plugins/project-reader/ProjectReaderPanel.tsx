@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Plus, RefreshCw } from "lucide-react";
+import {
+    Braces,
+    CaseSensitive,
+    ChevronsUpDown,
+    FileSearch,
+    Plus,
+    RefreshCw,
+    Sigma,
+    type LucideIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { PanelRenderContext } from "../../host/layout/workbenchContracts";
 import { FileTree, type FileTreeItem } from "../file-tree/panel/FileTree";
@@ -8,7 +17,10 @@ import {
     addProjectReaderProject,
     getProjectReaderTree,
     listProjectReaderProjects,
+    searchProjectReader,
     type ProjectReaderProject,
+    type ProjectReaderSearchMatch,
+    type ProjectReaderSearchMode,
     type ProjectReaderTreeEntry,
 } from "../../api/projectReaderApi";
 import {
@@ -22,6 +34,25 @@ import "./projectReaderPlugin.css";
 interface ProjectReaderPanelProps {
     context: PanelRenderContext;
 }
+
+interface SearchState {
+    query: string;
+    mode: ProjectReaderSearchMode;
+    loading: boolean;
+    error: string | null;
+    matches: ProjectReaderSearchMatch[];
+}
+
+const PROJECT_READER_SEARCH_LIMIT = 80;
+
+const PROJECT_READER_SEARCH_MODES: Array<{
+    mode: ProjectReaderSearchMode;
+    icon: LucideIcon;
+}> = [
+    { mode: "text", icon: CaseSensitive },
+    { mode: "symbol", icon: Sigma },
+    { mode: "astGrep", icon: Braces },
+];
 
 function isTauriRuntime(): boolean {
     if (typeof window === "undefined") {
@@ -68,6 +99,14 @@ export function ProjectReaderPanel(props: ProjectReaderPanelProps): ReactNode {
     const [loadingProjects, setLoadingProjects] = useState(true);
     const [loadingTree, setLoadingTree] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [searchState, setSearchState] = useState<SearchState>({
+        query: "",
+        mode: "text",
+        loading: false,
+        error: null,
+        matches: [],
+    });
+    const [searchModeMenuOpen, setSearchModeMenuOpen] = useState(false);
 
     const activeProject = useMemo(
         () => projects.find((project) => project.id === activeProjectId) ?? null,
@@ -132,8 +171,92 @@ export function ProjectReaderPanel(props: ProjectReaderPanelProps): ReactNode {
 
     useEffect(() => {
         setActivePath(null);
+        setSearchState((previous) => ({
+            ...previous,
+            loading: false,
+            error: null,
+            matches: [],
+        }));
         void refreshTree(activeProjectId);
     }, [activeProjectId]);
+
+    useEffect(() => {
+        if (!activeProject || !searchState.query.trim()) {
+            setSearchState((previous) => ({
+                ...previous,
+                loading: false,
+                error: null,
+                matches: [],
+            }));
+            return;
+        }
+
+        let disposed = false;
+        const query = searchState.query.trim();
+        const mode = searchState.mode;
+        setSearchState((previous) => ({
+            ...previous,
+            loading: true,
+            error: null,
+        }));
+
+        const timer = window.setTimeout(() => {
+            void searchProjectReader(activeProject.id, query, mode, PROJECT_READER_SEARCH_LIMIT)
+                .then((response) => {
+                    if (disposed) {
+                        return;
+                    }
+                    setSearchState((previous) => ({
+                        ...previous,
+                        loading: false,
+                        error: null,
+                        matches: response.matches,
+                    }));
+                })
+                .catch((searchError) => {
+                    if (disposed) {
+                        return;
+                    }
+                    setSearchState((previous) => ({
+                        ...previous,
+                        loading: false,
+                        error: searchError instanceof Error ? searchError.message : String(searchError),
+                        matches: [],
+                    }));
+                });
+        }, 220);
+
+        return () => {
+            disposed = true;
+            window.clearTimeout(timer);
+        };
+    }, [activeProject?.id, searchState.query, searchState.mode]);
+
+    useEffect(() => {
+        if (!searchModeMenuOpen) {
+            return;
+        }
+
+        const handlePointerDown = (event: PointerEvent): void => {
+            const target = event.target as Element | null;
+            if (target?.closest(".project-reader-search-mode-picker")) {
+                return;
+            }
+            setSearchModeMenuOpen(false);
+        };
+        const handleKeyDown = (event: KeyboardEvent): void => {
+            if (event.key === "Escape") {
+                setSearchModeMenuOpen(false);
+            }
+        };
+
+        document.addEventListener("pointerdown", handlePointerDown, true);
+        document.addEventListener("keydown", handleKeyDown, true);
+        return () => {
+            document.removeEventListener("pointerdown", handlePointerDown, true);
+            document.removeEventListener("keydown", handleKeyDown, true);
+        };
+    }, [searchModeMenuOpen]);
 
     const handleAddProject = async (): Promise<void> => {
         setError(null);
@@ -204,6 +327,45 @@ export function ProjectReaderPanel(props: ProjectReaderPanelProps): ReactNode {
         reportProjectReaderTabBacklinkTarget(tab);
     };
 
+    const handleOpenSearchMatch = (match: ProjectReaderSearchMatch): void => {
+        if (!activeProject) {
+            return;
+        }
+
+        setActivePath(match.relativePath);
+        if (props.context.workbenchApi) {
+            openProjectReaderLocationInWorkbench(props.context.workbenchApi, {
+                projectId: activeProject.id,
+                projectName: activeProject.name,
+                rootPath: activeProject.rootPath,
+                relativePath: match.relativePath,
+                lineNumber: match.lineNumber,
+                columnNumber: match.columnNumber,
+                endLineNumber: match.endLineNumber,
+                endColumnNumber: match.endColumnNumber,
+            });
+            return;
+        }
+
+        const tab = buildProjectReaderTabDefinition({
+            projectId: activeProject.id,
+            projectName: activeProject.name,
+            rootPath: activeProject.rootPath,
+            relativePath: match.relativePath,
+            lineNumber: match.lineNumber,
+            columnNumber: match.columnNumber,
+            endLineNumber: match.endLineNumber,
+            endColumnNumber: match.endColumnNumber,
+        });
+        props.context.openTab(tab);
+        reportProjectReaderTabBacklinkTarget(tab);
+    };
+
+    const isSearching = searchState.query.trim().length > 0;
+    const activeSearchMode = PROJECT_READER_SEARCH_MODES.find((item) => item.mode === searchState.mode)
+        ?? PROJECT_READER_SEARCH_MODES[0]!;
+    const ActiveSearchModeIcon = activeSearchMode.icon;
+
     return (
         <div className="project-reader-panel">
             <div className="project-reader-panel-toolbar">
@@ -254,11 +416,78 @@ export function ProjectReaderPanel(props: ProjectReaderPanelProps): ReactNode {
                 </div>
             ) : null}
 
+            {activeProject ? (
+                <div className="project-reader-search">
+                    <div className="project-reader-search-input-wrap">
+                        <FileSearch size={13} strokeWidth={1.9} />
+                        <input
+                            className="project-reader-search-input"
+                            value={searchState.query}
+                            placeholder={t("projectReader.searchPlaceholder")}
+                            aria-label={t("projectReader.searchPlaceholder")}
+                            onChange={(event) => {
+                                setSearchState((previous) => ({
+                                    ...previous,
+                                    query: event.target.value,
+                                }));
+                            }}
+                        />
+                        <div className="project-reader-search-mode-picker">
+                            <button
+                                type="button"
+                                className={`project-reader-search-mode-button is-${searchState.mode}`}
+                                title={t(`projectReader.searchMode.${searchState.mode}`)}
+                                aria-label={t("projectReader.searchModeLabel")}
+                                aria-haspopup="menu"
+                                aria-expanded={searchModeMenuOpen}
+                                onClick={() => {
+                                    setSearchModeMenuOpen((open) => !open);
+                                }}
+                            >
+                                <ActiveSearchModeIcon size={14} strokeWidth={2} />
+                                <ChevronsUpDown size={11} strokeWidth={2} />
+                            </button>
+                            {searchModeMenuOpen ? (
+                                <div className="project-reader-search-mode-menu" role="menu">
+                                    {PROJECT_READER_SEARCH_MODES.map(({ mode, icon: ModeIcon }) => (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            role="menuitemradio"
+                                            aria-checked={searchState.mode === mode}
+                                            className={[
+                                                "project-reader-search-mode-menu-item",
+                                                searchState.mode === mode ? "is-active" : "",
+                                                `is-${mode}`,
+                                            ].filter(Boolean).join(" ")}
+                                            onClick={() => {
+                                                setSearchState((previous) => ({
+                                                    ...previous,
+                                                    mode,
+                                                }));
+                                                setSearchModeMenuOpen(false);
+                                            }}
+                                        >
+                                            <ModeIcon size={14} strokeWidth={2} />
+                                            <span>{t(`projectReader.searchMode.${mode}`)}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
             {error ? (
                 <div className="project-reader-panel-state is-error">{error}</div>
             ) : null}
 
-            {loadingProjects || loadingTree ? (
+            {searchState.error ? (
+                <div className="project-reader-panel-state is-error">{searchState.error}</div>
+            ) : null}
+
+            {loadingProjects || loadingTree || searchState.loading ? (
                 <div className="project-reader-panel-state">{t("common.loading")}</div>
             ) : null}
 
@@ -276,7 +505,34 @@ export function ProjectReaderPanel(props: ProjectReaderPanelProps): ReactNode {
                 </div>
             ) : null}
 
-            {activeProject && !loadingTree ? (
+            {activeProject && isSearching && !searchState.loading ? (
+                <div className="project-reader-search-results">
+                    {searchState.matches.length === 0 ? (
+                        <div className="project-reader-panel-state">{t("projectReader.noSearchResults")}</div>
+                    ) : searchState.matches.map((match, index) => (
+                        <button
+                            key={`${match.relativePath}:${String(match.lineNumber)}:${String(match.columnNumber)}:${String(index)}`}
+                            type="button"
+                            className="project-reader-search-result"
+                            onClick={() => {
+                                handleOpenSearchMatch(match);
+                            }}
+                        >
+                            <span className="project-reader-search-result__path">
+                                {match.relativePath}:{match.lineNumber}
+                            </span>
+                            <span className="project-reader-search-result__kind">
+                                {match.kind}
+                            </span>
+                            <span className="project-reader-search-result__preview">
+                                {match.preview}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+            ) : null}
+
+            {activeProject && !loadingTree && !isSearching ? (
                 <FileTree
                     items={treeItems}
                     activePath={activePath}

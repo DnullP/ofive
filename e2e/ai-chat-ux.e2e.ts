@@ -34,6 +34,7 @@ test.describe("ai chat ux", () => {
         await expect(page.locator(".settings-tab")).toBeVisible();
         await expect(page.locator(".settings-tab-sidebar-item.active")).toContainText(/AI Chat|AI 对话/);
         await expect(page.locator("[data-settings-section-id='ai-chat']")).toBeVisible();
+        await expect(page.locator("[data-settings-active-selection='ai-chat:ai-chat-provider-settings-panel']")).toBeVisible();
 
         const apiKeyRow = page.locator("[data-ai-chat-settings-field='apiKey']");
         const apiKeyInput = apiKeyRow.locator("input");
@@ -238,6 +239,7 @@ test.describe("ai chat ux", () => {
         await page.getByTestId("activity-bar-item-__settings__").click();
         await page.locator(".settings-tab-search-input").fill("AI");
         await page.locator(".settings-tab-sidebar-item", { hasText: /AI Chat|AI 对话/ }).click();
+        await page.locator(".settings-tab-sidebar-subitem", { hasText: /Tool Approval|工具审批/ }).click();
         const policyRow = page.locator(".ai-chat-settings-tool-policy-row", { hasText: "vault.apply_markdown_patch" });
         await expect(policyRow).toBeVisible();
         await expect(policyRow.locator(".ai-chat-settings-tool-policy-select")).toHaveValue("auto");
@@ -249,6 +251,7 @@ test.describe("ai chat ux", () => {
         await page.getByTestId("activity-bar-item-__settings__").click();
         await page.locator(".settings-tab-search-input").fill("AI");
         await page.locator(".settings-tab-sidebar-item", { hasText: /AI Chat|AI 对话/ }).click();
+        await page.locator(".settings-tab-sidebar-subitem", { hasText: /Provider/ }).click();
 
         const providerList = page.locator(".ai-chat-settings-provider-list");
         await expect(providerList.locator(".ai-chat-settings-provider-item")).toHaveCount(1);

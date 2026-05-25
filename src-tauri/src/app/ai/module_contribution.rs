@@ -61,7 +61,10 @@ const AI_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[
     },
     ModulePrivateNamespaceTemplate {
         namespace: "crate::infra::persistence::ai_chat_rollback_store",
-        allowed_paths: &["src/app/ai/", "src/infra/persistence/ai_chat_rollback_store.rs"],
+        allowed_paths: &[
+            "src/app/ai/",
+            "src/infra/persistence/ai_chat_rollback_store.rs",
+        ],
         rationale: "AI edit rollback journal 属于 AI 模块私有持久化实现",
     },
 ];

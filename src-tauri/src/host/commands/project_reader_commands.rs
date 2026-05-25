@@ -10,8 +10,9 @@ use tauri::State;
 use crate::app::project_reader::project_reader_app_service;
 use crate::shared::project_reader_contracts::{
     ProjectReaderCodeReferenceResponse, ProjectReaderFileResponse, ProjectReaderProject,
-    ProjectReaderProjectListResponse, ProjectReaderSymbolResolveContext,
-    ProjectReaderSymbolResolveResponse, ProjectReaderTreeResponse,
+    ProjectReaderProjectListResponse, ProjectReaderSearchRequest, ProjectReaderSearchResponse,
+    ProjectReaderSymbolResolveContext, ProjectReaderSymbolResolveResponse,
+    ProjectReaderTreeResponse,
 };
 use crate::state::{get_vault_root, AppState};
 
@@ -22,6 +23,7 @@ pub(crate) const PROJECT_READER_COMMAND_IDS: &[&str] = &[
     "read_project_reader_file",
     "get_project_reader_code_references",
     "resolve_project_reader_symbol",
+    "search_project_reader",
 ];
 
 macro_rules! timed_command {
@@ -120,5 +122,18 @@ pub async fn resolve_project_reader_symbol(
         })
         .await
         .map_err(|error| format!("project-reader symbol resolve join failed: {error}"))?
+    )
+}
+
+/// 在外部项目中搜索文本、符号或 ast-grep 结构模式。
+#[tauri::command]
+pub async fn search_project_reader(
+    request: ProjectReaderSearchRequest,
+) -> Result<ProjectReaderSearchResponse, String> {
+    timed_command!(
+        "search_project_reader",
+        async_runtime::spawn_blocking(move || project_reader_app_service::search_project(request))
+            .await
+            .map_err(|error| format!("project-reader search join failed: {error}"))?
     )
 }

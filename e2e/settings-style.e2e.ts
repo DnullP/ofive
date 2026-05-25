@@ -26,6 +26,7 @@ test.describe("settings style", () => {
         await expect(page.locator(".settings-shortcut-kbd").first()).toHaveCSS("border-top-left-radius", "0px");
 
         await page.locator(".settings-tab-sidebar-item", { hasText: /AI 对话|AI Chat/ }).click();
+        await page.locator(".settings-tab-sidebar-subitem", { hasText: /Provider/ }).click();
         await expect(page.locator(".ai-chat-provider-settings-form")).toBeVisible();
         await expect(page.locator(".ai-chat-settings-input").first()).toHaveCSS("border-top-left-radius", "0px");
         await expect(page.locator(".ai-chat-settings-save").first()).toHaveCSS("border-top-left-radius", "0px");

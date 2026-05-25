@@ -28,7 +28,11 @@ describe("aiChatPlugin settings registration", () => {
         const section = getSettingsSectionsSnapshot().find((item) => item.id === "ai-chat");
 
         expect(section).toBeDefined();
-        expect(section?.items.map((item) => item.id)).toEqual(["ai-chat-settings-panel"]);
+        expect(section?.exposeItemsInNavigation).toBe(true);
+        expect(section?.items.map((item) => item.id)).toEqual([
+            "ai-chat-provider-settings-panel",
+            "ai-chat-tool-approval-settings-panel",
+        ]);
 
         dispose();
         expect(getSettingsSectionsSnapshot().find((item) => item.id === "ai-chat")).toBeUndefined();

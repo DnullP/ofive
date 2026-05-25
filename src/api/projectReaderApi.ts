@@ -90,6 +90,27 @@ export interface ProjectReaderSymbolResolveContext {
     currentFileContent?: string | null;
 }
 
+export type ProjectReaderSearchMode = "text" | "symbol" | "astGrep";
+
+export interface ProjectReaderSearchMatch {
+    projectId: string;
+    relativePath: string;
+    lineNumber: number;
+    columnNumber: number;
+    endLineNumber: number;
+    endColumnNumber: number;
+    kind: string;
+    language?: string | null;
+    preview: string;
+}
+
+export interface ProjectReaderSearchResponse {
+    projectId: string;
+    query: string;
+    mode: ProjectReaderSearchMode;
+    matches: ProjectReaderSearchMatch[];
+}
+
 function isTauriRuntime(): boolean {
     if (typeof window === "undefined") {
         return false;
@@ -450,6 +471,144 @@ function filterBrowserSymbolLocations(
     return sameFileLocations.length > 0 ? sameFileLocations : locations;
 }
 
+function resolveBrowserSymbolLocations(
+    projectId: string,
+    symbol: string,
+    context: ReturnType<typeof normalizeBrowserSymbolResolveContext>,
+): ProjectReaderSymbolLocation[] {
+    const locations: ProjectReaderSymbolLocation[] = [];
+    const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const symbolPattern = new RegExp(`\\b(class|function|interface|type|const|let|var)\\s+${escapedSymbol}\\b`);
+
+    Object.entries(browserMockFiles).forEach(([relativePath, content]) => {
+        content.split("\n").forEach((line, index) => {
+            if (!symbolPattern.test(line)) {
+                return;
+            }
+
+            const columnNumber = Math.max(1, line.indexOf(symbol) + 1);
+            locations.push({
+                projectId,
+                relativePath,
+                lineNumber: index + 1,
+                columnNumber,
+                endLineNumber: index + 1,
+                endColumnNumber: columnNumber + symbol.length,
+                symbolName: symbol,
+                kind: "definition",
+                preview: line.trim(),
+            });
+        });
+    });
+
+    return filterBrowserSymbolLocations(locations, context)
+        .sort((left, right) => {
+            const leftRank = rankBrowserSymbolLocation(left, context);
+            const rightRank = rankBrowserSymbolLocation(right, context);
+            for (let index = 0; index < leftRank.length; index += 1) {
+                const diff = leftRank[index]! - rightRank[index]!;
+                if (diff !== 0) {
+                    return diff;
+                }
+            }
+            return left.relativePath.localeCompare(right.relativePath)
+                || left.lineNumber - right.lineNumber
+                || left.columnNumber - right.columnNumber;
+        });
+}
+
+function browserSearchProject(
+    projectId: string,
+    query: string,
+    mode: ProjectReaderSearchMode,
+    limit: number,
+): ProjectReaderSearchMatch[] {
+    const normalizedQuery = query.trim();
+    const matches: ProjectReaderSearchMatch[] = [];
+    if (!normalizedQuery) {
+        return matches;
+    }
+    const pushMatch = (match: ProjectReaderSearchMatch): void => {
+        if (matches.length < limit) {
+            matches.push(match);
+        }
+    };
+
+    if (mode === "symbol") {
+        const queryLowercase = normalizedQuery.toLowerCase();
+        const seenKeys = new Set<string>();
+        Object.entries(browserMockFiles).forEach(([relativePath, content]) => {
+            content.split("\n").forEach((line) => {
+                const symbolMatch = line.match(/\b(class|function|interface|type|const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\b/);
+                const symbol = symbolMatch?.[2] ?? "";
+                if (!symbol.toLowerCase().includes(queryLowercase)) {
+                    return;
+                }
+                const key = `${relativePath}:${symbol}`;
+                if (seenKeys.has(key)) {
+                    return;
+                }
+                seenKeys.add(key);
+                resolveBrowserSymbolLocations(
+                    projectId,
+                    symbol,
+                    normalizeBrowserSymbolResolveContext(),
+                ).forEach((location) => {
+                    pushMatch({
+                        projectId,
+                        relativePath: location.relativePath,
+                        lineNumber: location.lineNumber,
+                        columnNumber: location.columnNumber,
+                        endLineNumber: location.endLineNumber ?? location.lineNumber,
+                        endColumnNumber: location.endColumnNumber ?? location.columnNumber + location.symbolName.length,
+                        kind: location.kind,
+                        language: detectLanguage(location.relativePath),
+                        preview: location.preview,
+                    });
+                });
+            });
+        });
+        return matches;
+    }
+
+    Object.entries(browserMockFiles).forEach(([relativePath, content]) => {
+        if (matches.length >= limit) {
+            return;
+        }
+        content.split("\n").forEach((line, index) => {
+            if (matches.length >= limit) {
+                return;
+            }
+            const astGrepNeedle = normalizedQuery
+                .replace(/\$\w+/g, "")
+                .replace(/[{}()[\];:,.]/g, " ")
+                .split(/\s+/)
+                .find((part) => part.length > 1)
+                ?? normalizedQuery;
+            const columnIndex = mode === "astGrep"
+                ? line.indexOf(astGrepNeedle)
+                : line.toLowerCase().indexOf(normalizedQuery.toLowerCase());
+            if (columnIndex < 0) {
+                return;
+            }
+            const columnNumber = columnIndex + 1;
+            pushMatch({
+                projectId,
+                relativePath,
+                lineNumber: index + 1,
+                columnNumber,
+                endLineNumber: index + 1,
+                endColumnNumber: columnNumber + Math.max(1, normalizedQuery.length),
+                kind: mode === "astGrep" ? "ast-grep:mock" : "text",
+                language: detectLanguage(relativePath),
+                preview: line.trim(),
+            });
+        });
+    });
+
+    return matches;
+}
+
 function buildBrowserTreeEntries(): ProjectReaderTreeEntry[] {
     const entries = new Map<string, ProjectReaderTreeEntry>();
 
@@ -590,42 +749,7 @@ export async function resolveProjectReaderSymbol(
 ): Promise<ProjectReaderSymbolResolveResponse> {
     if (!isTauriRuntime()) {
         const normalizedContext = normalizeBrowserSymbolResolveContext(context);
-        const locations: ProjectReaderSymbolLocation[] = [];
-        Object.entries(browserMockFiles).forEach(([relativePath, content]) => {
-            content.split("\n").forEach((line, index) => {
-                if (!new RegExp(`\\b(class|function|interface|type|const|let|var)\\s+${symbol}\\b`).test(line)) {
-                    return;
-                }
-
-                const columnNumber = Math.max(1, line.indexOf(symbol) + 1);
-                locations.push({
-                    projectId,
-                    relativePath,
-                    lineNumber: index + 1,
-                    columnNumber,
-                    endLineNumber: index + 1,
-                    endColumnNumber: columnNumber + symbol.length,
-                    symbolName: symbol,
-                    kind: "definition",
-                    preview: line.trim(),
-                });
-            });
-        });
-
-        const filteredLocations = filterBrowserSymbolLocations(locations, normalizedContext)
-            .sort((left, right) => {
-                const leftRank = rankBrowserSymbolLocation(left, normalizedContext);
-                const rightRank = rankBrowserSymbolLocation(right, normalizedContext);
-                for (let index = 0; index < leftRank.length; index += 1) {
-                    const diff = leftRank[index]! - rightRank[index]!;
-                    if (diff !== 0) {
-                        return diff;
-                    }
-                }
-                return left.relativePath.localeCompare(right.relativePath)
-                    || left.lineNumber - right.lineNumber
-                    || left.columnNumber - right.columnNumber;
-            });
+        const filteredLocations = resolveBrowserSymbolLocations(projectId, symbol, normalizedContext);
 
         return { projectId, symbol, locations: filteredLocations };
     }
@@ -634,6 +758,33 @@ export async function resolveProjectReaderSymbol(
         projectId,
         symbol,
         context,
+    });
+}
+
+export async function searchProjectReader(
+    projectId: string,
+    query: string,
+    mode: ProjectReaderSearchMode,
+    limit = 80,
+): Promise<ProjectReaderSearchResponse> {
+    if (!isTauriRuntime()) {
+        const normalizedLimit = Math.max(1, Math.min(Math.floor(limit), 200));
+        const matches = browserSearchProject(projectId, query, mode, normalizedLimit);
+        return {
+            projectId,
+            query,
+            mode,
+            matches,
+        };
+    }
+
+    return invoke<ProjectReaderSearchResponse>("search_project_reader", {
+        request: {
+            projectId,
+            query,
+            mode,
+            limit,
+        },
     });
 }
 

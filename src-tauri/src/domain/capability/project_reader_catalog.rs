@@ -18,6 +18,7 @@ pub(crate) fn project_reader_capability_descriptors() -> Vec<CapabilityDescripto
         read_project_file_capability(),
         get_code_references_capability(),
         resolve_project_symbol_capability(),
+        search_project_capability(),
     ]
 }
 
@@ -213,6 +214,62 @@ fn get_code_references_capability() -> CapabilityDescriptor {
                     "items": {
                         "type": "object",
                         "required": ["sourcePath", "title", "linkText", "target"]
+                    }
+                }
+            }
+        }),
+        risk_level: CapabilityRiskLevel::Low,
+        requires_confirmation: false,
+        required_permissions: vec!["project-reader.read".to_string()],
+        supported_consumers: vec![
+            CapabilityConsumer::Frontend,
+            CapabilityConsumer::AiTool,
+            CapabilityConsumer::Sidecar,
+        ],
+    }
+}
+
+fn search_project_capability() -> CapabilityDescriptor {
+    CapabilityDescriptor {
+        id: "project_reader.search_project".to_string(),
+        api_version: CAPABILITY_API_VERSION.to_string(),
+        display_name: "Search Project Reader Project".to_string(),
+        description: "Search one imported external project by text, indexed symbols, or ast-grep structural pattern.".to_string(),
+        kind: CapabilityKind::Read,
+        input_schema: json!({
+            "type": "object",
+            "required": ["projectId", "query", "mode"],
+            "properties": {
+                "projectId": {"type": "string"},
+                "query": {"type": "string"},
+                "mode": {
+                    "type": "string",
+                    "enum": ["text", "symbol", "astGrep"]
+                },
+                "limit": {"type": ["integer", "null"]}
+            }
+        }),
+        output_schema: json!({
+            "type": "object",
+            "required": ["projectId", "query", "mode", "matches"],
+            "properties": {
+                "projectId": {"type": "string"},
+                "query": {"type": "string"},
+                "mode": {"type": "string"},
+                "matches": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "projectId",
+                            "relativePath",
+                            "lineNumber",
+                            "columnNumber",
+                            "endLineNumber",
+                            "endColumnNumber",
+                            "kind",
+                            "preview"
+                        ]
                     }
                 }
             }

@@ -151,6 +151,8 @@ const AI_CHAT_TAB_ID = "ai-chat-tab-instance";
 const AI_CHAT_CONVERTIBLE_ID = "ai-chat";
 const AI_CHAT_SETTINGS_TAB_ID = "settings";
 const AI_CHAT_SETTINGS_COMPONENT_ID = "settings";
+const AI_CHAT_PROVIDER_SETTINGS_ITEM_ID = "ai-chat-provider-settings-panel";
+const AI_CHAT_TOOL_APPROVAL_SETTINGS_ITEM_ID = "ai-chat-tool-approval-settings-panel";
 const AI_CHAT_SETTINGS_API_KEY_FOCUS_TARGET = "ai-chat-api-key";
 
 interface QuickPromptDefinition {
@@ -434,6 +436,7 @@ function buildOpenTabsSnapshot(
 function buildAiChatSettingsTabParams(): Record<string, unknown> {
     return {
         sectionId: AI_CHAT_PANEL_ID,
+        itemId: AI_CHAT_PROVIDER_SETTINGS_ITEM_ID,
         focusTarget: AI_CHAT_SETTINGS_API_KEY_FOCUS_TARGET,
         focusRequestId: `ai-chat-api-key-${Date.now()}`,
     };
@@ -2914,12 +2917,7 @@ function AiChatTab(props: WorkbenchTabProps<Record<string, unknown>>): ReactNode
     return <AiChatView tabContainerApi={props.containerApi} />;
 }
 
-/**
- * @function AiChatSettingsSection
- * @description 渲染 AI 设置页，按照后端返回的 schema 动态生成表单。
- * @returns 设置页 React 节点。
- */
-function AiChatSettingsSection(): ReactNode {
+function AiChatSettingsSection(props: { pane: "provider" | "tool-approval" }): ReactNode {
     const { currentVaultPath, backendReady } = useVaultState();
     const [vendorCatalog, setVendorCatalog] = useState<AiVendorDefinition[]>([]);
     const [toolCatalog, setToolCatalog] = useState<AiToolDescriptor[]>([]);
@@ -3289,13 +3287,8 @@ function AiChatSettingsSection(): ReactNode {
 
     const activeProviderVendorTitle = selectedVendor?.title ?? activeProvider?.vendorId ?? "-";
 
-    return (
-        <>
+    const providerSettingsPanel = (
         <div className="settings-item-group ai-chat-settings-form ai-chat-provider-settings-form">
-            <div className="ai-chat-settings-row">
-                <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.settingsTitle")}</div>
-                <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.settingsSubtitle")}</div>
-            </div>
 
             <div className="ai-chat-settings-provider-layout">
                 <div className="ai-chat-settings-provider-list-pane">
@@ -3464,7 +3457,9 @@ function AiChatSettingsSection(): ReactNode {
                 </div>
             </div>
         </div>
+    );
 
+    const settingsPanel = props.pane === "tool-approval" ? (
         <div className="settings-item-group ai-chat-settings-form ai-chat-tool-approval-section">
             <div className="ai-chat-settings-row ai-chat-settings-tool-policy-header">
                 <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.toolApprovalTitle")}</div>
@@ -3521,7 +3516,11 @@ function AiChatSettingsSection(): ReactNode {
                 </UiButton>
             </div>
         </div>
+    ) : providerSettingsPanel;
 
+    return (
+        <>
+        {settingsPanel}
         <UiModal
             ariaLabel={i18n.t("aiChatPlugin.providerAdd")}
             className="ai-chat-provider-modal-backdrop"
@@ -3583,29 +3582,31 @@ function AiChatSettingsSection(): ReactNode {
     );
 }
 
-/**
- * @function registerAiChatSettingsSection
- * @description 注册 AI 设置选栏。
- * @returns 取消注册函数。
- */
 function registerAiChatSettingsSection(): () => void {
     const unregisterSection = registerSettingsSection({
         id: AI_CHAT_PANEL_ID,
         title: "settings.aiSection",
         order: 45,
+        exposeItemsInNavigation: true,
     });
 
-    const unregisterItem = registerSettingsItem({
-        id: "ai-chat-settings-panel",
-        sectionId: AI_CHAT_PANEL_ID,
-        order: 10,
-        kind: "custom",
-        title: "settings.aiSection",
-        render: () => <AiChatSettingsSection />,
-    });
+    const unregisterItems = [
+        registerSettingsItem({
+            id: AI_CHAT_PROVIDER_SETTINGS_ITEM_ID, sectionId: AI_CHAT_PANEL_ID, order: 10, kind: "custom",
+            title: "aiChatPlugin.providerLabel", description: "aiChatPlugin.providerDescription",
+            searchTerms: ["provider", "model", "vendor", "api key", "base url", "ai", "模型", "供应商", "密钥"],
+            render: () => <AiChatSettingsSection pane="provider" />,
+        }),
+        registerSettingsItem({
+            id: AI_CHAT_TOOL_APPROVAL_SETTINGS_ITEM_ID, sectionId: AI_CHAT_PANEL_ID, order: 30, kind: "custom",
+            title: "aiChatPlugin.toolApprovalTitle", description: "aiChatPlugin.toolApprovalDescription",
+            searchTerms: ["tool", "approval", "permission", "capability", "ai", "工具", "审批", "权限"],
+            render: () => <AiChatSettingsSection pane="tool-approval" />,
+        }),
+    ];
 
     return () => {
-        unregisterItem();
+        unregisterItems.forEach((unregister) => unregister());
         unregisterSection();
     };
 }

@@ -148,7 +148,8 @@ fn plan_capability_snapshots(
             push_directory_with_parent_snapshots(vault_root, &relative_path, &mut snapshots)?;
         }
         "agent_skill.create" => {
-            let skill_name = normalize_skill_name(&input_string(input, "skillName", capability_id)?)?;
+            let skill_name =
+                normalize_skill_name(&input_string(input, "skillName", capability_id)?)?;
             let skill_root = format!(".ofive/skills/{skill_name}");
             push_directory_with_parent_snapshots(vault_root, &skill_root, &mut snapshots)?;
             push_snapshot(
@@ -165,9 +166,13 @@ fn plan_capability_snapshots(
             )?;
         }
         "agent_skill.write_file" => {
-            let skill_name = normalize_skill_name(&input_string(input, "skillName", capability_id)?)?;
-            let skill_file_relative_path =
-                normalize_skill_file_relative_path(&input_string(input, "relativePath", capability_id)?)?;
+            let skill_name =
+                normalize_skill_name(&input_string(input, "skillName", capability_id)?)?;
+            let skill_file_relative_path = normalize_skill_file_relative_path(&input_string(
+                input,
+                "relativePath",
+                capability_id,
+            )?)?;
             push_file_with_parent_snapshots(
                 vault_root,
                 &format!(".ofive/skills/{skill_name}/{skill_file_relative_path}"),
@@ -293,10 +298,7 @@ fn delete_empty_directory_if_present(
             response.skipped_paths.push(snapshot.relative_path.clone());
         }
         Err(error) => {
-            return Err(format!(
-                "删除 AI 创建目录失败 {}: {error}",
-                path.display()
-            ));
+            return Err(format!("删除 AI 创建目录失败 {}: {error}", path.display()));
         }
     }
     Ok(())
@@ -379,7 +381,9 @@ fn push_snapshot(
         AiChatEditRollbackSnapshotKind::File => {
             if absolute_path.exists() {
                 if !absolute_path.is_file() {
-                    return Err(format!("AI edit rollback 期望文件但发现非文件: {relative_path}"));
+                    return Err(format!(
+                        "AI edit rollback 期望文件但发现非文件: {relative_path}"
+                    ));
                 }
                 AiChatEditRollbackSnapshot {
                     relative_path,
@@ -404,7 +408,9 @@ fn push_snapshot(
         AiChatEditRollbackSnapshotKind::Directory => {
             if absolute_path.exists() {
                 if !absolute_path.is_dir() {
-                    return Err(format!("AI edit rollback 期望目录但发现非目录: {relative_path}"));
+                    return Err(format!(
+                        "AI edit rollback 期望目录但发现非目录: {relative_path}"
+                    ));
                 }
                 AiChatEditRollbackSnapshot {
                     relative_path,
@@ -533,8 +539,7 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        record_ai_chat_capability_rollback_checkpoint,
-        restore_ai_chat_rollback_checkpoint_in_root,
+        record_ai_chat_capability_rollback_checkpoint, restore_ai_chat_rollback_checkpoint_in_root,
     };
 
     static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -571,13 +576,13 @@ mod tests {
         .expect("record should succeed");
         write_file(&root, "notes/a.md", "after");
 
-        let result = restore_ai_chat_rollback_checkpoint_in_root(
-            &root,
-            "checkpoint-1".to_string(),
-        )
-        .expect("restore should succeed");
+        let result = restore_ai_chat_rollback_checkpoint_in_root(&root, "checkpoint-1".to_string())
+            .expect("restore should succeed");
 
-        assert_eq!(fs::read_to_string(root.join("notes/a.md")).unwrap(), "before");
+        assert_eq!(
+            fs::read_to_string(root.join("notes/a.md")).unwrap(),
+            "before"
+        );
         assert!(result.restored_paths.contains(&"notes/a.md".to_string()));
         let _ = fs::remove_dir_all(root);
     }
@@ -595,11 +600,8 @@ mod tests {
         .expect("record should succeed");
         write_file(&root, "nested/new.md", "# New");
 
-        let result = restore_ai_chat_rollback_checkpoint_in_root(
-            &root,
-            "checkpoint-1".to_string(),
-        )
-        .expect("restore should succeed");
+        let result = restore_ai_chat_rollback_checkpoint_in_root(&root, "checkpoint-1".to_string())
+            .expect("restore should succeed");
 
         assert!(!root.join("nested/new.md").exists());
         assert!(!root.join("nested").exists());
@@ -625,7 +627,10 @@ mod tests {
         restore_ai_chat_rollback_checkpoint_in_root(&root, "checkpoint-1".to_string())
             .expect("restore should succeed");
 
-        assert_eq!(fs::read_to_string(root.join("notes/a.md")).unwrap(), "before");
+        assert_eq!(
+            fs::read_to_string(root.join("notes/a.md")).unwrap(),
+            "before"
+        );
         assert!(!root.join("archive/a.md").exists());
         let _ = fs::remove_dir_all(root);
     }
@@ -658,7 +663,9 @@ mod tests {
         assert!(!root
             .join(".ofive/skills/research-helper/references/context.md")
             .exists());
-        assert!(!root.join(".ofive/skills/research-helper/references").exists());
+        assert!(!root
+            .join(".ofive/skills/research-helper/references")
+            .exists());
         assert!(root.join(".ofive/skills/research-helper").exists());
         let _ = fs::remove_dir_all(root);
     }
