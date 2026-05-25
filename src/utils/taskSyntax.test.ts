@@ -27,9 +27,24 @@ describe("taskSyntax", () => {
             checked: false,
             content: "Ship release",
             due: "2026-03-24 10:00",
+            start: null,
+            end: null,
+            recurrence: null,
             priority: "high",
             rawLine: "- [ ] Ship release @2026-03-24 10:00 !high",
         });
+    });
+
+    it("应解析开始、结束和周期任务元数据", () => {
+        const parsed = parseTaskBoardLine(
+            "- [ ] Review launch window start:2026-03-24 09:00 end:2026-03-25 11:30 every:weekly !medium",
+        );
+
+        expect(parsed?.content).toBe("Review launch window");
+        expect(parsed?.start).toBe("2026-03-24 09:00");
+        expect(parsed?.end).toBe("2026-03-25 11:30");
+        expect(parsed?.recurrence).toBe("weekly");
+        expect(parsed?.priority).toBe("medium");
     });
 
     it("应兼容旧版反引号元数据语法", () => {
@@ -55,12 +70,14 @@ describe("taskSyntax", () => {
         }
 
         expect(buildTaskBoardLine(parsed, {
-            due: "2026-03-25 09:00",
+            start: "2026-03-24 10:00",
+            end: "2026-03-24 12:00",
+            recurrence: "weekly-tue",
             priority: "medium",
-        })).toBe("- [x] Archive sprint notes @2026-03-25 09:00 !medium");
+        })).toBe("- [x] Archive sprint notes start:2026-03-24 10:00 end:2026-03-24 12:00 every:weekly-tue !medium");
     });
 
-    it("应在 Markdown 文档中替换目标任务的元数据", () => {
+    it("应在 Markdown 文档中替换目标任务的元数据并清理旧 due", () => {
         const markdown = [
             "# Tasks",
             "- [ ] First task @2026-03-24 10:00 !high",
@@ -71,12 +88,15 @@ describe("taskSyntax", () => {
             line: 3,
             rawLine: "- [ ] Second task",
         }, {
-            due: "2026-03-26 08:30",
+            due: null,
+            start: "2026-03-25 09:00",
+            end: "2026-03-25 10:00",
+            recurrence: "monthly-25",
             priority: "low",
         });
 
         expect(result.updatedLine).toBe(
-            "- [ ] Second task @2026-03-26 08:30 !low",
+            "- [ ] Second task start:2026-03-25 09:00 end:2026-03-25 10:00 every:monthly-25 !low",
         );
         expect(result.content).toContain(result.updatedLine);
     });

@@ -29,7 +29,20 @@ type BrowserMockFixturesImportMeta = ImportMeta & {
     ) => RawModuleMap;
 };
 
-let cachedBrowserMockMarkdownContentsPromise: Promise<Record<string, string>> | null = null;
+type BrowserMockFixturesGlobalScope = typeof globalThis & {
+    __OFIVE_BROWSER_MOCK_MARKDOWN_CONTENTS_PROMISE__?: Promise<Record<string, string>> | null;
+};
+
+function getCachedBrowserMockMarkdownContentsPromise(): Promise<Record<string, string>> | null {
+    return (globalThis as BrowserMockFixturesGlobalScope).__OFIVE_BROWSER_MOCK_MARKDOWN_CONTENTS_PROMISE__ ?? null;
+}
+
+function setCachedBrowserMockMarkdownContentsPromise(
+    promise: Promise<Record<string, string>>,
+): Promise<Record<string, string>> {
+    (globalThis as BrowserMockFixturesGlobalScope).__OFIVE_BROWSER_MOCK_MARKDOWN_CONTENTS_PROMISE__ = promise;
+    return promise;
+}
 
 /**
  * @function toBrowserMockMarkdownContents
@@ -90,11 +103,12 @@ async function loadStaticBrowserMockRawModules(): Promise<RawModuleMap> {
  * @returns Markdown 内容映射；在非浏览器运行时返回空映射。
  */
 export async function loadBrowserMockMarkdownContents(): Promise<Record<string, string>> {
-    if (cachedBrowserMockMarkdownContentsPromise) {
-        return cachedBrowserMockMarkdownContentsPromise;
+    const cachedPromise = getCachedBrowserMockMarkdownContentsPromise();
+    if (cachedPromise) {
+        return cachedPromise;
     }
 
-    cachedBrowserMockMarkdownContentsPromise = (async () => {
+    const nextPromise = (async () => {
         if (typeof window === "undefined") {
             return {};
         }
@@ -123,5 +137,5 @@ export async function loadBrowserMockMarkdownContents(): Promise<Record<string, 
         }
     })();
 
-    return cachedBrowserMockMarkdownContentsPromise;
+    return setCachedBrowserMockMarkdownContentsPromise(nextPromise);
 }

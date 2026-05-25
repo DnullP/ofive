@@ -399,5 +399,11 @@ pub struct VaultTaskItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub due: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub start: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recurrence: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<String>,
 }

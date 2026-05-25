@@ -392,6 +392,12 @@ export interface VaultTaskItem {
     content: string;
     /** 截止时间元数据 */
     due?: string | null;
+    /** 开始时间元数据 */
+    start?: string | null;
+    /** 结束时间元数据 */
+    end?: string | null;
+    /** 重复周期元数据 */
+    recurrence?: string | null;
     /** 优先级元数据 */
     priority?: string | null;
 }
@@ -455,9 +461,10 @@ import {
 } from "./selfTriggerTrace";
 
 let browserFallbackVaultPath = "";
+const BROWSER_FALLBACK_DEFAULT_VAULT_PATH = "/mock/notes";
 const BROWSER_FALLBACK_VAULT_CONFIG_STORAGE_KEY_PREFIX = "ofive:browser-fallback:vault-config:";
+const BROWSER_FALLBACK_LAST_VAULT_PATH_STORAGE_KEY = "ofive:last-vault-path";
 let browserMockMarkdownContentsPromise: Promise<Record<string, string>> | null = null;
-const browserFallbackAgentSkillFiles = new Map<string, string>();
 const BROWSER_FALLBACK_TRANSPARENT_PNG_BASE64 =
     "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAQAAAAAYLlVAAAAJ0lEQVR42u3PAQ0AAAgDINc/9K3hHBQQ7XS7oQAAAAAAAAAAAOA2HF4AAfWFGmwAAAAASUVORK5CYII=";
 
@@ -501,6 +508,18 @@ Use this skill when the user asks about, writes, fixes, or reviews ofive WikiLin
 - Preview and click behavior should resolve to the same target position.
 `;
 
+type VaultApiGlobalScope = typeof globalThis & {
+    __OFIVE_BROWSER_FALLBACK_AGENT_SKILL_FILES__?: Map<string, string>;
+};
+
+function resolveBrowserFallbackAgentSkillFiles(): Map<string, string> {
+    const scope = globalThis as VaultApiGlobalScope;
+    if (!scope.__OFIVE_BROWSER_FALLBACK_AGENT_SKILL_FILES__) {
+        scope.__OFIVE_BROWSER_FALLBACK_AGENT_SKILL_FILES__ = new Map<string, string>();
+    }
+    return scope.__OFIVE_BROWSER_FALLBACK_AGENT_SKILL_FILES__;
+}
+
 function getBrowserFallbackConfigReadDelayMs(): number {
     if (typeof window === "undefined") {
         return 0;
@@ -530,21 +549,43 @@ async function getBrowserMockMarkdownContents(): Promise<Record<string, string>>
     return browserMockMarkdownContentsPromise;
 }
 
+function resolveBrowserFallbackVaultPath(): string {
+    if (browserFallbackVaultPath) {
+        return browserFallbackVaultPath;
+    }
+
+    if (typeof window === "undefined") {
+        return "";
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const queryVaultPath = params.get("mockVaultPath")?.trim();
+    if (queryVaultPath) {
+        return queryVaultPath;
+    }
+
+    const persistedVaultPath = window.localStorage
+        .getItem(BROWSER_FALLBACK_LAST_VAULT_PATH_STORAGE_KEY)
+        ?.trim();
+    return persistedVaultPath || BROWSER_FALLBACK_DEFAULT_VAULT_PATH;
+}
+
 function getBrowserFallbackVaultConfigStorageKey(vaultPath: string): string {
     return `${BROWSER_FALLBACK_VAULT_CONFIG_STORAGE_KEY_PREFIX}${vaultPath}`;
 }
 
 function readBrowserFallbackVaultConfig(): VaultConfig {
-    if (typeof window === "undefined" || !browserFallbackVaultPath) {
+    if (typeof window === "undefined") {
         return {
             schemaVersion: 1,
             entries: {},
         };
     }
 
+    const vaultPath = resolveBrowserFallbackVaultPath();
     try {
         const raw = window.localStorage.getItem(
-            getBrowserFallbackVaultConfigStorageKey(browserFallbackVaultPath),
+            getBrowserFallbackVaultConfigStorageKey(vaultPath),
         );
         if (!raw) {
             return {
@@ -571,7 +612,7 @@ function readBrowserFallbackVaultConfig(): VaultConfig {
         return parsed;
     } catch (error) {
         console.warn("[vaultApi] failed to read browser fallback config", {
-            vaultPath: browserFallbackVaultPath,
+            vaultPath,
             error,
         });
         return {
@@ -582,18 +623,19 @@ function readBrowserFallbackVaultConfig(): VaultConfig {
 }
 
 function writeBrowserFallbackVaultConfig(config: VaultConfig): VaultConfig {
-    if (typeof window === "undefined" || !browserFallbackVaultPath) {
+    if (typeof window === "undefined") {
         return config;
     }
 
+    const vaultPath = resolveBrowserFallbackVaultPath();
     try {
         window.localStorage.setItem(
-            getBrowserFallbackVaultConfigStorageKey(browserFallbackVaultPath),
+            getBrowserFallbackVaultConfigStorageKey(vaultPath),
             JSON.stringify(config),
         );
     } catch (error) {
         console.warn("[vaultApi] failed to persist browser fallback config", {
-            vaultPath: browserFallbackVaultPath,
+            vaultPath,
             error,
         });
     }
@@ -1216,6 +1258,9 @@ function buildBrowserFallbackTaskItems(markdownContents: Record<string, string>)
                 checked: parsed.checked,
                 content: parsed.content,
                 ...(parsed.due ? { due: parsed.due } : {}),
+                ...(parsed.start ? { start: parsed.start } : {}),
+                ...(parsed.end ? { end: parsed.end } : {}),
+                ...(parsed.recurrence ? { recurrence: parsed.recurrence } : {}),
                 ...(parsed.priority ? { priority: parsed.priority } : {}),
             });
         });
@@ -1511,7 +1556,7 @@ export async function getCurrentVaultTree(): Promise<VaultTreeResponse> {
     if (!isTauriRuntime()) {
         const markdownContents = await getBrowserMockMarkdownContents();
         return {
-            vaultPath: browserFallbackVaultPath,
+            vaultPath: resolveBrowserFallbackVaultPath(),
             entries: buildBrowserFallbackTreeEntries(markdownContents),
         };
     }
@@ -1608,6 +1653,7 @@ function extractBrowserAgentSkillDescription(content: string): string {
  */
 export async function listAgentSkills(): Promise<AgentSkillSummary[]> {
     if (!isTauriRuntime()) {
+        const browserFallbackAgentSkillFiles = resolveBrowserFallbackAgentSkillFiles();
         const bySkill = new Map<string, AgentSkillFileEntry[]>();
         for (const [key, content] of browserFallbackAgentSkillFiles) {
             const [skillName, ...rest] = key.split("/");
@@ -1652,6 +1698,7 @@ export async function createAgentSkill(skillName: string, description: string): 
     }
 
     if (!isTauriRuntime()) {
+        const browserFallbackAgentSkillFiles = resolveBrowserFallbackAgentSkillFiles();
         const normalizedName = normalizeAgentSkillName(skillName);
         const content = `---\nname: ${normalizedName}\ndescription: ${description.trim()}\n---\n# ${normalizedName}\n\nUse this skill when ${description.trim()}\n`;
         browserFallbackAgentSkillFiles.set(buildBrowserAgentSkillKey(normalizedName, "SKILL.md"), content);
@@ -1679,6 +1726,7 @@ export async function readAgentSkillFile(
     }
 
     if (!isTauriRuntime()) {
+        const browserFallbackAgentSkillFiles = resolveBrowserFallbackAgentSkillFiles();
         return {
             skillName: normalizeAgentSkillName(skillName),
             relativePath: normalizeAgentSkillFilePath(relativePath),
@@ -1706,6 +1754,7 @@ export async function writeAgentSkillFile(
     }
 
     if (!isTauriRuntime()) {
+        const browserFallbackAgentSkillFiles = resolveBrowserFallbackAgentSkillFiles();
         const key = buildBrowserAgentSkillKey(skillName, relativePath);
         const created = !browserFallbackAgentSkillFiles.has(key);
         browserFallbackAgentSkillFiles.set(key, content);
@@ -1833,9 +1882,10 @@ export async function resolveWikiLinkTarget(
         });
 
         if (byExactPath) {
+            const vaultPath = resolveBrowserFallbackVaultPath();
             return {
                 relativePath: byExactPath,
-                absolutePath: `${browserFallbackVaultPath}/${byExactPath}`,
+                absolutePath: `${vaultPath}/${byExactPath}`,
             };
         }
 
@@ -1849,9 +1899,10 @@ export async function resolveWikiLinkTarget(
         });
 
         if (byStem) {
+            const vaultPath = resolveBrowserFallbackVaultPath();
             return {
                 relativePath: byStem,
-                absolutePath: `${browserFallbackVaultPath}/${byStem}`,
+                absolutePath: `${vaultPath}/${byStem}`,
             };
         }
 
@@ -1866,9 +1917,10 @@ export async function resolveWikiLinkTarget(
             return null;
         }
 
+        const vaultPath = resolveBrowserFallbackVaultPath();
         return {
             relativePath: byAlias,
-            absolutePath: `${browserFallbackVaultPath}/${byAlias}`,
+            absolutePath: `${vaultPath}/${byAlias}`,
         };
     }
 
@@ -1913,9 +1965,10 @@ export async function resolveMediaEmbedTarget(
             return null;
         }
 
+        const vaultPath = resolveBrowserFallbackVaultPath();
         return {
             relativePath: match,
-            absolutePath: `${browserFallbackVaultPath}/${match}`,
+            absolutePath: `${vaultPath}/${match}`,
         };
     }
 

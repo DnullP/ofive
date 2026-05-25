@@ -57,8 +57,10 @@ fn query_vault_tasks_should_work_with_real_test_resources_notes_tree() {
 
     assert!(tasks.iter().any(|item| {
         item.relative_path == "task-board-e2e.md"
-            && item.content == "Verify task board flow"
-            && item.due.as_deref() == Some("2026-03-24 09:00")
+            && item.content == "Verify task board flow #board"
+            && item.start.as_deref() == Some("2026-03-24 09:00")
+            && item.end.as_deref() == Some("2026-03-25 11:00")
+            && item.recurrence.as_deref() == Some("weekly")
             && item.priority.as_deref() == Some("high")
     }));
     assert!(tasks.iter().any(|item| {

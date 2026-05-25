@@ -186,8 +186,15 @@
 
 /* 日期网格：固定 7 列，用于渲染 6 周月历。 */
 .calendar-tab__grid {
+    --calendar-task-lane-count: 0;
+    --calendar-task-bar-height: 16px;
+    --calendar-task-bar-gap: 3px;
+    --calendar-task-bar-top: 30px;
+    --calendar-day-min-height: max(82px, calc(42px + (var(--calendar-task-lane-count) * (var(--calendar-task-bar-height) + var(--calendar-task-bar-gap)))));
+    position: relative;
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-rows: repeat(6, minmax(var(--calendar-day-min-height), auto));
     gap: 0;
     flex: 0 0 auto;
     border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
@@ -196,6 +203,7 @@
 
 /* Panel 模式日期网格：减小间距以容纳窄栏。 */
 .calendar-tab--panel .calendar-tab__grid {
+    --calendar-day-min-height: 30px;
     gap: 0;
 }
 
@@ -207,7 +215,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 6px;
-    min-height: 82px;
+    min-height: var(--calendar-day-min-height);
     padding: 8px;
     border: 0;
     border-right: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
@@ -277,27 +285,89 @@
     box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent-primary) 48%, transparent);
 }
 
+/* Panel 模式含任务日期：用不同底色和下划线区分任务预算。 */
+.calendar-tab--panel .calendar-tab__day--has-tasks {
+    background: color-mix(in srgb, var(--calendar-task-accent) 18%, transparent);
+    box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--calendar-task-accent) 62%, transparent);
+}
+
 /* Panel 模式已选中日期：强化边框与阴影，作为当前浮窗锚点。 */
 .calendar-tab--panel .calendar-tab__day--selected {
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 70%, transparent);
 }
 
-/* 笔记数量徽标：显示该日期关联笔记数量。 */
-.calendar-tab__day-count {
+/* 日期预算徽标组：分别显示笔记与任务数量。 */
+.calendar-tab__day-badges {
     position: absolute;
     right: 6px;
     bottom: 6px;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* 日期预算徽标：笔记和任务使用不同颜色。 */
+.calendar-tab__day-badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 20px;
+    min-width: 18px;
     height: 18px;
-    padding: 0 6px;
+    padding: 0 5px;
     border-radius: 5px;
-    background: color-mix(in srgb, var(--accent-primary-soft) 72%, var(--bg-primary));
-    color: var(--text-primary);
     font-size: 11px;
     font-weight: 600;
+    line-height: 1;
+}
+
+.calendar-tab__day-badge--note {
+    background: color-mix(in srgb, var(--accent-primary-soft) 72%, var(--bg-primary));
+    color: var(--text-primary);
+}
+
+.calendar-tab__day-badge--task {
+    background: color-mix(in srgb, var(--calendar-task-accent) 64%, var(--bg-primary));
+    color: var(--calendar-task-foreground);
+}
+
+/* 跨日任务条覆盖层：按周分段和 lane 排布，避免重叠。 */
+.calendar-tab__task-bars {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-rows: repeat(6, minmax(0, 1fr));
+    pointer-events: none;
+}
+
+/* 单条跨日任务：横跨对应日期区间，显示任务名。 */
+.calendar-tab__task-bar {
+    align-self: start;
+    min-width: 0;
+    height: var(--calendar-task-bar-height);
+    margin:
+        calc(var(--calendar-task-bar-top) + (var(--calendar-task-lane) * (var(--calendar-task-bar-height) + var(--calendar-task-bar-gap))))
+        4px
+        0;
+    border: 1px solid color-mix(in srgb, var(--calendar-task-accent) 74%, transparent);
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--calendar-task-accent) 58%, var(--bg-primary));
+    color: var(--calendar-task-foreground);
+    box-shadow: 0 1px 3px var(--calendar-task-shadow);
+    overflow: hidden;
+}
+
+.calendar-tab__task-bar-title {
+    display: block;
+    padding: 0 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: calc(var(--calendar-task-bar-height) - 2px);
 }
 
 /* Panel 浮动笔记窗：锚定到选中日期附近显示，不再占用下半区布局。 */
@@ -462,6 +532,25 @@
     background: transparent;
     color: var(--text-primary);
     cursor: pointer;
+}
+
+/* 条目类型徽标：区分日期笔记与任务。 */
+.calendar-tab__item-kind {
+    display: inline-flex;
+    align-items: center;
+    min-height: 18px;
+    padding: 0 6px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.calendar-tab__item-kind--task {
+    background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-secondary));
+    color: var(--text-primary);
 }
 
 /* Panel 模式笔记按钮：缩小卡片内边距。 */

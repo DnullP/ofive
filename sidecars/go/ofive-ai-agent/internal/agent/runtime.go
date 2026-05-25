@@ -805,6 +805,21 @@ func streamADKContent(
 		}
 	}
 
+	return finishStreamADKContent(ctx, sessionID, bridgeConfig, agentDisplayName, &state, emit)
+}
+
+func finishStreamADKContent(
+	ctx context.Context,
+	sessionID string,
+	bridgeConfig CapabilityBridgeConfig,
+	agentDisplayName string,
+	state *streamADKState,
+	emit func(StreamChunk) error,
+) error {
+	if state == nil {
+		state = &streamADKState{}
+	}
+
 	if state.confirmation != nil {
 		if err := savePendingConfirmation(ctx, sessionID, *state.confirmation, bridgeConfig); err != nil {
 			_ = emitDebugTrace(emitDebugEvent(emit), DebugTraceEvent{
@@ -830,12 +845,25 @@ func streamADKContent(
 	}
 
 	if strings.TrimSpace(state.responseText) == "" {
-		_ = emitDebugTrace(emitDebugEvent(emit), DebugTraceEvent{
-			Level: "error",
-			Title: "ADK returned empty response",
-			Text:  "model stream completed without assistant text",
-		})
-		return fmt.Errorf("adk returned empty response")
+		if fallbackText := emptyADKToolResponseFallbackText(state.historyContentBlocks); fallbackText != "" {
+			_ = emitDebugTrace(emitDebugEvent(emit), DebugTraceEvent{
+				Level: "warn",
+				Title: "ADK returned empty response after tool activity",
+				Text:  "model stream completed with tool protocol blocks but without assistant text",
+			})
+			state.responseText = fallbackText
+			state.historyContentBlocks = mergeHistoryContentBlocks(state.historyContentBlocks, []HistoryContentBlock{{
+				Kind: "text",
+				Text: fallbackText,
+			}})
+		} else {
+			_ = emitDebugTrace(emitDebugEvent(emit), DebugTraceEvent{
+				Level: "error",
+				Title: "ADK returned empty response",
+				Text:  "model stream completed without assistant text",
+			})
+			return fmt.Errorf("adk returned empty response")
+		}
 	}
 
 	return emit(StreamChunk{
@@ -875,6 +903,12 @@ func processADKEventContent(
 		}
 	}
 
+	nextHistoryContentBlocks := buildHistoryContentBlocksFromParts(content.Parts)
+	state.historyContentBlocks = mergeHistoryContentBlocks(
+		state.historyContentBlocks,
+		nextHistoryContentBlocks,
+	)
+
 	var reasoningParts []string
 	var textParts []string
 	for _, part := range content.Parts {
@@ -888,12 +922,10 @@ func processADKEventContent(
 		textParts = append(textParts, part.Text)
 	}
 	if len(reasoningParts) == 0 && len(textParts) == 0 {
-		state.historyContentBlocks = buildHistoryContentBlocksFromParts(content.Parts)
 		return nil
 	}
 
-	state.historyContentBlocks = buildHistoryContentBlocksFromParts(content.Parts)
-	if isToolOnlyHistoryContentBlocks(state.historyContentBlocks) {
+	if isToolOnlyHistoryContentBlocks(nextHistoryContentBlocks) {
 		return nil
 	}
 
@@ -930,6 +962,83 @@ func processADKEventContent(
 		false,
 		emit,
 	)
+}
+
+func mergeHistoryContentBlocks(
+	current []HistoryContentBlock,
+	next []HistoryContentBlock,
+) []HistoryContentBlock {
+	if len(next) == 0 {
+		return current
+	}
+
+	replaceVisibleKinds := map[string]bool{}
+	for _, block := range next {
+		switch strings.TrimSpace(block.Kind) {
+		case "thinking", "text":
+			replaceVisibleKinds[strings.TrimSpace(block.Kind)] = true
+		}
+	}
+
+	merged := make([]HistoryContentBlock, 0, len(current)+len(next))
+	for _, block := range current {
+		if replaceVisibleKinds[strings.TrimSpace(block.Kind)] {
+			continue
+		}
+		merged = append(merged, block)
+	}
+
+	for _, block := range next {
+		if hasMatchingHistoryContentBlock(merged, block) {
+			continue
+		}
+		merged = append(merged, block)
+	}
+	return merged
+}
+
+func hasMatchingHistoryContentBlock(blocks []HistoryContentBlock, target HistoryContentBlock) bool {
+	for _, block := range blocks {
+		if block.Kind == target.Kind &&
+			block.Text == target.Text &&
+			block.Signature == target.Signature &&
+			block.ToolUseID == target.ToolUseID &&
+			block.ToolName == target.ToolName &&
+			block.InputJSON == target.InputJSON &&
+			block.ResultJSON == target.ResultJSON {
+			return true
+		}
+	}
+	return false
+}
+
+func emptyADKToolResponseFallbackText(blocks []HistoryContentBlock) string {
+	if !hasToolHistoryContentBlock(blocks) {
+		return ""
+	}
+	if hasToolResultHistoryContentBlock(blocks) {
+		return "工具调用已返回，但模型没有返回最终回复。请查看上方工具调用记录，或重试这条消息。"
+	}
+	return "模型发起了工具调用，但没有返回最终回复。请查看上方工具调用记录，或重试这条消息。"
+}
+
+func hasToolHistoryContentBlock(blocks []HistoryContentBlock) bool {
+	for _, block := range blocks {
+		switch strings.TrimSpace(block.Kind) {
+		case "tool-use", "tool-result":
+			return true
+		}
+	}
+	return false
+}
+
+func hasToolResultHistoryContentBlock(blocks []HistoryContentBlock) bool {
+	for _, block := range blocks {
+		if strings.TrimSpace(block.Kind) == "tool-result" {
+			return true
+		}
+	}
+	return false
 }
 
 func isToolOnlyHistoryContentBlocks(blocks []HistoryContentBlock) bool {

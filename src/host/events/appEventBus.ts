@@ -124,11 +124,15 @@ export interface EditorCommandRequestedBusEvent {
  * @field eventId - 事件唯一标识
  * @field relativePath - 变更文件的相对路径
  * @field source - 变更来源："save" 表示前端保存成功，"external" 表示外部修改
+ * @field operation - 可选变更操作；保存事件保持省略以兼容现有消费者
+ * @field oldRelativePath - rename/move 时的旧路径
  */
 export interface PersistedContentUpdatedBusEvent {
     eventId: string;
     relativePath: string;
     source: "save" | "external";
+    operation?: "renamed" | "moved" | "deleted";
+    oldRelativePath?: string;
 }
 
 /**
@@ -154,8 +158,20 @@ type AppBusEventMap = {
     "persisted.content.updated": PersistedContentUpdatedBusEvent;
 };
 
-const appEventTarget = new EventTarget();
-let frontendEventSeq = 1;
+type AppEventBusGlobalScope = typeof globalThis & {
+    __OFIVE_APP_EVENT_TARGET__?: EventTarget;
+    __OFIVE_APP_EVENT_SEQ__?: number;
+};
+
+function resolveAppEventTarget(): EventTarget {
+    const scope = globalThis as AppEventBusGlobalScope;
+    if (!scope.__OFIVE_APP_EVENT_TARGET__) {
+        scope.__OFIVE_APP_EVENT_TARGET__ = new EventTarget();
+    }
+    return scope.__OFIVE_APP_EVENT_TARGET__;
+}
+
+const appEventTarget = resolveAppEventTarget();
 
 type VaultBeforeChangeListener = (payload: VaultBeforeChangeBusEvent) => void | Promise<void>;
 const vaultBeforeChangeListeners = new Set<VaultBeforeChangeListener>();
@@ -172,8 +188,10 @@ let backendBridgeStartPromise: Promise<void> | null = null;
  * @returns 前端事件ID字符串。
  */
 function nextFrontendEventId(): string {
-    const eventId = `frontend-${frontendEventSeq}`;
-    frontendEventSeq += 1;
+    const scope = globalThis as AppEventBusGlobalScope;
+    const nextSeq = scope.__OFIVE_APP_EVENT_SEQ__ ?? 1;
+    const eventId = `frontend-${nextSeq}`;
+    scope.__OFIVE_APP_EVENT_SEQ__ = nextSeq + 1;
     return eventId;
 }
 
@@ -568,6 +586,8 @@ export function subscribeEditorCommandRequestedEvent(
 export function emitPersistedContentUpdatedEvent(payload: {
     relativePath: string;
     source: "save" | "external";
+    operation?: "renamed" | "moved" | "deleted";
+    oldRelativePath?: string;
 }): void {
     dispatchBusEvent("persisted.content.updated", {
         eventId: nextFrontendEventId(),

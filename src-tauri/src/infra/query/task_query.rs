@@ -6,10 +6,10 @@
 //! ## 语法约定
 //!
 //! 任务行需要满足如下结构：
-//! `- [ ] task content @2026-03-24 10:00 !high`
+//! `- [ ] task content start:2026-03-24 09:00 end:2026-03-24 11:00 every:weekly !high`
 //!
 //! 其中：
-//! - due / priority 元数据允许缺省，保存时由前端补齐
+//! - due / start / end / recurrence / priority 元数据允许缺省，保存时由前端补齐
 //! - 兼容旧格式 `` `{$...}` `` 以及历史尾部 `edit` 标记
 //! - 任务仍兼容 `[x]` 已完成状态
 
@@ -30,8 +30,39 @@ struct ParsedTaskLine {
     content: String,
     /// 截止时间元数据。
     due: Option<String>,
+    /// 开始时间元数据。
+    start: Option<String>,
+    /// 结束时间元数据。
+    end: Option<String>,
+    /// 周期任务元数据。
+    recurrence: Option<String>,
     /// 优先级元数据。
     priority: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TaskMetadataKind {
+    Due,
+    Start,
+    End,
+    Recurrence,
+    Priority,
+}
+
+#[derive(Debug, Default)]
+struct ParsedTaskMetadata {
+    due: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+    recurrence: Option<String>,
+    priority: Option<String>,
+}
+
+#[derive(Debug)]
+struct PopMetadataResult<'a> {
+    remaining: &'a str,
+    value: Option<String>,
+    consumed: bool,
 }
 
 /// 在指定仓库根目录下查询所有任务。
@@ -79,6 +110,9 @@ pub(crate) fn query_vault_tasks_in_root(vault_root: &Path) -> Result<Vec<VaultTa
                     checked: parsed.checked,
                     content: parsed.content,
                     due: parsed.due,
+                    start: parsed.start,
+                    end: parsed.end,
+                    recurrence: parsed.recurrence,
                     priority: parsed.priority,
                 });
             }
@@ -118,9 +152,8 @@ fn parse_task_line(line: &str) -> Option<ParsedTaskLine> {
     let (checked, mut tail) = parse_task_prefix(line)?;
     tail = strip_trailing_edit_token(tail);
 
-    let (tail_without_priority, priority) = pop_metadata_token(tail, "priority");
-    let (tail_without_due, due) = pop_metadata_token(tail_without_priority, "due");
-    let content = tail_without_due.trim();
+    let (tail_without_metadata, metadata) = pop_task_metadata_tokens(tail);
+    let content = tail_without_metadata.trim();
     if content.is_empty() {
         return None;
     }
@@ -128,8 +161,11 @@ fn parse_task_line(line: &str) -> Option<ParsedTaskLine> {
     Some(ParsedTaskLine {
         checked,
         content: content.to_string(),
-        due,
-        priority,
+        due: metadata.due,
+        start: metadata.start,
+        end: metadata.end,
+        recurrence: metadata.recurrence,
+        priority: metadata.priority,
     })
 }
 
@@ -209,25 +245,106 @@ fn strip_trailing_edit_token(input: &str) -> &str {
         .unwrap_or(trimmed)
 }
 
+/// 从行尾连续提取任务元数据 token。
+fn pop_task_metadata_tokens(mut input: &str) -> (&str, ParsedTaskMetadata) {
+    let mut metadata = ParsedTaskMetadata::default();
+    let pop_order = [
+        TaskMetadataKind::Priority,
+        TaskMetadataKind::Recurrence,
+        TaskMetadataKind::End,
+        TaskMetadataKind::Start,
+        TaskMetadataKind::Due,
+    ];
+
+    loop {
+        let mut consumed = false;
+        for kind in pop_order {
+            if metadata_has_value(&metadata, kind) {
+                continue;
+            }
+
+            let result = pop_metadata_token(input, kind);
+            if !result.consumed {
+                continue;
+            }
+
+            input = result.remaining;
+            set_metadata_value(&mut metadata, kind, result.value);
+            consumed = true;
+            break;
+        }
+
+        if !consumed {
+            break;
+        }
+    }
+
+    (input, metadata)
+}
+
+fn metadata_has_value(metadata: &ParsedTaskMetadata, kind: TaskMetadataKind) -> bool {
+    match kind {
+        TaskMetadataKind::Due => metadata.due.is_some(),
+        TaskMetadataKind::Start => metadata.start.is_some(),
+        TaskMetadataKind::End => metadata.end.is_some(),
+        TaskMetadataKind::Recurrence => metadata.recurrence.is_some(),
+        TaskMetadataKind::Priority => metadata.priority.is_some(),
+    }
+}
+
+fn set_metadata_value(
+    metadata: &mut ParsedTaskMetadata,
+    kind: TaskMetadataKind,
+    value: Option<String>,
+) {
+    match kind {
+        TaskMetadataKind::Due => metadata.due = value,
+        TaskMetadataKind::Start => metadata.start = value,
+        TaskMetadataKind::End => metadata.end = value,
+        TaskMetadataKind::Recurrence => metadata.recurrence = value,
+        TaskMetadataKind::Priority => metadata.priority = value,
+    }
+}
+
 /// 从行尾提取一个简写或旧式元数据 token。
-fn pop_metadata_token<'a>(input: &'a str, kind: &str) -> (&'a str, Option<String>) {
+fn pop_metadata_token<'a>(input: &'a str, kind: TaskMetadataKind) -> PopMetadataResult<'a> {
     let trimmed = input.trim_end();
     if let Some(result) = pop_short_metadata_token(trimmed, kind) {
         return result;
     }
 
     if !trimmed.ends_with('`') || !trimmed.ends_with("}`") {
-        return (trimmed, None);
+        return PopMetadataResult {
+            remaining: trimmed,
+            value: None,
+            consumed: false,
+        };
+    }
+
+    if !matches!(kind, TaskMetadataKind::Due | TaskMetadataKind::Priority) {
+        return PopMetadataResult {
+            remaining: trimmed,
+            value: None,
+            consumed: false,
+        };
     }
 
     let Some(start_index) = trimmed.rfind("`{$") else {
-        return (trimmed, None);
+        return PopMetadataResult {
+            remaining: trimmed,
+            value: None,
+            consumed: false,
+        };
     };
 
     if start_index > 0 {
         let preceding = trimmed[..start_index].chars().next_back();
         if !preceding.is_some_and(char::is_whitespace) {
-            return (trimmed, None);
+            return PopMetadataResult {
+                remaining: trimmed,
+                value: None,
+                consumed: false,
+            };
         }
     }
 
@@ -236,47 +353,106 @@ fn pop_metadata_token<'a>(input: &'a str, kind: &str) -> (&'a str, Option<String
     let remaining = trimmed[..start_index].trim_end();
 
     if value.is_empty() {
-        return (remaining, None);
+        return PopMetadataResult {
+            remaining,
+            value: None,
+            consumed: true,
+        };
     }
 
-    (remaining, Some(value.to_string()))
+    PopMetadataResult {
+        remaining,
+        value: Some(value.to_string()),
+        consumed: true,
+    }
 }
 
-/// 从行尾提取简写元数据 token，例如 `@2026-03-24 10:00` 或 `!high`。
-fn pop_short_metadata_token<'a>(input: &'a str, kind: &str) -> Option<(&'a str, Option<String>)> {
+/// 从行尾提取简写元数据 token，例如 `@2026-03-24 10:00`、`start:2026-03-24 10:00` 或 `!high`。
+fn pop_short_metadata_token<'a>(
+    input: &'a str,
+    kind: TaskMetadataKind,
+) -> Option<PopMetadataResult<'a>> {
     let trimmed = input.trim_end();
     match kind {
-        "priority" => {
+        TaskMetadataKind::Priority => {
             let (remaining, token) = split_last_whitespace_token(trimmed)?;
             let value = token
                 .strip_prefix('!')
                 .map(str::trim)
-                .filter(|value| matches!(*value, "high" | "medium" | "low"))?;
+                .map(str::to_lowercase)
+                .filter(|value| matches!(value.as_str(), "high" | "medium" | "low"))?;
 
-            Some((remaining, Some(value.to_string())))
+            Some(PopMetadataResult {
+                remaining,
+                value: Some(value),
+                consumed: true,
+            })
         }
-        "due" => {
-            let (remaining, last_token) = split_last_whitespace_token(trimmed)?;
-
-            if let Some(value) = last_token
-                .strip_prefix('@')
-                .filter(|value| is_short_due_value(value))
-            {
-                return Some((remaining, Some(value.to_string())));
-            }
-
-            if is_time_token(last_token) {
-                let (remaining_without_date, date_token) = split_last_whitespace_token(remaining)?;
-                let date_value = date_token.strip_prefix('@')?;
-                let candidate = format!("{date_value} {last_token}");
-                if is_short_due_value(&candidate) {
-                    return Some((remaining_without_date, Some(candidate)));
-                }
-            }
-
-            None
+        TaskMetadataKind::Recurrence => pop_recurrence_metadata_token(trimmed),
+        TaskMetadataKind::Due | TaskMetadataKind::Start | TaskMetadataKind::End => {
+            pop_date_time_metadata_token(trimmed, kind)
         }
-        _ => None,
+    }
+}
+
+fn pop_recurrence_metadata_token(input: &str) -> Option<PopMetadataResult<'_>> {
+    let (remaining, token) = split_last_whitespace_token(input)?;
+    let normalized_token = token.to_lowercase();
+    let value = normalized_token
+        .strip_prefix("every:")
+        .or_else(|| normalized_token.strip_prefix("repeat:"))
+        .or_else(|| normalized_token.strip_prefix("recurrence:"))
+        .map(str::trim)
+        .filter(|value| is_recurrence_token(value))?;
+
+    Some(PopMetadataResult {
+        remaining,
+        value: Some(value.to_string()),
+        consumed: true,
+    })
+}
+
+fn pop_date_time_metadata_token(
+    input: &str,
+    kind: TaskMetadataKind,
+) -> Option<PopMetadataResult<'_>> {
+    let (remaining, last_token) = split_last_whitespace_token(input)?;
+    let prefix = date_time_metadata_prefix(kind)?;
+
+    if let Some(value) = last_token
+        .strip_prefix(prefix)
+        .map(|value| value.replace('T', " "))
+        .filter(|value| is_short_date_time_value(value))
+    {
+        return Some(PopMetadataResult {
+            remaining,
+            value: Some(value),
+            consumed: true,
+        });
+    }
+
+    if is_time_token(last_token) {
+        let (remaining_without_date, date_token) = split_last_whitespace_token(remaining)?;
+        let date_value = date_token.strip_prefix(prefix)?;
+        let candidate = format!("{date_value} {last_token}");
+        if is_short_date_time_value(&candidate) {
+            return Some(PopMetadataResult {
+                remaining: remaining_without_date,
+                value: Some(candidate),
+                consumed: true,
+            });
+        }
+    }
+
+    None
+}
+
+fn date_time_metadata_prefix(kind: TaskMetadataKind) -> Option<&'static str> {
+    match kind {
+        TaskMetadataKind::Due => Some("@"),
+        TaskMetadataKind::Start => Some("start:"),
+        TaskMetadataKind::End => Some("end:"),
+        TaskMetadataKind::Recurrence | TaskMetadataKind::Priority => None,
     }
 }
 
@@ -304,7 +480,7 @@ fn split_last_whitespace_token(input: &str) -> Option<(&str, &str)> {
     Some(("", trimmed))
 }
 
-fn is_short_due_value(value: &str) -> bool {
+fn is_short_date_time_value(value: &str) -> bool {
     let mut parts = value.split(' ');
     let Some(date_part) = parts.next() else {
         return false;
@@ -317,6 +493,13 @@ fn is_short_due_value(value: &str) -> bool {
         None => true,
         Some(time_part) => parts.next().is_none() && is_time_token(time_part),
     }
+}
+
+fn is_recurrence_token(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
 fn is_date_token(value: &str) -> bool {
@@ -379,6 +562,20 @@ mod tests {
         assert_eq!(parsed.content, "Finish quarterly review");
         assert_eq!(parsed.due.as_deref(), Some("2026-03-24 09:30"));
         assert_eq!(parsed.priority.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn parse_task_line_should_extract_schedule_and_recurrence_metadata() {
+        let parsed = parse_task_line(
+            "- [ ] Review launch window start:2026-03-24 09:00 end:2026-03-25 11:30 every:weekly !medium",
+        )
+        .expect("应成功解析任务排期元数据");
+
+        assert_eq!(parsed.content, "Review launch window");
+        assert_eq!(parsed.start.as_deref(), Some("2026-03-24 09:00"));
+        assert_eq!(parsed.end.as_deref(), Some("2026-03-25 11:30"));
+        assert_eq!(parsed.recurrence.as_deref(), Some("weekly"));
+        assert_eq!(parsed.priority.as_deref(), Some("medium"));
     }
 
     #[test]

@@ -38,7 +38,7 @@ async function waitForMockLayoutReady(page: Page): Promise<void> {
  */
 async function enableVimMode(page: Page): Promise<void> {
     await page.evaluate(async () => {
-        const module = await import("/src/host/store/configStore.ts");
+        const module = await import("/src/host/config/configStore.ts");
         await module.updateVimModeEnabled(true);
     });
 }

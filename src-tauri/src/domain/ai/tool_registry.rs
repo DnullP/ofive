@@ -122,4 +122,23 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn ai_tool_catalog_should_include_task_management_capabilities() {
+        let registry = build_builtin_capability_registry();
+        let tools = build_ai_tool_catalog(&registry);
+        let list_tasks = tools
+            .iter()
+            .find(|item| item.capability_id == "vault.list_tasks")
+            .expect("AI tool catalog should include task list capability");
+        let update_task = tools
+            .iter()
+            .find(|item| item.capability_id == "vault.update_task")
+            .expect("AI tool catalog should include task update capability");
+
+        assert_eq!(list_tasks.name, "vault_list_tasks");
+        assert!(!list_tasks.requires_confirmation);
+        assert_eq!(update_task.name, "vault_update_task");
+        assert!(update_task.requires_confirmation);
+    }
 }

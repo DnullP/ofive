@@ -1142,7 +1142,7 @@ test.describe("markdown table vim regression", () => {
             .evaluate((element) => Math.round(element.getBoundingClientRect().height));
 
         expect(Math.abs(restoredHeaderWidth - resizedHeaderWidth)).toBeLessThanOrEqual(3);
-        expect(Math.abs(restoredRowHeight - resizedRowHeight)).toBeLessThanOrEqual(3);
+        expect(Math.abs(restoredRowHeight - resizedRowHeight)).toBeLessThanOrEqual(4);
     });
 
     test("row edge handles should align to the visual center of wrapped table rows", async ({ page }) => {

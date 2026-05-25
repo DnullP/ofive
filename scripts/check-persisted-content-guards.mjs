@@ -6,27 +6,11 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { persistedContentAllowedFilesBySymbol } from "./code-simplification-baseline.config.mjs";
+
 const repoRoot = process.cwd();
 const sourceRoot = path.join(repoRoot, "src");
 const sourceExtensions = new Set([".ts", ".tsx"]);
-
-const allowedFilesBySymbol = {
-    saveVaultMarkdownFile: new Set([
-        "src/api/vaultApi.ts",
-        "src/host/editor/autoSaveService.ts",
-        "src/host/editor/persistedMarkdownContentSync.ts",
-    ]),
-    saveVaultCanvasFile: new Set([
-        "src/api/vaultApi.ts",
-        "src/host/editor/persistedMarkdownContentSync.ts",
-    ]),
-    emitPersistedContentUpdatedEvent: new Set([
-        "src/host/events/appEventBus.ts",
-        "src/host/editor/autoSaveService.ts",
-        "src/host/editor/persistedMarkdownContentSync.ts",
-        "src/plugins/vault-fs-sync/vaultFsSyncPlugin.ts",
-    ]),
-};
 
 function toPosixPath(inputPath) {
     return inputPath.split(path.sep).join("/");
@@ -55,6 +39,17 @@ function shouldIgnoreFile(relativePath) {
         relativePath.startsWith("src/test-support/");
 }
 
+function stripCodeComments(content) {
+    return content
+        .replaceAll(/\/\*[\s\S]*?\*\//g, "")
+        .replaceAll(/^\s*\/\/.*$/gm, "");
+}
+
+function containsSymbol(content, symbol) {
+    const pattern = new RegExp(`\\b${symbol}\\b`);
+    return pattern.test(content);
+}
+
 const violations = [];
 for (const filePath of listSourceFiles(sourceRoot)) {
     const relativePath = toPosixPath(path.relative(repoRoot, filePath));
@@ -62,9 +57,9 @@ for (const filePath of listSourceFiles(sourceRoot)) {
         continue;
     }
 
-    const content = readFileSync(filePath, "utf8");
-    for (const [symbol, allowedFiles] of Object.entries(allowedFilesBySymbol)) {
-        if (!content.includes(symbol) || allowedFiles.has(relativePath)) {
+    const content = stripCodeComments(readFileSync(filePath, "utf8"));
+    for (const [symbol, allowedFiles] of Object.entries(persistedContentAllowedFilesBySymbol)) {
+        if (!containsSymbol(content, symbol) || allowedFiles.has(relativePath)) {
             continue;
         }
 
@@ -81,7 +76,7 @@ if (violations.length > 0) {
         console.error(`  - ${violation.relativePath}: ${violation.symbol}`);
     });
     console.error("");
-    console.error("Use src/host/editor/persistedMarkdownContentSync.ts so saves, editor snapshots, tab params, autosave state, and persisted.content.updated stay synchronized.");
+    console.error("Keep saves, renames, moves, deletes, editor snapshots, tab params, autosave state, and persisted.content.updated behind governed mutation services.");
     process.exit(1);
 }
 

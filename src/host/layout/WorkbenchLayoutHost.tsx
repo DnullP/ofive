@@ -607,6 +607,7 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
 }): ReactNode {
     const { Component, params, api, workbenchApiRef, decorateTabDefinition, showNavigationControls } = props;
     const navigationHistory = readTabNavigationHistory(params);
+    const shouldShowNavigationControls = showNavigationControls || navigationHistory !== null;
     const canNavigateBack = Boolean(navigationHistory && navigationHistory.index > 0);
     const canNavigateForward = Boolean(
         navigationHistory && navigationHistory.index < navigationHistory.entries.length - 1,
@@ -677,7 +678,7 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
 
     return (
         <div className="workbench-layout-v2__tab-shell">
-            {showNavigationControls ? (
+            {shouldShowNavigationControls ? (
                 <div className="workbench-layout-v2__tab-navigation" aria-label={i18n.t("workbenchLayout.tabNavigation")}>
                     <button
                         type="button"

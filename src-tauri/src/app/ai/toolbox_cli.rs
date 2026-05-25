@@ -227,4 +227,51 @@ mod tests {
 
         let _ = fs::remove_dir_all(root);
     }
+
+    #[test]
+    fn run_capability_call_should_update_task() {
+        let root = create_test_root();
+        let raw_line = "- [ ] Review plan start:2026-03-24 09:00 !high";
+        write_markdown_file(&root, "Tasks/task.md", &format!("# Tasks\n{raw_line}\n"));
+
+        let request = json!({
+            "schemaVersion": "2026-03-17",
+            "capabilityId": "vault.update_task",
+            "input": {
+                "relativePath": "Tasks/task.md",
+                "line": 2,
+                "rawLine": raw_line,
+                "end": "2026-03-24 11:00",
+                "recurrence": "weekly-tue",
+                "priority": "medium"
+            },
+            "traceId": null,
+            "sessionId": null,
+        })
+        .to_string();
+        let mut stdin = Cursor::new(request.into_bytes());
+        let mut stdout = Vec::new();
+
+        run(
+            vec![
+                CAPABILITY_CALL_COMMAND.into(),
+                VAULT_ROOT_ARG.into(),
+                root.as_os_str().to_owned(),
+            ],
+            &mut stdin,
+            &mut stdout,
+        )
+        .expect("capability-call 应执行成功");
+
+        let output = String::from_utf8(stdout).expect("输出应是有效 UTF-8");
+        let payload: serde_json::Value = serde_json::from_str(&output).expect("输出应是有效 JSON");
+        assert_eq!(payload["success"], true);
+        assert_eq!(payload["capabilityId"], "vault.update_task");
+        assert_eq!(
+            payload["output"]["updatedLine"],
+            "- [ ] Review plan start:2026-03-24 09:00 end:2026-03-24 11:00 every:weekly-tue !medium"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

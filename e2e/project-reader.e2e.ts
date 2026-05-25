@@ -81,9 +81,29 @@ async function resolveLocatorPoint(page: Page, locator: Locator, missingBoxMessa
     }
 
     return {
-        x: box.x + Math.min(box.width - 1, 4),
+        x: box.x + box.width / 2,
         y: box.y + box.height / 2,
     };
+}
+
+async function hoverTokenWithModifier(page: Page, locator: Locator, modifier: "Meta" | "Control"): Promise<void> {
+    await page.keyboard.down(modifier);
+    try {
+        await expect.poll(async () => {
+            const { x, y } = await resolveLocatorPoint(
+                page,
+                locator,
+                "Project reader token is missing a bounding box.",
+            );
+            await page.mouse.move(x, y);
+            const className = await locator.evaluate((element) => element.className);
+            return typeof className === "string"
+                ? className.includes("project-reader-code-token--hovered")
+                : false;
+        }).toBe(true);
+    } finally {
+        await page.keyboard.up(modifier);
+    }
 }
 
 async function clickTokenWithModifier(page: Page, locator: Locator, modifier: "Meta" | "Control"): Promise<void> {
@@ -205,14 +225,7 @@ test.describe("project reader", () => {
         const appRuntimeToken = () => codeTab.locator(".project-reader-code-token", { hasText: "AppRuntime" }).first();
         const runtimeToken = appRuntimeToken();
         await expect(runtimeToken).toBeVisible();
-        const hoverPoint = await resolveLocatorPoint(page, runtimeToken, "Project reader runtime token is missing a bounding box.");
-        await page.keyboard.down("Meta");
-        try {
-            await page.mouse.move(hoverPoint.x, hoverPoint.y);
-            await expect(runtimeToken).toHaveClass(/project-reader-code-token--hovered/);
-        } finally {
-            await page.keyboard.up("Meta");
-        }
+        await hoverTokenWithModifier(page, runtimeToken, "Meta");
 
         await clickTokenWithModifier(page, appRuntimeToken(), "Meta");
 

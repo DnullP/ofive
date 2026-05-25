@@ -112,11 +112,12 @@ if is_byte_offset_excluded(match_start, &excluded) {
 
 ## 代码规范
 
-详见 `.github/instructions/` 目录下的规范文件：
+详见 `docs/` 与 `docs/wiki/` 下的项目文档：
 
-- `SPEC.instructions.md` — Rust 后端代码规范
-- `SPEC-FRONTEND.instructions.md` — 前端代码规范
-- `integration_test.instructions.md` — 集成测试要求
+- `docs/ai-development-workflow.md` — AI 全流程开发与治理工作流
+- `docs/testing-handbook.md` — 测试体系与测试手册
+- `docs/wiki/ofive-code-simplification-governance.md` — 代码简化、硬门禁与旧兼容入口清理
+- `docs/wiki/ofive-backend-module-platform.md` — 后端模块平台治理
 
 核心要点：
 - 遵循"代码即文档"原则，所有模块/函数/结构体必须有文档注释

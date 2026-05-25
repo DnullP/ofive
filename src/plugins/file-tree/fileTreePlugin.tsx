@@ -30,11 +30,13 @@ import { FilePlus2, FolderOpen, FolderPlus, SquarePen } from "lucide-react";
 import {
     copyVaultEntry,
     deleteVaultBinaryFile,
-    deleteVaultCanvasFile,
     deleteVaultDirectory,
-    deleteVaultMarkdownFile,
 } from "../../api/vaultApi";
 import { registerCommands } from "../../host/commands/commandSystem";
+import {
+    deletePersistedCanvasFile,
+    deletePersistedMarkdownFile,
+} from "../../host/vault/vaultMutationService";
 import i18n from "../../i18n";
 import { VaultPanel } from "./panel/VaultPanel";
 import { registerActivity } from "../../host/registry/activityRegistry";
@@ -237,9 +239,9 @@ export function activatePlugin(): () => void {
                     if (selected.isDir) {
                         await deleteVaultDirectory(selected.path);
                     } else if (isCanvasPath(selected.path)) {
-                        await deleteVaultCanvasFile(selected.path);
+                        await deletePersistedCanvasFile(selected.path);
                     } else if (isMarkdownPath(selected.path)) {
-                        await deleteVaultMarkdownFile(selected.path);
+                        await deletePersistedMarkdownFile(selected.path);
                     } else {
                         await deleteVaultBinaryFile(selected.path);
                     }

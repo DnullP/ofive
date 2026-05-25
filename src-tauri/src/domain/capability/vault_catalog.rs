@@ -16,6 +16,7 @@ const CAPABILITY_API_VERSION: &str = "2026-03-17";
 pub(crate) fn vault_capability_descriptors() -> Vec<CapabilityDescriptor> {
     vec![
         read_markdown_file_capability(),
+        list_tasks_capability(),
         search_markdown_capability(),
         search_canvas_capability(),
         resolve_wikilink_target_capability(),
@@ -29,6 +30,7 @@ pub(crate) fn vault_capability_descriptors() -> Vec<CapabilityDescriptor> {
         create_markdown_file_capability(),
         save_markdown_file_capability(),
         apply_markdown_patch_capability(),
+        update_task_capability(),
         save_canvas_document_capability(),
         rename_markdown_file_capability(),
         delete_markdown_file_capability(),
@@ -36,6 +38,59 @@ pub(crate) fn vault_capability_descriptors() -> Vec<CapabilityDescriptor> {
         create_agent_skill_capability(),
         write_agent_skill_file_capability(),
     ]
+}
+
+/// 构建“列出任务规划”能力描述。
+fn list_tasks_capability() -> CapabilityDescriptor {
+    CapabilityDescriptor {
+        id: "vault.list_tasks".to_string(),
+        api_version: CAPABILITY_API_VERSION.to_string(),
+        display_name: "List Tasks".to_string(),
+        description: "List task-board tasks in the current vault, including their exact relativePath, line, rawLine, schedule metadata, recurrence, status, and priority. Use this before updating a task so follow-up writes can target the exact current task line.".to_string(),
+        kind: CapabilityKind::Read,
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "relativePath": {
+                    "type": "string",
+                    "description": "Optional markdown file path to limit results to one note."
+                },
+                "includeCompleted": {
+                    "type": "boolean",
+                    "description": "When true, include checked/completed tasks. Defaults to false."
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500,
+                    "description": "Maximum tasks to return. Defaults to 200."
+                }
+            }
+        }),
+        output_schema: json!({
+            "type": "object",
+            "required": ["tasks", "totalCount", "returnedCount"],
+            "properties": {
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["relativePath", "title", "line", "rawLine", "checked", "content"]
+                    }
+                },
+                "totalCount": {"type": "integer"},
+                "returnedCount": {"type": "integer"}
+            }
+        }),
+        risk_level: CapabilityRiskLevel::Low,
+        requires_confirmation: false,
+        required_permissions: vec!["vault.read".to_string()],
+        supported_consumers: vec![
+            CapabilityConsumer::Frontend,
+            CapabilityConsumer::AiTool,
+            CapabilityConsumer::Sidecar,
+        ],
+    }
 }
 
 /// 构建“搜索 Canvas 文件”能力描述。
@@ -552,6 +607,81 @@ fn apply_markdown_patch_capability() -> CapabilityDescriptor {
             "properties": {
                 "relativePath": {"type": "string"},
                 "appliedBlockCount": {"type": "integer", "minimum": 1}
+            }
+        }),
+        risk_level: CapabilityRiskLevel::Medium,
+        requires_confirmation: true,
+        required_permissions: vec!["vault.write".to_string()],
+        supported_consumers: vec![
+            CapabilityConsumer::AiTool,
+            CapabilityConsumer::Sidecar,
+        ],
+    }
+}
+
+/// 构建“更新任务规划”能力描述。
+fn update_task_capability() -> CapabilityDescriptor {
+    CapabilityDescriptor {
+        id: "vault.update_task".to_string(),
+        api_version: CAPABILITY_API_VERSION.to_string(),
+        display_name: "Update Task".to_string(),
+        description: "Update one existing task-board task line in the current vault. Call vault.list_tasks first and pass the returned relativePath, line, and rawLine to avoid editing stale or guessed content. This tool can update content, checked status, start, end, recurrence, and priority; omit a field to keep it, or pass null for start/end/recurrence/priority to clear it. Legacy due metadata is removed on save; use end to represent deadlines.".to_string(),
+        kind: CapabilityKind::Write,
+        input_schema: json!({
+            "type": "object",
+            "required": ["relativePath", "line", "rawLine"],
+            "properties": {
+                "relativePath": {
+                    "type": "string",
+                    "description": "Markdown file path returned by vault.list_tasks."
+                },
+                "line": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "1-based line number returned by vault.list_tasks."
+                },
+                "rawLine": {
+                    "type": "string",
+                    "description": "Exact raw task line returned by vault.list_tasks."
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Optional replacement task title/body, without metadata tokens."
+                },
+                "checked": {
+                    "type": "boolean",
+                    "description": "Optional completion status."
+                },
+                "start": {
+                    "type": ["string", "null"],
+                    "description": "Optional start time, e.g. 2026-03-24 or 2026-03-24 09:00. Null clears it."
+                },
+                "end": {
+                    "type": ["string", "null"],
+                    "description": "Optional end time/deadline, e.g. 2026-03-25 18:00. Null clears it."
+                },
+                "recurrence": {
+                    "type": ["string", "null"],
+                    "description": "Optional recurrence token such as daily, weekly-tue, monthly-24, yearly, 2w. Null clears it."
+                },
+                "priority": {
+                    "type": ["string", "null"],
+                    "enum": ["high", "medium", "low", null],
+                    "description": "Optional priority. Null clears it."
+                }
+            }
+        }),
+        output_schema: json!({
+            "type": "object",
+            "required": ["relativePath", "line", "updatedLine", "task"],
+            "properties": {
+                "relativePath": {"type": "string"},
+                "line": {"type": "integer"},
+                "updatedLine": {"type": "string"},
+                "task": {
+                    "type": "object",
+                    "required": ["relativePath", "title", "line", "rawLine", "checked", "content"]
+                }
             }
         }),
         risk_level: CapabilityRiskLevel::Medium,

@@ -27,6 +27,7 @@ related:
 - [[ofive-maintainer-dashboard|维护者管理视图]]
 - [[ofive-architecture-overview|架构总览]]
 - [[ofive-feature-owner-map|功能 Owner 地图]]
+- [[ofive-code-simplification-governance|代码简化与门禁治理]]
 - [[ofive-wiki-authoring-guide|Wiki 维护规范]]
 
 ## 专项文档

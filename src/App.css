@@ -142,6 +142,9 @@
   --error-color: #e74c3c;
   --text-warning: #e2a33e;
   --bg-warning: rgba(226, 163, 62, 0.08);
+  --calendar-task-accent: #2a8f74;
+  --calendar-task-foreground: #f6fffb;
+  --calendar-task-shadow: rgba(0, 0, 0, 0.18);
   --overlay-shadow-floating: 0 4px 16px rgba(0, 0, 0, 0.12);
   --overlay-shadow-strong: 0 12px 32px rgba(0, 0, 0, 0.18);
   --floating-surface-bg: color-mix(in srgb, var(--bg-secondary) 92%, transparent);

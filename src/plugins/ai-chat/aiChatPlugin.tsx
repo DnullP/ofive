@@ -72,8 +72,6 @@ import {
 } from "./aiChatShared";
 import { resolveParentDirectory } from "../markdown-codemirror/editor/pathUtils";
 import {
-    deleteVaultCanvasFile,
-    deleteVaultMarkdownFile,
     readVaultCanvasFile,
     readVaultMarkdownFile,
     resolveWikiLinkTarget,
@@ -136,6 +134,7 @@ import {
 import { registerSettingsItem, registerSettingsSection } from "../../host/settings/settingsRegistry";
 import { registerPluginOwnedStore } from "../../host/store/storeRegistry";
 import { useVaultState } from "../../host/vault/vaultStore";
+import { deletePersistedCanvasFile, deletePersistedMarkdownFile } from "../../host/vault/vaultMutationService";
 import { useActiveEditor } from "../../host/editor/activeEditorStore";
 import {
     notifyPersistedContentSaved,
@@ -1924,8 +1923,8 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                     relativePath,
                     content,
                 }),
-                deleteMarkdownFile: deleteVaultMarkdownFile,
-                deleteCanvasFile: deleteVaultCanvasFile,
+                deleteMarkdownFile: deletePersistedMarkdownFile,
+                deleteCanvasFile: deletePersistedCanvasFile,
             });
         }
 

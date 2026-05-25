@@ -221,7 +221,20 @@ interface ConfigChangedEventDetail {
     state: ConfigState;
 }
 
-const configEventTarget = new EventTarget();
+type ConfigStoreGlobalScope = typeof globalThis & {
+    __OFIVE_CONFIG_EVENT_TARGET__?: EventTarget;
+    __OFIVE_CONFIG_STORE__?: ConfigStore;
+};
+
+function resolveConfigEventTarget(): EventTarget {
+    const scope = globalThis as ConfigStoreGlobalScope;
+    if (!scope.__OFIVE_CONFIG_EVENT_TARGET__) {
+        scope.__OFIVE_CONFIG_EVENT_TARGET__ = new EventTarget();
+    }
+    return scope.__OFIVE_CONFIG_EVENT_TARGET__;
+}
+
+const configEventTarget = resolveConfigEventTarget();
 
 /**
  * @constant DEFAULT_FEATURE_SETTINGS
@@ -700,6 +713,7 @@ class ConfigStore {
     private activeVaultUnlisten: (() => void) | null = null;
     private latestHandledEventId: string | null = null;
     private backendConfigWriteQueue: Promise<unknown> = Promise.resolve();
+    private activeLoad: { vaultPath: string; promise: Promise<void> } | null = null;
 
     subscribe(listener: () => void): () => void {
         this.listeners.add(listener);
@@ -748,10 +762,36 @@ class ConfigStore {
             return;
         }
 
-        if (this.state.loadedVaultPath === vaultPath && !this.state.error) {
+        if (
+            this.state.loadedVaultPath === vaultPath
+            && this.state.backendConfig
+            && !this.state.isLoading
+            && !this.state.error
+        ) {
             return;
         }
 
+        if (this.activeLoad?.vaultPath === vaultPath) {
+            await this.activeLoad.promise;
+            return;
+        }
+
+        const loadPromise = this.loadBackendConfigForVault(vaultPath);
+        this.activeLoad = {
+            vaultPath,
+            promise: loadPromise,
+        };
+
+        try {
+            await loadPromise;
+        } finally {
+            if (this.activeLoad?.promise === loadPromise) {
+                this.activeLoad = null;
+            }
+        }
+    }
+
+    private async loadBackendConfigForVault(vaultPath: string): Promise<void> {
         this.state = {
             ...this.state,
             loadedVaultPath: vaultPath,
@@ -861,7 +901,7 @@ class ConfigStore {
     }
 
     async setSearchEnabled(nextValue: boolean): Promise<void> {
-        const currentConfig = this.state.backendConfig;
+        const currentConfig = await this.loadBackendConfigSnapshotIfMissing("searchEnabled");
         if (!currentConfig) {
             return;
         }
@@ -908,7 +948,7 @@ class ConfigStore {
     }
 
     async setVimModeEnabled(nextValue: boolean): Promise<void> {
-        const currentConfig = this.state.backendConfig;
+        const currentConfig = await this.loadBackendConfigSnapshotIfMissing("vimModeEnabled");
         if (!currentConfig) {
             return;
         }
@@ -979,7 +1019,7 @@ class ConfigStore {
         key: K,
         nextValue: FeatureSettings[K],
     ): Promise<void> {
-        const currentConfig = this.state.backendConfig;
+        const currentConfig = await this.loadBackendConfigSnapshotIfMissing(`feature:${String(key)}`);
         if (!currentConfig) {
             console.warn("[config-store] setFeatureSetting: no backendConfig loaded", { key });
             return;
@@ -1023,6 +1063,42 @@ class ConfigStore {
             };
             this.emit();
             console.error("[config-store] save feature setting failed", { key, nextValue, message });
+        }
+    }
+
+    private async loadBackendConfigSnapshotIfMissing(logLabel: string): Promise<VaultConfig | null> {
+        if (this.activeLoad) {
+            await this.activeLoad.promise;
+        }
+
+        if (this.state.backendConfig) {
+            return this.state.backendConfig;
+        }
+
+        try {
+            const rawConfig = await getCurrentVaultConfig();
+            const { nextConfig, featureSettings } = normalizeBackendConfig(rawConfig);
+            this.state = {
+                ...this.state,
+                backendConfig: nextConfig,
+                featureSettings,
+                error: null,
+            };
+            this.emit();
+            console.info("[config-store] loaded missing backendConfig snapshot", { logLabel });
+            return nextConfig;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : i18n.t("store.loadConfigFailed");
+            this.state = {
+                ...this.state,
+                error: message,
+            };
+            this.emit();
+            console.warn("[config-store] failed to load missing backendConfig snapshot", {
+                logLabel,
+                message,
+            });
+            return null;
         }
     }
 
@@ -1137,7 +1213,15 @@ class ConfigStore {
     }
 }
 
-const configStore = new ConfigStore();
+function resolveConfigStore(): ConfigStore {
+    const scope = globalThis as ConfigStoreGlobalScope;
+    if (!scope.__OFIVE_CONFIG_STORE__) {
+        scope.__OFIVE_CONFIG_STORE__ = new ConfigStore();
+    }
+    return scope.__OFIVE_CONFIG_STORE__;
+}
+
+const configStore = resolveConfigStore();
 
 /**
  * @function subscribeConfigChanges

@@ -4,8 +4,8 @@
 //! 该模块让 Vault capability 的输入解析、执行分发与输出序列化
 //! 保持在 Vault 自己的边界内，而不是集中堆在公共执行器中。
 
-use serde::Deserialize;
 use serde::Serialize;
+use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
 use crate::app::vault::{
@@ -13,7 +13,7 @@ use crate::app::vault::{
     vault_app_service,
 };
 use crate::domain::capability::{CapabilityExecutionContext, CapabilityExecutionRequest};
-use crate::shared::vault_contracts::VaultCanvasDocument;
+use crate::shared::vault_contracts::{VaultCanvasDocument, VaultTaskItem};
 
 /// 尝试执行一条由 Vault 模块负责的平台能力请求。
 ///
@@ -27,6 +27,7 @@ pub(crate) fn execute_vault_capability(
         "vault.read_markdown_file" => {
             Some(execute_read_markdown_file(request.input.clone(), context))
         }
+        "vault.list_tasks" => Some(execute_list_tasks(request.input.clone(), context)),
         "vault.search_markdown_files" => Some(execute_search_markdown_files(
             request.input.clone(),
             context,
@@ -72,6 +73,7 @@ pub(crate) fn execute_vault_capability(
         "vault.apply_markdown_patch" => {
             Some(execute_apply_markdown_patch(request.input.clone(), context))
         }
+        "vault.update_task" => Some(execute_update_task(request.input.clone(), context)),
         "vault.save_canvas_document" => {
             Some(execute_save_canvas_document(request.input.clone(), context))
         }
@@ -98,6 +100,23 @@ struct SearchMarkdownFilesInput {
     #[serde(default)]
     query: String,
     limit: Option<usize>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ListTasksInput {
+    relative_path: Option<String>,
+    #[serde(default)]
+    include_completed: bool,
+    limit: Option<usize>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ListTasksOutput {
+    tasks: Vec<VaultTaskItem>,
+    total_count: usize,
+    returned_count: usize,
 }
 
 #[derive(Deserialize)]
@@ -159,6 +178,79 @@ struct ApplyMarkdownPatchInput {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct UpdateTaskInput {
+    relative_path: String,
+    line: usize,
+    raw_line: String,
+    content: Option<String>,
+    checked: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_task_metadata_update_field")]
+    start: TaskMetadataUpdateField,
+    #[serde(default, deserialize_with = "deserialize_task_metadata_update_field")]
+    end: TaskMetadataUpdateField,
+    #[serde(default, deserialize_with = "deserialize_task_metadata_update_field")]
+    recurrence: TaskMetadataUpdateField,
+    #[serde(default, deserialize_with = "deserialize_task_metadata_update_field")]
+    priority: TaskMetadataUpdateField,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateTaskOutput {
+    relative_path: String,
+    line: usize,
+    updated_line: String,
+    task: VaultTaskItem,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedTaskLineForUpdate {
+    indent: String,
+    list_marker: String,
+    checked: bool,
+    content: String,
+    due: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+    recurrence: Option<String>,
+    priority: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TaskMetadataKindForUpdate {
+    Due,
+    Start,
+    End,
+    Recurrence,
+    Priority,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+enum TaskMetadataUpdateField {
+    #[default]
+    Missing,
+    Clear,
+    Set(String),
+}
+
+#[derive(Debug, Default)]
+struct TaskMetadataForUpdate {
+    due: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+    recurrence: Option<String>,
+    priority: Option<String>,
+}
+
+#[derive(Debug)]
+struct PopTaskMetadataResult<'a> {
+    remaining: &'a str,
+    value: Option<String>,
+    consumed: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RenameMarkdownFileInput {
     from_relative_path: String,
     to_relative_path: String,
@@ -195,6 +287,37 @@ fn execute_search_markdown_files(
         input.limit,
     )?;
     serialize_output(output, "vault.search_markdown_files")
+}
+
+/// 执行“列出任务规划”能力。
+fn execute_list_tasks(
+    input: Value,
+    context: &CapabilityExecutionContext<'_>,
+) -> Result<Value, String> {
+    let input: ListTasksInput = parse_input(input, "vault.list_tasks")?;
+    let normalized_relative_path = input
+        .relative_path
+        .map(|value| value.trim().replace('\\', "/"))
+        .filter(|value| !value.is_empty());
+    let limit = input.limit.unwrap_or(200).clamp(1, 500);
+    let filtered_tasks = query_app_service::query_vault_tasks_in_root(context.vault_root)?
+        .into_iter()
+        .filter(|task| input.include_completed || !task.checked)
+        .filter(|task| {
+            normalized_relative_path
+                .as_ref()
+                .is_none_or(|relative_path| &task.relative_path == relative_path)
+        })
+        .collect::<Vec<_>>();
+    let total_count = filtered_tasks.len();
+    let tasks = filtered_tasks.into_iter().take(limit).collect::<Vec<_>>();
+    let output = ListTasksOutput {
+        returned_count: tasks.len(),
+        total_count,
+        tasks,
+    };
+
+    serialize_output(output, "vault.list_tasks")
 }
 
 /// 执行“搜索 Canvas 文件”能力。
@@ -377,6 +500,58 @@ fn execute_apply_markdown_patch(
     serialize_output(output, "vault.apply_markdown_patch")
 }
 
+/// 执行“更新任务规划”能力。
+fn execute_update_task(
+    input: Value,
+    context: &CapabilityExecutionContext<'_>,
+) -> Result<Value, String> {
+    let input: UpdateTaskInput = parse_input(input, "vault.update_task")?;
+    validate_update_task_input(&input)?;
+
+    let read_response = vault_app_service::read_vault_markdown_file_in_root(
+        input.relative_path.clone(),
+        context.vault_root,
+    )?;
+    let newline = if read_response.content.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let mut lines = read_response
+        .content
+        .split(newline)
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    let line_index = resolve_task_line_index(&lines, input.line, &input.raw_line)?;
+    let current_line = lines
+        .get(line_index)
+        .ok_or_else(|| "无法定位要更新的任务行，请先重新读取任务列表".to_string())?
+        .clone();
+    let parsed = parse_task_line_for_update(&current_line)
+        .ok_or_else(|| "目标任务行已不再符合任务看板语法".to_string())?;
+    let updated_line = build_updated_task_line(&parsed, &input)?;
+    lines[line_index] = updated_line.clone();
+
+    vault_app_service::save_vault_markdown_file_in_root(
+        input.relative_path.clone(),
+        lines.join(newline),
+        context.vault_root,
+    )?;
+
+    let updated_task = query_app_service::query_vault_tasks_in_root(context.vault_root)?
+        .into_iter()
+        .find(|task| task.relative_path == input.relative_path && task.line == line_index + 1)
+        .ok_or_else(|| "任务已保存，但无法在任务索引中重新定位更新后的任务".to_string())?;
+    let output = UpdateTaskOutput {
+        relative_path: input.relative_path,
+        line: line_index + 1,
+        updated_line,
+        task: updated_task,
+    };
+
+    serialize_output(output, "vault.update_task")
+}
+
 fn ensure_patch_targets_relative_path(
     relative_path: &str,
     unified_diff: &str,
@@ -418,6 +593,531 @@ fn ensure_patch_targets_relative_path(
     }
 
     Ok(unified_diff.to_string())
+}
+
+fn validate_update_task_input(input: &UpdateTaskInput) -> Result<(), String> {
+    if input.relative_path.trim().is_empty() {
+        return Err("relativePath 不能为空".to_string());
+    }
+    if input.line == 0 {
+        return Err("line 必须大于 0".to_string());
+    }
+    if input.raw_line.trim().is_empty() {
+        return Err("rawLine 不能为空".to_string());
+    }
+    if let Some(content) = &input.content {
+        if content.trim().is_empty() {
+            return Err("content 不能为空".to_string());
+        }
+    }
+    if let TaskMetadataUpdateField::Set(start) = &input.start {
+        validate_task_date_time_value(start, "start")?;
+    }
+    if let TaskMetadataUpdateField::Set(end) = &input.end {
+        validate_task_date_time_value(end, "end")?;
+    }
+    if let TaskMetadataUpdateField::Set(recurrence) = &input.recurrence {
+        validate_task_recurrence_value(recurrence)?;
+    }
+    if let TaskMetadataUpdateField::Set(priority) = &input.priority {
+        validate_task_priority_value(priority)?;
+    }
+
+    Ok(())
+}
+
+fn deserialize_task_metadata_update_field<'de, D>(
+    deserializer: D,
+) -> Result<TaskMetadataUpdateField, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer).map(|value| match value {
+        Some(value) => TaskMetadataUpdateField::Set(value),
+        None => TaskMetadataUpdateField::Clear,
+    })
+}
+
+fn resolve_task_line_index(
+    lines: &[String],
+    preferred_line: usize,
+    raw_line: &str,
+) -> Result<usize, String> {
+    let preferred_index = preferred_line.saturating_sub(1);
+    if lines
+        .get(preferred_index)
+        .is_some_and(|line| line == raw_line)
+    {
+        return Ok(preferred_index);
+    }
+
+    let matched_indexes = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| (line == raw_line).then_some(index))
+        .collect::<Vec<_>>();
+    if matched_indexes.len() == 1 {
+        return Ok(matched_indexes[0]);
+    }
+
+    Err("无法定位要更新的任务行，请先重新读取任务列表".to_string())
+}
+
+fn parse_task_line_for_update(line: &str) -> Option<ParsedTaskLineForUpdate> {
+    let (indent, list_marker, checked, tail) = parse_task_prefix_for_update(line)?;
+    let tail_without_edit = strip_trailing_edit_token_for_update(tail);
+    let (content_tail, metadata) = pop_task_metadata_tokens_for_update(tail_without_edit);
+    let content = content_tail.trim();
+    if content.is_empty() {
+        return None;
+    }
+
+    Some(ParsedTaskLineForUpdate {
+        indent: indent.to_string(),
+        list_marker: list_marker.to_string(),
+        checked,
+        content: content.to_string(),
+        due: metadata.due,
+        start: metadata.start,
+        end: metadata.end,
+        recurrence: metadata.recurrence,
+        priority: metadata.priority,
+    })
+}
+
+fn parse_task_prefix_for_update(line: &str) -> Option<(&str, &str, bool, &str)> {
+    let trimmed_start = line.trim_start();
+    let indent_len = line.len().saturating_sub(trimmed_start.len());
+    let indent = &line[..indent_len];
+    let rest = trimmed_start;
+    let marker_end = rest.find(char::is_whitespace)?;
+    let list_marker = &rest[..marker_end];
+    let mut tail = rest[marker_end..].trim_start();
+    if !matches!(list_marker, "-" | "+" | "*") && !is_ordered_list_marker(list_marker) {
+        return None;
+    }
+
+    if !tail.starts_with('[') || tail.len() < 3 {
+        return None;
+    }
+    let checked = match tail.as_bytes().get(1) {
+        Some(b'x') | Some(b'X') => true,
+        Some(b' ') => false,
+        _ => return None,
+    };
+    if tail.as_bytes().get(2) != Some(&b']') {
+        return None;
+    }
+    tail = tail[3..].trim_start();
+    if tail.is_empty() {
+        return None;
+    }
+
+    Some((indent, list_marker, checked, tail))
+}
+
+fn is_ordered_list_marker(value: &str) -> bool {
+    value.strip_suffix('.').is_some_and(|prefix| {
+        !prefix.is_empty() && prefix.bytes().all(|byte| byte.is_ascii_digit())
+    })
+}
+
+fn strip_trailing_edit_token_for_update(input: &str) -> &str {
+    let trimmed = input.trim_end();
+    if trimmed == "edit" {
+        return "";
+    }
+
+    trimmed
+        .strip_suffix(" edit")
+        .map(str::trim_end)
+        .unwrap_or(trimmed)
+}
+
+fn pop_task_metadata_tokens_for_update(mut input: &str) -> (&str, TaskMetadataForUpdate) {
+    let mut metadata = TaskMetadataForUpdate::default();
+    let pop_order = [
+        TaskMetadataKindForUpdate::Priority,
+        TaskMetadataKindForUpdate::Recurrence,
+        TaskMetadataKindForUpdate::End,
+        TaskMetadataKindForUpdate::Start,
+        TaskMetadataKindForUpdate::Due,
+    ];
+
+    loop {
+        let mut consumed = false;
+        for kind in pop_order {
+            if task_metadata_has_value(&metadata, kind) {
+                continue;
+            }
+
+            let result = pop_task_metadata_token_for_update(input, kind);
+            if !result.consumed {
+                continue;
+            }
+
+            input = result.remaining;
+            set_task_metadata_value(&mut metadata, kind, result.value);
+            consumed = true;
+            break;
+        }
+
+        if !consumed {
+            break;
+        }
+    }
+
+    (input, metadata)
+}
+
+fn task_metadata_has_value(
+    metadata: &TaskMetadataForUpdate,
+    kind: TaskMetadataKindForUpdate,
+) -> bool {
+    match kind {
+        TaskMetadataKindForUpdate::Due => metadata.due.is_some(),
+        TaskMetadataKindForUpdate::Start => metadata.start.is_some(),
+        TaskMetadataKindForUpdate::End => metadata.end.is_some(),
+        TaskMetadataKindForUpdate::Recurrence => metadata.recurrence.is_some(),
+        TaskMetadataKindForUpdate::Priority => metadata.priority.is_some(),
+    }
+}
+
+fn set_task_metadata_value(
+    metadata: &mut TaskMetadataForUpdate,
+    kind: TaskMetadataKindForUpdate,
+    value: Option<String>,
+) {
+    match kind {
+        TaskMetadataKindForUpdate::Due => metadata.due = value,
+        TaskMetadataKindForUpdate::Start => metadata.start = value,
+        TaskMetadataKindForUpdate::End => metadata.end = value,
+        TaskMetadataKindForUpdate::Recurrence => metadata.recurrence = value,
+        TaskMetadataKindForUpdate::Priority => metadata.priority = value,
+    }
+}
+
+fn pop_task_metadata_token_for_update<'a>(
+    input: &'a str,
+    kind: TaskMetadataKindForUpdate,
+) -> PopTaskMetadataResult<'a> {
+    let trimmed = input.trim_end();
+    if let Some(result) = pop_short_task_metadata_token_for_update(trimmed, kind) {
+        return result;
+    }
+
+    if !trimmed.ends_with("}`")
+        || !matches!(
+            kind,
+            TaskMetadataKindForUpdate::Due | TaskMetadataKindForUpdate::Priority
+        )
+    {
+        return PopTaskMetadataResult {
+            remaining: trimmed,
+            value: None,
+            consumed: false,
+        };
+    }
+
+    let Some(start_index) = trimmed.rfind("`{$") else {
+        return PopTaskMetadataResult {
+            remaining: trimmed,
+            value: None,
+            consumed: false,
+        };
+    };
+    if start_index > 0
+        && !trimmed[..start_index]
+            .chars()
+            .next_back()
+            .is_some_and(char::is_whitespace)
+    {
+        return PopTaskMetadataResult {
+            remaining: trimmed,
+            value: None,
+            consumed: false,
+        };
+    }
+
+    let value = normalize_optional_task_metadata_value(
+        &trimmed[start_index + 3..trimmed.len().saturating_sub(2)],
+    );
+    PopTaskMetadataResult {
+        remaining: trimmed[..start_index].trim_end(),
+        value,
+        consumed: true,
+    }
+}
+
+fn pop_short_task_metadata_token_for_update<'a>(
+    input: &'a str,
+    kind: TaskMetadataKindForUpdate,
+) -> Option<PopTaskMetadataResult<'a>> {
+    let trimmed = input.trim_end();
+    match kind {
+        TaskMetadataKindForUpdate::Priority => {
+            let (remaining, token) = split_last_whitespace_token_for_update(trimmed)?;
+            let value = token
+                .strip_prefix('!')
+                .map(str::trim)
+                .map(str::to_lowercase)
+                .filter(|value| matches!(value.as_str(), "high" | "medium" | "low"))?;
+            Some(PopTaskMetadataResult {
+                remaining,
+                value: Some(value),
+                consumed: true,
+            })
+        }
+        TaskMetadataKindForUpdate::Recurrence => {
+            let (remaining, token) = split_last_whitespace_token_for_update(trimmed)?;
+            let normalized = token.to_lowercase();
+            let value = normalized
+                .strip_prefix("every:")
+                .or_else(|| normalized.strip_prefix("repeat:"))
+                .or_else(|| normalized.strip_prefix("recurrence:"))
+                .map(str::trim)
+                .filter(|value| is_task_recurrence_token(value))?;
+            Some(PopTaskMetadataResult {
+                remaining,
+                value: Some(value.to_string()),
+                consumed: true,
+            })
+        }
+        TaskMetadataKindForUpdate::Due
+        | TaskMetadataKindForUpdate::Start
+        | TaskMetadataKindForUpdate::End => {
+            pop_task_date_time_metadata_token_for_update(trimmed, kind)
+        }
+    }
+}
+
+fn pop_task_date_time_metadata_token_for_update(
+    input: &str,
+    kind: TaskMetadataKindForUpdate,
+) -> Option<PopTaskMetadataResult<'_>> {
+    let (remaining, last_token) = split_last_whitespace_token_for_update(input)?;
+    let prefix = task_date_time_metadata_prefix(kind)?;
+    if let Some(value) = last_token
+        .strip_prefix(prefix)
+        .map(|value| value.replace('T', " "))
+        .filter(|value| is_task_date_time_value(value))
+    {
+        return Some(PopTaskMetadataResult {
+            remaining,
+            value: Some(value),
+            consumed: true,
+        });
+    }
+
+    if is_task_time_token(last_token) {
+        let (remaining_without_date, date_token) =
+            split_last_whitespace_token_for_update(remaining)?;
+        let date_value = date_token.strip_prefix(prefix)?;
+        let candidate = format!("{date_value} {last_token}");
+        if is_task_date_time_value(&candidate) {
+            return Some(PopTaskMetadataResult {
+                remaining: remaining_without_date,
+                value: Some(candidate),
+                consumed: true,
+            });
+        }
+    }
+
+    None
+}
+
+fn task_date_time_metadata_prefix(kind: TaskMetadataKindForUpdate) -> Option<&'static str> {
+    match kind {
+        TaskMetadataKindForUpdate::Due => Some("@"),
+        TaskMetadataKindForUpdate::Start => Some("start:"),
+        TaskMetadataKindForUpdate::End => Some("end:"),
+        TaskMetadataKindForUpdate::Recurrence | TaskMetadataKindForUpdate::Priority => None,
+    }
+}
+
+fn split_last_whitespace_token_for_update(input: &str) -> Option<(&str, &str)> {
+    let trimmed = input.trim_end();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let token_end = trimmed.len();
+    for (index, ch) in trimmed.char_indices().rev() {
+        if ch.is_whitespace() {
+            let token_start = index + ch.len_utf8();
+            if token_start >= token_end {
+                continue;
+            }
+
+            return Some((
+                trimmed[..index].trim_end(),
+                &trimmed[token_start..token_end],
+            ));
+        }
+    }
+
+    Some(("", trimmed))
+}
+
+fn build_updated_task_line(
+    parsed: &ParsedTaskLineForUpdate,
+    input: &UpdateTaskInput,
+) -> Result<String, String> {
+    let content = input
+        .content
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(parsed.content.as_str());
+    let checked = input.checked.unwrap_or(parsed.checked);
+    let start = resolve_optional_task_metadata_update(
+        &input.start,
+        parsed.start.as_deref(),
+        Some(validate_task_date_time_value),
+        "start",
+    )?;
+    let end = resolve_optional_task_metadata_update(
+        &input.end,
+        parsed.end.as_deref(),
+        Some(validate_task_date_time_value),
+        "end",
+    )?;
+    let recurrence = resolve_optional_task_metadata_update(
+        &input.recurrence,
+        parsed.recurrence.as_deref(),
+        Some(|value, _field| validate_task_recurrence_value(value)),
+        "recurrence",
+    )?;
+    let priority = resolve_optional_task_metadata_update(
+        &input.priority,
+        parsed.priority.as_deref(),
+        Some(|value, _field| validate_task_priority_value(value)),
+        "priority",
+    )?;
+
+    let mut segments = vec![format!(
+        "{}{} [{}] {}",
+        parsed.indent,
+        parsed.list_marker,
+        if checked { "x" } else { " " },
+        content,
+    )];
+    if let Some(start) = start {
+        segments.push(format!("start:{start}"));
+    }
+    if let Some(end) = end {
+        segments.push(format!("end:{end}"));
+    }
+    if let Some(recurrence) = recurrence {
+        segments.push(format!("every:{recurrence}"));
+    }
+    if let Some(priority) = priority {
+        segments.push(format!("!{priority}"));
+    }
+
+    Ok(segments.join(" "))
+}
+
+fn resolve_optional_task_metadata_update(
+    update: &TaskMetadataUpdateField,
+    current: Option<&str>,
+    validator: Option<fn(&str, &str) -> Result<(), String>>,
+    field: &str,
+) -> Result<Option<String>, String> {
+    match update {
+        TaskMetadataUpdateField::Missing => {
+            Ok(current.and_then(normalize_optional_task_metadata_value))
+        }
+        TaskMetadataUpdateField::Clear => Ok(None),
+        TaskMetadataUpdateField::Set(value) => {
+            let Some(normalized) = normalize_optional_task_metadata_value(value) else {
+                return Ok(None);
+            };
+            if let Some(validator) = validator {
+                validator(&normalized, field)?;
+            }
+            Ok(Some(normalized))
+        }
+    }
+}
+
+fn normalize_optional_task_metadata_value(value: &str) -> Option<String> {
+    let normalized = value.trim().replace('T', " ");
+    (!normalized.is_empty()).then_some(normalized)
+}
+
+fn validate_task_date_time_value(value: &str, field: &str) -> Result<(), String> {
+    let normalized = value.trim().replace('T', " ");
+    if is_task_date_time_value(&normalized) {
+        return Ok(());
+    }
+
+    Err(format!(
+        "{field} 必须是 YYYY-MM-DD 或 YYYY-MM-DD HH:MM 格式"
+    ))
+}
+
+fn validate_task_recurrence_value(value: &str) -> Result<(), String> {
+    let normalized = value.trim().to_lowercase();
+    if is_task_recurrence_token(&normalized) {
+        return Ok(());
+    }
+
+    Err("recurrence 只能包含字母、数字、- 或 _".to_string())
+}
+
+fn validate_task_priority_value(value: &str) -> Result<(), String> {
+    if matches!(
+        value.trim().to_lowercase().as_str(),
+        "high" | "medium" | "low"
+    ) {
+        return Ok(());
+    }
+
+    Err("priority 必须是 high、medium 或 low".to_string())
+}
+
+fn is_task_date_time_value(value: &str) -> bool {
+    let mut parts = value.split(' ');
+    let Some(date_part) = parts.next() else {
+        return false;
+    };
+    if !is_task_date_token(date_part) {
+        return false;
+    }
+
+    match parts.next() {
+        None => true,
+        Some(time_part) => parts.next().is_none() && is_task_time_token(time_part),
+    }
+}
+
+fn is_task_recurrence_token(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+fn is_task_date_token(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| matches!(index, 4 | 7) || byte.is_ascii_digit())
+}
+
+fn is_task_time_token(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 5
+        && bytes[2] == b':'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| index == 2 || byte.is_ascii_digit())
 }
 
 /// 执行“保存结构化 Canvas 文档”能力。
@@ -620,6 +1320,138 @@ mod tests {
                 .and_then(|value| value.as_str()),
             Some("notes/topic.md")
         );
+    }
+
+    #[test]
+    fn execute_vault_capability_should_list_tasks() {
+        let root = create_test_root();
+        write_markdown_file(
+            &root,
+            "Tasks/task.md",
+            "# Tasks\n- [ ] Plan launch start:2026-03-24 09:00 end:2026-03-25 18:00 every:weekly-tue !high\n- [x] Done item start:2026-03-20 09:00 !low\n",
+        );
+
+        let request = CapabilityExecutionRequest {
+            capability_id: "vault.list_tasks".to_string(),
+            consumer: crate::domain::capability::CapabilityConsumer::AiTool,
+            input: json!({"includeCompleted": false}),
+        };
+        let context = CapabilityExecutionContext { vault_root: &root };
+
+        let result = execute_vault_capability(&request, &context)
+            .expect("应由 Vault 模块接管任务列表能力")
+            .expect("列出任务应成功");
+
+        assert_eq!(result["totalCount"], 1);
+        assert_eq!(result["returnedCount"], 1);
+        assert_eq!(result["tasks"][0]["relativePath"], "Tasks/task.md");
+        assert_eq!(result["tasks"][0]["line"], 2);
+        assert_eq!(result["tasks"][0]["content"], "Plan launch");
+        assert_eq!(result["tasks"][0]["recurrence"], "weekly-tue");
+    }
+
+    #[test]
+    fn execute_vault_capability_should_update_task_schedule() {
+        let root = create_test_root();
+        let raw_line =
+            "- [ ] Plan launch start:2026-03-24 09:00 end:2026-03-25 18:00 every:weekly-tue !high";
+        write_markdown_file(&root, "Tasks/task.md", &format!("# Tasks\n{raw_line}\n"));
+
+        let request = CapabilityExecutionRequest {
+            capability_id: "vault.update_task".to_string(),
+            consumer: crate::domain::capability::CapabilityConsumer::AiTool,
+            input: json!({
+                "relativePath": "Tasks/task.md",
+                "line": 2,
+                "rawLine": raw_line,
+                "content": "Plan launch window",
+                "checked": true,
+                "start": "2026-03-26 10:00",
+                "end": "2026-03-26 12:00",
+                "recurrence": "monthly-26",
+                "priority": "medium"
+            }),
+        };
+        let context = CapabilityExecutionContext { vault_root: &root };
+
+        let result = execute_vault_capability(&request, &context)
+            .expect("应由 Vault 模块接管任务更新能力")
+            .expect("更新任务应成功");
+
+        let expected = "- [x] Plan launch window start:2026-03-26 10:00 end:2026-03-26 12:00 every:monthly-26 !medium";
+        assert_eq!(result["updatedLine"], expected);
+        assert_eq!(result["task"]["checked"], true);
+        assert_eq!(result["task"]["priority"], "medium");
+        assert_eq!(
+            fs::read_to_string(root.join("Tasks/task.md")).expect("应能读取更新后的任务文件"),
+            format!("# Tasks\n{expected}\n")
+        );
+    }
+
+    #[test]
+    fn execute_vault_capability_should_clear_task_schedule_fields_with_null() {
+        let root = create_test_root();
+        let raw_line =
+            "- [ ] Plan launch start:2026-03-24 09:00 end:2026-03-25 18:00 every:weekly-tue !high";
+        write_markdown_file(&root, "Tasks/task.md", &format!("# Tasks\n{raw_line}\n"));
+
+        let request = CapabilityExecutionRequest {
+            capability_id: "vault.update_task".to_string(),
+            consumer: crate::domain::capability::CapabilityConsumer::AiTool,
+            input: json!({
+                "relativePath": "Tasks/task.md",
+                "line": 2,
+                "rawLine": raw_line,
+                "start": null,
+                "end": null,
+                "recurrence": null,
+                "priority": null
+            }),
+        };
+        let context = CapabilityExecutionContext { vault_root: &root };
+
+        let result = execute_vault_capability(&request, &context)
+            .expect("应由 Vault 模块接管任务更新能力")
+            .expect("清空任务元数据应成功");
+
+        let expected = "- [ ] Plan launch";
+        assert_eq!(result["updatedLine"], expected);
+        assert!(result["task"]["start"].is_null());
+        assert!(result["task"]["end"].is_null());
+        assert!(result["task"]["recurrence"].is_null());
+        assert!(result["task"]["priority"].is_null());
+        assert_eq!(
+            fs::read_to_string(root.join("Tasks/task.md")).expect("应能读取更新后的任务文件"),
+            format!("# Tasks\n{expected}\n")
+        );
+    }
+
+    #[test]
+    fn execute_vault_capability_should_reject_stale_task_line() {
+        let root = create_test_root();
+        write_markdown_file(
+            &root,
+            "Tasks/task.md",
+            "# Tasks\n- [ ] Current task !high\n",
+        );
+
+        let request = CapabilityExecutionRequest {
+            capability_id: "vault.update_task".to_string(),
+            consumer: crate::domain::capability::CapabilityConsumer::AiTool,
+            input: json!({
+                "relativePath": "Tasks/task.md",
+                "line": 2,
+                "rawLine": "- [ ] Old task !high",
+                "priority": "low"
+            }),
+        };
+        let context = CapabilityExecutionContext { vault_root: &root };
+
+        let error = execute_vault_capability(&request, &context)
+            .expect("应由 Vault 模块接管任务更新能力")
+            .expect_err("过期 rawLine 应被拒绝");
+
+        assert!(error.contains("重新读取任务列表"));
     }
 
     #[test]

@@ -20,17 +20,11 @@ import {
     createVaultCanvasFile,
     createVaultDirectory,
     createVaultMarkdownFile,
-    deleteVaultCanvasFile,
     deleteVaultDirectory,
-    deleteVaultMarkdownFile,
-    moveVaultCanvasFileToDirectory,
     moveVaultDirectoryToDirectory,
-    moveVaultMarkdownFileToDirectory,
     readVaultCanvasFile,
     readVaultMarkdownFile,
-    renameVaultCanvasFile,
     renameVaultDirectory,
-    renameVaultMarkdownFile,
 } from "../../../api/vaultApi";
 import {
     buildCreatedCanvasInitialContent,
@@ -41,6 +35,7 @@ import { buildCreatedMarkdownInitialContent } from "../../../utils/frontmatterTe
 import { getConfigSnapshot } from "../../../host/config/configStore";
 import { getArticleSnapshotById, useFocusedArticle } from "../../../host/editor/editorContextStore";
 import { savePersistedMarkdownContent } from "../../../host/editor/persistedMarkdownContentSync";
+import { deletePersistedCanvasFile, deletePersistedMarkdownFile, movePersistedCanvasFileToDirectory, movePersistedMarkdownFileToDirectory, renamePersistedCanvasFile, renamePersistedMarkdownFile } from "../../../host/vault/vaultMutationService";
 import { useVaultState } from "../../../host/vault/vaultStore";
 import { openVaultWithSystemPicker } from "../../../host/vault/openVaultDialog";
 import {
@@ -360,9 +355,9 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             const sourceSnapshot = getArticleSnapshotById(sourceTabId);
 
             if (isCanvasPath(item.path)) {
-                await renameVaultCanvasFile(item.path, targetPath);
+                await renamePersistedCanvasFile(item.path, targetPath);
             } else {
-                await renameVaultMarkdownFile(item.path, targetPath);
+                await renamePersistedMarkdownFile(item.path, targetPath);
             }
 
             if (sourceSnapshot && !isCanvasPath(item.path)) {
@@ -449,9 +444,9 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
 
         try {
             if (isCanvasPath(item.path)) {
-                await deleteVaultCanvasFile(item.path);
+                await deletePersistedCanvasFile(item.path);
             } else {
-                await deleteVaultMarkdownFile(item.path);
+                await deletePersistedMarkdownFile(item.path);
             }
             closeTab?.(`file:${item.path}`);
             console.info("[vault-ui] delete success", {
@@ -505,8 +500,8 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
 
         try {
             const result = isCanvasPath(sourceRelativePath)
-                ? await moveVaultCanvasFileToDirectory(sourceRelativePath, targetDirectoryRelativePath)
-                : await moveVaultMarkdownFileToDirectory(sourceRelativePath, targetDirectoryRelativePath);
+                ? await movePersistedCanvasFileToDirectory(sourceRelativePath, targetDirectoryRelativePath)
+                : await movePersistedMarkdownFileToDirectory(sourceRelativePath, targetDirectoryRelativePath);
             closeTab?.(`file:${sourceRelativePath}`);
 
             const latestContent = await readEditableFileContent(result.relativePath);
@@ -555,8 +550,8 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
         const sourceTabId = `file:${item.path}`;
         const sourceSnapshot = getArticleSnapshotById(sourceTabId);
         const result = isCanvasPath(item.path)
-            ? await moveVaultCanvasFileToDirectory(item.path, targetDirectoryRelativePath)
-            : await moveVaultMarkdownFileToDirectory(item.path, targetDirectoryRelativePath);
+            ? await movePersistedCanvasFileToDirectory(item.path, targetDirectoryRelativePath)
+            : await movePersistedMarkdownFileToDirectory(item.path, targetDirectoryRelativePath);
         const targetPath = result.relativePath.replace(/\\/g, "/");
 
         if (sourceSnapshot && !isCanvasPath(item.path)) {
@@ -633,13 +628,13 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                         path: item.path,
                     });
                 } else if (isCanvasPath(item.path)) {
-                    await deleteVaultCanvasFile(item.path);
+                    await deletePersistedCanvasFile(item.path);
                     closeTab?.(`file:${item.path}`);
                     console.info("[vault-ui] batch delete file success", {
                         path: item.path,
                     });
                 } else if (isMarkdownPath(item.path)) {
-                    await deleteVaultMarkdownFile(item.path);
+                    await deletePersistedMarkdownFile(item.path);
                     closeTab?.(`file:${item.path}`);
                     console.info("[vault-ui] batch delete file success", {
                         path: item.path,

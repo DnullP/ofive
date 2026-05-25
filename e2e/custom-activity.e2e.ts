@@ -31,7 +31,7 @@ async function deleteCustomActivity(page: Page, activityId: string): Promise<voi
     await page.evaluate(async (targetActivityId) => {
         const configModule = await import("/src/plugins/custom-activity/customActivityConfig.ts");
         const activityBarModule = await import("/src/host/layout/activityBarStore.ts");
-        const configStoreModule = await import("/src/host/store/configStore.ts");
+        const configStoreModule = await import("/src/host/config/configStore.ts");
         const targetRegistrationId = `custom-activity:${targetActivityId}`;
 
         const nextActivityBarItems: Array<{

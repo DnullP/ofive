@@ -102,6 +102,132 @@ func TestProcessADKEventContentIgnoresToolOnlyContentAsVisibleText(t *testing.T)
 	}
 }
 
+func TestProcessADKEventContentPreservesToolBlocksAcrossTextSnapshots(t *testing.T) {
+	t.Parallel()
+
+	state := &streamADKState{}
+	emit := func(StreamChunk) error {
+		return nil
+	}
+
+	err := processADKEventContent(
+		"agent",
+		&genai.Content{
+			Role: genai.RoleModel,
+			Parts: []*genai.Part{{
+				FunctionCall: &genai.FunctionCall{
+					ID:   "call-1",
+					Name: "vault_list_tasks",
+					Args: map[string]any{},
+				},
+			}},
+		},
+		state,
+		emit,
+	)
+	if err != nil {
+		t.Fatalf("processADKEventContent returned error for tool call: %v", err)
+	}
+
+	err = processADKEventContent(
+		"agent",
+		&genai.Content{
+			Role: genai.RoleUser,
+			Parts: []*genai.Part{{
+				FunctionResponse: &genai.FunctionResponse{
+					ID:       "call-1",
+					Name:     "vault_list_tasks",
+					Response: map[string]any{"output": []any{}},
+				},
+			}},
+		},
+		state,
+		emit,
+	)
+	if err != nil {
+		t.Fatalf("processADKEventContent returned error for tool result: %v", err)
+	}
+
+	for _, text := range []string{"初稿", "初稿完成"} {
+		err = processADKEventContent(
+			"agent",
+			&genai.Content{
+				Role:  genai.RoleModel,
+				Parts: []*genai.Part{{Text: text}},
+			},
+			state,
+			emit,
+		)
+		if err != nil {
+			t.Fatalf("processADKEventContent returned error for text snapshot %q: %v", text, err)
+		}
+	}
+
+	if len(state.historyContentBlocks) != 3 {
+		t.Fatalf("expected tool call, tool result, and latest text blocks, got %+v", state.historyContentBlocks)
+	}
+	if state.historyContentBlocks[0].Kind != "tool-use" || state.historyContentBlocks[1].Kind != "tool-result" {
+		t.Fatalf("expected tool protocol blocks to be preserved, got %+v", state.historyContentBlocks)
+	}
+	if state.historyContentBlocks[2].Kind != "text" || state.historyContentBlocks[2].Text != "初稿完成" {
+		t.Fatalf("expected latest text snapshot to replace stale text, got %+v", state.historyContentBlocks)
+	}
+}
+
+func TestFinishStreamADKContentReturnsDoneForToolOnlyEmptyResponse(t *testing.T) {
+	t.Parallel()
+
+	state := &streamADKState{
+		historyContentBlocks: []HistoryContentBlock{
+			{
+				Kind:      "tool-use",
+				ToolUseID: "call-1",
+				ToolName:  "vault_list_tasks",
+			},
+			{
+				Kind:       "tool-result",
+				ToolUseID:  "call-1",
+				ToolName:   "vault_list_tasks",
+				ResultJSON: `{"success":true}`,
+			},
+		},
+	}
+	chunks := make([]StreamChunk, 0)
+
+	err := finishStreamADKContent(
+		context.Background(),
+		"session-1",
+		CapabilityBridgeConfig{},
+		"agent",
+		state,
+		func(chunk StreamChunk) error {
+			chunks = append(chunks, chunk)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("finishStreamADKContent returned error: %v", err)
+	}
+
+	if len(chunks) != 2 {
+		t.Fatalf("expected warning debug and done chunks, got %+v", chunks)
+	}
+	if chunks[0].EventType != "debug" || chunks[0].DebugLevel != "warn" {
+		t.Fatalf("expected warning debug chunk, got %+v", chunks[0])
+	}
+	done := chunks[1]
+	if done.EventType != "done" || !done.Done {
+		t.Fatalf("expected done chunk, got %+v", done)
+	}
+	if !strings.Contains(done.AccumulatedText, "工具调用已返回") {
+		t.Fatalf("expected fallback text to explain the empty final response, got %q", done.AccumulatedText)
+	}
+	if !strings.Contains(done.HistoryContentBlocksJSON, `"kind":"tool-result"`) ||
+		!strings.Contains(done.HistoryContentBlocksJSON, `"kind":"text"`) {
+		t.Fatalf("expected history blocks to preserve tool result and fallback text, got %q", done.HistoryContentBlocksJSON)
+	}
+}
+
 func TestMergeStreamEventTextPreservesPreviousTurnReasoning(t *testing.T) {
 	t.Parallel()
 

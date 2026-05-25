@@ -104,6 +104,15 @@ fn plan_capability_snapshots(
                 &mut snapshots,
             )?;
         }
+        "vault.update_task" => {
+            let relative_path = input_string(input, "relativePath", capability_id)?;
+            push_snapshot(
+                vault_root,
+                &relative_path,
+                AiChatEditRollbackSnapshotKind::File,
+                &mut snapshots,
+            )?;
+        }
         "vault.save_canvas_document" => {
             let relative_path = input_string(input, "relativePath", capability_id)?;
             push_file_with_parent_snapshots(vault_root, &relative_path, &mut snapshots)?;

@@ -89,7 +89,13 @@ function resolveMockVaultPath(): string {
     }
 
     const params = new URLSearchParams(window.location.search);
-    return params.get("mockVaultPath") || MOCK_VAULT_PATH;
+    const queryVaultPath = params.get("mockVaultPath")?.trim();
+    if (queryVaultPath) {
+        return queryVaultPath;
+    }
+
+    const persistedVaultPath = window.localStorage.getItem("ofive:last-vault-path")?.trim();
+    return persistedVaultPath || MOCK_VAULT_PATH;
 }
 
 type MockPlatform = "windows" | "macos";

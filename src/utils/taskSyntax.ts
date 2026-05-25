@@ -5,14 +5,16 @@
  *
  * @example
  * const parsed = parseTaskBoardLine(
- *   "- [ ] Ship release @2026-03-24 10:00 !high",
+ *   "- [ ] Ship release start:2026-03-24 09:00 end:2026-03-24 11:00 every:weekly !high",
  * );
  *
  * const next = replaceTaskBoardMetadataInMarkdown(markdown, {
  *   line: 12,
  *   rawLine: "- [ ] Ship release `{$2026-03-24 10:00}` `{$high}`",
  * }, {
- *   due: "2026-03-25 09:00",
+ *   start: "2026-03-24 09:00",
+ *   end: "2026-03-25 09:00",
+ *   recurrence: "weekly-tue",
  *   priority: "medium",
  * });
  *
@@ -40,8 +42,14 @@ export interface ParsedTaskBoardLine {
     checked: boolean;
     /** 任务正文。 */
     content: string;
-    /** 截止时间。 */
+    /** 旧版截止时间；仅用于兼容历史任务，新写入应优先使用 end。 */
     due: string | null;
+    /** 开始时间。 */
+    start: string | null;
+    /** 结束时间。 */
+    end: string | null;
+    /** 重复周期。 */
+    recurrence: string | null;
     /** 优先级。 */
     priority: string | null;
     /** 原始行文本。 */
@@ -49,6 +57,23 @@ export interface ParsedTaskBoardLine {
 }
 
 const TASK_PREFIX_RE = /^(\s*)([-*+]|\d+\.)\s+\[([ xX])\]\s+(.*)$/;
+type TaskMetadataKind = "due" | "start" | "end" | "recurrence" | "priority";
+
+interface TaskMetadataValues {
+    due: string | null;
+    start: string | null;
+    end: string | null;
+    recurrence: string | null;
+    priority: string | null;
+}
+
+const METADATA_POP_ORDER: TaskMetadataKind[] = [
+    "priority",
+    "recurrence",
+    "end",
+    "start",
+    "due",
+];
 
 /**
  * @function normalizeTaskMetadataValue
@@ -79,9 +104,8 @@ export function parseTaskBoardLine(rawLine: string): ParsedTaskBoardLine | null 
     const tail = prefixMatch[4] ?? "";
     const tailWithoutEdit = stripTrailingEditToken(tail);
 
-    const priorityResult = popMetadataToken(tailWithoutEdit, "priority");
-    const dueResult = popMetadataToken(priorityResult.remaining, "due");
-    const content = dueResult.remaining.trim();
+    const metadataResult = popTaskMetadataTokens(tailWithoutEdit);
+    const content = metadataResult.remaining.trim();
     if (!content) {
         return null;
     }
@@ -91,8 +115,11 @@ export function parseTaskBoardLine(rawLine: string): ParsedTaskBoardLine | null 
         listMarker,
         checked,
         content,
-        due: dueResult.value,
-        priority: priorityResult.value,
+        due: metadataResult.values.due,
+        start: metadataResult.values.start,
+        end: metadataResult.values.end,
+        recurrence: metadataResult.values.recurrence,
+        priority: metadataResult.values.priority,
         rawLine,
     };
 }
@@ -101,19 +128,31 @@ export function parseTaskBoardLine(rawLine: string): ParsedTaskBoardLine | null 
  * @function buildTaskBoardLine
  * @description 根据解析结果与新元数据重建任务行。
  * @param parsed 已解析的任务行。
- * @param updates 待覆盖的 due / priority。
+ * @param updates 待覆盖的任务元数据。
  * @returns 重建后的任务行。
  */
 export function buildTaskBoardLine(
     parsed: ParsedTaskBoardLine,
     updates: {
         due?: string | null;
+        start?: string | null;
+        end?: string | null;
+        recurrence?: string | null;
         priority?: string | null;
     },
 ): string {
     const due = updates.due === undefined
         ? parsed.due
         : normalizeTaskMetadataValue(updates.due);
+    const start = updates.start === undefined
+        ? parsed.start
+        : normalizeTaskMetadataValue(updates.start);
+    const end = updates.end === undefined
+        ? parsed.end
+        : normalizeTaskMetadataValue(updates.end);
+    const recurrence = updates.recurrence === undefined
+        ? parsed.recurrence
+        : normalizeTaskMetadataValue(updates.recurrence)?.toLowerCase() ?? null;
     const priority = updates.priority === undefined
         ? parsed.priority
         : normalizeTaskMetadataValue(updates.priority);
@@ -125,6 +164,15 @@ export function buildTaskBoardLine(
     if (due) {
         segments.push(`@${due}`);
     }
+    if (start) {
+        segments.push(`start:${start}`);
+    }
+    if (end) {
+        segments.push(`end:${end}`);
+    }
+    if (recurrence) {
+        segments.push(`every:${recurrence}`);
+    }
     if (priority) {
         segments.push(`!${priority}`);
     }
@@ -134,7 +182,7 @@ export function buildTaskBoardLine(
 
 /**
  * @function replaceTaskBoardMetadataInMarkdown
- * @description 在整篇 Markdown 中定位目标任务并替换其 due / priority 元数据。
+ * @description 在整篇 Markdown 中定位目标任务并替换其任务元数据。
  * @param markdown 文档全文。
  * @param task 目标任务定位信息。
  * @param updates 元数据更新值。
@@ -148,7 +196,10 @@ export function replaceTaskBoardMetadataInMarkdown(
         rawLine: string;
     },
     updates: {
-        due: string | null;
+        due?: string | null;
+        start?: string | null;
+        end?: string | null;
+        recurrence?: string | null;
         priority: string | null;
     },
 ): {
@@ -268,14 +319,61 @@ function stripTrailingEditToken(input: string): string {
 
 /**
  * @function popMetadataToken
+ * @description 从尾部连续提取任务元数据 token。
+ * @param input 待处理字符串。
+ * @returns 剩余正文与解析出的元数据集合。
+ */
+function popTaskMetadataTokens(input: string): {
+    remaining: string;
+    values: TaskMetadataValues;
+} {
+    let remaining = input.trimEnd();
+    const values: TaskMetadataValues = {
+        due: null,
+        start: null,
+        end: null,
+        recurrence: null,
+        priority: null,
+    };
+
+    let consumed = true;
+    while (consumed) {
+        consumed = false;
+
+        for (const kind of METADATA_POP_ORDER) {
+            if (values[kind] !== null) {
+                continue;
+            }
+
+            const result = popMetadataToken(remaining, kind);
+            if (!result.consumed) {
+                continue;
+            }
+
+            remaining = result.remaining;
+            values[kind] = result.value;
+            consumed = true;
+            break;
+        }
+    }
+
+    return {
+        remaining,
+        values,
+    };
+}
+
+/**
+ * @function popMetadataToken
  * @description 从尾部提取一个简写或旧式元数据 token。
  * @param input 待处理字符串。
  * @param kind 元数据类型。
  * @returns 剩余正文与解析出的元数据值。
  */
-function popMetadataToken(input: string, kind: "due" | "priority"): {
+function popMetadataToken(input: string, kind: TaskMetadataKind): {
     remaining: string;
     value: string | null;
+    consumed: boolean;
 } {
     const trimmed = input.trimEnd();
     const shortTokenResult = popShortMetadataToken(trimmed, kind);
@@ -287,6 +385,7 @@ function popMetadataToken(input: string, kind: "due" | "priority"): {
         return {
             remaining: trimmed,
             value: null,
+            consumed: false,
         };
     }
 
@@ -295,13 +394,15 @@ function popMetadataToken(input: string, kind: "due" | "priority"): {
         return {
             remaining: trimmed,
             value: null,
+            consumed: false,
         };
     }
 
-    if (startIndex > 0 && !/\s/.test(trimmed[startIndex - 1] ?? "")) {
+    if ((kind !== "due" && kind !== "priority") || startIndex > 0 && !/\s/.test(trimmed[startIndex - 1] ?? "")) {
         return {
             remaining: trimmed,
             value: null,
+            consumed: false,
         };
     }
 
@@ -312,6 +413,7 @@ function popMetadataToken(input: string, kind: "due" | "priority"): {
     return {
         remaining: trimmed.slice(0, startIndex).trimEnd(),
         value,
+        consumed: true,
     };
 }
 
@@ -324,24 +426,96 @@ function popMetadataToken(input: string, kind: "due" | "priority"): {
  */
 function popShortMetadataToken(
     input: string,
-    kind: "due" | "priority",
+    kind: TaskMetadataKind,
 ): {
     remaining: string;
     value: string | null;
+    consumed: boolean;
 } | null {
     const trimmed = input.trimEnd();
-    const matcher = kind === "due"
+    if (kind === "priority") {
+        const match = trimmed.match(/^(.*?)(?:\s+)(!(high|medium|low))$/i);
+        if (!match) {
+            return null;
+        }
+
+        return {
+            remaining: match[1]?.trimEnd() ?? "",
+            value: normalizeTaskMetadataValue(match[3]?.toLowerCase()),
+            consumed: true,
+        };
+    }
+
+    if (kind === "recurrence") {
+        const match = trimmed.match(/^(.*?)(?:\s+)((?:every|repeat|recurrence):([A-Za-z0-9_-]+))$/i);
+        if (!match) {
+            return null;
+        }
+
+        return {
+            remaining: match[1]?.trimEnd() ?? "",
+            value: normalizeTaskMetadataValue(match[3]?.toLowerCase()),
+            consumed: true,
+        };
+    }
+
+    return popDateTimeMetadataToken(trimmed, kind);
+}
+
+/**
+ * @function popDateTimeMetadataToken
+ * @description 从尾部提取日期时间类元数据 token。
+ * @param input 待处理字符串。
+ * @param kind 日期时间元数据类型。
+ * @returns 命中时返回剩余正文与元数据，否则返回 null。
+ */
+function popDateTimeMetadataToken(
+    input: string,
+    kind: "due" | "start" | "end",
+): {
+    remaining: string;
+    value: string | null;
+    consumed: boolean;
+} | null {
+    const prefixes = kind === "due" ? ["@"] : [`${kind}:`];
+    const directMatcher = kind === "due"
         ? /^(.*?)(?:\s+)(@(\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2})?))$/
-        : /^(.*?)(?:\s+)(!(high|medium|low))$/i;
-    const match = trimmed.match(matcher);
-    if (!match) {
+        : new RegExp(`^(.*?)(?:\\s+)(${kind}:(\\d{4}-\\d{2}-\\d{2}(?:[ T]\\d{2}:\\d{2})?))$`);
+    const directMatch = input.match(directMatcher);
+    if (directMatch) {
+        return {
+            remaining: directMatch[1]?.trimEnd() ?? "",
+            value: normalizeTaskMetadataValue(directMatch[3]?.replace("T", " ")),
+            consumed: true,
+        };
+    }
+
+    const timeMatch = input.match(/^(.*?)(?:\s+)(\d{2}:\d{2})$/);
+    if (!timeMatch) {
         return null;
     }
 
-    return {
-        remaining: match[1]?.trimEnd() ?? "",
-        value: normalizeTaskMetadataValue(match[3]),
-    };
+    const remainingBeforeTime = timeMatch[1]?.trimEnd() ?? "";
+    const timePart = timeMatch[2] ?? "";
+    for (const prefix of prefixes) {
+        const dateMatcher = new RegExp(`^(.*?)(?:\\s+)(${escapeRegExp(prefix)}(\\d{4}-\\d{2}-\\d{2}))$`);
+        const dateMatch = remainingBeforeTime.match(dateMatcher);
+        if (!dateMatch) {
+            continue;
+        }
+
+        return {
+            remaining: dateMatch[1]?.trimEnd() ?? "",
+            value: normalizeTaskMetadataValue(`${dateMatch[3]} ${timePart}`),
+            consumed: true,
+        };
+    }
+
+    return null;
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

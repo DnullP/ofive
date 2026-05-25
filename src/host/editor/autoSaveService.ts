@@ -24,9 +24,9 @@
  *  - getAutoSaveServiceState: 获取当前服务内部状态快照（仅测试/调试用）
  *
  * @state
- *  - running - 服务是否正在运行 (boolean) [false]
+ *  - autoSaveRuntime.running - 服务是否正在运行 (boolean) [false]
  *  - pendingPaths - 有待保存内容的文件路径集合 (Set<string>)
- *  - lastSavedContentMap - 每个路径最后成功保存的内容 (Map<string, string>)
+ *  - autoSaveRuntime.lastSavedContentMap - 每个路径最后成功保存的内容 (Map<string, string>)
  *
  * @lifecycle
  *  - 初始化时机：App 组件挂载后调用 startAutoSaveService
@@ -37,7 +37,7 @@
  * @sync
  *  - 与后端同步：通过 saveVaultMarkdownFile 写入后端
  *  - 缓存策略：内存中缓存 lastSavedContent 与 pendingContent，不持久化
- *  - 与其他 Store 的关系：读取 configStore 的 autoSaveEnabled / autoSaveDelayMs 配置
+ *  - 与其他 Store 的关系：读取 configStore 的 autoSaveRuntime.autoSaveEnabled / autoSaveRuntime.autoSaveDelayMs 配置
  */
 
 import { useEffect } from "react";
@@ -86,32 +86,50 @@ interface PendingEntry {
     firstDirtyAt: number;
 }
 
-/** 服务运行状态 */
-let running = false;
+interface AutoSaveServiceRuntime {
+    /** 服务运行状态 */
+    running: boolean;
+    /** 事件取消订阅函数 */
+    unsubscribeContentEvent: (() => void) | null;
+    /** 配置变更取消订阅函数 */
+    unsubscribeConfigEvent: (() => void) | null;
+    /** 仓库切换前事件取消订阅函数 */
+    unsubscribeVaultBeforeChangeEvent: (() => void) | null;
+    /** 是否启用自动保存 */
+    autoSaveEnabled: boolean;
+    /** 防抖延迟（毫秒） */
+    autoSaveDelayMs: number;
+    /** 按路径索引的待保存条目 */
+    pendingMap: Map<string, PendingEntry>;
+    /** 按路径索引的最后成功保存内容 */
+    lastSavedContentMap: Map<string, string>;
+    /** 仓库切换清理窗口内，忽略旧编辑器卸载/失焦带来的内容变更 */
+    vaultSwitchSuppressionDepth: number;
+}
 
-/** 事件取消订阅函数 */
-let unsubscribeContentEvent: (() => void) | null = null;
+type AutoSaveGlobalScope = typeof globalThis & {
+    __OFIVE_AUTO_SAVE_SERVICE__?: AutoSaveServiceRuntime;
+};
 
-/** 配置变更取消订阅函数 */
-let unsubscribeConfigEvent: (() => void) | null = null;
+function resolveAutoSaveRuntime(): AutoSaveServiceRuntime {
+    const scope = globalThis as AutoSaveGlobalScope;
+    if (!scope.__OFIVE_AUTO_SAVE_SERVICE__) {
+        scope.__OFIVE_AUTO_SAVE_SERVICE__ = {
+            running: false,
+            unsubscribeContentEvent: null,
+            unsubscribeConfigEvent: null,
+            unsubscribeVaultBeforeChangeEvent: null,
+            autoSaveEnabled: true,
+            autoSaveDelayMs: DEFAULT_AUTO_SAVE_DELAY_MS,
+            pendingMap: new Map<string, PendingEntry>(),
+            lastSavedContentMap: new Map<string, string>(),
+            vaultSwitchSuppressionDepth: 0,
+        };
+    }
+    return scope.__OFIVE_AUTO_SAVE_SERVICE__;
+}
 
-/** 仓库切换前事件取消订阅函数 */
-let unsubscribeVaultBeforeChangeEvent: (() => void) | null = null;
-
-/** 是否启用自动保存 */
-let autoSaveEnabled = true;
-
-/** 防抖延迟（毫秒） */
-let autoSaveDelayMs = DEFAULT_AUTO_SAVE_DELAY_MS;
-
-/** 按路径索引的待保存条目 */
-const pendingMap = new Map<string, PendingEntry>();
-
-/** 按路径索引的最后成功保存内容 */
-const lastSavedContentMap = new Map<string, string>();
-
-/** 仓库切换清理窗口内，忽略旧编辑器卸载/失焦带来的内容变更 */
-let vaultSwitchSuppressionDepth = 0;
+const autoSaveRuntime = resolveAutoSaveRuntime();
 
 // ────────── 核心逻辑 ──────────
 
@@ -130,10 +148,10 @@ function isMarkdownPath(path: string): boolean {
  * @description 执行单个路径的保存操作。若内容与上次保存一致则跳过。
  * @param path 文件相对路径。
  * @param content 要保存的内容。
- * @sideEffects 调用后端 saveVaultMarkdownFile，更新 lastSavedContentMap。
+ * @sideEffects 调用后端 saveVaultMarkdownFile，更新 autoSaveRuntime.lastSavedContentMap。
  */
 async function executeSave(path: string, content: string): Promise<void> {
-    const lastSaved = lastSavedContentMap.get(path);
+    const lastSaved = autoSaveRuntime.lastSavedContentMap.get(path);
     if (lastSaved === content) {
         console.debug("[auto-save] skip unchanged content", { path });
         return;
@@ -141,7 +159,7 @@ async function executeSave(path: string, content: string): Promise<void> {
 
     try {
         await saveVaultMarkdownFile(path, content);
-        lastSavedContentMap.set(path, content);
+        autoSaveRuntime.lastSavedContentMap.set(path, content);
         console.info("[auto-save] saved", {
             path,
             bytes: content.length,
@@ -171,16 +189,16 @@ function clearPendingTimer(entry: PendingEntry): void {
  * @function flushEntry
  * @description 立即保存某个路径的待保存内容并清理条目。
  * @param path 文件相对路径。
- * @sideEffects 清除定时器，从 pendingMap 中移除条目，调用 executeSave。
+ * @sideEffects 清除定时器，从 autoSaveRuntime.pendingMap 中移除条目，调用 executeSave。
  */
 async function flushEntry(path: string): Promise<void> {
-    const entry = pendingMap.get(path);
+    const entry = autoSaveRuntime.pendingMap.get(path);
     if (!entry) {
         return;
     }
 
     clearPendingTimer(entry);
-    pendingMap.delete(path);
+    autoSaveRuntime.pendingMap.delete(path);
 
     await executeSave(entry.path, entry.content);
 }
@@ -190,10 +208,10 @@ async function flushEntry(path: string): Promise<void> {
  * @description 为指定路径调度一次防抖保存。若距首次变脏已超过最大间隔则立即保存。
  * @param path 文件相对路径。
  * @param content 最新文件内容。
- * @sideEffects 创建/更新 pendingMap 中的条目，设置防抖定时器。
+ * @sideEffects 创建/更新 autoSaveRuntime.pendingMap 中的条目，设置防抖定时器。
  */
 function scheduleSave(path: string, content: string): void {
-    const existing = pendingMap.get(path);
+    const existing = autoSaveRuntime.pendingMap.get(path);
     const now = Date.now();
 
     if (existing) {
@@ -202,7 +220,7 @@ function scheduleSave(path: string, content: string): void {
         // 若距首次变脏超过最大间隔，立即保存
         if (now - existing.firstDirtyAt >= MAX_AUTO_SAVE_INTERVAL_MS) {
             existing.content = content;
-            pendingMap.delete(path);
+            autoSaveRuntime.pendingMap.delete(path);
             console.info("[auto-save] max interval reached, flushing", { path });
             void executeSave(path, content).then(() => {
                 // 保存完成后重置 firstDirtyAt（如果该路径再次变脏会在下次事件里创建新条目）
@@ -213,10 +231,10 @@ function scheduleSave(path: string, content: string): void {
         existing.content = content;
         existing.debounceTimer = setTimeout(() => {
             void flushEntry(path);
-        }, autoSaveDelayMs) as unknown as number;
+        }, autoSaveRuntime.autoSaveDelayMs) as unknown as number;
     } else {
         // 首次变脏：检查与上次保存内容是否一致
-        const lastSaved = lastSavedContentMap.get(path);
+        const lastSaved = autoSaveRuntime.lastSavedContentMap.get(path);
         if (lastSaved === content) {
             console.debug("[auto-save] skip scheduling unchanged content", { path });
             return;
@@ -228,9 +246,9 @@ function scheduleSave(path: string, content: string): void {
             firstDirtyAt: now,
             debounceTimer: setTimeout(() => {
                 void flushEntry(path);
-            }, autoSaveDelayMs) as unknown as number,
+            }, autoSaveRuntime.autoSaveDelayMs) as unknown as number,
         };
-        pendingMap.set(path, entry);
+        autoSaveRuntime.pendingMap.set(path, entry);
     }
 }
 
@@ -241,14 +259,14 @@ function scheduleSave(path: string, content: string): void {
  * @sideEffects 若自动保存已启用且路径为 Markdown 文件，则调度保存。
  */
 function handleContentChanged(event: EditorContentChangedBusEvent): void {
-    if (vaultSwitchSuppressionDepth > 0 || isVaultBeforeChangeEventActive()) {
+    if (autoSaveRuntime.vaultSwitchSuppressionDepth > 0 || isVaultBeforeChangeEventActive()) {
         console.debug("[auto-save] ignored content change during vault switch", {
             path: event.path,
         });
         return;
     }
 
-    if (!autoSaveEnabled) {
+    if (!autoSaveRuntime.autoSaveEnabled) {
         return;
     }
 
@@ -263,7 +281,7 @@ function handleContentChanged(event: EditorContentChangedBusEvent): void {
  * @function syncConfigState
  * @description 同步来自 configStore 的自动保存配置。
  * @param featureSettings 功能配置快照。
- * @sideEffects 更新模块级 autoSaveEnabled / autoSaveDelayMs 变量。
+ * @sideEffects 更新模块级 autoSaveRuntime.autoSaveEnabled / autoSaveRuntime.autoSaveDelayMs 变量。
  */
 function syncConfigState(featureSettings: {
     autoSaveEnabled?: boolean;
@@ -272,43 +290,43 @@ function syncConfigState(featureSettings: {
     const nextEnabled = featureSettings.autoSaveEnabled ?? true;
     const nextDelay = featureSettings.autoSaveDelayMs ?? DEFAULT_AUTO_SAVE_DELAY_MS;
 
-    if (nextEnabled !== autoSaveEnabled) {
+    if (nextEnabled !== autoSaveRuntime.autoSaveEnabled) {
         console.info("[auto-save] enabled changed", {
-            from: autoSaveEnabled,
+            from: autoSaveRuntime.autoSaveEnabled,
             to: nextEnabled,
         });
-        autoSaveEnabled = nextEnabled;
+        autoSaveRuntime.autoSaveEnabled = nextEnabled;
 
         // 若被关闭，清理所有待保存条目
-        if (!autoSaveEnabled) {
+        if (!autoSaveRuntime.autoSaveEnabled) {
             clearAllPending();
         }
     }
 
-    if (nextDelay !== autoSaveDelayMs) {
+    if (nextDelay !== autoSaveRuntime.autoSaveDelayMs) {
         console.info("[auto-save] delay changed", {
-            from: autoSaveDelayMs,
+            from: autoSaveRuntime.autoSaveDelayMs,
             to: nextDelay,
         });
-        autoSaveDelayMs = nextDelay;
+        autoSaveRuntime.autoSaveDelayMs = nextDelay;
     }
 }
 
 /**
  * @function clearAllPending
- * @description 清除所有待保存条目的定时器并清空 pendingMap（不保存）。
+ * @description 清除所有待保存条目的定时器并清空 autoSaveRuntime.pendingMap（不保存）。
  */
 function clearAllPending(): void {
-    pendingMap.forEach((entry) => {
+    autoSaveRuntime.pendingMap.forEach((entry) => {
         clearPendingTimer(entry);
     });
-    pendingMap.clear();
+    autoSaveRuntime.pendingMap.clear();
 }
 
 async function handleVaultBeforeChange(): Promise<void> {
-    vaultSwitchSuppressionDepth += 1;
+    autoSaveRuntime.vaultSwitchSuppressionDepth += 1;
     clearAllPending();
-    lastSavedContentMap.clear();
+    autoSaveRuntime.lastSavedContentMap.clear();
 
     try {
         await new Promise<void>((resolve) => {
@@ -317,7 +335,7 @@ async function handleVaultBeforeChange(): Promise<void> {
         clearAllPending();
         console.info("[auto-save] dropped pending content before vault switch");
     } finally {
-        vaultSwitchSuppressionDepth = Math.max(0, vaultSwitchSuppressionDepth - 1);
+        autoSaveRuntime.vaultSwitchSuppressionDepth = Math.max(0, autoSaveRuntime.vaultSwitchSuppressionDepth - 1);
     }
 }
 
@@ -326,67 +344,67 @@ async function handleVaultBeforeChange(): Promise<void> {
 /**
  * @function startAutoSaveService
  * @description 启动自动保存服务：订阅编辑器内容变化事件和配置变更事件。
- * @sideEffects 设置 running = true，绑定事件订阅。
+ * @sideEffects 设置 autoSaveRuntime.running = true，绑定事件订阅。
  * @throws 无。若已在运行则忽略。
  */
 export function startAutoSaveService(): void {
-    if (running) {
-        console.warn("[auto-save] service already running, skip start");
+    if (autoSaveRuntime.running) {
+        console.warn("[auto-save] service already autoSaveRuntime.running, skip start");
         return;
     }
 
-    running = true;
+    autoSaveRuntime.running = true;
 
-    unsubscribeContentEvent = subscribeEditorContentBusEvent(handleContentChanged);
+    autoSaveRuntime.unsubscribeContentEvent = subscribeEditorContentBusEvent(handleContentChanged);
 
-    unsubscribeConfigEvent = subscribeConfigChanges((state) => {
+    autoSaveRuntime.unsubscribeConfigEvent = subscribeConfigChanges((state) => {
         syncConfigState(state.featureSettings);
     });
 
-    unsubscribeVaultBeforeChangeEvent = subscribeVaultBeforeChangeEvent(handleVaultBeforeChange);
+    autoSaveRuntime.unsubscribeVaultBeforeChangeEvent = subscribeVaultBeforeChangeEvent(handleVaultBeforeChange);
 
     console.info("[auto-save] service started", {
-        autoSaveEnabled,
-        autoSaveDelayMs,
+        autoSaveEnabled: autoSaveRuntime.autoSaveEnabled,
+        autoSaveDelayMs: autoSaveRuntime.autoSaveDelayMs,
     });
 }
 
 /**
  * @function stopAutoSaveService
  * @description 停止自动保存服务：取消事件订阅，立即保存所有待保存内容，清理状态。
- * @sideEffects 设置 running = false，清理订阅和定时器，flush 所有待保存项。
+ * @sideEffects 设置 autoSaveRuntime.running = false，清理订阅和定时器，flush 所有待保存项。
  */
 export async function stopAutoSaveServiceAsync(): Promise<void> {
-    if (!running) {
+    if (!autoSaveRuntime.running) {
         return;
     }
 
-    running = false;
+    autoSaveRuntime.running = false;
 
-    if (unsubscribeContentEvent) {
-        unsubscribeContentEvent();
-        unsubscribeContentEvent = null;
+    if (autoSaveRuntime.unsubscribeContentEvent) {
+        autoSaveRuntime.unsubscribeContentEvent();
+        autoSaveRuntime.unsubscribeContentEvent = null;
     }
 
-    if (unsubscribeConfigEvent) {
-        unsubscribeConfigEvent();
-        unsubscribeConfigEvent = null;
+    if (autoSaveRuntime.unsubscribeConfigEvent) {
+        autoSaveRuntime.unsubscribeConfigEvent();
+        autoSaveRuntime.unsubscribeConfigEvent = null;
     }
 
-    if (unsubscribeVaultBeforeChangeEvent) {
-        unsubscribeVaultBeforeChangeEvent();
-        unsubscribeVaultBeforeChangeEvent = null;
+    if (autoSaveRuntime.unsubscribeVaultBeforeChangeEvent) {
+        autoSaveRuntime.unsubscribeVaultBeforeChangeEvent();
+        autoSaveRuntime.unsubscribeVaultBeforeChangeEvent = null;
     }
 
     await flushAutoSave();
-    lastSavedContentMap.clear();
+    autoSaveRuntime.lastSavedContentMap.clear();
     console.info("[auto-save] service stopped, all pending flushed");
 }
 
 /**
  * @function stopAutoSaveService
  * @description 停止自动保存服务：取消事件订阅并异步写回待保存内容。
- * @sideEffects 设置 running = false，清理订阅和定时器，flush 所有待保存项。
+ * @sideEffects 设置 autoSaveRuntime.running = false，清理订阅和定时器，flush 所有待保存项。
  */
 export function stopAutoSaveService(): void {
     void stopAutoSaveServiceAsync().catch((error) => {
@@ -400,10 +418,10 @@ export function stopAutoSaveService(): void {
  * @function flushAutoSave
  * @description 立即保存所有待保存文件内容。适用于编辑器失焦、Tab 切换、应用退出前等场景。
  * @returns Promise，所有保存完成后 resolve。
- * @sideEffects 清空 pendingMap，逐一调用后端保存。
+ * @sideEffects 清空 autoSaveRuntime.pendingMap，逐一调用后端保存。
  */
 export async function flushAutoSave(): Promise<void> {
-    const paths = Array.from(pendingMap.keys());
+    const paths = Array.from(autoSaveRuntime.pendingMap.keys());
     if (paths.length === 0) {
         return;
     }
@@ -423,17 +441,17 @@ export async function flushAutoSave(): Promise<void> {
  * @description 立即保存指定路径的待保存内容。适用于单个编辑器失焦场景。
  * @param path 文件相对路径。
  * @returns Promise，保存完成后 resolve。
- * @sideEffects 从 pendingMap 中移除条目，调用后端保存。
+ * @sideEffects 从 autoSaveRuntime.pendingMap 中移除条目，调用后端保存。
  */
 export async function flushAutoSaveByPath(path: string): Promise<void> {
-    const pending = pendingMap.get(path);
+    const pending = autoSaveRuntime.pendingMap.get(path);
     if (!pending) {
         return;
     }
 
     if (isVaultBeforeChangeEventActive()) {
         clearPendingTimer(pending);
-        pendingMap.delete(path);
+        autoSaveRuntime.pendingMap.delete(path);
         console.info("[auto-save] flush by path ignored during vault switch", { path });
         return;
     }
@@ -447,15 +465,15 @@ export async function flushAutoSaveByPath(path: string): Promise<void> {
  * @description 标记指定路径的内容为已保存状态（用于手动 Cmd+S 保存后同步状态）。
  * @param path 文件相对路径。
  * @param content 已保存的内容。
- * @sideEffects 更新 lastSavedContentMap，若 pendingMap 中有同内容条目则清除。
+ * @sideEffects 更新 autoSaveRuntime.lastSavedContentMap，若 autoSaveRuntime.pendingMap 中有同内容条目则清除。
  */
 export function markContentAsSaved(path: string, content: string): void {
-    lastSavedContentMap.set(path, content);
+    autoSaveRuntime.lastSavedContentMap.set(path, content);
 
-    const pending = pendingMap.get(path);
+    const pending = autoSaveRuntime.pendingMap.get(path);
     if (pending && pending.content === content) {
         clearPendingTimer(pending);
-        pendingMap.delete(path);
+        autoSaveRuntime.pendingMap.delete(path);
         console.debug("[auto-save] pending cleared after manual save", { path });
     }
 }
@@ -479,9 +497,9 @@ export function useAutoSaveLifecycle(): void {
 /**
  * @interface AutoSaveServiceState
  * @description 自动保存服务内部状态快照（仅供测试和调试使用）。
- * @field running - 服务是否运行中
- * @field autoSaveEnabled - 自动保存是否启用
- * @field autoSaveDelayMs - 当前防抖延迟
+ * @field autoSaveRuntime.running - 服务是否运行中
+ * @field autoSaveRuntime.autoSaveEnabled - 自动保存是否启用
+ * @field autoSaveRuntime.autoSaveDelayMs - 当前防抖延迟
  * @field pendingPaths - 待保存路径列表
  * @field lastSavedPaths - 已记录最后保存内容的路径列表
  */
@@ -505,10 +523,10 @@ export interface AutoSaveServiceState {
  */
 export function getAutoSaveServiceState(): AutoSaveServiceState {
     return {
-        running,
-        autoSaveEnabled,
-        autoSaveDelayMs,
-        pendingPaths: Array.from(pendingMap.keys()),
-        lastSavedPaths: Array.from(lastSavedContentMap.keys()),
+        running: autoSaveRuntime.running,
+        autoSaveEnabled: autoSaveRuntime.autoSaveEnabled,
+        autoSaveDelayMs: autoSaveRuntime.autoSaveDelayMs,
+        pendingPaths: Array.from(autoSaveRuntime.pendingMap.keys()),
+        lastSavedPaths: Array.from(autoSaveRuntime.lastSavedContentMap.keys()),
     };
 }

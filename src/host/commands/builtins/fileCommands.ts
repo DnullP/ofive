@@ -22,9 +22,7 @@ import {
     createVaultDirectory,
     createVaultMarkdownFile,
     deleteVaultBinaryFile,
-    deleteVaultCanvasFile,
     deleteVaultDirectory,
-    deleteVaultMarkdownFile,
 } from "../../../api/vaultApi";
 import i18n from "../../../i18n";
 import {
@@ -39,6 +37,10 @@ import {
     getFocusedArticleSnapshot,
 } from "../../editor/editorContextStore";
 import { savePersistedMarkdownContent } from "../../editor/persistedMarkdownContentSync";
+import {
+    deletePersistedCanvasFile,
+    deletePersistedMarkdownFile,
+} from "../../vault/vaultMutationService";
 import type { CommandContext, CommandDefinition } from "../commandTypes";
 
 interface TargetArticleSnapshot {
@@ -77,12 +79,12 @@ function resolveTargetArticlePath(activeTabId: string | null): string | null {
  */
 async function deleteVaultEntryByPath(relativePath: string): Promise<void> {
     if (relativePath.endsWith(".md") || relativePath.endsWith(".markdown")) {
-        await deleteVaultMarkdownFile(relativePath);
+        await deletePersistedMarkdownFile(relativePath);
         return;
     }
 
     if (relativePath.endsWith(".canvas")) {
-        await deleteVaultCanvasFile(relativePath);
+        await deletePersistedCanvasFile(relativePath);
         return;
     }
 

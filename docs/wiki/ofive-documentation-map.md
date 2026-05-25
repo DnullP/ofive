@@ -39,6 +39,7 @@ Wiki 层回答“系统是什么、边界是什么、为什么这样设计”。
 - [[ofive-module-glossary]]：后端模块。
 - [[ofive-architecture-overview]]：整体架构。
 - [[ofive-maintainer-dashboard]]：维护者视图。
+- [[ofive-code-simplification-governance]]：代码简化、硬门禁、旧兼容入口清理和交接规则。
 - [[ofive-wiki-authoring-guide]]：wiki 写作规范。
 
 ## 专项文档层

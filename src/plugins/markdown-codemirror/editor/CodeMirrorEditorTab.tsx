@@ -32,7 +32,6 @@ import { requestVaultDeleteConfirmation } from "../../../host/commands/deleteCon
 import { useShortcutState } from "../../../host/commands/shortcutStore";
 import { useVaultState } from "../../../host/vault/vaultStore";
 import {
-    renameVaultMarkdownFile,
     segmentChineseText,
 } from "../../../api/vaultApi";
 import { useConfigState, getConfigSnapshot, DEFAULT_EDITOR_FONT_FAMILY } from "../../../host/config/configStore";
@@ -42,6 +41,7 @@ import {
 } from "../../../host/events/appEventBus";
 import { reportActiveEditor, useActiveEditor } from "../../../host/editor/activeEditorStore";
 import { savePersistedMarkdownContent } from "../../../host/editor/persistedMarkdownContentSync";
+import { renamePersistedMarkdownFile } from "../../../host/vault/vaultMutationService";
 import i18n from "../../../i18n";
 import { createRegisteredLineSyntaxRenderExtension } from "./syntaxRenderRegistry";
 import { ensureBuiltinSyntaxRenderersRegistered } from "./registerBuiltinSyntaxRenderers";
@@ -1054,7 +1054,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                 isActiveEditor,
                 focusEditorBodyStart,
                 dependencies: {
-                    renameMarkdownFile: renameVaultMarkdownFile,
+                    renameMarkdownFile: renamePersistedMarkdownFile,
                     saveMarkdownFile: (path, content) => savePersistedMarkdownContent({
                         containerApi: props.containerApi,
                         relativePath: path,
