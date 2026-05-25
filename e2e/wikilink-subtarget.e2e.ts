@@ -7,14 +7,15 @@ import { expect, test, type Page } from "@playwright/test";
 import { gotoMockVaultPage } from "./helpers/mockVault";
 
 const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
+const GLASS_MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0&glass=1&tint=0.06&surface=0.18&inactiveSurface=0.12&blur=16";
 const SOURCE_PATH = "test-resources/notes/wikilink-subtarget-source.md";
 const TARGET_TAB_LABEL = "wikilink-subtarget-target.md";
 
-async function waitForMockWorkbench(page: Page): Promise<void> {
+async function waitForMockWorkbench(page: Page, mockPage = MOCK_PAGE): Promise<void> {
     await page.addInitScript(() => {
         localStorage.clear();
     });
-    await gotoMockVaultPage(page, "wikilink-subtarget", MOCK_PAGE);
+    await gotoMockVaultPage(page, "wikilink-subtarget", mockPage);
     await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
     await page.locator(".layout-v2-tab-section").first().waitFor({ state: "visible" });
 }
@@ -114,6 +115,16 @@ async function switchToReadMode(page: Page): Promise<void> {
     await waitForEditorFrames(page, 2);
 }
 
+function parseCssAlpha(color: string): number {
+    const match = color.match(/^rgba?\(([^)]+)\)$/u);
+    if (!match) {
+        return 1;
+    }
+
+    const parts = match[1].split(",").map((part) => part.trim());
+    return parts.length >= 4 ? Number(parts[3]) : 1;
+}
+
 test.describe("wikilink subtargets", () => {
     test("clicking line, title, and paragraph wikilinks reveals the specific target", async ({ page }) => {
         await waitForMockWorkbench(page);
@@ -142,6 +153,37 @@ test.describe("wikilink subtargets", () => {
         await expect(preview).toBeVisible();
         await expect(preview.locator(".cm-rendered-header-h2", { hasText: "Deep Anchor" })).toBeVisible();
         await expect.poll(async () => previewBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    });
+
+    test("hover preview keeps an opaque floating surface in glass mode", async ({ page }) => {
+        await waitForMockWorkbench(page, GLASS_MOCK_PAGE);
+        await openSourceNote(page);
+
+        await dispatchCmdHoverOnWikiLink(page, "title target");
+
+        const preview = page.locator(".cm-wikilink-preview-tooltip").last();
+        await expect(preview).toBeVisible();
+        await expect(preview.locator(".cm-rendered-header-h2", { hasText: "Deep Anchor" })).toBeVisible();
+
+        const surface = await preview.evaluate((element) => {
+            const tooltip = window.getComputedStyle(element);
+            const body = element.querySelector<HTMLElement>(".cm-wikilink-preview__body");
+            const reader = element.querySelector<HTMLElement>(".cm-tab-reader");
+            const bodyStyle = body ? window.getComputedStyle(body) : null;
+            const readerStyle = reader ? window.getComputedStyle(reader) : null;
+
+            return {
+                bodyBackgroundColor: bodyStyle?.backgroundColor ?? "",
+                readerBackgroundColor: readerStyle?.backgroundColor ?? "",
+                tooltipBackdropFilter: tooltip.backdropFilter || tooltip.webkitBackdropFilter || "",
+                tooltipBackgroundColor: tooltip.backgroundColor,
+            };
+        });
+
+        expect(parseCssAlpha(surface.tooltipBackgroundColor)).toBeGreaterThanOrEqual(0.75);
+        expect(parseCssAlpha(surface.bodyBackgroundColor)).toBeGreaterThanOrEqual(0.75);
+        expect(parseCssAlpha(surface.readerBackgroundColor)).toBeGreaterThanOrEqual(0.75);
+        expect(surface.tooltipBackdropFilter).toContain("blur");
     });
 
     test("read mode wikilink navigation reveals the title subtarget in the reader", async ({ page }) => {

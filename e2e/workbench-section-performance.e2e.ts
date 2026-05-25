@@ -21,7 +21,7 @@ const GUIDE_NOTE_PATH = "test-resources/notes/guide.md";
 const NETWORK_NOTE_PATH = "test-resources/notes/network-segment.md";
 const TABLE_EDITOR_NOTE_PATH = "test-resources/notes/table-editor.md";
 const TABLE_VIM_NOTE_PATH = "test-resources/notes/table-vim-boundary.md";
-const MOCK_ARCHITECTURE_COMPONENT_ID = "architecture-devtools";
+const PERF_PLACEHOLDER_COMPONENT_ID = "performance-placeholder";
 
 interface PerformanceScenarioConfig {
     id: string;
@@ -128,6 +128,7 @@ interface LiveResizeFrameSample {
     editorWidth: number | null;
     calendarWidth: number | null;
     taskBoardWidth: number | null;
+    innerTransformCount: number;
 }
 
 interface LiveResizeSummary {
@@ -142,6 +143,7 @@ interface LiveResizeSummary {
     distinctEditorWidths: number;
     distinctCalendarWidths: number;
     distinctTaskBoardWidths: number;
+    maxInnerTransformCount: number;
     samples: LiveResizeFrameSample[];
 }
 
@@ -170,6 +172,7 @@ function compactScenarioSummary(summary: ScenarioSummary): Record<string, unknow
             editorRange: summary.liveResize.editorWidthRange,
             calendarRange: summary.liveResize.calendarWidthRange,
             taskRange: summary.liveResize.taskBoardWidthRange,
+            maxInnerTransforms: summary.liveResize.maxInnerTransformCount,
         },
         frames: {
             count: summary.sampler.frameCount,
@@ -232,7 +235,7 @@ function buildPlaceholderTab(id: string, title: string): Record<string, unknown>
     return {
         id,
         title,
-        component: MOCK_ARCHITECTURE_COMPONENT_ID,
+        component: PERF_PLACEHOLDER_COMPONENT_ID,
     };
 }
 
@@ -532,7 +535,7 @@ async function waitForFixtureReady(page: Page, scenario: PerformanceScenarioConf
         await expect(page.locator("[data-tab-section-id='calendar-tabs'] .calendar-tab__calendar-surface")).toBeVisible();
         await expect(page.locator("[data-tab-section-id='calendar-tabs'] .calendar-tab__day")).toHaveCount(42);
     } else {
-        await expect(page.locator("[data-tab-section-id='calendar-tabs']")).toContainText("Architecture Devtools");
+        await expect(page.locator("[data-tab-section-id='calendar-tabs']")).toContainText("Unregistered: performance-placeholder");
     }
 
     if (scenario.taskVisible) {
@@ -541,7 +544,7 @@ async function waitForFixtureReady(page: Page, scenario: PerformanceScenarioConf
         await taskSection.getByRole("button", { name: /All|全部/ }).click();
         await expect(taskSection.locator(".task-board__task-card")).toHaveCount(2);
     } else {
-        await expect(page.locator("[data-tab-section-id='task-tabs']")).toContainText("Architecture Devtools");
+        await expect(page.locator("[data-tab-section-id='task-tabs']")).toContainText("Unregistered: performance-placeholder");
     }
 }
 
@@ -634,6 +637,7 @@ function summarizeLiveResizeSamples(
         distinctEditorWidths: distinctCountFor((sample) => sample.editorWidth),
         distinctCalendarWidths: distinctCountFor((sample) => sample.calendarWidth),
         distinctTaskBoardWidths: distinctCountFor((sample) => sample.taskBoardWidth),
+        maxInnerTransformCount: Math.max(0, ...samples.map((sample) => sample.innerTransformCount)),
         samples,
     };
 }
@@ -672,6 +676,18 @@ async function sampleLiveResizeDuringShortDrag(
                 };
             };
             const samples: LiveResizeFrameSample[] = [];
+            const countTransformedInnerNodes = (): number => {
+                const branch = document.querySelector("[data-section-id='main-workspace']");
+                if (!(branch instanceof HTMLElement)) {
+                    return 0;
+                }
+                return Array.from(branch.querySelectorAll<HTMLElement>(".layout-v2__child-slot-inner"))
+                    .filter((element) => {
+                        const transform = window.getComputedStyle(element).transform;
+                        return transform !== "" && transform !== "none";
+                    })
+                    .length;
+            };
             const sample = (phase: LiveResizeFrameSample["phase"], index: number): void => {
                 const slotWidths = readMainWorkspaceSlotWidths();
                 samples.push({
@@ -681,6 +697,7 @@ async function sampleLiveResizeDuringShortDrag(
                     editorWidth: readWidth("[data-tab-section-id='main-tabs'] .cm-editor"),
                     calendarWidth: readWidth("[data-tab-section-id='calendar-tabs'] .calendar-tab__calendar-surface"),
                     taskBoardWidth: readWidth("[data-tab-section-id='task-tabs'] .task-board"),
+                    innerTransformCount: countTransformedInnerNodes(),
                 });
             };
 
@@ -926,6 +943,7 @@ test.describe("workbench section performance", () => {
 
             expect(summary.dom).toEqual(scenario.expectedDom);
             expect(summary.liveResize.strategy).toBe("dom-flex");
+            expect(summary.liveResize.maxInnerTransformCount).toBe(0);
             expect(summary.liveResize.sampleCount).toBeGreaterThan(20);
             expect(summary.liveResize.mainSlotWidthRange).toBeGreaterThan(80);
             expect(summary.liveResize.rightSlotWidthRange).toBeGreaterThan(80);

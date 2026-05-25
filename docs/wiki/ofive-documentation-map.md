@@ -2,7 +2,7 @@
 title: "ofive 文档地图"
 kind: "documentation-map"
 status: "active"
-updated: "2026-04-27"
+updated: "2026-05-26"
 owners:
   - "maintainers"
 tags:
@@ -40,6 +40,7 @@ Wiki 层回答“系统是什么、边界是什么、为什么这样设计”。
 - [[ofive-architecture-overview]]：整体架构。
 - [[ofive-maintainer-dashboard]]：维护者视图。
 - [[ofive-code-simplification-governance]]：代码简化、硬门禁、旧兼容入口清理和交接规则。
+- [[ofive-workbench-section-resize-performance]]：工作台 section resize 真实重绘性能优化交接。
 - [[ofive-wiki-authoring-guide]]：wiki 写作规范。
 
 ## 专项文档层

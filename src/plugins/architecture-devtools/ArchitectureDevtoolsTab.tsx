@@ -20,6 +20,7 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactElement } from "react";
 import type { WorkbenchTabProps } from "../../host/layout/workbenchContracts";
+import { WorkbenchOverlayPortal } from "../../host/layout/workbenchOverlayLayer";
 import i18n from "../../i18n";
 import { useActivities, usePanels, useTabComponents } from "../../host/registry";
 import { ArchitectureDagEdgeCanvas } from "./ArchitectureDagEdgeCanvas";
@@ -2297,117 +2298,119 @@ export function ArchitectureDevtoolsTab(
 
             </section>
 
-            {isInspectorOpen ? (
-                <div
-                    className="architecture-inspector-modal-backdrop"
-                    data-floating-backdrop="true"
-                    onClick={closeInspectorModal}
-                    role="presentation"
-                >
-                    <aside
-                        aria-label={t("architectureDevtools.inspector")}
-                        aria-modal="true"
-                        className="architecture-inspector-modal"
-                        data-floating-surface="true"
-                        onClick={(event) => event.stopPropagation()}
-                        role="dialog"
+            <WorkbenchOverlayPortal interactive>
+                {isInspectorOpen ? (
+                    <div
+                        className="architecture-inspector-modal-backdrop"
+                        data-floating-backdrop="true"
+                        onClick={closeInspectorModal}
+                        role="presentation"
                     >
-                        <div className="architecture-inspector-modal-header">
-                            <div className="architecture-section-title">
-                                {t("architectureDevtools.inspector")}
-                            </div>
-                            <div className="architecture-inspector-modal-actions">
-                                {selectedNode ? (
+                        <aside
+                            aria-label={t("architectureDevtools.inspector")}
+                            aria-modal="true"
+                            className="architecture-inspector-modal"
+                            data-floating-surface="true"
+                            onClick={(event) => event.stopPropagation()}
+                            role="dialog"
+                        >
+                            <div className="architecture-inspector-modal-header">
+                                <div className="architecture-section-title">
+                                    {t("architectureDevtools.inspector")}
+                                </div>
+                                <div className="architecture-inspector-modal-actions">
+                                    {selectedNode ? (
+                                        <button
+                                            className="architecture-inspector-tree-action"
+                                            onClick={() => focusNodeDependencyTree(selectedNode)}
+                                            type="button"
+                                        >
+                                            {t("architectureDevtools.viewNodeDependencyTree")}
+                                        </button>
+                                    ) : null}
                                     <button
-                                        className="architecture-inspector-tree-action"
-                                        onClick={() => focusNodeDependencyTree(selectedNode)}
+                                        className="architecture-inspector-close"
+                                        onClick={closeInspectorModal}
                                         type="button"
                                     >
-                                        {t("architectureDevtools.viewNodeDependencyTree")}
+                                        {t("common.close")}
                                     </button>
-                                ) : null}
-                                <button
-                                    className="architecture-inspector-close"
-                                    onClick={closeInspectorModal}
-                                    type="button"
-                                >
-                                    {t("common.close")}
-                                </button>
-                            </div>
-                        </div>
-                        {selectedNode ? (
-                            <>
-                                <div className="architecture-inspector-kind">
-                                    {(() => {
-                                        const moduleLayer = selectedNode.kind === "ui-module"
-                                            ? getNodeModuleLayer(selectedNode)
-                                            : null;
-                                        return moduleLayer
-                                            ? `${getKindLabel(selectedNode.kind)} · ${getModuleLayerLabel(moduleLayer)}`
-                                            : getKindLabel(selectedNode.kind);
-                                    })()}
                                 </div>
-                                <h3 className="architecture-inspector-title">
-                                    {selectedNode.title}
-                                </h3>
-                                <p className="architecture-inspector-summary">
-                                    {selectedNode.summary}
-                                </p>
-                                {selectedNode.location ? (
-                                    <div className="architecture-location-chip">
-                                        {selectedNode.location}
+                            </div>
+                            {selectedNode ? (
+                                <>
+                                    <div className="architecture-inspector-kind">
+                                        {(() => {
+                                            const moduleLayer = selectedNode.kind === "ui-module"
+                                                ? getNodeModuleLayer(selectedNode)
+                                                : null;
+                                            return moduleLayer
+                                                ? `${getKindLabel(selectedNode.kind)} · ${getModuleLayerLabel(moduleLayer)}`
+                                                : getKindLabel(selectedNode.kind);
+                                        })()}
                                     </div>
-                                ) : null}
-                                {selectedNode.details && selectedNode.details.length > 0 ? (
+                                    <h3 className="architecture-inspector-title">
+                                        {selectedNode.title}
+                                    </h3>
+                                    <p className="architecture-inspector-summary">
+                                        {selectedNode.summary}
+                                    </p>
+                                    {selectedNode.location ? (
+                                        <div className="architecture-location-chip">
+                                            {selectedNode.location}
+                                        </div>
+                                    ) : null}
+                                    {selectedNode.details && selectedNode.details.length > 0 ? (
+                                        <div className="architecture-inspector-list">
+                                            {selectedNode.details.map((detail) => (
+                                                <div
+                                                    className="architecture-inspector-item"
+                                                    key={`${selectedNode.id}-${detail}`}
+                                                >
+                                                    {detail}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : null}
+                                    <div className="architecture-inspector-subtitle">
+                                        {t("architectureDevtools.relatedEdges", {
+                                            count: selectedNodeRelatedEdges.length,
+                                        })}
+                                    </div>
                                     <div className="architecture-inspector-list">
-                                        {selectedNode.details.map((detail) => (
+                                        {selectedNodeRelatedEdges.map((edge) => (
                                             <div
                                                 className="architecture-inspector-item"
-                                                key={`${selectedNode.id}-${detail}`}
+                                                key={getArchitectureEdgeKey(edge)}
                                             >
-                                                {detail}
+                                                <div className="architecture-inspector-item-title">
+                                                    {formatEdgeDescription(edge, nodeMap)}
+                                                </div>
+                                                {edge.details && edge.details.length > 0 ? (
+                                                    <div className="architecture-inspector-item-details">
+                                                        {edge.details.map((detail) => (
+                                                            <div
+                                                                className="architecture-inspector-item-detail"
+                                                                key={`${edge.from}-${edge.to}-${detail}`}
+                                                            >
+                                                                {detail}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : null}
                                             </div>
                                         ))}
                                     </div>
-                                ) : null}
-                                <div className="architecture-inspector-subtitle">
-                                    {t("architectureDevtools.relatedEdges", {
-                                        count: selectedNodeRelatedEdges.length,
-                                    })}
-                                </div>
-                                <div className="architecture-inspector-list">
-                                    {selectedNodeRelatedEdges.map((edge) => (
-                                        <div
-                                            className="architecture-inspector-item"
-                                            key={getArchitectureEdgeKey(edge)}
-                                        >
-                                            <div className="architecture-inspector-item-title">
-                                                {formatEdgeDescription(edge, nodeMap)}
-                                            </div>
-                                            {edge.details && edge.details.length > 0 ? (
-                                                <div className="architecture-inspector-item-details">
-                                                    {edge.details.map((detail) => (
-                                                        <div
-                                                            className="architecture-inspector-item-detail"
-                                                            key={`${edge.from}-${edge.to}-${detail}`}
-                                                        >
-                                                            {detail}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : null}
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        ) : (
-                            <p className="architecture-inspector-summary">
-                                {t("architectureDevtools.emptySelection")}
-                            </p>
-                        )}
-                    </aside>
-                </div>
-            ) : null}
+                                </>
+                            ) : (
+                                <p className="architecture-inspector-summary">
+                                    {t("architectureDevtools.emptySelection")}
+                                </p>
+                            )}
+                        </aside>
+                    </div>
+                ) : null}
+            </WorkbenchOverlayPortal>
 
             {/* architecture-runtime-grid: 当前运行时扩展注册面 */}
             <section className="architecture-runtime-grid">

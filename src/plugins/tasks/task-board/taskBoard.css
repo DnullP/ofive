@@ -135,6 +135,10 @@
     backdrop-filter: blur(2px);
 }
 
+[data-workbench-overlay-portal="true"] > .task-board__modal-backdrop {
+    position: absolute;
+}
+
 /* task-board__column-settings：自定义列配置弹窗，保持紧凑并支持复杂条件。 */
 .task-board__column-settings {
     display: flex;
@@ -142,11 +146,12 @@
     width: min(920px, 100%);
     max-height: min(620px, calc(100% - 12px));
     min-height: 0;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--surface-overlay-panel-border);
     border-radius: 8px;
-    background: color-mix(in srgb, var(--bg-primary) 98%, transparent);
-    box-shadow: var(--overlay-shadow-strong);
+    background: var(--surface-overlay-panel-bg);
+    box-shadow: var(--surface-overlay-panel-shadow);
     overflow: hidden;
+    background-clip: padding-box;
 }
 
 .task-board__column-settings-header,

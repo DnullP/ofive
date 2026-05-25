@@ -95,6 +95,8 @@ async function hoverTokenWithModifier(page: Page, locator: Locator, modifier: "M
                 locator,
                 "Project reader token is missing a bounding box.",
             );
+            await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+            await page.mouse.move(x - 24, y);
             await page.mouse.move(x, y);
             const className = await locator.evaluate((element) => element.className);
             return typeof className === "string"

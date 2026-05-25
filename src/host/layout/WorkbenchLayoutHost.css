@@ -30,8 +30,23 @@
 }
 
 .workbench-layout-v2__overlay-layer [data-overlay-id],
-.workbench-layout-v2__overlay-layer [data-workbench-overlay-interactive="true"] {
+.workbench-layout-v2__overlay-layer [data-workbench-overlay-portal="true"] > [data-floating-backdrop="true"],
+.workbench-layout-v2__overlay-layer [data-workbench-overlay-portal="true"] > [data-floating-surface="true"],
+.workbench-layout-v2__overlay-layer > [data-floating-backdrop="true"] {
     pointer-events: auto;
+}
+
+.workbench-layout-v2__overlay-layer [data-workbench-overlay-portal="true"] {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.workbench-layout-v2__overlay-layer > [data-floating-backdrop="true"] {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
 }
 
 .workbench-layout-v2__empty-section {

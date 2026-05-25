@@ -194,7 +194,7 @@
     position: relative;
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    grid-template-rows: repeat(6, minmax(var(--calendar-day-min-height), auto));
+    grid-template-rows: repeat(6, var(--calendar-day-min-height));
     gap: 0;
     flex: 0 0 auto;
     border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);

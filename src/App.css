@@ -79,6 +79,7 @@
   --surface-chip-border: color-mix(in srgb, var(--border-color) 72%, transparent);
   --surface-chip-text: var(--text-secondary);
   --surface-chip-text-strong: var(--text-primary);
+  --project-reader-structural-accent: color-mix(in srgb, var(--accent-primary) 72%, var(--text-link-color));
   --surface-overlay-backdrop: color-mix(in srgb, var(--bg-primary) 68%, transparent);
   --surface-overlay-panel-bg: color-mix(in srgb, var(--surface-card-bg) 94%, transparent);
   --surface-overlay-panel-border: color-mix(in srgb, var(--border-color) 76%, transparent);
@@ -1273,9 +1274,9 @@ textarea,
 }
 
 [data-floating-surface="true"] button,
-[data-floating-surface="true"] input,
-[data-floating-surface="true"] select,
-[data-floating-surface="true"] textarea {
+[data-floating-surface="true"] input:not(.ofive-ui-control),
+[data-floating-surface="true"] select:not(.ofive-ui-control),
+[data-floating-surface="true"] textarea:not(.ofive-ui-control) {
   border-radius: var(--modal-control-radius);
 }
 

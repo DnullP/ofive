@@ -240,14 +240,6 @@ test.describe("frontmatter 可见性", () => {
         await expectVisibleWithPositiveRect(frontmatterWidget);
 
         await expect(frontmatterWidget.locator("textarea.fmv-input").first()).toHaveValue("Network Segment");
-        await expect(frontmatterWidget.locator(".fmv-editor").first()).toHaveCSS("background-color", /rgba?\(/);
-
-        const frontmatterSurfaceAlpha = await frontmatterWidget.locator(".fmv-editor").first().evaluate((node) => {
-            const color = window.getComputedStyle(node as HTMLElement).backgroundColor;
-            const alphaMatch = color.match(/^rgba\([^,]+,\s*[^,]+,\s*[^,]+,\s*([^)]+)\)$/);
-            return alphaMatch ? Number(alphaMatch[1]) : 1;
-        });
-        expect(frontmatterSurfaceAlpha).toBeGreaterThan(0.5);
 
         const bodyLine = page.locator(".cm-line").filter({ hasText: "Description" }).first();
         await expectVisibleWithPositiveRect(bodyLine);

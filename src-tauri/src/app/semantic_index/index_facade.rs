@@ -183,6 +183,9 @@ mod tests {
         save_semantic_index_settings, search_markdown_chunks_for_consumer,
         upsert_indexed_markdown_document,
     };
+    use crate::app::app_storage::storage_registry_facade::{
+        lock_app_storage_test_root, set_app_storage_test_root,
+    };
     use crate::shared::semantic_index_contracts::SemanticSearchRequest;
     use crate::shared::semantic_index_contracts::{
         ChunkingStrategyKind, EmbeddingProviderKind, SemanticIndexSettings, VectorStoreKind,
@@ -190,6 +193,7 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::MutexGuard;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -208,6 +212,27 @@ mod tests {
         root
     }
 
+    struct AppStorageTestGuard {
+        _lock: MutexGuard<'static, ()>,
+        root: PathBuf,
+    }
+
+    impl AppStorageTestGuard {
+        fn new(test_root: &std::path::Path) -> Self {
+            let lock = lock_app_storage_test_root().expect("app storage test lock should succeed");
+            let root = test_root.join(".app-storage-test");
+            set_app_storage_test_root(Some(root.clone())).expect("test root should set");
+            Self { _lock: lock, root }
+        }
+    }
+
+    impl Drop for AppStorageTestGuard {
+        fn drop(&mut self) {
+            let _ = set_app_storage_test_root(None);
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
     #[test]
     fn backend_catalog_facade_should_forward_builtin_choices() {
         let catalog = load_semantic_index_backend_catalog();
@@ -220,6 +245,7 @@ mod tests {
     #[test]
     fn settings_facade_should_round_trip_configuration() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         let saved = save_semantic_index_settings(
             SemanticIndexSettings {
                 enabled: true,
@@ -243,6 +269,7 @@ mod tests {
     #[test]
     fn indexed_document_facade_should_support_basic_crud() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         save_semantic_index_settings(
             SemanticIndexSettings {
                 enabled: true,
@@ -284,6 +311,7 @@ mod tests {
     #[test]
     fn ensure_current_should_return_disabled_status_for_default_settings() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         let status = ensure_semantic_index_current(&root)
             .expect("ensure current should succeed in cold state");
 
@@ -311,6 +339,7 @@ mod tests {
     #[test]
     fn facade_search_should_forward_structured_cold_state() {
         let root = create_test_root();
+        let _app_guard = AppStorageTestGuard::new(&root);
         let response = search_markdown_chunks_for_consumer(
             SemanticSearchRequest {
                 query: "markdown chunk".to_string(),

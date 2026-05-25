@@ -334,6 +334,12 @@
     box-shadow: inset 0 1px 0 rgba(var(--window-glass-border-rgb), 0.12);
 }
 
+.app-runtime--tauri.app-effect--glass .ofive-ui-control:focus,
+.app-runtime--tauri.app-effect--glass .ofive-ui-control:focus-visible {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary-soft) 42%, transparent);
+}
+
 .app-runtime--tauri.app-effect--glass .ofive-ui-control--settings {
     border-color: var(--content-material-border);
     background: var(--content-material-input-bg);

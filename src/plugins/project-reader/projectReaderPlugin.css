@@ -130,7 +130,7 @@
 }
 
 .project-reader-search-mode-button.is-astGrep {
-    color: color-mix(in srgb, var(--accent-primary) 72%, #7c3aed);
+    color: var(--project-reader-structural-accent);
 }
 
 .project-reader-search-mode-menu {
@@ -179,7 +179,7 @@
 
 .project-reader-search-mode-menu-item.is-astGrep.is-active,
 .project-reader-search-mode-menu-item.is-astGrep:hover {
-    color: color-mix(in srgb, var(--accent-primary) 72%, #7c3aed);
+    color: var(--project-reader-structural-accent);
 }
 
 .project-reader-search-mode-menu-item span {

@@ -379,6 +379,13 @@ test.describe("editor view state regression", () => {
         await waitForVisibleEditorTitle(page, "scroll-regression");
         await waitForEditorActivationFrame(page);
 
+        await expect.poll(async () => {
+            const state = await readVisibleEditorState(page);
+            return state.title === "scroll-regression"
+                && state.scrollTop < 240
+                && state.editorHasFocus;
+        }).toBe(true);
+
         const afterSwitch = await readVisibleEditorState(page);
         expect(afterSwitch.title).toBe("scroll-regression");
         expect(afterSwitch.scrollTop).toBeLessThan(240);

@@ -1271,12 +1271,13 @@ export function TaskBoardTab(
 
             <WorkbenchOverlayPortal interactive>
                 {columnSettingsModal ? (
-                    <div className="task-board__modal-backdrop">
+                    <div className="task-board__modal-backdrop" data-floating-backdrop="true">
                         <section
                             className="task-board__column-settings"
                             role="dialog"
                             aria-modal="true"
                             aria-labelledby="task-board-column-settings-title"
+                            data-floating-surface="true"
                         >
                         <div className="task-board__column-settings-header">
                             <div className="task-board__column-settings-title-group">
