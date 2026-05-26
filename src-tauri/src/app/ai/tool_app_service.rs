@@ -83,6 +83,8 @@ mod tests {
             active_provider_id: None,
             providers: Vec::new(),
             tool_approval_policy,
+            auto_compress_context: true,
+            context_limit_tokens: 32_000,
         }
     }
 

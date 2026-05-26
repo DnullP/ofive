@@ -245,6 +245,21 @@ pub(crate) fn move_vault_canvas_file_to_directory(
     )
 }
 
+/// 将当前仓库中的任意普通文件移动到目标目录。
+pub(crate) fn move_vault_file_to_directory(
+    from_relative_path: String,
+    target_directory_relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    write_runtime::move_vault_file_to_directory(
+        from_relative_path,
+        target_directory_relative_path,
+        source_trace_id,
+        state,
+    )
+}
+
 /// 重命名当前仓库中的目录。
 pub(crate) fn rename_vault_directory(
     from_relative_path: String,
@@ -465,6 +480,19 @@ pub fn move_vault_canvas_file_to_directory_in_root(
     vault_root: &Path,
 ) -> Result<WriteMarkdownResponse, String> {
     write_runtime::move_vault_canvas_file_to_directory_in_root(
+        from_relative_path,
+        target_directory_relative_path,
+        vault_root,
+    )
+}
+
+/// 在指定仓库根目录下移动任意普通文件到目录。
+pub fn move_vault_file_to_directory_in_root(
+    from_relative_path: String,
+    target_directory_relative_path: String,
+    vault_root: &Path,
+) -> Result<WriteMarkdownResponse, String> {
+    write_runtime::move_vault_file_to_directory_in_root(
         from_relative_path,
         target_directory_relative_path,
         vault_root,

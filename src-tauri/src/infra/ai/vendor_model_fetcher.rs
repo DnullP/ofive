@@ -37,6 +37,8 @@ pub(crate) async fn fetch_ai_vendor_models(
         active_provider_id: None,
         providers: Vec::new(),
         tool_approval_policy: sanitized.tool_approval_policy,
+        auto_compress_context: sanitized.auto_compress_context,
+        context_limit_tokens: sanitized.context_limit_tokens,
     };
 
     match active_settings.vendor_id.as_str() {
@@ -349,6 +351,8 @@ mod tests {
             active_provider_id: None,
             providers: Vec::new(),
             tool_approval_policy: HashMap::new(),
+            auto_compress_context: true,
+            context_limit_tokens: 32_000,
         })
         .await
         .expect("MiniMax 模型列表应从配置 base URL 拉取");
@@ -408,6 +412,8 @@ mod tests {
             active_provider_id: None,
             providers: Vec::new(),
             tool_approval_policy: HashMap::new(),
+            auto_compress_context: true,
+            context_limit_tokens: 32_000,
         })
         .await
         .expect("Codex-compatible 模型列表应从配置 base URL 拉取");

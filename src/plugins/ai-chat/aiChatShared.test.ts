@@ -270,6 +270,39 @@ describe("aiChatShared", () => {
         expect(next.conversations[0]?.protocolMessages).toHaveLength(0);
     });
 
+    it("应在加载历史时保留协议工具块消息", () => {
+        const next = ensureHistoryState({
+            activeConversationId: "c1",
+            conversations: [
+                {
+                    id: "c1",
+                    sessionId: "s1",
+                    title: "tool blocks",
+                    createdAtUnixMs: 1,
+                    updatedAtUnixMs: 2,
+                    messages: [],
+                    protocolMessages: [
+                        {
+                            id: "p1",
+                            role: "user",
+                            text: "",
+                            createdAtUnixMs: 2,
+                            contentBlocks: [{
+                                kind: "tool-result",
+                                toolUseId: "toolu-1",
+                                toolName: "vault.read_markdown_file",
+                                resultJson: "{\"content\":\"hello\"}",
+                            }],
+                        },
+                    ],
+                },
+            ],
+        });
+
+        expect(next.conversations[0]?.protocolMessages).toHaveLength(1);
+        expect(next.conversations[0]?.protocolMessages?.[0]?.contentBlocks?.[0]?.kind).toBe("tool-result");
+    });
+
     it("应在持久化历史时过滤空消息并重算标题", () => {
         const history: AiChatHistoryState = {
             activeConversationId: "c1",

@@ -567,6 +567,22 @@ function isVisibleConversationMessage(message: AiChatHistoryMessage): boolean {
     });
 }
 
+/**
+ * @function isPersistableProtocolMessage
+ * @description 判断协议历史消息是否应持久化，保留 tool-use/tool-result 等不可见协议块。
+ * @param message 历史消息。
+ * @returns 可用于恢复模型上下文时返回 true。
+ */
+function isPersistableProtocolMessage(message: AiChatHistoryMessage): boolean {
+    if (isLegacyVisibleToolTranscript(message.text)) {
+        return false;
+    }
+
+    return message.text.trim().length > 0 ||
+        (message.reasoningText ?? "").trim().length > 0 ||
+        (message.contentBlocks?.length ?? 0) > 0;
+}
+
 function isLegacyVisibleToolTranscript(text: string): boolean {
     const trimmed = text.trimStart();
     return trimmed.startsWith("[tool:")
@@ -644,7 +660,7 @@ export function ensureHistoryState(
             ...conversation,
             messages: conversation.messages.filter(isVisibleConversationMessage),
             protocolMessages: conversation.protocolMessages?.length
-                ? conversation.protocolMessages.filter(isVisibleConversationMessage)
+                ? conversation.protocolMessages.filter(isPersistableProtocolMessage)
                 : buildFallbackProtocolMessages(conversation.messages),
         }))),
     };
@@ -669,11 +685,7 @@ export function buildPersistableHistory(
                 protocolMessages: (conversation.protocolMessages?.length
                     ? conversation.protocolMessages
                     : buildFallbackProtocolMessages(conversation.messages)
-                ).filter((message) => {
-                    return message.text.trim().length > 0 ||
-                        (message.reasoningText ?? "").trim().length > 0 ||
-                        (message.contentBlocks?.length ?? 0) > 0;
-                }),
+                ).filter(isPersistableProtocolMessage),
             }),
         ),
     };

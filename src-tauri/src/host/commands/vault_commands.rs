@@ -30,6 +30,7 @@ pub(crate) const VAULT_COMMAND_IDS: &[&str] = &[
     "rename_vault_canvas_file",
     "move_vault_markdown_file_to_directory",
     "move_vault_canvas_file_to_directory",
+    "move_vault_file_to_directory",
     "rename_vault_directory",
     "move_vault_directory_to_directory",
     "delete_vault_directory",
@@ -377,6 +378,25 @@ pub fn move_vault_canvas_file_to_directory(
     timed_command!(
         "move_vault_canvas_file_to_directory",
         vault_app_service::move_vault_canvas_file_to_directory(
+            from_relative_path,
+            target_directory_relative_path,
+            source_trace_id,
+            state,
+        )
+    )
+}
+
+/// 移动普通文件到目录。
+#[tauri::command]
+pub fn move_vault_file_to_directory(
+    from_relative_path: String,
+    target_directory_relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    timed_command!(
+        "move_vault_file_to_directory",
+        vault_app_service::move_vault_file_to_directory(
             from_relative_path,
             target_directory_relative_path,
             source_trace_id,

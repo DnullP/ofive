@@ -127,6 +127,10 @@ export interface AiChatSettings {
     activeProviderId?: string;
     providers?: AiChatProviderConfig[];
     toolApprovalPolicy?: Record<string, Exclude<AiToolApprovalMode, "default">>;
+    /** 是否在发送前自动压缩超过预算的旧对话上下文。 */
+    autoCompressContext?: boolean;
+    /** 单次请求允许携带的估算上下文 token 上限。 */
+    contextLimitTokens?: number;
 }
 
 /**

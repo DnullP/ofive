@@ -35,7 +35,7 @@ import { buildCreatedMarkdownInitialContent } from "../../../utils/frontmatterTe
 import { getConfigSnapshot } from "../../../host/config/configStore";
 import { getArticleSnapshotById, useFocusedArticle } from "../../../host/editor/editorContextStore";
 import { savePersistedMarkdownContent } from "../../../host/editor/persistedMarkdownContentSync";
-import { deletePersistedCanvasFile, deletePersistedMarkdownFile, movePersistedCanvasFileToDirectory, movePersistedMarkdownFileToDirectory, renamePersistedCanvasFile, renamePersistedMarkdownFile } from "../../../host/vault/vaultMutationService";
+import { deletePersistedCanvasFile, deletePersistedMarkdownFile, movePersistedCanvasFileToDirectory, movePersistedFileToDirectory, movePersistedMarkdownFileToDirectory, renamePersistedCanvasFile, renamePersistedMarkdownFile } from "../../../host/vault/vaultMutationService";
 import { useVaultState } from "../../../host/vault/vaultStore";
 import { openVaultWithSystemPicker } from "../../../host/vault/openVaultDialog";
 import {
@@ -490,27 +490,23 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             return;
         }
 
-        if (!isEditableFilePath(sourceRelativePath)) {
-            console.warn("[vault-ui] drop-move skipped: unsupported file type", {
-                sourceRelativePath,
-                targetDirectoryRelativePath,
-            });
-            return;
-        }
-
         try {
-            const result = isCanvasPath(sourceRelativePath)
-                ? await movePersistedCanvasFileToDirectory(sourceRelativePath, targetDirectoryRelativePath)
-                : await movePersistedMarkdownFileToDirectory(sourceRelativePath, targetDirectoryRelativePath);
-            closeTab?.(`file:${sourceRelativePath}`);
+            const result = !isEditableFilePath(sourceRelativePath)
+                ? await movePersistedFileToDirectory(sourceRelativePath, targetDirectoryRelativePath)
+                : isCanvasPath(sourceRelativePath)
+                    ? await movePersistedCanvasFileToDirectory(sourceRelativePath, targetDirectoryRelativePath)
+                    : await movePersistedMarkdownFileToDirectory(sourceRelativePath, targetDirectoryRelativePath);
 
-            const latestContent = await readEditableFileContent(result.relativePath);
-            await openFileWithResolver({
-                relativePath: result.relativePath,
-                currentVaultPath,
-                contentOverride: latestContent,
-                openTab,
-            });
+            if (isEditableFilePath(sourceRelativePath)) {
+                closeTab?.(`file:${sourceRelativePath}`);
+                const latestContent = await readEditableFileContent(result.relativePath);
+                await openFileWithResolver({
+                    relativePath: result.relativePath,
+                    currentVaultPath,
+                    contentOverride: latestContent,
+                    openTab,
+                });
+            }
 
             console.info("[vault-ui] drop-move success", {
                 from: sourceRelativePath,
@@ -540,9 +536,10 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
         }
 
         if (!isEditableFilePath(item.path)) {
-            console.warn("[vault-ui] batch move skipped: unsupported file type", {
-                path: item.path,
-                targetDirectoryRelativePath,
+            const result = await movePersistedFileToDirectory(item.path, targetDirectoryRelativePath);
+            console.info("[vault-ui] batch move file success", {
+                from: item.path,
+                to: result.relativePath,
             });
             return;
         }

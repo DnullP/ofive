@@ -71,6 +71,18 @@ pub struct AiChatSettings {
     pub providers: Vec<AiChatProviderConfig>,
     #[serde(default)]
     pub tool_approval_policy: HashMap<String, String>,
+    #[serde(default = "default_auto_compress_context")]
+    pub auto_compress_context: bool,
+    #[serde(default = "default_context_limit_tokens")]
+    pub context_limit_tokens: u32,
+}
+
+fn default_auto_compress_context() -> bool {
+    true
+}
+
+fn default_context_limit_tokens() -> u32 {
+    32_000
 }
 
 /// AI 对话消息记录。

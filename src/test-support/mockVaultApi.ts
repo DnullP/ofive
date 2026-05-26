@@ -69,6 +69,10 @@ export function createMockVaultApi(overrides: MockVaultApiOverrides = {}): MockV
             relativePath: fromRelativePath,
             created: false,
         }),
+        moveVaultFileToDirectory: async (fromRelativePath: string) => ({
+            relativePath: fromRelativePath,
+            created: false,
+        }),
         renameVaultDirectory: async (_fromRelativePath: string, toRelativePath: string) => ({
             relativePath: toRelativePath,
             created: false,

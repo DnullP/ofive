@@ -228,6 +228,10 @@ define_app_commands![
         crate::host::commands::vault_commands::move_vault_canvas_file_to_directory
     ),
     (
+        "move_vault_file_to_directory",
+        crate::host::commands::vault_commands::move_vault_file_to_directory
+    ),
+    (
         "rename_vault_directory",
         crate::host::commands::vault_commands::rename_vault_directory
     ),

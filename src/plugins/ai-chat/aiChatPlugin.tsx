@@ -88,6 +88,7 @@ import {
     UiField,
     UiModal,
     UiSelect,
+    UiNumberInput,
     UiTextInput,
 } from "../../host/ui";
 import {
@@ -113,6 +114,15 @@ import {
     syncAiChatSmoothedMessageTargets,
     type AiChatSmoothedMessageState,
 } from "./aiChatStreamSmoothing";
+import {
+    buildBudgetedAiChatHistory,
+    normalizeAiChatContextBudgetSettings,
+} from "./aiChatContextBudget";
+import {
+    getAiChatRuntimeSnapshot,
+    resetAiChatRuntimeSnapshot,
+    updateAiChatRuntimeSnapshot,
+} from "./aiChatRuntimeStore";
 import {
     groupAiChatToolCallRecords,
     reduceAiChatToolCallDebugEntry,
@@ -631,22 +641,73 @@ function AiChatToolCallRecordView(props: AiChatToolCallRecordViewProps): ReactNo
 function AiChatView(props: AiChatViewProps = {}): ReactNode {
     const { currentVaultPath, backendReady, files } = useVaultState();
     const activeEditor = useActiveEditor();
-    const [historyState, setHistoryState] = useState<AiChatHistoryState | null>(null);
-    const [bindingsByConversation, setBindingsByConversation] = useState<Record<string, PendingStreamBinding>>({});
-    const [smoothedMessagesById, setSmoothedMessagesById] = useState<Record<string, AiChatSmoothedMessageState>>({});
-    const [debugEntriesByConversation, setDebugEntriesByConversation] = useState<Record<string, ChatDebugEntry[]>>({});
-    const [pendingConfirmations, setPendingConfirmations] = useState<Record<string, PendingToolConfirmation>>({});
-    const [toolCallRecordsByMessageId, setToolCallRecordsByMessageId] = useState<Record<string, AiChatToolCallRecord[]>>({});
-    const [activeTab, setActiveTab] = useState<"history" | "chat" | "debug">("chat");
-    const [debugFilter, setDebugFilter] = useState<ChatDebugFilterValue>("all");
-    const [debugCopyState, setDebugCopyState] = useState<"idle" | "copied" | "error">("idle");
+    const initialRuntimeSnapshot = getAiChatRuntimeSnapshot();
+    const canUseInitialRuntimeSnapshot = initialRuntimeSnapshot.vaultPath === currentVaultPath
+        && initialRuntimeSnapshot.historyLoaded;
+    const [historyState, setHistoryState] = useState<AiChatHistoryState | null>(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.historyState
+            : null,
+    );
+    const [bindingsByConversation, setBindingsByConversation] = useState<Record<string, PendingStreamBinding>>(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.bindingsByConversation
+            : {},
+    );
+    const [smoothedMessagesById, setSmoothedMessagesById] = useState<Record<string, AiChatSmoothedMessageState>>(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.smoothedMessagesById
+            : {},
+    );
+    const [debugEntriesByConversation, setDebugEntriesByConversation] = useState<Record<string, ChatDebugEntry[]>>(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.debugEntriesByConversation
+            : {},
+    );
+    const [pendingConfirmations, setPendingConfirmations] = useState<Record<string, PendingToolConfirmation>>(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.pendingConfirmations
+            : {},
+    );
+    const [toolCallRecordsByMessageId, setToolCallRecordsByMessageId] = useState<Record<string, AiChatToolCallRecord[]>>(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.toolCallRecordsByMessageId
+            : {},
+    );
+    const [activeTab, setActiveTab] = useState<"history" | "chat" | "debug">(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.activeTab
+            : "chat",
+    );
+    const [debugFilter, setDebugFilter] = useState<ChatDebugFilterValue>(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.debugFilter
+            : "all",
+    );
+    const [debugCopyState, setDebugCopyState] = useState<"idle" | "copied" | "error">(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.debugCopyState
+            : "idle",
+    );
     const [copiedMessageFeedback, setCopiedMessageFeedback] = useState<{
         messageId: string;
         updatedAtUnixMs: number;
     } | null>(null);
-    const [conversationQuery, setConversationQuery] = useState("");
-    const [draft, setDraft] = useState("");
-    const [error, setError] = useState<string | null>(null);
+    const [conversationQuery, setConversationQuery] = useState(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.conversationQuery
+            : "",
+    );
+    const [draft, setDraft] = useState(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.draft
+            : "",
+    );
+    const [error, setError] = useState<string | null>(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.error
+            : null,
+    );
     const [settings, setSettings] = useState<AiChatSettings | null>(null);
     const [vendorCatalog, setVendorCatalog] = useState<AiVendorDefinition[]>([]);
     const [toolCatalog, setToolCatalog] = useState<AiToolDescriptor[]>([]);
@@ -660,12 +721,27 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         conversationId: string;
         messageId: string;
         draft: string;
-    } | null>(null);
-    const [isConversationReplaying, setIsConversationReplaying] = useState(false);
-    const bindingsRef = useRef<Record<string, PendingStreamBinding>>({});
-    const smoothedMessagesRef = useRef<Record<string, AiChatSmoothedMessageState>>({});
+    } | null>(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.editingUserMessage
+            : null,
+    );
+    const [isConversationReplaying, setIsConversationReplaying] = useState(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.isConversationReplaying
+            : false,
+    );
+    const bindingsRef = useRef<Record<string, PendingStreamBinding>>(bindingsByConversation);
+    const smoothedMessagesRef = useRef<Record<string, AiChatSmoothedMessageState>>(smoothedMessagesById);
     const rollbackCheckpointsRef = useRef<Record<string, AiChatRollbackCheckpoint>>({});
-    const historyLoadedRef = useRef(false);
+    const historyLoadedRef = useRef(
+        canUseInitialRuntimeSnapshot
+            ? initialRuntimeSnapshot.historyLoaded
+            : false,
+    );
+    const loadedRuntimeVaultPathRef = useRef<string | null>(
+        canUseInitialRuntimeSnapshot ? currentVaultPath : null,
+    );
     const historySaveTimerRef = useRef<number | null>(null);
     const threadViewportRef = useRef<HTMLDivElement | null>(null);
     const debugViewportRef = useRef<HTMLDivElement | null>(null);
@@ -1041,6 +1117,47 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         vendorCatalogRef.current = vendorCatalog;
     }, [vendorCatalog]);
 
+    useEffect(() => {
+        if (!currentVaultPath || loadedRuntimeVaultPathRef.current !== currentVaultPath) {
+            return;
+        }
+
+        updateAiChatRuntimeSnapshot({
+            activeTab,
+            bindingsByConversation,
+            conversationQuery,
+            debugCopyState,
+            debugEntriesByConversation,
+            debugFilter,
+            draft,
+            editingUserMessage,
+            error,
+            historyLoaded: historyLoadedRef.current,
+            historyState,
+            isConversationReplaying,
+            pendingConfirmations,
+            smoothedMessagesById,
+            toolCallRecordsByMessageId,
+            vaultPath: currentVaultPath,
+        });
+    }, [
+        activeTab,
+        bindingsByConversation,
+        conversationQuery,
+        currentVaultPath,
+        debugCopyState,
+        debugEntriesByConversation,
+        debugFilter,
+        draft,
+        editingUserMessage,
+        error,
+        historyState,
+        isConversationReplaying,
+        pendingConfirmations,
+        smoothedMessagesById,
+        toolCallRecordsByMessageId,
+    ]);
+
     const canSend = Boolean(
         currentVaultPath
         && activeConversation
@@ -1121,9 +1238,47 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     };
 
     useEffect(() => {
+        if (!currentVaultPath) {
+            return;
+        }
+
+        const cachedRuntimeSnapshot = getAiChatRuntimeSnapshot();
+        if (
+            cachedRuntimeSnapshot.vaultPath === currentVaultPath
+            || loadedRuntimeVaultPathRef.current === currentVaultPath
+        ) {
+            return;
+        }
+
+        loadedRuntimeVaultPathRef.current = null;
+        historyLoadedRef.current = false;
+        resetAiChatRuntimeSnapshot(currentVaultPath);
+        setHistoryState(null);
+        setBindingsByConversation({});
+        bindingsRef.current = {};
+        setSmoothedMessagesById({});
+        smoothedMessagesRef.current = {};
+        setDebugEntriesByConversation({});
+        setPendingConfirmations({});
+        setToolCallRecordsByMessageId({});
+        setActiveTab("chat");
+        setDebugFilter("all");
+        setDebugCopyState("idle");
+        setConversationQuery("");
+        setDraft("");
+        setError(null);
+        setEditingUserMessage(null);
+        setIsConversationReplaying(false);
+        rollbackCheckpointsRef.current = {};
+        conversationAutoApprovalRef.current = new Set();
+    }, [currentVaultPath]);
+
+    useEffect(() => {
         let disposed = false;
 
         if (!currentVaultPath) {
+            loadedRuntimeVaultPathRef.current = null;
+            resetAiChatRuntimeSnapshot(null);
             setHistoryState(null);
             setBindingsByConversation({});
             bindingsRef.current = {};
@@ -1149,11 +1304,41 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             return;
         }
 
+        const cachedRuntimeSnapshot = getAiChatRuntimeSnapshot();
+        const canReuseRuntimeSnapshot = cachedRuntimeSnapshot.vaultPath === currentVaultPath
+            && cachedRuntimeSnapshot.historyLoaded
+            && cachedRuntimeSnapshot.historyState !== null;
+
+        if (canReuseRuntimeSnapshot) {
+            loadedRuntimeVaultPathRef.current = currentVaultPath;
+            setHistoryState(cachedRuntimeSnapshot.historyState);
+            setBindingsByConversation(cachedRuntimeSnapshot.bindingsByConversation);
+            bindingsRef.current = cachedRuntimeSnapshot.bindingsByConversation;
+            setSmoothedMessagesById(cachedRuntimeSnapshot.smoothedMessagesById);
+            smoothedMessagesRef.current = cachedRuntimeSnapshot.smoothedMessagesById;
+            setDebugEntriesByConversation(cachedRuntimeSnapshot.debugEntriesByConversation);
+            setPendingConfirmations(cachedRuntimeSnapshot.pendingConfirmations);
+            setToolCallRecordsByMessageId(cachedRuntimeSnapshot.toolCallRecordsByMessageId);
+            setActiveTab(cachedRuntimeSnapshot.activeTab);
+            setDebugFilter(cachedRuntimeSnapshot.debugFilter);
+            setDebugCopyState(cachedRuntimeSnapshot.debugCopyState);
+            setConversationQuery(cachedRuntimeSnapshot.conversationQuery);
+            setDraft(cachedRuntimeSnapshot.draft);
+            setError(cachedRuntimeSnapshot.error);
+            setEditingUserMessage(cachedRuntimeSnapshot.editingUserMessage);
+            setIsConversationReplaying(cachedRuntimeSnapshot.isConversationReplaying);
+            historyLoadedRef.current = true;
+            console.info("[aiChatPlugin] reused runtime snapshot", {
+                vaultPath: currentVaultPath,
+                activeBindings: Object.keys(cachedRuntimeSnapshot.bindingsByConversation).length,
+            });
+        }
+
         Promise.all([
             getAiVendorCatalog(),
             getAiToolCatalog(),
             ensureAiChatSettingsLoaded(currentVaultPath),
-            getAiChatHistory(),
+            canReuseRuntimeSnapshot ? Promise.resolve(cachedRuntimeSnapshot.historyState!) : getAiChatHistory(),
         ])
             .then(([catalog, tools, nextSettings, history]) => {
                 if (disposed) {
@@ -1163,21 +1348,38 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
                 setVendorCatalog(catalog);
                 setToolCatalog(tools);
                 setSettings(nextSettings);
-                setHistoryState(ensureHistoryState(history));
-                setBindingsByConversation({});
-                bindingsRef.current = {};
-                setSmoothedMessagesById({});
-                smoothedMessagesRef.current = {};
-                setDebugEntriesByConversation({});
-                setPendingConfirmations({});
-                setToolCallRecordsByMessageId({});
-                setEditingUserMessage(null);
-                setIsConversationReplaying(false);
-                rollbackCheckpointsRef.current = {};
-                conversationAutoApprovalRef.current = new Set();
-                setDebugFilter("all");
-                setDebugCopyState("idle");
-                historyLoadedRef.current = true;
+                if (!canReuseRuntimeSnapshot) {
+                    const nextHistoryState = ensureHistoryState(history);
+                    setHistoryState(nextHistoryState);
+                    setBindingsByConversation({});
+                    bindingsRef.current = {};
+                    setSmoothedMessagesById({});
+                    smoothedMessagesRef.current = {};
+                    setDebugEntriesByConversation({});
+                    setPendingConfirmations({});
+                    setToolCallRecordsByMessageId({});
+                    setEditingUserMessage(null);
+                    setIsConversationReplaying(false);
+                    rollbackCheckpointsRef.current = {};
+                    conversationAutoApprovalRef.current = new Set();
+                    setDebugFilter("all");
+                    setDebugCopyState("idle");
+                    historyLoadedRef.current = true;
+                    loadedRuntimeVaultPathRef.current = currentVaultPath;
+                    updateAiChatRuntimeSnapshot({
+                        historyState: nextHistoryState,
+                        historyLoaded: true,
+                        vaultPath: currentVaultPath,
+                    });
+                }
+                if (canReuseRuntimeSnapshot) {
+                    historyLoadedRef.current = true;
+                    loadedRuntimeVaultPathRef.current = currentVaultPath;
+                    updateAiChatRuntimeSnapshot({
+                        historyLoaded: true,
+                        vaultPath: currentVaultPath,
+                    });
+                }
             })
             .catch((loadError) => {
                 if (disposed) {
@@ -2050,6 +2252,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         const history = input.protocolMessagesBeforeTurn.length
             ? input.protocolMessagesBeforeTurn
             : input.visibleMessagesBeforeTurn;
+        const budgetedHistory = buildBudgetedAiChatHistory(history, settings);
 
         rollbackCheckpointsRef.current = {
             ...rollbackCheckpointsRef.current,
@@ -2061,6 +2264,11 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             sessionId: input.sessionId,
             messageLength: trimmed.length,
             activeFilePath: activeEditor?.path ?? null,
+            historyMessages: history.length,
+            requestHistoryMessages: budgetedHistory.history.length,
+            estimatedContextTokensBefore: budgetedHistory.estimatedTokensBefore,
+            estimatedContextTokensAfter: budgetedHistory.estimatedTokensAfter,
+            compressedMessageCount: budgetedHistory.compressedMessageCount,
         });
 
         setError(null);
@@ -2090,7 +2298,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
             const response = await startAiChatStream({
                 message: trimmed,
                 sessionId: input.sessionId,
-                history,
+                history: budgetedHistory.history,
                 contextSnapshotJson,
                 rollbackCheckpointId: input.checkpoint.id,
             });
@@ -3130,6 +3338,37 @@ function AiChatSettingsSection(props: { pane: "provider" | "tool-approval" }): R
     };
 
     /**
+     * @function updateAutoCompressContext
+     * @description 更新自动上下文压缩开关。
+     * @param enabled 是否启用。
+     */
+    const updateAutoCompressContext = (enabled: boolean): void => {
+        setSettings((currentSettings) => currentSettings
+            ? {
+                ...currentSettings,
+                autoCompressContext: enabled,
+            }
+            : currentSettings);
+    };
+
+    /**
+     * @function updateContextLimitTokens
+     * @description 更新 AI 请求上下文预算上限。
+     * @param nextLimitTokens 新的估算 token 上限。
+     */
+    const updateContextLimitTokens = (nextLimitTokens: number): void => {
+        setSettings((currentSettings) => currentSettings
+            ? {
+                ...currentSettings,
+                contextLimitTokens: normalizeAiChatContextBudgetSettings({
+                    ...currentSettings,
+                    contextLimitTokens: nextLimitTokens,
+                }).contextLimitTokens,
+            }
+            : currentSettings);
+    };
+
+    /**
      * @function handleProviderChange
      * @description 切换当前使用的 provider 实例。
      */
@@ -3286,6 +3525,7 @@ function AiChatSettingsSection(props: { pane: "provider" | "tool-approval" }): R
     }
 
     const activeProviderVendorTitle = selectedVendor?.title ?? activeProvider?.vendorId ?? "-";
+    const contextBudgetSettings = normalizeAiChatContextBudgetSettings(settings);
 
     const providerSettingsPanel = (
         <div className="settings-item-group ai-chat-settings-form ai-chat-provider-settings-form">
@@ -3438,6 +3678,34 @@ function AiChatSettingsSection(props: { pane: "provider" | "tool-approval" }): R
                             />
                         </div>
                     ))}
+
+                    <div className="ai-chat-settings-row">
+                        <div className="ai-chat-settings-label">{i18n.t("aiChatPlugin.contextBudgetTitle")}</div>
+                        <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.contextBudgetDescription")}</div>
+                        <label className="ai-chat-settings-checkbox-row">
+                            <input
+                                type="checkbox"
+                                checked={contextBudgetSettings.autoCompressContext}
+                                onChange={(event) => {
+                                    updateAutoCompressContext(event.target.checked);
+                                }}
+                            />
+                            <span>{i18n.t("aiChatPlugin.autoCompressContextLabel")}</span>
+                        </label>
+                        <UiNumberInput
+                            className="ai-chat-settings-input"
+                            controlSize="compact"
+                            variant="settings"
+                            min={1000}
+                            max={1000000}
+                            step={1000}
+                            value={contextBudgetSettings.contextLimitTokens}
+                            onValueChange={(nextValue) => {
+                                updateContextLimitTokens(nextValue);
+                            }}
+                        />
+                        <div className="ai-chat-settings-desc">{i18n.t("aiChatPlugin.contextBudgetHint")}</div>
+                    </div>
 
                     <div className="ai-chat-settings-actions">
                         <div className={`ai-chat-settings-feedback ${feedbackIsError ? "error" : ""}`}>

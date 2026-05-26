@@ -21,11 +21,11 @@ use ofive_lib::test_support::{
     delete_vault_canvas_file_in_root, delete_vault_directory_in_root,
     delete_vault_markdown_file_in_root, get_current_vault_tree_in_root,
     move_vault_canvas_file_to_directory_in_root, move_vault_directory_to_directory_in_root,
-    move_vault_markdown_file_to_directory_in_root, read_vault_binary_file_in_root,
-    read_vault_canvas_file_in_root, read_vault_markdown_file_in_root,
-    rename_vault_canvas_file_in_root, rename_vault_directory_in_root,
-    rename_vault_markdown_file_in_root, save_vault_canvas_file_in_root,
-    save_vault_markdown_file_in_root,
+    move_vault_file_to_directory_in_root, move_vault_markdown_file_to_directory_in_root,
+    read_vault_binary_file_in_root, read_vault_canvas_file_in_root,
+    read_vault_markdown_file_in_root, rename_vault_canvas_file_in_root,
+    rename_vault_directory_in_root, rename_vault_markdown_file_in_root,
+    save_vault_canvas_file_in_root, save_vault_markdown_file_in_root,
 };
 use serde_json::Value;
 use support::TestVault;
@@ -224,6 +224,29 @@ fn move_command_should_preserve_filename_and_content() {
     let moved_content = fs::read_to_string(vault.root.join("archive/2026/move-source.md"))
         .expect("应能读取移动后的文件内容");
     assert!(moved_content.contains("content before move"));
+}
+
+/// 移动图片等普通文件时应保留文件名与二进制内容。
+#[test]
+fn move_generic_file_should_preserve_filename_and_content() {
+    let vault = TestVault::new();
+    let source_path = vault.root.join("assets/images/photo.png");
+    fs::create_dir_all(source_path.parent().expect("图片目录应存在")).expect("应创建图片目录");
+    fs::write(&source_path, [0x89, 0x50, 0x4E, 0x47]).expect("应写入图片内容");
+
+    let moved = move_vault_file_to_directory_in_root(
+        "assets/images/photo.png".to_string(),
+        "archive/images".to_string(),
+        &vault.root,
+    )
+    .expect("移动普通文件应成功");
+
+    assert_eq!(moved.relative_path, "archive/images/photo.png");
+    assert!(!source_path.exists());
+    assert_eq!(
+        fs::read(vault.root.join("archive/images/photo.png")).expect("应读取移动后文件"),
+        vec![0x89, 0x50, 0x4E, 0x47]
+    );
 }
 
 #[test]

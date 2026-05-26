@@ -10,6 +10,7 @@
  *  - renamePersistedCanvasFile
  *  - movePersistedMarkdownFileToDirectory
  *  - movePersistedCanvasFileToDirectory
+ *  - movePersistedFileToDirectory
  *  - deletePersistedMarkdownFile
  *  - deletePersistedCanvasFile
  */
@@ -18,6 +19,7 @@ import {
     deleteVaultCanvasFile,
     deleteVaultMarkdownFile,
     moveVaultCanvasFileToDirectory,
+    moveVaultFileToDirectory,
     moveVaultMarkdownFileToDirectory,
     renameVaultCanvasFile,
     renameVaultMarkdownFile,
@@ -109,6 +111,23 @@ export async function movePersistedCanvasFileToDirectory(
     const normalizedFromPath = normalizeRelativePath(fromRelativePath);
     const normalizedTargetDirectory = normalizeRelativePath(targetDirectoryRelativePath);
     const response = await moveVaultCanvasFileToDirectory(normalizedFromPath, normalizedTargetDirectory);
+    notifyPersistedContentMutation(response.relativePath, "moved", normalizedFromPath);
+    return response;
+}
+
+/**
+ * @function movePersistedFileToDirectory
+ * @description 移动任意普通文件，并发布本地持久内容 mutation 事件。
+ * @param options 移动参数。
+ * @returns 后端移动响应。
+ */
+export async function movePersistedFileToDirectory(
+    fromRelativePath: string,
+    targetDirectoryRelativePath: string,
+): Promise<WriteMarkdownResponse> {
+    const normalizedFromPath = normalizeRelativePath(fromRelativePath);
+    const normalizedTargetDirectory = normalizeRelativePath(targetDirectoryRelativePath);
+    const response = await moveVaultFileToDirectory(normalizedFromPath, normalizedTargetDirectory);
     notifyPersistedContentMutation(response.relativePath, "moved", normalizedFromPath);
     return response;
 }

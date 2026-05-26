@@ -37,6 +37,16 @@ mock.module("../../api/vaultApi", () => createMockVaultApi({
             created: false,
         };
     },
+    moveVaultFileToDirectory: async (fromRelativePath: string, targetDirectoryRelativePath: string) => {
+        apiCalls.push({
+            name: "moveVaultFileToDirectory",
+            args: [fromRelativePath, targetDirectoryRelativePath],
+        });
+        return {
+            relativePath: `${targetDirectoryRelativePath}/photo.png`,
+            created: false,
+        };
+    },
     deleteVaultMarkdownFile: async (relativePath: string) => {
         apiCalls.push({
             name: "deleteVaultMarkdownFile",
@@ -51,6 +61,7 @@ const {
 const {
     deletePersistedMarkdownFile,
     movePersistedCanvasFileToDirectory,
+    movePersistedFileToDirectory,
     renamePersistedMarkdownFile,
 } = await import("./vaultMutationService");
 
@@ -111,6 +122,30 @@ describe("vaultMutationService", () => {
             relativePath: "Archive/board.canvas",
             operation: "moved",
             oldRelativePath: "Boards/board.canvas",
+        }]);
+    });
+
+    it("should emit a persisted mutation event after generic file move", async () => {
+        const events: Array<{ relativePath: string; operation?: string; oldRelativePath?: string }> = [];
+        const unlisten = subscribePersistedContentUpdatedEvent((event) => {
+            events.push({
+                relativePath: event.relativePath,
+                operation: event.operation,
+                oldRelativePath: event.oldRelativePath,
+            });
+        });
+
+        await movePersistedFileToDirectory("Assets\\photo.png", "Archive");
+        unlisten();
+
+        expect(apiCalls).toEqual([{
+            name: "moveVaultFileToDirectory",
+            args: ["Assets/photo.png", "Archive"],
+        }]);
+        expect(events).toEqual([{
+            relativePath: "Archive/photo.png",
+            operation: "moved",
+            oldRelativePath: "Assets/photo.png",
         }]);
     });
 

@@ -47,6 +47,7 @@ pub use crate::app::vault::vault_app_service::get_current_vault_config_in_root;
 pub use crate::app::vault::vault_app_service::get_current_vault_tree_in_root;
 pub use crate::app::vault::vault_app_service::move_vault_canvas_file_to_directory_in_root;
 pub use crate::app::vault::vault_app_service::move_vault_directory_to_directory_in_root;
+pub use crate::app::vault::vault_app_service::move_vault_file_to_directory_in_root;
 pub use crate::app::vault::vault_app_service::move_vault_markdown_file_to_directory_in_root;
 pub use crate::app::vault::vault_app_service::read_vault_binary_file_in_root;
 pub use crate::app::vault::vault_app_service::read_vault_canvas_file_in_root;

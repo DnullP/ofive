@@ -593,23 +593,24 @@ function shouldSkipArticleSnapshotSync(options: {
 function restoreCompositionAnchorIfSelectionDrifted(
     view: EditorView,
     compositionAnchor: number,
-): void {
+): boolean {
     const anchor = Math.max(0, Math.min(compositionAnchor, view.state.doc.length));
     const selection = view.state.selection.main;
     if (!selection.empty || selection.head >= anchor) {
-        return;
+        return false;
     }
 
     const anchorLine = view.state.doc.lineAt(anchor);
     const selectionLine = view.state.doc.lineAt(selection.head);
     if (selectionLine.number !== anchorLine.number) {
-        return;
+        return false;
     }
 
     view.dispatch({
         selection: { anchor },
         scrollIntoView: true,
     });
+    return true;
 }
 
 function syncRuntimeTabContentSnapshot(options: {
@@ -659,7 +660,32 @@ export function useCodeMirrorEditorLifecycle(
     const vimModeEnabledRef = useRef(options.vimModeEnabled);
     const editorImeCompositionGuard = useRef(createImeCompositionGuard()).current;
     const editorImeCompositionAnchorRef = useRef<number | null>(null);
+    const editorImePostCompositionAnchorRef = useRef<number | null>(null);
+    const editorImePostCompositionUntilRef = useRef(0);
     const staleArticleSnapshotBoundaryRef = useRef<StaleArticleSnapshotBoundary | null>(null);
+
+    /**
+     * @function restoreRecentCompositionAnchor
+     * @description 在 IME 提交后的短保护窗口内恢复被浏览器错误挪到行首的选区。
+     * @param view 当前编辑器视图。
+     * @returns 发生恢复时返回 true。
+     */
+    const restoreRecentCompositionAnchor = (view: EditorView): boolean => {
+        const anchor = editorImePostCompositionAnchorRef.current;
+        if (typeof anchor !== "number" || Date.now() > editorImePostCompositionUntilRef.current) {
+            return false;
+        }
+
+        const restored = restoreCompositionAnchorIfSelectionDrifted(view, anchor);
+        if (restored) {
+            console.debug("[editor] restored post-composition cursor anchor", {
+                articleId: options.articleId,
+                filePath: options.currentFilePathRef.current,
+                anchor,
+            });
+        }
+        return restored;
+    };
 
     const markAuthoritativeInitialDocument = (content: string): { path: string; boundary: StaleArticleSnapshotBoundary | null } => {
         const path = options.currentFilePathRef.current;
@@ -836,6 +862,8 @@ export function useCodeMirrorEditorLifecycle(
                 compositionstart(_event, view) {
                     editorImeCompositionGuard.handleCompositionStart();
                     editorImeCompositionAnchorRef.current = view.state.selection.main.head;
+                    editorImePostCompositionAnchorRef.current = null;
+                    editorImePostCompositionUntilRef.current = 0;
                     setLineSyntaxImeCompositionActive(view, true);
                     return false;
                 },
@@ -849,6 +877,14 @@ export function useCodeMirrorEditorLifecycle(
                             );
                         }
                         setLineSyntaxImeCompositionActive(view, true);
+                    }
+                    if (
+                        event.inputType === "insertText"
+                        && !event.isComposing
+                        && !editorImeCompositionGuard.state.isComposing
+                        && !view.composing
+                    ) {
+                        restoreRecentCompositionAnchor(view);
                     }
                     if (
                         (event.inputType === "deleteCompositionText" || event.inputType === "deleteContentBackward")
@@ -867,6 +903,14 @@ export function useCodeMirrorEditorLifecycle(
                     return false;
                 },
                 compositionend(_event, view) {
+                    const compositionAnchor = editorImeCompositionAnchorRef.current;
+                    if (typeof compositionAnchor === "number") {
+                        editorImePostCompositionAnchorRef.current = compositionAnchor;
+                        editorImePostCompositionUntilRef.current = Date.now() + 800;
+                        window.requestAnimationFrame(() => {
+                            restoreRecentCompositionAnchor(view);
+                        });
+                    }
                     editorImeCompositionGuard.handleCompositionEnd();
                     editorImeCompositionAnchorRef.current = null;
                     setLineSyntaxImeCompositionActive(view, false);
@@ -896,6 +940,10 @@ export function useCodeMirrorEditorLifecycle(
 
                 if (update.docChanged || update.selectionSet) {
                     options.scheduleActiveLineSegmentation(update.state);
+                }
+
+                if (update.selectionSet && !update.docChanged) {
+                    restoreRecentCompositionAnchor(update.view);
                 }
 
                 if (update.focusChanged && update.view.hasFocus) {

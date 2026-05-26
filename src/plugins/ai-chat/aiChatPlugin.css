@@ -1760,6 +1760,19 @@
     line-height: 1.35;
 }
 
+.ai-chat-settings-checkbox-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    color: var(--text-primary);
+    font-size: 12px;
+}
+
+.ai-chat-settings-checkbox-row input {
+    margin: 0;
+}
+
 .ai-chat-settings-provider-detail-pane {
     min-width: 0;
     background: var(--bg-secondary);

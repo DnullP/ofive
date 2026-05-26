@@ -13,7 +13,8 @@ use tauri::State;
 
 use crate::infra::fs::fs_helpers::{
     resolve_binary_target_path, resolve_canvas_path, resolve_canvas_target_path,
-    resolve_markdown_path, resolve_markdown_target_path, resolve_vault_directory_path,
+    resolve_existing_vault_file_path, resolve_markdown_path, resolve_markdown_target_path,
+    resolve_vault_directory_path,
 };
 use crate::infra::persistence::vault_config_store::save_vault_config;
 use crate::infra::query::query_index;
@@ -703,6 +704,86 @@ pub(crate) fn move_vault_canvas_file_to_directory(
         source_trace_id,
         &[from_path_for_trace, moved.relative_path.clone()],
         "move_vault_canvas_file_to_directory",
+    )?;
+    Ok(moved)
+}
+
+/// 在指定 vault 根目录下移动任意普通文件到目录。
+pub(crate) fn move_vault_file_to_directory_in_root(
+    from_relative_path: String,
+    target_directory_relative_path: String,
+    vault_root: &Path,
+) -> Result<WriteMarkdownResponse, String> {
+    let source_path = resolve_existing_vault_file_path(vault_root, &from_relative_path)?;
+    if !source_path.is_file() {
+        return Err("源路径不是文件".to_string());
+    }
+
+    let source_file_name = source_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "源文件名无效".to_string())?;
+    let target_directory_path =
+        resolve_vault_directory_path(vault_root, &target_directory_relative_path)?;
+
+    if target_directory_path.exists() && !target_directory_path.is_dir() {
+        return Err("目标目录路径不是目录".to_string());
+    }
+
+    fs::create_dir_all(&target_directory_path).map_err(|error| {
+        format!(
+            "创建目标目录失败 {}: {error}",
+            target_directory_path.display()
+        )
+    })?;
+
+    let target_path = target_directory_path.join(source_file_name);
+    let target_relative_path = to_vault_relative_path(&target_path, vault_root)?;
+
+    if source_path == target_path {
+        return Ok(WriteMarkdownResponse {
+            relative_path: target_relative_path,
+            created: false,
+        });
+    }
+
+    if target_path.exists() {
+        return Err("目标文件已存在".to_string());
+    }
+
+    fs::rename(&source_path, &target_path).map_err(|error| {
+        format!(
+            "移动文件失败 {} -> {}: {error}",
+            source_path.display(),
+            target_path.display()
+        )
+    })?;
+
+    Ok(WriteMarkdownResponse {
+        relative_path: target_relative_path,
+        created: false,
+    })
+}
+
+/// 将当前仓库中的任意普通文件移动到目录并注册写入 trace。
+pub(crate) fn move_vault_file_to_directory(
+    from_relative_path: String,
+    target_directory_relative_path: String,
+    source_trace_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<WriteMarkdownResponse, String> {
+    let root = get_vault_root(&state)?;
+    let from_path_for_trace = from_relative_path.clone();
+    let moved = move_vault_file_to_directory_in_root(
+        from_relative_path,
+        target_directory_relative_path,
+        &root,
+    )?;
+    register_pending_write_trace(
+        &state,
+        source_trace_id,
+        &[from_path_for_trace, moved.relative_path.clone()],
+        "move_vault_file_to_directory",
     )?;
     Ok(moved)
 }

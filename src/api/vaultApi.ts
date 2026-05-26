@@ -2726,6 +2726,62 @@ export async function moveVaultCanvasFileToDirectory(
 }
 
 /**
+ * @function moveVaultFileToDirectory
+ * @description 将任意普通文件移动到指定目录（文件名保持不变）。
+ * @param fromRelativePath 源文件相对路径。
+ * @param targetDirectoryRelativePath 目标目录相对路径；空字符串表示仓库根目录。
+ * @returns 移动结果。
+ */
+export async function moveVaultFileToDirectory(
+    fromRelativePath: string,
+    targetDirectoryRelativePath: string,
+): Promise<WriteMarkdownResponse> {
+    const normalizedFromPath = normalizeSlashPath(fromRelativePath).trim();
+    const normalizedTargetDirectory = normalizeSlashPath(targetDirectoryRelativePath).trim().replace(/^\/+|\/+$/g, "");
+    const sourceFileName = normalizedFromPath.split("/").pop() ?? "";
+
+    if (!sourceFileName) {
+        throw new Error(i18n.t("editor.invalidSourcePath"));
+    }
+
+    const targetRelativePath = normalizedTargetDirectory
+        ? `${normalizedTargetDirectory}/${sourceFileName}`
+        : sourceFileName;
+
+    if (!isTauriRuntime()) {
+        const textContents = await getBrowserMockMarkdownContents();
+        const sourceContent = textContents[normalizedFromPath];
+        if (typeof sourceContent !== "string") {
+            throw new Error(i18n.t("editor.sourceNotExist"));
+        }
+
+        const existedTarget = textContents[targetRelativePath];
+        if (typeof existedTarget === "string" && targetRelativePath !== normalizedFromPath) {
+            throw new Error(i18n.t("editor.targetExists"));
+        }
+
+        if (targetRelativePath !== normalizedFromPath) {
+            delete textContents[normalizedFromPath];
+            textContents[targetRelativePath] = sourceContent;
+        }
+
+        return {
+            relativePath: targetRelativePath,
+            created: false,
+        };
+    }
+
+    const sourceTraceId = createWriteTraceId();
+    registerLocalWriteTrace(sourceTraceId);
+
+    return invoke<WriteMarkdownResponse>("move_vault_file_to_directory", {
+        fromRelativePath: normalizedFromPath,
+        targetDirectoryRelativePath: normalizedTargetDirectory,
+        sourceTraceId,
+    });
+}
+
+/**
  * @function renameVaultDirectory
  * @description 重命名当前仓库中的目录。
  * @param fromRelativePath 原目录相对路径。

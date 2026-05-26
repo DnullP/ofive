@@ -55,6 +55,9 @@ const AI_CHAT_HISTORY_STATE_KEY: &str = "history";
 const AI_CHAT_SETTINGS_CONFIG_KEY: &str = "aiChatSettings";
 const AI_CHAT_HISTORY_CONFIG_KEY: &str = "aiChatHistory";
 const DEFAULT_AI_VENDOR_ID: &str = "anthropic-compatible";
+const DEFAULT_AI_CHAT_CONTEXT_LIMIT_TOKENS: u32 = 32_000;
+const MIN_AI_CHAT_CONTEXT_LIMIT_TOKENS: u32 = 1_000;
+const MAX_AI_CHAT_CONTEXT_LIMIT_TOKENS: u32 = 1_000_000;
 
 /// 返回当前宿主支持的 AI vendor 目录。
 ///
@@ -574,6 +577,8 @@ fn default_ai_chat_settings() -> AiChatSettings {
         active_provider_id: Some(provider.id.clone()),
         providers: vec![provider],
         tool_approval_policy: HashMap::new(),
+        auto_compress_context: true,
+        context_limit_tokens: DEFAULT_AI_CHAT_CONTEXT_LIMIT_TOKENS,
     }
 }
 
@@ -831,6 +836,11 @@ fn sanitize_ai_chat_settings(settings: AiChatSettings) -> AiChatSettings {
         active_provider_id: Some(active_provider.id.clone()),
         providers,
         tool_approval_policy: next_tool_approval_policy,
+        auto_compress_context: settings.auto_compress_context,
+        context_limit_tokens: settings.context_limit_tokens.clamp(
+            MIN_AI_CHAT_CONTEXT_LIMIT_TOKENS,
+            MAX_AI_CHAT_CONTEXT_LIMIT_TOKENS,
+        ),
     }
 }
 
@@ -913,9 +923,10 @@ fn sanitize_ai_chat_conversation(
 
 /// 清洗单条历史消息。
 ///
-/// 仅保留 `user` 与 `assistant` 两种角色，且要求消息标识非空；用户消息
-/// 仍要求正文非空，助手消息则允许仅保留推理文本。非法消息会被整个丢弃。若消息带有 `interrupted_by_user` 标记，则在
-/// 持久化后继续保留，供后续恢复对话上下文时补充“上一轮被用户中断”的语义。
+/// 仅保留 `user` 与 `assistant` 两种角色，且要求消息标识非空；正文、
+/// 推理文本或协议内容块至少存在一项。非法消息会被整个丢弃。若消息带有
+/// `interrupted_by_user` 标记，则在持久化后继续保留，供后续恢复对话上下文时
+/// 补充“上一轮被用户中断”的语义。
 fn sanitize_ai_chat_message(message: AiChatHistoryMessage) -> Option<AiChatHistoryMessage> {
     let id = message.id.trim().to_string();
     let text = message.text.trim().to_string();
@@ -938,11 +949,13 @@ fn sanitize_ai_chat_message(message: AiChatHistoryMessage) -> Option<AiChatHisto
         return None;
     }
 
-    if role == "user" && text.is_empty() {
-        return None;
-    }
-
-    if role == "assistant" && text.is_empty() && reasoning_text.is_none() {
+    let content_blocks = message
+        .content_blocks
+        .into_iter()
+        .filter_map(sanitize_ai_chat_content_block)
+        .collect::<Vec<_>>();
+    let has_content = !text.is_empty() || reasoning_text.is_some() || !content_blocks.is_empty();
+    if !has_content {
         return None;
     }
 
@@ -955,11 +968,7 @@ fn sanitize_ai_chat_message(message: AiChatHistoryMessage) -> Option<AiChatHisto
         completed_at_unix_ms: message.completed_at_unix_ms.map(|value| value.max(0)),
         duration_ms: message.duration_ms.map(|value| value.max(0)),
         reasoning_text,
-        content_blocks: message
-            .content_blocks
-            .into_iter()
-            .filter_map(sanitize_ai_chat_content_block)
-            .collect(),
+        content_blocks,
         interrupted_by_user: message.interrupted_by_user,
         rollback_checkpoint_id: message
             .rollback_checkpoint_id
@@ -1019,12 +1028,13 @@ mod tests {
     use super::{
         default_ai_chat_settings, load_ai_chat_history_in_root, load_ai_chat_settings_in_root,
         sanitize_ai_chat_settings, save_ai_chat_history_in_root, AI_CHAT_HISTORY_CONFIG_KEY,
-        AI_CHAT_SETTINGS_CONFIG_KEY,
+        AI_CHAT_SETTINGS_CONFIG_KEY, DEFAULT_AI_CHAT_CONTEXT_LIMIT_TOKENS,
+        MIN_AI_CHAT_CONTEXT_LIMIT_TOKENS,
     };
     use crate::infra::persistence::vault_config_store::{load_vault_config, save_vault_config};
     use crate::shared::ai_service::{
-        AiChatConversationRecord, AiChatHistoryMessage, AiChatHistoryState, AiChatProviderConfig,
-        AiChatSettings,
+        AiChatConversationRecord, AiChatHistoryContentBlock, AiChatHistoryMessage,
+        AiChatHistoryState, AiChatProviderConfig, AiChatSettings,
     };
     use crate::shared::vault_contracts::VaultConfig;
     use serde_json::json;
@@ -1233,6 +1243,66 @@ mod tests {
     }
 
     #[test]
+    fn save_ai_chat_history_should_keep_protocol_tool_blocks() {
+        let root = create_test_root();
+
+        let history = AiChatHistoryState {
+            active_conversation_id: Some("conversation-1".to_string()),
+            conversations: vec![AiChatConversationRecord {
+                id: "conversation-1".to_string(),
+                session_id: "session-1".to_string(),
+                title: "Test".to_string(),
+                created_at_unix_ms: 10,
+                updated_at_unix_ms: 20,
+                messages: vec![AiChatHistoryMessage {
+                    id: "message-1".to_string(),
+                    role: "user".to_string(),
+                    text: "读取文件".to_string(),
+                    created_at_unix_ms: 10,
+                    started_at_unix_ms: None,
+                    completed_at_unix_ms: None,
+                    duration_ms: None,
+                    reasoning_text: None,
+                    content_blocks: vec![],
+                    interrupted_by_user: false,
+                    rollback_checkpoint_id: None,
+                }],
+                protocol_messages: vec![AiChatHistoryMessage {
+                    id: "protocol-tool-result".to_string(),
+                    role: "user".to_string(),
+                    text: "".to_string(),
+                    created_at_unix_ms: 12,
+                    started_at_unix_ms: None,
+                    completed_at_unix_ms: None,
+                    duration_ms: None,
+                    reasoning_text: None,
+                    content_blocks: vec![AiChatHistoryContentBlock {
+                        kind: "tool-result".to_string(),
+                        text: None,
+                        signature: None,
+                        tool_use_id: Some("toolu-1".to_string()),
+                        tool_name: Some("vault.read_markdown_file".to_string()),
+                        input_json: None,
+                        result_json: Some("{\"content\":\"hello\"}".to_string()),
+                    }],
+                    interrupted_by_user: false,
+                    rollback_checkpoint_id: None,
+                }],
+            }],
+        };
+
+        let loaded = save_ai_chat_history_in_root(history, &root).expect("保存历史应成功");
+
+        assert_eq!(loaded.conversations[0].protocol_messages.len(), 1);
+        assert_eq!(
+            loaded.conversations[0].protocol_messages[0].content_blocks[0].kind,
+            "tool-result"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn load_ai_chat_history_should_return_default_when_no_state_exists() {
         let root = create_test_root();
 
@@ -1267,6 +1337,8 @@ mod tests {
             active_provider_id: None,
             providers: Vec::new(),
             tool_approval_policy: HashMap::new(),
+            auto_compress_context: true,
+            context_limit_tokens: DEFAULT_AI_CHAT_CONTEXT_LIMIT_TOKENS,
         };
         crate::infra::persistence::extension_private_store::save_extension_private_state(
             &root, "ai-chat", "settings", &settings,
@@ -1343,6 +1415,8 @@ mod tests {
                 },
             ],
             tool_approval_policy: HashMap::new(),
+            auto_compress_context: true,
+            context_limit_tokens: DEFAULT_AI_CHAT_CONTEXT_LIMIT_TOKENS,
         });
 
         assert_eq!(settings.vendor_id, "openai-compatible");
@@ -1377,6 +1451,8 @@ mod tests {
             active_provider_id: None,
             providers: Vec::new(),
             tool_approval_policy: HashMap::new(),
+            auto_compress_context: true,
+            context_limit_tokens: DEFAULT_AI_CHAT_CONTEXT_LIMIT_TOKENS,
         });
 
         assert_eq!(settings.vendor_id, "codex-compatible");
@@ -1405,6 +1481,8 @@ mod tests {
             active_provider_id: None,
             providers: Vec::new(),
             tool_approval_policy: HashMap::new(),
+            auto_compress_context: true,
+            context_limit_tokens: DEFAULT_AI_CHAT_CONTEXT_LIMIT_TOKENS,
         });
 
         assert_eq!(settings.vendor_id, "minimax-anthropic");
@@ -1421,6 +1499,26 @@ mod tests {
         assert_eq!(
             settings.field_values.get("endpoint").map(String::as_str),
             Some("https://api.minimaxi.com/anthropic")
+        );
+    }
+
+    #[test]
+    fn sanitize_ai_chat_settings_should_clamp_context_budget() {
+        let settings = sanitize_ai_chat_settings(AiChatSettings {
+            vendor_id: "anthropic-compatible".to_string(),
+            model: "claude-sonnet-4-5".to_string(),
+            field_values: HashMap::new(),
+            active_provider_id: None,
+            providers: Vec::new(),
+            tool_approval_policy: HashMap::new(),
+            auto_compress_context: false,
+            context_limit_tokens: 42,
+        });
+
+        assert!(!settings.auto_compress_context);
+        assert_eq!(
+            settings.context_limit_tokens,
+            MIN_AI_CHAT_CONTEXT_LIMIT_TOKENS
         );
     }
 
