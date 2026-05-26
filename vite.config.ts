@@ -46,10 +46,6 @@ function resolveManualChunk(id: string): string | undefined {
     return "file-tree-feature";
   }
 
-  if (normalizedId.includes("/src/api/")) {
-    return "vault-api";
-  }
-
   if (normalizedId.includes("/src/host/store/") || normalizedId.includes("/src/host/events/")) {
     return "host-state";
   }
