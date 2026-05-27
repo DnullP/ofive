@@ -5,7 +5,10 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { shouldKeepMarkdownTableSourceVisible } from "./markdownTableSyntaxExtension";
+import {
+    estimateMarkdownTableWidgetHeight,
+    shouldKeepMarkdownTableSourceVisible,
+} from "./markdownTableSyntaxExtension";
 
 describe("shouldKeepMarkdownTableSourceVisible", () => {
     test("空光标停留在表格源码范围内时应保留源码可见", () => {
@@ -27,5 +30,28 @@ describe("shouldKeepMarkdownTableSourceVisible", () => {
             { from: 12, to: 48 },
             [{ from: 48, to: 48, empty: true }],
         )).toBe(false);
+    });
+});
+
+describe("estimateMarkdownTableWidgetHeight", () => {
+    test("大型表格应在 React 挂载前提供接近真实表格的高度下限", () => {
+        const estimatedHeight = estimateMarkdownTableWidgetHeight({
+            rows: Array.from({ length: 48 }, () => ["A", "B", "C"]),
+        }, null);
+
+        expect(estimatedHeight).toBeGreaterThan(1800);
+    });
+
+    test("应优先使用持久化行高估算已调整过的表格", () => {
+        const estimatedHeight = estimateMarkdownTableWidgetHeight({
+            rows: [
+                ["one", "two"],
+                ["three", "four"],
+            ],
+        }, {
+            rowHeights: [96, 128],
+        });
+
+        expect(estimatedHeight).toBe(312);
     });
 });

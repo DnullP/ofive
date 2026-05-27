@@ -71,6 +71,53 @@ interface MarkdownTableSyntaxExtensionOptions {
     }) => void;
 }
 
+const MARKDOWN_TABLE_WIDGET_VERTICAL_CHROME_HEIGHT = 50;
+const MARKDOWN_TABLE_WIDGET_HEADER_HEIGHT = 38;
+const MARKDOWN_TABLE_WIDGET_MIN_ROW_HEIGHT = 38;
+
+/**
+ * @function estimateMarkdownTableWidgetHeight
+ * @description 为 CodeMirror 的离屏高度图提供 Markdown 表格 widget 的保守高度估算。
+ *   大型表格在 React 内容真正挂载前不能被估成一行高，否则滚动到该区域时
+ *   CodeMirror 会在测量后大幅修正 scrollTop，表现为漂移或瞬移。
+ */
+export function estimateMarkdownTableWidgetHeight(
+    model: Pick<MarkdownTableModel, "rows">,
+    layout: MarkdownTableLayout | null | undefined,
+): number {
+    const bodyRowsHeight = model.rows.reduce((totalHeight, _row, rowIndex) => {
+        const persistedHeight = Number(layout?.rowHeights?.[rowIndex]);
+        const rowHeight = Number.isFinite(persistedHeight) && persistedHeight > 0
+            ? persistedHeight
+            : MARKDOWN_TABLE_WIDGET_MIN_ROW_HEIGHT;
+
+        return totalHeight + Math.max(
+            MARKDOWN_TABLE_WIDGET_MIN_ROW_HEIGHT,
+            Math.round(rowHeight),
+        );
+    }, 0);
+
+    return MARKDOWN_TABLE_WIDGET_VERTICAL_CHROME_HEIGHT
+        + MARKDOWN_TABLE_WIDGET_HEADER_HEIGHT
+        + bodyRowsHeight;
+}
+
+function estimateMarkdownTableWidgetHeightContribution(options: {
+    model: Pick<MarkdownTableModel, "rows">;
+    layout: MarkdownTableLayout | null | undefined;
+    hiddenSourceLineCount: number;
+    sourceLineHeight: number;
+}): number {
+    const visualHeight = estimateMarkdownTableWidgetHeight(options.model, options.layout);
+    const hiddenSourceHeight = Math.max(0, options.hiddenSourceLineCount)
+        * Math.max(0, options.sourceLineHeight);
+
+    return Math.max(
+        MARKDOWN_TABLE_WIDGET_MIN_ROW_HEIGHT,
+        visualHeight - hiddenSourceHeight,
+    );
+}
+
 /**
  * @function shouldKeepMarkdownTableSourceVisible
  * @description 当底层选区仍停留在表格源码范围里时，保留源码显示，
@@ -280,6 +327,9 @@ class MarkdownTableWidget extends WidgetType {
     /** 表格布局元数据。 */
     private readonly layout: MarkdownTableLayout | null;
 
+    /** 同一表格块中会被 CSS 折叠为 0 高的源码行数量。 */
+    private readonly hiddenSourceLineCount: number;
+
     /** React 根实例。 */
     private root: Root | null = null;
 
@@ -287,6 +337,7 @@ class MarkdownTableWidget extends WidgetType {
         blockFrom: number,
         model: MarkdownTableModel,
         layout: MarkdownTableLayout | null,
+        hiddenSourceLineCount: number,
         private readonly view: EditorView,
         private readonly containerApi: WorkbenchContainerApi,
         private readonly getCurrentFilePath: () => string,
@@ -295,6 +346,7 @@ class MarkdownTableWidget extends WidgetType {
         this.blockFrom = blockFrom;
         this.model = model;
         this.layout = layout;
+        this.hiddenSourceLineCount = hiddenSourceLineCount;
     }
 
     eq(other: MarkdownTableWidget): boolean {
@@ -303,9 +355,19 @@ class MarkdownTableWidget extends WidgetType {
             === serializeMarkdownTableWithLayout(other.model, other.layout);
     }
 
+    get estimatedHeight(): number {
+        return estimateMarkdownTableWidgetHeightContribution({
+            model: this.model,
+            layout: this.layout,
+            hiddenSourceLineCount: this.hiddenSourceLineCount,
+            sourceLineHeight: this.view.defaultLineHeight,
+        });
+    }
+
     toDOM(): HTMLElement {
         const wrapper = document.createElement("section");
         wrapper.className = "cm-markdown-table-widget";
+        wrapper.style.minHeight = `${String(estimateMarkdownTableWidgetHeight(this.model, this.layout))}px`;
 
         try {
             this.root = createRoot(wrapper);
@@ -322,6 +384,13 @@ class MarkdownTableWidget extends WidgetType {
                     currentFilePath: this.getCurrentFilePath(),
                 }),
             );
+            window.requestAnimationFrame(() => {
+                if (!isViewAlive(this.view)) {
+                    return;
+                }
+
+                this.view.requestMeasure();
+            });
         } catch (error) {
             console.error("[markdown-table-syntax-extension] widget render failed", {
                 message: error instanceof Error ? error.message : String(error),
@@ -412,7 +481,7 @@ export function createMarkdownTableSyntaxExtension(
                     }
                 }
 
-                if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged) {
+                if (update.docChanged || update.selectionSet || update.focusChanged) {
                     this.decorations = this.safeBuildDecorations(update.view);
                 }
             }
@@ -461,6 +530,7 @@ export function createMarkdownTableSyntaxExtension(
                                 block.from,
                                 block.model,
                                 block.layout,
+                                block.endLineNumber - block.startLineNumber,
                                 view,
                                 containerApi,
                                 getCurrentFilePath,

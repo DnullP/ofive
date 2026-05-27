@@ -389,6 +389,7 @@ export function applyListLineDecorations(context: LineSyntaxDecorationContext): 
 export function registerListSyntaxRenderer(): void {
     registerLineSyntaxRenderer({
         id: "list-line",
+        allowComposingSelectionLine: true,
         applyLineDecorations: applyListLineDecorations,
     });
 }

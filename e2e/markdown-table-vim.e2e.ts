@@ -252,6 +252,15 @@ async function commitImeTextWithChrome(page: Page, text: string): Promise<void> 
     }
 }
 
+async function insertTextWithChrome(page: Page, text: string): Promise<void> {
+    const client = await page.context().newCDPSession(page);
+    try {
+        await client.send("Input.insertText", { text });
+    } finally {
+        await client.detach();
+    }
+}
+
 async function setImeCompositionWithChrome(page: Page, text: string): Promise<void> {
     const client = await page.context().newCDPSession(page);
     try {
@@ -453,6 +462,29 @@ async function simulateImeInsertSelectionDriftToLineStart(page: Page, data: stri
         Object.defineProperty(inputEvent, "inputType", { value: "insertCompositionText" });
         eventTarget.dispatchEvent(inputEvent);
     }, data);
+}
+
+async function readActiveListLineRenderState(page: Page): Promise<{
+    hasListSourceLine: boolean;
+    markerSourceCount: number;
+    renderedMarkerCount: number;
+    textContent: string;
+}> {
+    return page.evaluate(() => {
+        const activeCard = document.querySelector(".layout-v2-tab-section__card--active");
+        const activeLine = Array.from(activeCard?.querySelectorAll<HTMLElement>(".cm-line") ?? [])
+            .find((line) => line.textContent?.includes("标点后继续输入"));
+        if (!activeLine) {
+            throw new Error("Active list line not found.");
+        }
+
+        return {
+            hasListSourceLine: activeLine.classList.contains("cm-list-source-line"),
+            markerSourceCount: activeLine.querySelectorAll(".cm-list-syntax-marker-source").length,
+            renderedMarkerCount: activeLine.querySelectorAll(".cm-rendered-list-marker").length,
+            textContent: activeLine.textContent ?? "",
+        };
+    });
 }
 
 test.describe("markdown table vim regression", () => {
@@ -969,6 +1001,43 @@ test.describe("markdown table vim regression", () => {
         const orderedCommittedState = await getActiveEditorState(page);
         expect(orderedCommittedState.head).toBe(orderedInitialState.head + 1);
         expect(orderedCommittedState.docText).toContain("1. xxxw");
+    });
+
+    test("IME pinyin after punctuation should keep markdown list source DOM stable", async ({ page }) => {
+        const userLine = "- 标点后继续输入";
+        await openMockNote(page, INLINE_CODE_WIKILINK_NOTE_PATH);
+        await disableEditorVimMode(page);
+        await replaceActiveEditorDoc(page, [userLine, "---"].join("\n"), userLine);
+
+        const initialState = await getActiveEditorState(page);
+        await page.keyboard.insertText("，");
+        await waitForEditorFrames(page, 4);
+
+        const afterPunctuationState = await getActiveEditorState(page);
+        expect(afterPunctuationState.head).toBe(initialState.head + 1);
+        expect(afterPunctuationState.docText).toContain(`${userLine}，`);
+
+        const beforeCursor = afterPunctuationState.docText.slice(0, afterPunctuationState.head);
+        const afterCursor = afterPunctuationState.docText.slice(afterPunctuationState.head);
+
+        await setImeCompositionWithChrome(page, "ni");
+        await waitForEditorFrames(page, 4);
+
+        const preeditState = await getActiveEditorState(page);
+        expect(preeditState.head).toBe(afterPunctuationState.head + 2);
+        expect(preeditState.lineNumber).toBe(afterPunctuationState.lineNumber);
+        const preeditLineRenderState = await readActiveListLineRenderState(page);
+        expect(preeditLineRenderState.hasListSourceLine).toBe(true);
+        expect(preeditLineRenderState.markerSourceCount).toBe(1);
+        expect(preeditLineRenderState.renderedMarkerCount).toBe(0);
+        expect(preeditLineRenderState.textContent).toContain(`${userLine}，ni`);
+
+        await insertTextWithChrome(page, "你");
+        await waitForEditorFrames(page, 4);
+
+        const committedState = await getActiveEditorState(page);
+        expect(committedState.head).toBe(afterPunctuationState.head + 1);
+        expect(committedState.docText).toBe(`${beforeCursor}你${afterCursor}`);
     });
 
     test("modified cell should return to the same navigation target after Escape or Enter", async ({ page }) => {

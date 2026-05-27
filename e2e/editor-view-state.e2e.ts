@@ -4,6 +4,7 @@ const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
 const SCROLL_NOTE_PATH = "test-resources/notes/scroll-regression.md";
 const ALT_SCROLL_NOTE_PATH = "test-resources/notes/scroll-regression-alt.md";
 const FRONTMATTER_NOTE_PATH = "test-resources/notes/network-segment.md";
+const LARGE_TABLE_SCROLL_NOTE_PATH = "test-resources/notes/big-tables-drift.md";
 
 interface CodeMirrorContentElement extends HTMLElement {
     cmTile?: {
@@ -57,6 +58,16 @@ async function clickVisibleEditor(page: Page, offsetX: number, offsetY: number):
     }
 
     await page.mouse.click(box.x + offsetX, box.y + offsetY);
+}
+
+async function moveMouseToVisibleEditorCenter(page: Page): Promise<void> {
+    const editor = page.locator(".layout-v2-tab-section__card[aria-hidden='false'] .cm-editor").first();
+    const box = await editor.boundingBox();
+    if (!box) {
+        throw new Error("moveMouseToVisibleEditorCenter: editor bounds missing");
+    }
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 }
 
 async function setVisibleEditorScrollTop(page: Page, scrollTop: number): Promise<void> {
@@ -151,6 +162,117 @@ async function readVisibleEditorState(page: Page): Promise<{
             editorHasFocus: editor.contains(document.activeElement),
         };
     });
+}
+
+async function replaceActiveEditorDoc(page: Page, markdown: string, cursorNeedle: string): Promise<void> {
+    await page.locator(".layout-v2-tab-section__card--active .cm-content").waitFor({ state: "visible" });
+    await page.evaluate(({ nextMarkdown, needle }) => {
+        const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as CodeMirrorContentElement | null;
+        const view = content?.cmTile?.view;
+        if (!view) {
+            throw new Error("EditorView not found on .cm-content");
+        }
+
+        const needleIndex = nextMarkdown.indexOf(needle);
+        if (needleIndex < 0) {
+            throw new Error(`Needle not found: ${needle}`);
+        }
+
+        view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: nextMarkdown },
+            selection: { anchor: needleIndex + needle.length },
+            scrollIntoView: true,
+        });
+    }, { nextMarkdown: markdown, needle: cursorNeedle });
+}
+
+async function createLargeMarkdownTableScrollDocument(): Promise<string> {
+    return [
+        "# Runtime Large Table Scroll Regression",
+        "",
+        "Prelude before runtime generated tables.",
+        "",
+        ...Array.from({ length: 14 }, (_, tableIndex) => {
+            const tableLabel = String(tableIndex + 1).padStart(2, "0");
+            return [
+                `## Runtime Large Table ${tableLabel}`,
+                "",
+                "| Metric | Owner | Status | Detail |",
+                "| --- | --- | --- | --- |",
+                ...Array.from({ length: 52 }, (_, rowIndex) => {
+                    const rowLabel = String(rowIndex + 1).padStart(2, "0");
+                    return `| R${tableLabel}-${rowLabel} | Team ${((rowIndex % 6) + 1).toString()} | Active | Runtime generated table ${tableLabel} row ${rowLabel} keeps the widget visually large during scrolling. |`;
+                }),
+                "",
+            ];
+        }).flat(),
+        "## Runtime Tail",
+        "",
+        ...Array.from({ length: 96 }, (_, index) => {
+            const lineNumber = String(index + 1).padStart(3, "0");
+            return `${lineNumber}. Runtime tail checkpoint ${lineNumber}.`;
+        }),
+    ].join("\n");
+}
+
+async function startEditorScrollStabilityMonitor(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const monitorKey = "__OFIVE_EDITOR_SCROLL_STABILITY_MONITOR__";
+        const existingMonitor = (window as any)[monitorKey];
+        if (existingMonitor?.stop) {
+            existingMonitor.stop();
+        }
+
+        const samples: Array<{
+            scrollTop: number;
+            scrollHeight: number;
+            tableWidgetCount: number;
+        }> = [];
+        let frameId = 0;
+
+        const sample = (): void => {
+            const activeCard = document.querySelector<HTMLElement>(".layout-v2-tab-section__card[aria-hidden='false']");
+            const editor = activeCard?.querySelector<HTMLElement>(".cm-editor") ?? null;
+            const scroller = editor?.querySelector<HTMLElement>(".cm-scroller") ?? null;
+            if (scroller) {
+                samples.push({
+                    scrollTop: scroller.scrollTop,
+                    scrollHeight: scroller.scrollHeight,
+                    tableWidgetCount: activeCard?.querySelectorAll(".cm-markdown-table-widget").length ?? 0,
+                });
+            }
+
+            frameId = window.requestAnimationFrame(sample);
+        };
+
+        frameId = window.requestAnimationFrame(sample);
+        (window as any)[monitorKey] = {
+            samples,
+            stop: () => window.cancelAnimationFrame(frameId),
+        };
+    });
+}
+
+async function stopEditorScrollStabilityMonitor(page: Page): Promise<Array<{
+    scrollTop: number;
+    scrollHeight: number;
+    tableWidgetCount: number;
+}>> {
+    return page.evaluate(() => {
+        const monitorKey = "__OFIVE_EDITOR_SCROLL_STABILITY_MONITOR__";
+        const monitor = (window as any)[monitorKey];
+        if (!monitor) {
+            return [];
+        }
+
+        monitor.stop();
+        return monitor.samples;
+    });
+}
+
+async function waitForLargeTableWidgets(page: Page, minimumCount: number): Promise<void> {
+    await expect.poll(async () => page.locator(".layout-v2-tab-section__card--active .cm-markdown-table-widget").count())
+        .toBeGreaterThanOrEqual(minimumCount);
 }
 
 async function waitForVisibleEditorTitle(page: Page, expectedTitle: string): Promise<void> {
@@ -450,5 +572,45 @@ test.describe("editor view state regression", () => {
         expect(afterSidebarSwitch.selectionCollapsed).toBe(true);
         expect(afterSidebarSwitch.selectionText).toBe("");
         expect(afterSidebarSwitch.scrollTop).toBeGreaterThan(beforeSidebarSwitch.scrollTop - 120);
+    });
+
+    test("large markdown tables do not drift or teleport while scrolling", async ({ page }) => {
+        await openMockNote(page, LARGE_TABLE_SCROLL_NOTE_PATH);
+        await waitForLargeTableWidgets(page, 1);
+        await replaceActiveEditorDoc(
+            page,
+            await createLargeMarkdownTableScrollDocument(),
+            "Runtime Tail",
+        );
+        await waitForLargeTableWidgets(page, 1);
+        await setVisibleEditorScrollTop(page, 0);
+        await page.waitForTimeout(160);
+        await moveMouseToVisibleEditorCenter(page);
+
+        await startEditorScrollStabilityMonitor(page);
+        for (let stepIndex = 0; stepIndex < 12; stepIndex += 1) {
+            await page.mouse.wheel(0, 640);
+            await page.waitForTimeout(70);
+        }
+
+        const duringScrollSamples = await stopEditorScrollStabilityMonitor(page);
+        expect(duringScrollSamples.length).toBeGreaterThan(8);
+        expect(duringScrollSamples.some((sample) => sample.tableWidgetCount > 0)).toBe(true);
+
+        let maxUnexpectedJump = 0;
+        for (let index = 1; index < duringScrollSamples.length; index += 1) {
+            const previous = duringScrollSamples[index - 1]!;
+            const current = duringScrollSamples[index]!;
+            const scrollDelta = Math.abs(current.scrollTop - previous.scrollTop);
+            const heightDelta = Math.abs(current.scrollHeight - previous.scrollHeight);
+            maxUnexpectedJump = Math.max(maxUnexpectedJump, Math.max(0, scrollDelta - heightDelta));
+        }
+
+        expect(maxUnexpectedJump).toBeLessThan(2400);
+
+        const settledBefore = await readVisibleEditorState(page);
+        await page.waitForTimeout(180);
+        const settledAfter = await readVisibleEditorState(page);
+        expect(Math.abs(settledAfter.scrollTop - settledBefore.scrollTop)).toBeLessThan(32);
     });
 });

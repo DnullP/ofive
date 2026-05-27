@@ -254,6 +254,37 @@ const SCROLL_REGRESSION_ALT_SAMPLE = [
     }),
 ].join("\n");
 
+function createLargeMarkdownTableFixture(tableIndex: number): string[] {
+    const tableLabel = String(tableIndex + 1).padStart(2, "0");
+    return [
+        `## Large Table ${tableLabel}`,
+        "",
+        "| Metric | Owner | Status | Detail |",
+        "| --- | --- | --- | --- |",
+        ...Array.from({ length: 44 }, (_, rowIndex) => {
+            const rowLabel = String(rowIndex + 1).padStart(2, "0");
+            return `| T${tableLabel}-${rowLabel} | Team ${((rowIndex % 5) + 1).toString()} | Active | Large table ${tableLabel} row ${rowLabel} keeps enough visual height for scroll stability. |`;
+        }),
+        "",
+    ];
+}
+
+const LARGE_TABLE_SCROLL_REGRESSION_SAMPLE = [
+    "# Large Table Scroll Regression",
+    "",
+    "该页面包含多个大型 Markdown 表格，用于验证编辑器滚动不会因为 widget 高度测量而漂移。",
+    "",
+    "Prelude checkpoint before tables.",
+    "",
+    ...Array.from({ length: 12 }, (_, tableIndex) => createLargeMarkdownTableFixture(tableIndex)).flat(),
+    "## After Tables",
+    "",
+    ...Array.from({ length: 80 }, (_, index) => {
+        const lineNumber = String(index + 1).padStart(3, "0");
+        return `${lineNumber}. Large table scroll tail checkpoint ${lineNumber}.`;
+    }),
+].join("\n");
+
 const OUTLINE_REVEAL_SAMPLE = [
     "# Outline Reveal Demo",
     "",
@@ -360,6 +391,7 @@ const MOCK_FILE_CONTENTS: Record<string, string> = {
     "test-resources/notes/open-mode-source.md": "# Open Mode Source\n\n[[network-segment]]\n",
     "test-resources/notes/scroll-regression.md": SCROLL_REGRESSION_SAMPLE,
     "test-resources/notes/scroll-regression-alt.md": SCROLL_REGRESSION_ALT_SAMPLE,
+    "test-resources/notes/big-tables-drift.md": LARGE_TABLE_SCROLL_REGRESSION_SAMPLE,
     "test-resources/notes/outline-reveal.md": OUTLINE_REVEAL_SAMPLE,
     "test-resources/notes/table-editor.md": TABLE_EDITOR_SAMPLE,
     "test-resources/notes/table-vim-boundary.md": TABLE_VIM_BOUNDARY_SAMPLE,

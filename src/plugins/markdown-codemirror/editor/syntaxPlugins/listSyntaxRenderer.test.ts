@@ -5,11 +5,13 @@
 
 import { describe, expect, test } from "bun:test";
 import { EditorState } from "@codemirror/state";
+import { getLineSyntaxRendererSnapshot } from "../syntaxRenderRegistry";
 import type { LineSyntaxDecorationContext, SyntaxDecorationRange } from "../syntaxRenderRegistry";
 import {
     applyListLineDecorations,
     buildTaskCheckboxToggleSpec,
     detectMarkdownListLine,
+    registerListSyntaxRenderer,
 } from "./listSyntaxRenderer";
 
 function createListDecorationContext(
@@ -175,5 +177,15 @@ describe("applyListLineDecorations", () => {
             .toContain("cm-list-syntax-marker-source-task");
         expect((ranges[1]?.decoration as unknown as { spec?: { class?: string } }).spec?.class)
             .toContain("cm-list-source-line-task");
+    });
+});
+
+describe("registerListSyntaxRenderer", () => {
+    test("列表编辑态装饰应允许在 IME 组合态保留，避免 compositionstart 重建活动行 DOM", () => {
+        registerListSyntaxRenderer();
+
+        const renderer = getLineSyntaxRendererSnapshot().find((entry) => entry.id === "list-line");
+
+        expect(renderer?.allowComposingSelectionLine).toBe(true);
     });
 });
