@@ -26,6 +26,7 @@ import {
     type MouseEvent,
     type ReactNode,
 } from "react";
+import { flushSync } from "react-dom";
 import * as LucideIcons from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -1020,7 +1021,6 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
      */
     const commitWithNextRecord = (nextRecord: Record<string, VisualYamlValue>): void => {
         setRecordDraft(nextRecord);
-
         const nextYaml = stringifyRecordToYaml(nextRecord);
         if (nextYaml === lastCommittedYamlRef.current) {
             return;
@@ -1071,7 +1071,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
             : renameRecordKey(recordDraft, previousKey, field.key);
 
         nextRecord[field.key] = nextValue;
-        commitWithNextRecord(nextRecord);
+        flushSync(() => commitWithNextRecord(nextRecord));
         clearKeyDraft(previousKey);
         setActiveKeySuggestionField(null);
         focusNavigationRow(field.key);
@@ -1118,7 +1118,7 @@ export function FrontmatterYamlVisualEditor(props: FrontmatterYamlVisualEditorPr
         });
 
         const nextRecord = renameRecordKey(recordDraft, previousKey, nextKey);
-        commitWithNextRecord(nextRecord);
+        flushSync(() => commitWithNextRecord(nextRecord));
         setEditingListItem((previous) => {
             if (!previous || previous.key !== previousKey) {
                 return previous;

@@ -406,6 +406,7 @@ test.describe("frontmatter 可见性", () => {
         await page.keyboard.type("Updated");
         await page.keyboard.press("Enter");
         await page.keyboard.press("j");
+        await waitForFrontmatterNavigationRowFocus(page, "category");
 
         const navigationState = await page.evaluate(() => {
             const activeElement = document.activeElement as HTMLElement | null;

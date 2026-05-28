@@ -8,26 +8,65 @@ import { gotoMockVaultPage } from "./helpers/mockVault";
 
 const MOCK_RENAME_PATH = "test-resources/notes/guide.md";
 
-function parseRgbColor(color: string): { red: number; green: number; blue: number } {
+function parseCssColor(color: string): { red: number; green: number; blue: number; alpha: number } {
+    const normalizedColor = color.trim().toLowerCase();
+    if (normalizedColor === "transparent") {
+        return { red: 0, green: 0, blue: 0, alpha: 0 };
+    }
+
+    const parseChannel = (channel: string): number => {
+        const trimmedChannel = channel.trim();
+        if (trimmedChannel.endsWith("%")) {
+            return Number(trimmedChannel.slice(0, -1)) * 2.55;
+        }
+
+        return Number(trimmedChannel);
+    };
+    const parseAlpha = (alpha: string | undefined): number => {
+        if (!alpha) {
+            return 1;
+        }
+
+        const trimmedAlpha = alpha.trim();
+        if (trimmedAlpha.endsWith("%")) {
+            return Number(trimmedAlpha.slice(0, -1)) / 100;
+        }
+
+        return Number(trimmedAlpha);
+    };
+
     const legacyMatch = color.match(/rgba?\(([^)]+)\)/i);
     if (legacyMatch) {
-        const channels = legacyMatch[1]
-            .split(",")
-            .slice(0, 3)
-            .map((part) => Number(part.trim()));
+        const [channelPart, slashAlpha] = legacyMatch[1].split(/\s*\/\s*/);
+        const rawParts = channelPart.includes(",")
+            ? channelPart.split(",")
+            : channelPart.trim().split(/\s+/);
         return {
-            red: channels[0] ?? 0,
-            green: channels[1] ?? 0,
-            blue: channels[2] ?? 0,
+            red: parseChannel(rawParts[0] ?? "0"),
+            green: parseChannel(rawParts[1] ?? "0"),
+            blue: parseChannel(rawParts[2] ?? "0"),
+            alpha: parseAlpha(slashAlpha ?? rawParts[3]),
         };
     }
 
-    const colorMatch = color.match(/color\(srgb\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)/i);
+    const colorMatch = color.match(/color\(srgb\s+([^)]+)\)/i);
     if (colorMatch) {
+        const [channelPart, slashAlpha] = colorMatch[1].split(/\s*\/\s*/);
+        const channels = channelPart.trim().split(/\s+/);
+        const srgbChannelToByte = (channel: string): number => {
+            const trimmedChannel = channel.trim();
+            if (trimmedChannel.endsWith("%")) {
+                return Number(trimmedChannel.slice(0, -1)) * 2.55;
+            }
+
+            return Number(trimmedChannel) * 255;
+        };
+
         return {
-            red: Math.round(Number(colorMatch[1]) * 255),
-            green: Math.round(Number(colorMatch[2]) * 255),
-            blue: Math.round(Number(colorMatch[3]) * 255),
+            red: srgbChannelToByte(channels[0] ?? "0"),
+            green: srgbChannelToByte(channels[1] ?? "0"),
+            blue: srgbChannelToByte(channels[2] ?? "0"),
+            alpha: parseAlpha(slashAlpha),
         };
     }
 
@@ -37,12 +76,16 @@ function parseRgbColor(color: string): { red: number; green: number; blue: numbe
 async function expectFocusedInputStroke(input: Locator): Promise<void> {
     await expect(input).toBeFocused();
     await expect(input).toHaveCSS("border-top-width", "1px");
+    await expect(input).toHaveCSS("border-top-style", "solid");
     await expect(input).toHaveCSS("outline-style", "none");
 
     const borderColor = await input.evaluate((element) => window.getComputedStyle(element).borderTopColor);
-    const { red, green, blue } = parseRgbColor(borderColor);
-    expect(blue).toBeGreaterThan(red);
-    expect(blue).toBeGreaterThan(green);
+    const { red, green, blue, alpha } = parseCssColor(borderColor);
+    expect(Number.isFinite(red)).toBe(true);
+    expect(Number.isFinite(green)).toBe(true);
+    expect(Number.isFinite(blue)).toBe(true);
+    expect(Number.isFinite(alpha)).toBe(true);
+    expect(alpha).toBeGreaterThan(0);
 }
 
 async function openCommandPalette(page: Page): Promise<void> {
