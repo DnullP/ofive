@@ -5,11 +5,56 @@
 
 use crate::host::window_effects::{self, WindowsAcrylicEffectConfig};
 use crate::state::AppState;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
-use tauri::{State, WebviewWindow};
+use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-pub(crate) const WINDOW_COMMAND_IDS: &[&str] =
-    &["update_main_window_acrylic_effect", "reload_current_window"];
+pub(crate) const WINDOW_COMMAND_IDS: &[&str] = &[
+    "update_main_window_acrylic_effect",
+    "reload_current_window",
+    "create_detached_tab_window",
+];
+
+static DETACHED_WINDOW_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetachedTabWindowTab {
+    pub id: String,
+    pub title: String,
+    pub component: String,
+    #[serde(default)]
+    pub params: Option<Value>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDetachedTabWindowRequest {
+    pub tab: DetachedTabWindowTab,
+    #[serde(default)]
+    pub screen_x: Option<f64>,
+    #[serde(default)]
+    pub screen_y: Option<f64>,
+}
+
+fn next_detached_window_label() -> String {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    let sequence = DETACHED_WINDOW_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    format!("ofive-detached-{millis}-{sequence}")
+}
+
+fn encode_detached_tab_for_url(tab: &DetachedTabWindowTab) -> Result<String, String> {
+    let json = serde_json::to_vec(tab)
+        .map_err(|error| format!("serialize detached tab payload failed: {error}"))?;
+    Ok(URL_SAFE_NO_PAD.encode(json))
+}
 
 fn cleanup_runtime_for_reload_state(state: &AppState) -> Result<(), String> {
     {
@@ -138,6 +183,97 @@ pub fn reload_current_window(
         start.elapsed()
     );
     Ok(())
+}
+
+/// 为拖出主工作区的 tab 创建独立窗口。
+///
+/// 新窗口复用同一前端入口，通过 URL 启动参数进入 detached main-only 模式。
+#[tauri::command]
+pub async fn create_detached_tab_window(
+    app: AppHandle,
+    window: WebviewWindow,
+    request: CreateDetachedTabWindowRequest,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    log::info!("[command] create_detached_tab_window invoked");
+    let start = Instant::now();
+
+    let label = next_detached_window_label();
+    let encoded_tab = encode_detached_tab_for_url(&request.tab)?;
+    let window_url = format!(
+        "index.html?ofiveWindow=detached&ofiveInitialTab={encoded_tab}"
+    );
+
+    let fallback_position = window.outer_position().ok();
+    let fallback_x = fallback_position
+        .as_ref()
+        .map(|position| f64::from(position.x) + 72.0)
+        .unwrap_or(80.0);
+    let fallback_y = fallback_position
+        .as_ref()
+        .map(|position| f64::from(position.y) + 48.0)
+        .unwrap_or(80.0);
+    let target_x = request.screen_x.map(|x| x - 220.0).unwrap_or(fallback_x);
+    let target_y = request.screen_y.map(|y| y - 28.0).unwrap_or(fallback_y);
+
+    let mut builder = WebviewWindowBuilder::new(
+        &app,
+        label.clone(),
+        WebviewUrl::App(window_url.into()),
+    )
+    .title(format!("ofive - {}", request.tab.title))
+    .inner_size(980.0, 700.0)
+    .min_inner_size(360.0, 240.0)
+    .position(target_x, target_y)
+    .transparent(true)
+    .decorations(false)
+    .shadow(true)
+    .disable_drag_drop_handler();
+
+    #[cfg(windows)]
+    {
+        builder = builder.drag_and_drop(false);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+    }
+
+    let detached_window = builder
+        .build()
+        .map_err(|error| format!("create detached tab window failed: {error}"))?;
+
+    window_effects::apply_transparent_window_background(&detached_window);
+
+    let acrylic_config = state
+        .windows_acrylic_effect_config
+        .lock()
+        .map(|guard| guard.clone())
+        .unwrap_or_else(|error| {
+            log::warn!(
+                "[window] detached setup warning: failed to read acrylic config from state: {}",
+                error
+            );
+            WindowsAcrylicEffectConfig::default()
+        });
+    if let Err(error) = window_effects::apply_main_window_effects(&detached_window, &acrylic_config)
+    {
+        log::warn!("[window] detached setup warning: failed to apply window effect: {error}");
+    }
+
+    if let Err(error) = detached_window.set_focus() {
+        log::warn!("[window] detached setup warning: failed to focus detached window: {error}");
+    }
+
+    log::info!(
+        "[command] create_detached_tab_window completed label={} in {:?}",
+        label,
+        start.elapsed()
+    );
+    Ok(label)
 }
 
 #[cfg(test)]

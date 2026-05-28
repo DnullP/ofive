@@ -8,9 +8,7 @@ use crate::infra::logging;
 use crate::state::AppState;
 use std::collections::HashMap;
 use std::sync::Mutex;
-#[cfg(target_os = "macos")]
-use tauri::window::Color;
-use tauri::{App, LogicalSize, Manager, PhysicalPosition, Position, Size, WebviewWindow};
+use tauri::{App, LogicalSize, Manager, PhysicalPosition, Position, Size};
 
 /// 构建全局共享状态。
 pub(crate) fn build_app_state() -> AppState {
@@ -47,7 +45,7 @@ pub(crate) fn setup_main_window(
         return Ok(());
     };
 
-    apply_main_window_transparent_background(&main_window);
+    window_effects::apply_transparent_window_background(&main_window);
 
     let initial_window_effect_config = app
         .state::<AppState>()
@@ -150,27 +148,4 @@ pub(crate) fn setup_main_window(
     );
 
     Ok(())
-}
-
-/// 为 macOS 主窗口与主 WebView 显式设置透明背景。
-///
-/// Wry 在 macOS 上对 `set_background_color` 已经内置了对 WKWebView 白底的处理，
-/// 这里在宿主启动阶段直接下发透明色，避免前端 CSS 已透明但 WebView 仍保留默认白底。
-fn apply_main_window_transparent_background(window: &WebviewWindow) {
-    #[cfg(target_os = "macos")]
-    {
-        let transparent = Color(0, 0, 0, 0);
-        if let Err(error) = window.set_background_color(Some(transparent)) {
-            log::warn!(
-                "[window] setup warning: failed to set transparent macOS webview background: {error}"
-            );
-        } else {
-            log::info!("[window] applied transparent macOS window/webview background");
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = window;
-    }
 }

@@ -17,6 +17,7 @@ import (
 )
 
 const sidecarVersion = "0.1.0"
+const maxGrpcMessageSizeBytes = 64 * 1024 * 1024
 
 func main() {
 	port := flag.Int("port", 0, "tcp port to listen on")
@@ -31,7 +32,10 @@ func main() {
 		log.Fatalf("[sidecar] listen failed: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(maxGrpcMessageSizeBytes),
+		grpc.MaxSendMsgSize(maxGrpcMessageSizeBytes),
+	)
 	serviceImpl, err := service.NewAIService(sidecarVersion)
 	if err != nil {
 		log.Fatalf("[sidecar] init service failed: %v", err)

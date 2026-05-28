@@ -970,7 +970,6 @@ function ensureMockComponentsRegistered(): void {
         id: "codemirror",
         component: CodeMirrorEditorTab as never,
         lifecycleScope: "vault",
-        deferPresentationUntilReady: true,
         showNavigationControls: true,
     });
     registerTabComponent({ id: "canvas", component: CanvasTab as never, lifecycleScope: "vault" });

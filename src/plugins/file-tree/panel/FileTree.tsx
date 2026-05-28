@@ -110,12 +110,7 @@ function resolveDropDirectoryPath(node: TreeNode): string | null {
     return node.path;
   }
 
-  const parentDirectory = resolveParentDirectory(node.path);
-  if (parentDirectory === "") {
-    return null;
-  }
-
-  return parentDirectory;
+  return resolveParentDirectory(node.path);
 }
 
 function isDescendantPath(path: string, ancestorPath: string): boolean {

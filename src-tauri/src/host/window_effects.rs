@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(any(target_os = "macos", test))]
 use tauri::Theme;
 use tauri::WebviewWindow;
+#[cfg(target_os = "macos")]
+use tauri::window::Color;
 
 #[cfg(target_os = "windows")]
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -193,6 +195,26 @@ pub(crate) fn apply_runtime_window_effect_config(
         let _ = windows_acrylic_config;
         let _ = is_focused;
         Ok(())
+    }
+}
+
+/// 为透明前端壳设置原生 WebView 背景。
+pub(crate) fn apply_transparent_window_background(window: &WebviewWindow) {
+    #[cfg(target_os = "macos")]
+    {
+        let transparent = Color(0, 0, 0, 0);
+        if let Err(error) = window.set_background_color(Some(transparent)) {
+            log::warn!(
+                "[window] setup warning: failed to set transparent macOS webview background: {error}"
+            );
+        } else {
+            log::info!("[window] applied transparent macOS window/webview background");
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window;
     }
 }
 

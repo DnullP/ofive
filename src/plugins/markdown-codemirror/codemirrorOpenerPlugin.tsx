@@ -45,7 +45,6 @@ export function activatePlugin(): () => void {
         id: "codemirror",
         component: CodeMirrorEditorTab as any,
         lifecycleScope: "vault",
-        deferPresentationUntilReady: true,
         showNavigationControls: true,
     });
 

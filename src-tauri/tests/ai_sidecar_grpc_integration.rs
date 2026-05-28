@@ -19,16 +19,16 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{Json, Router};
+use ofive_lib::test_support::ai_sidecar_pb as pb;
+use ofive_lib::test_support::connect_ai_sidecar_client;
+use ofive_lib::test_support::AI_SIDECAR_GRPC_MAX_MESSAGE_SIZE_BYTES;
 use tonic::Request;
-
-pub mod pb {
-    tonic::include_proto!("ofive.ai.v1");
-}
 
 #[derive(Clone)]
 struct CallbackState {
     expected_token: String,
     call_count: Arc<AtomicUsize>,
+    output_content: Arc<String>,
 }
 
 #[derive(Clone)]
@@ -51,8 +51,21 @@ struct MinimaxMockState {
     captured_requests: Arc<Mutex<Vec<serde_json::Value>>>,
 }
 
+#[derive(Clone)]
+struct LargeTextMinimaxMockState {
+    call_count: Arc<AtomicUsize>,
+    large_text: Arc<String>,
+}
+
 async fn spawn_mock_callback_server(
     expected_token: String,
+) -> Result<(String, tokio::sync::oneshot::Sender<()>, Arc<AtomicUsize>), String> {
+    spawn_mock_callback_server_with_content(expected_token, Arc::new("# A".to_string())).await
+}
+
+async fn spawn_mock_callback_server_with_content(
+    expected_token: String,
+    output_content: Arc<String>,
 ) -> Result<(String, tokio::sync::oneshot::Sender<()>, Arc<AtomicUsize>), String> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
@@ -68,6 +81,7 @@ async fn spawn_mock_callback_server(
         .with_state(CallbackState {
             expected_token,
             call_count: call_count.clone(),
+            output_content,
         });
 
     tokio::spawn(async move {
@@ -104,7 +118,7 @@ async fn handle_mock_callback(
         "success": true,
         "output": {
             "relativePath": "Notes/A.md",
-            "content": "# A"
+            "content": state.output_content.as_str()
         },
         "error": null
     })))
@@ -308,6 +322,37 @@ async fn spawn_mock_minimax_server() -> Result<
     ))
 }
 
+async fn spawn_mock_minimax_large_text_server(
+    large_text: Arc<String>,
+) -> Result<(String, tokio::sync::oneshot::Sender<()>, Arc<AtomicUsize>), String> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|error| format!("启动 large text minimax mock server 失败: {error}"))?;
+    let address = listener
+        .local_addr()
+        .map_err(|error| format!("读取 large text minimax mock server 地址失败: {error}"))?;
+    let (shutdown_sender, shutdown_receiver) = tokio::sync::oneshot::channel();
+    let call_count = Arc::new(AtomicUsize::new(0));
+    let router = Router::new()
+        .route(
+            "/v1/messages",
+            post(handle_mock_minimax_large_text_messages),
+        )
+        .with_state(LargeTextMinimaxMockState {
+            call_count: call_count.clone(),
+            large_text,
+        });
+
+    tokio::spawn(async move {
+        let server = axum::serve(listener, router).with_graceful_shutdown(async move {
+            let _ = shutdown_receiver.await;
+        });
+        let _ = server.await;
+    });
+
+    Ok((format!("http://{address}"), shutdown_sender, call_count))
+}
+
 async fn handle_mock_minimax_messages(
     AxumState(state): AxumState<MinimaxMockState>,
     Json(request): Json<serde_json::Value>,
@@ -392,6 +437,75 @@ async fn handle_mock_minimax_messages(
         ]
         .join("")
     };
+
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+        body,
+    )
+}
+
+async fn handle_mock_minimax_large_text_messages(
+    AxumState(state): AxumState<LargeTextMinimaxMockState>,
+) -> impl IntoResponse {
+    state.call_count.fetch_add(1, Ordering::SeqCst);
+
+    let mut events = vec![
+        minimax_sse_event(
+            "message_start",
+            &serde_json::json!({
+                "type": "message_start",
+                "message": {
+                    "id": "msg_large",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "MiniMax-M2.7",
+                    "usage": {"input_tokens": 1, "output_tokens": 0}
+                }
+            })
+            .to_string(),
+        ),
+        minimax_sse_event(
+            "content_block_start",
+            &serde_json::json!({
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""}
+            })
+            .to_string(),
+        ),
+    ];
+    for chunk in state.large_text.as_bytes().chunks(64 * 1024) {
+        let text = std::str::from_utf8(chunk).expect("测试文本应保持 UTF-8");
+        events.push(minimax_sse_event(
+            "content_block_delta",
+            &serde_json::json!({
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": text}
+            })
+            .to_string(),
+        ));
+    }
+    events.extend([
+        minimax_sse_event(
+            "content_block_stop",
+            &serde_json::json!({"type": "content_block_stop", "index": 0}).to_string(),
+        ),
+        minimax_sse_event(
+            "message_delta",
+            &serde_json::json!({
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn"},
+                "usage": {"output_tokens": 1}
+            })
+            .to_string(),
+        ),
+        minimax_sse_event(
+            "message_stop",
+            &serde_json::json!({"type": "message_stop"}).to_string(),
+        ),
+    ]);
+    let body = events.join("");
 
     (
         [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
@@ -511,9 +625,7 @@ async fn wait_for_health(
             );
         }
 
-        if let Ok(mut client) =
-            pb::ai_agent_service_client::AiAgentServiceClient::connect(endpoint.to_string()).await
-        {
+        if let Ok(mut client) = connect_ai_sidecar_client(endpoint.to_string()).await {
             if client
                 .health(Request::new(pb::HealthRequest {}))
                 .await
@@ -579,6 +691,136 @@ async fn ai_sidecar_streams_chat_chunks() {
         assert!(chunk_count > 0, "应至少收到一个流式 chunk");
         assert!(saw_done, "应收到 done=true 的结束 chunk");
         assert_eq!(final_text, "[ADK] hello integration");
+    }
+    .await;
+
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[tokio::test]
+async fn ai_sidecar_streams_chat_chunk_larger_than_grpc_default_limit() {
+    let port = allocate_port();
+    let endpoint = format!("http://127.0.0.1:{port}");
+    let (mut child, log_path) = spawn_sidecar(port);
+    let large_text = Arc::new("A".repeat(5 * 1024 * 1024));
+    assert!(large_text.len() < AI_SIDECAR_GRPC_MAX_MESSAGE_SIZE_BYTES);
+    let (minimax_url, minimax_shutdown_sender, minimax_count) =
+        spawn_mock_minimax_large_text_server(large_text.clone())
+            .await
+            .expect("应成功启动 large text minimax mock server");
+
+    async {
+        let mut client = wait_for_health(&endpoint, &mut child, &log_path).await;
+        let response = client
+            .chat(Request::new(pb::ChatRequest {
+                session_id: "integration-large-response-session".to_string(),
+                user_id: "integration-user".to_string(),
+                message: "return a large response".to_string(),
+                vendor_config: HashMap::from([
+                    ("endpoint".to_string(), minimax_url),
+                    ("apiKey".to_string(), "test-key".to_string()),
+                ]),
+                vendor_id: "minimax-anthropic".to_string(),
+                model: "MiniMax-M2.7".to_string(),
+                tools: Vec::new(),
+                capability_callback_url: String::new(),
+                capability_callback_token: String::new(),
+                mcp_server_url: String::new(),
+                mcp_auth_token: String::new(),
+                history: Vec::new(),
+                persistence_callback_url: String::new(),
+                persistence_callback_token: String::new(),
+                context_snapshot_json: String::new(),
+                agent_skill_files: Vec::new(),
+            }))
+            .await
+            .expect("应成功建立 large response 聊天流");
+
+        let mut stream = response.into_inner();
+        let mut final_text_len = 0usize;
+        let mut saw_large_delta = false;
+        let mut saw_done = false;
+        while let Some(chunk) = stream
+            .message()
+            .await
+            .expect("应成功读取 large response 聊天流")
+        {
+            if !chunk.done && chunk.accumulated_text.len() > 4 * 1024 * 1024 {
+                saw_large_delta = true;
+            }
+            if chunk.done {
+                saw_done = true;
+                final_text_len = chunk.accumulated_text.len();
+            }
+        }
+
+        assert!(saw_large_delta, "应收到超过 gRPC 默认 4MiB 的 delta chunk");
+        assert!(saw_done, "应收到 done=true 的结束 chunk");
+        assert_eq!(final_text_len, large_text.len());
+        assert_eq!(minimax_count.load(Ordering::SeqCst), 1);
+    }
+    .await;
+
+    let _ = minimax_shutdown_sender.send(());
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[tokio::test]
+async fn ai_sidecar_accepts_chat_request_larger_than_grpc_default_limit() {
+    let port = allocate_port();
+    let endpoint = format!("http://127.0.0.1:{port}");
+    let (mut child, log_path) = spawn_sidecar(port);
+    let large_history_text = "H".repeat(5 * 1024 * 1024);
+    assert!(large_history_text.len() < AI_SIDECAR_GRPC_MAX_MESSAGE_SIZE_BYTES);
+
+    async {
+        let mut client = wait_for_health(&endpoint, &mut child, &log_path).await;
+        let response = client
+            .chat(Request::new(pb::ChatRequest {
+                session_id: "integration-large-request-session".to_string(),
+                user_id: "integration-user".to_string(),
+                message: "hello after large history".to_string(),
+                vendor_config: HashMap::new(),
+                vendor_id: "mock-echo".to_string(),
+                model: String::new(),
+                tools: Vec::new(),
+                capability_callback_url: String::new(),
+                capability_callback_token: String::new(),
+                mcp_server_url: String::new(),
+                mcp_auth_token: String::new(),
+                history: vec![pb::ChatHistoryEntry {
+                    role: "user".to_string(),
+                    text: large_history_text,
+                    interrupted_by_user: false,
+                    reasoning_text: String::new(),
+                    content_blocks_json: String::new(),
+                }],
+                persistence_callback_url: String::new(),
+                persistence_callback_token: String::new(),
+                context_snapshot_json: String::new(),
+                agent_skill_files: Vec::new(),
+            }))
+            .await
+            .expect("应成功发送超过 gRPC 默认 4MiB 的聊天请求");
+
+        let mut stream = response.into_inner();
+        let mut final_text = String::new();
+        let mut saw_done = false;
+        while let Some(chunk) = stream
+            .message()
+            .await
+            .expect("应成功读取 large request 聊天流")
+        {
+            if chunk.done {
+                saw_done = true;
+                final_text = chunk.accumulated_text;
+            }
+        }
+
+        assert!(saw_done, "应收到 done=true 的结束 chunk");
+        assert_eq!(final_text, "[ADK] hello after large history");
     }
     .await;
 

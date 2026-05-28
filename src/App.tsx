@@ -15,6 +15,7 @@ import { ensureBuiltinComponentsRegistered } from "./host/registry/registerBuilt
 import { useWindowEffectsSync } from "./host/window/useWindowEffectsSync";
 import { useMainWindowFullscreenEscapeGuard } from "./host/window/useMainWindowFullscreenEscapeGuard";
 import { useGlobalContextMenuBlocker } from "./host/layout/contextMenuCenter";
+import { readOfiveWindowBootstrap } from "./api/windowApi";
 import "./App.css";
 
 function App() {
@@ -29,6 +30,8 @@ function App() {
 
   const vaultState = useVaultState();
   useConfigSync(vaultState.currentVaultPath, !vaultState.isLoadingTree && !vaultState.error);
+  const windowBootstrap = useMemo(() => readOfiveWindowBootstrap(), []);
+  const isDetachedWindow = windowBootstrap.kind === "detached";
 
   /* ── 注册内置组件（幂等，只执行一次） ── */
   const builtinRefs = useMemo(() => ({
@@ -41,7 +44,10 @@ function App() {
       <CustomTitlebar />
       <div className="app-content">
         <WorkbenchLayoutHost
-          initialActivePanelId="files"
+          initialActivePanelId={isDetachedWindow ? undefined : "files"}
+          initialTabs={windowBootstrap.initialTab ? [windowBootstrap.initialTab] : undefined}
+          mainOnly={isDetachedWindow}
+          windowKind={windowBootstrap.kind}
         />
       </div>
     </div>

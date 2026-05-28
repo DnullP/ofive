@@ -8,7 +8,7 @@
  *  - ../../src/plugins/file-tree/panel/VaultPanel.css
  */
 
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FileTree, type FileTreeItem } from "../../src/plugins/file-tree/panel/FileTree";
 import type { TabInstanceDefinition } from "../../src/host/layout/workbenchContracts";
 import { loadBrowserMockMarkdownContents } from "../../src/api/vaultBrowserMockFixtures";
@@ -380,6 +380,7 @@ function resolveMockRenameRequest(): { eventId: string; path: string } | null {
 }
 
 const MOCK_FILE_CONTENTS: Record<string, string> = {
+    "root-target.md": "# Root Target\n\nDrop nested files on this root-level file to move them into the vault root.\n",
     "test-resources/notes/code-block-test.md": CODE_BLOCK_TEST_SAMPLE,
     "test-resources/notes/mermaid-test.md": MERMAID_TEST_SAMPLE,
     "test-resources/notes/network-segment.md": NETWORK_SEGMENT_SAMPLE,
@@ -458,22 +459,148 @@ async function primeBrowserMockContents(fileContents: Record<string, string>): P
     });
 }
 
+async function syncBrowserMockContents(
+    previousFileContents: Record<string, string>,
+    nextFileContents: Record<string, string>,
+): Promise<void> {
+    const browserMockContents = await loadBrowserMockMarkdownContents();
+    Object.keys(previousFileContents).forEach((relativePath) => {
+        if (!(relativePath in nextFileContents)) {
+            delete browserMockContents[relativePath];
+        }
+    });
+    Object.entries(nextFileContents).forEach(([relativePath, content]) => {
+        browserMockContents[relativePath] = content;
+    });
+}
+
+function normalizeMockRelativePath(relativePath: string): string {
+    return relativePath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+function isMockDescendantPath(path: string, ancestorPath: string): boolean {
+    return Boolean(ancestorPath) && path.startsWith(`${ancestorPath}/`);
+}
+
+function buildMockFileTreeItems(fileContents: Record<string, string>): FileTreeItem[] {
+    const folderSet = new Set<string>();
+    const filePaths = Object.keys(fileContents).map(normalizeMockRelativePath);
+
+    filePaths.forEach((path) => {
+        const segments = path.split("/");
+        let cursor = "";
+        for (let index = 0; index < segments.length - 1; index += 1) {
+            const segment = segments[index] ?? "";
+            cursor = cursor ? `${cursor}/${segment}` : segment;
+            folderSet.add(cursor);
+        }
+    });
+
+    const folderItems = Array.from(folderSet).map((path) => ({
+        id: `folder:${path}`,
+        path,
+        isDir: true,
+    }));
+    const fileItems = filePaths.map((path) => ({
+        id: path,
+        path,
+        isDir: false,
+    }));
+
+    return [...folderItems, ...fileItems].sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function resolveMockMovedPath(sourcePath: string, targetDirectoryRelativePath: string): string {
+    const normalizedSourcePath = normalizeMockRelativePath(sourcePath);
+    const normalizedTargetDirectory = normalizeMockRelativePath(targetDirectoryRelativePath);
+    const sourceName = normalizedSourcePath.split("/").pop() ?? normalizedSourcePath;
+    return normalizedTargetDirectory ? `${normalizedTargetDirectory}/${sourceName}` : sourceName;
+}
+
+function moveMockFileContents(
+    currentFileContents: Record<string, string>,
+    items: FileTreeItem[],
+    targetDirectoryRelativePath: string,
+): Record<string, string> {
+    let nextFileContents = { ...currentFileContents };
+
+    items.forEach((item) => {
+        const sourcePath = normalizeMockRelativePath(item.path);
+        const targetPath = resolveMockMovedPath(sourcePath, targetDirectoryRelativePath);
+        if (!sourcePath || sourcePath === targetPath || isMockDescendantPath(targetPath, sourcePath)) {
+            return;
+        }
+
+        if (item.isDir) {
+            const entriesToMove = Object.entries(nextFileContents)
+                .filter(([relativePath]) => isMockDescendantPath(relativePath, sourcePath));
+            const hasCollision = entriesToMove.some(([relativePath]) => {
+                const movedPath = `${targetPath}/${relativePath.slice(sourcePath.length + 1)}`;
+                return movedPath in nextFileContents && !isMockDescendantPath(movedPath, sourcePath);
+            });
+            if (hasCollision) {
+                return;
+            }
+
+            entriesToMove.forEach(([relativePath]) => {
+                delete nextFileContents[relativePath];
+            });
+            entriesToMove.forEach(([relativePath, content]) => {
+                const movedPath = `${targetPath}/${relativePath.slice(sourcePath.length + 1)}`;
+                nextFileContents[movedPath] = content;
+            });
+            return;
+        }
+
+        const sourceContent = nextFileContents[sourcePath];
+        if (typeof sourceContent !== "string" || (targetPath in nextFileContents && targetPath !== sourcePath)) {
+            return;
+        }
+
+        delete nextFileContents[sourcePath];
+        nextFileContents[targetPath] = sourceContent;
+    });
+
+    return nextFileContents;
+}
+
 export function MockVaultPanel(props: MockVaultPanelProps): ReactNode {
     const { openFile, openTab } = props;
-    const fileContents = useMemo(() => createCurrentMockFileContents(), []);
+    const [fileContents, setFileContents] = useState<Record<string, string>>(() => ({
+        ...createCurrentMockFileContents(),
+    }));
+    const previousFileContentsRef = useRef<Record<string, string> | null>(null);
     const renameRequest = useMemo(() => resolveMockRenameRequest(), []);
 
     useEffect(() => {
-        void primeBrowserMockContents(fileContents);
+        const previousFileContents = previousFileContentsRef.current;
+        previousFileContentsRef.current = fileContents;
+
+        if (!previousFileContents) {
+            void primeBrowserMockContents(fileContents);
+            return;
+        }
+
+        void syncBrowserMockContents(previousFileContents, fileContents);
     }, [fileContents]);
 
     const files = useMemo<FileTreeItem[]>(
-        () =>
-            Object.keys(fileContents)
-                .sort((left, right) => left.localeCompare(right))
-                .map((path) => ({ id: path, path })),
+        () => buildMockFileTreeItems(fileContents),
         [fileContents],
     );
+
+    const moveMockItemsToDirectory = (
+        movedItems: FileTreeItem[],
+        targetDirectoryRelativePath: string,
+    ): void => {
+        setFileContents((previousFileContents) => {
+            return moveMockFileContents(
+                previousFileContents,
+                movedItems,
+                targetDirectoryRelativePath,
+            );
+        });
+    };
 
     return (
         <div>
@@ -500,6 +627,15 @@ export function MockVaultPanel(props: MockVaultPanelProps): ReactNode {
 
                         openTab(createFileTab(item, content));
                     });
+                }}
+                onMoveFileByDrop={(sourceRelativePath, targetDirectoryRelativePath, sourceIsDir) => {
+                    moveMockItemsToDirectory(
+                        [{ id: sourceRelativePath, path: sourceRelativePath, isDir: sourceIsDir }],
+                        targetDirectoryRelativePath,
+                    );
+                }}
+                onMoveItemsByDrop={(items, targetDirectoryRelativePath) => {
+                    moveMockItemsToDirectory(items, targetDirectoryRelativePath);
                 }}
             />
         </div>

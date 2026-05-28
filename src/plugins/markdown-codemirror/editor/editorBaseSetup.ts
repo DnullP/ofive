@@ -35,7 +35,6 @@ import type { Extension } from "@codemirror/state";
 import { EditorState } from "@codemirror/state";
 import {
     crosshairCursor,
-    drawSelection,
     dropCursor,
     highlightActiveLine,
     highlightActiveLineGutter,
@@ -78,7 +77,6 @@ export const editorBaseSetup: Extension = [
     highlightSpecialChars(),
     history(),
     foldGutter(),
-    drawSelection(),
     dropCursor(),
     EditorState.allowMultipleSelections.of(true),
     indentOnInput(),

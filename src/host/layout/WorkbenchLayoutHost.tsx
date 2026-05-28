@@ -9,7 +9,7 @@ import React, {
     type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, FilePlus2, FolderOpen, Search, Settings, Shuffle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import {
     readWorkbenchTabPayload,
     WORKBENCH_LEFT_ACTIVITY_BAR_ID,
@@ -79,6 +79,7 @@ import {
     type TabNavigationHistoryState,
 } from "./openFileService";
 import { useConfigState, type FileOpenMode } from "../config/configStore";
+import { destroyCurrentOfiveWindow, type OfiveWindowKind } from "../../api/windowApi";
 import {
     hasWorkspaceFileDragPayloadFiles,
     readWorkspaceFileDragPayload,
@@ -115,6 +116,7 @@ import {
     decorateTabParamsWithLifecycle,
     shouldCloseTabOnVaultChange,
 } from "./vaultTabScope";
+import { useTabWindowDragBridge } from "../window/useTabWindowDragBridge";
 
 const WORKBENCH_ACTIVITY_ITEM_CONTEXT_MENU_ID = "workbench-v2.activity.item";
 const WORKBENCH_ACTIVITY_BACKGROUND_CONTEXT_MENU_ID = "workbench-v2.activity.background";
@@ -141,6 +143,7 @@ import { createConditionContext } from "../conditions/conditionEvaluator";
 import i18n from "../../i18n";
 import { CreateEntryModal } from "./CreateEntryModal";
 import { WorkbenchOverlayLayerProvider } from "./workbenchOverlayLayer";
+import { WorkbenchHomeEmptyState } from "./WorkbenchHomeEmptyState";
 import { CodeMirrorEditorPreviewMirror } from "../../plugins/markdown-codemirror/editor/CodeMirrorEditorPreviewMirror";
 import { stableStringify } from "../../utils/stableJson";
 import "../../../node_modules/layout-v2/dist/layout-v2.css";
@@ -256,6 +259,8 @@ function resolveFocusedFileTreePasteTargetDirectory(): string {
 export interface WorkbenchLayoutHostProps {
     initialTabs?: TabInstanceDefinition[];
     initialActivePanelId?: string;
+    mainOnly?: boolean;
+    windowKind?: OfiveWindowKind;
 }
 
 /* ────────── Mapping helpers ────────── */
@@ -463,90 +468,6 @@ function resolveVaultDisplayName(vaultPath: string): string {
     return normalizedPath.split("/").filter(Boolean).pop() ?? normalizedPath;
 }
 
-interface WorkbenchHomeEmptyStateProps {
-    vaultLabel: string;
-    markdownNoteCount: number;
-    isVaultLoading: boolean;
-    canCreateNote: boolean;
-    canOpenRandomNote: boolean;
-    onCreateNote: () => void;
-    onOpenRandomNote: () => void;
-    onOpenVault: () => void;
-}
-
-function WorkbenchHomeEmptyState(props: WorkbenchHomeEmptyStateProps): ReactNode {
-    const noteCountLabel = props.markdownNoteCount === 1
-        ? i18n.t("app.homeNoteCountOne")
-        : i18n.t("app.homeNoteCount", { count: props.markdownNoteCount });
-
-    return (
-        <div className="workbench-home-empty" role="region" aria-label={i18n.t("app.homeAriaLabel")}>
-            <div className="workbench-home-empty__inner">
-                <div className="workbench-home-empty__hero">
-                    <div className="workbench-home-empty__eyebrow">{i18n.t("app.homeEyebrow")}</div>
-                    <h1>{i18n.t("app.homeTitle")}</h1>
-                    <p>{i18n.t("app.homeDescription")}</p>
-                    <div className="workbench-home-empty__actions" aria-label={i18n.t("app.homeQuickStartLabel")}>
-                        <button
-                            type="button"
-                            className="workbench-home-empty__button workbench-home-empty__button--primary"
-                            onClick={props.onCreateNote}
-                            disabled={!props.canCreateNote}
-                        >
-                            <FilePlus2 size={16} strokeWidth={1.9} aria-hidden="true" />
-                            <span>{i18n.t("app.homeCreateNote")}</span>
-                        </button>
-                        <button
-                            type="button"
-                            className="workbench-home-empty__button"
-                            onClick={props.onOpenRandomNote}
-                            disabled={!props.canOpenRandomNote}
-                        >
-                            <Shuffle size={16} strokeWidth={1.9} aria-hidden="true" />
-                            <span>{i18n.t("app.homeRandomNote")}</span>
-                        </button>
-                        <button
-                            type="button"
-                            className="workbench-home-empty__button"
-                            onClick={props.onOpenVault}
-                        >
-                            <FolderOpen size={16} strokeWidth={1.9} aria-hidden="true" />
-                            <span>{i18n.t("app.homeOpenVault")}</span>
-                        </button>
-                    </div>
-                    <div className="workbench-home-empty__status" aria-live="polite">
-                        <span>{props.vaultLabel}</span>
-                        <span>{props.isVaultLoading ? i18n.t("app.homeLoadingVault") : noteCountLabel}</span>
-                    </div>
-                </div>
-                <div className="workbench-home-empty__guide" aria-label={i18n.t("app.homeGuideLabel")}>
-                    <div className="workbench-home-empty__guide-item">
-                        <FolderOpen size={17} strokeWidth={1.8} aria-hidden="true" />
-                        <div>
-                            <strong>{i18n.t("app.homeGuideOpenTitle")}</strong>
-                            <span>{i18n.t("app.homeGuideOpenDesc")}</span>
-                        </div>
-                    </div>
-                    <div className="workbench-home-empty__guide-item">
-                        <FilePlus2 size={17} strokeWidth={1.8} aria-hidden="true" />
-                        <div>
-                            <strong>{i18n.t("app.homeGuideWriteTitle")}</strong>
-                            <span>{i18n.t("app.homeGuideWriteDesc")}</span>
-                        </div>
-                    </div>
-                    <div className="workbench-home-empty__guide-item">
-                        <Search size={17} strokeWidth={1.8} aria-hidden="true" />
-                        <div>
-                            <strong>{i18n.t("app.homeGuideExploreTitle")}</strong>
-                            <span>{i18n.t("app.homeGuideExploreDesc")}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
 function buildPanelRenderContext(
     workbenchContext: WorkbenchPanelContext,
     workbenchApiRef: MutableRefObject<WorkbenchApi | null>,
@@ -713,6 +634,8 @@ const StableTabComponentWrapper = memo(function StableTabComponentWrapper(props:
 /* ────────── Main component ────────── */
 
 function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
+    const mainOnly = props.mainOnly ?? props.windowKind === "detached";
+    const windowKind: OfiveWindowKind = props.windowKind ?? (mainOnly ? "detached" : "main");
     const registeredActivities = useActivities();
     const registeredPanels = usePanels();
     const registeredTabComponents = useTabComponents();
@@ -732,27 +655,31 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
     const sidebarSnapshot = useMemo(
         () => {
+            if (mainOnly) return null;
             if (!configState.featureSettings.restoreWorkspaceLayout) return null;
             return getSidebarLayoutFromVaultConfig(configState.backendConfig);
         },
-        [configState.backendConfig, configState.featureSettings.restoreWorkspaceLayout],
+        [configState.backendConfig, configState.featureSettings.restoreWorkspaceLayout, mainOnly],
     );
 
     const workspaceSnapshot = useMemo(
         () => {
+            if (mainOnly) return null;
             if (!configState.featureSettings.restoreWorkspaceLayout) return null;
             return getWorkspaceLayoutFromVaultConfig(configState.backendConfig);
         },
-        [configState.backendConfig, configState.featureSettings.restoreWorkspaceLayout],
+        [configState.backendConfig, configState.featureSettings.restoreWorkspaceLayout, mainOnly],
     );
     const [hydratedWorkspaceSnapshot, setHydratedWorkspaceSnapshot] = useState<WorkbenchLayoutSnapshot | null>(null);
     const [workspaceLayoutHydrationComplete, setWorkspaceLayoutHydrationComplete] = useState(false);
 
     const hasRightSidebar = useMemo(
         () =>
+            !mainOnly && (
             registeredPanels.some((panel) => panel.defaultPosition === "right") ||
-            registeredActivities.some((activity) => activity.defaultBar === "right"),
-        [registeredActivities, registeredPanels],
+            registeredActivities.some((activity) => activity.defaultBar === "right")
+            ),
+        [mainOnly, registeredActivities, registeredPanels],
     );
 
     const activitiesById = useMemo(
@@ -773,13 +700,13 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     /* ── Map registry data to layout-v2 definitions ── */
 
     const activityDefinitions = useMemo(
-        () => mapActivitiesToDefinitions(registeredActivities, mergedActivityItems),
-        [registeredActivities, mergedActivityItems],
+        () => mainOnly ? [] : mapActivitiesToDefinitions(registeredActivities, mergedActivityItems),
+        [mainOnly, registeredActivities, mergedActivityItems],
     );
 
     const panelDefinitions = useMemo(
-        () => mapPanelsToDefinitions(registeredPanels),
-        [registeredPanels],
+        () => mainOnly ? [] : mapPanelsToDefinitions(registeredPanels),
+        [mainOnly, registeredPanels],
     );
 
     const deferredPresentationTabComponentIds = useMemo(
@@ -901,6 +828,12 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         setOpenTabCount((currentCount) => currentCount === nextCount ? currentCount : nextCount);
     }, []);
 
+    const tabWindowDragBridge = useTabWindowDragBridge({
+        workbenchApiRef,
+        windowKind,
+        onTabsChanged: syncOpenTabCountFromApi,
+    });
+
     useEffect(() => {
         if (hydratedWorkspaceSnapshot) {
             setOpenTabCount(countWorkspaceLayoutTabs(hydratedWorkspaceSnapshot));
@@ -909,6 +842,17 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
 
         setOpenTabCount(countInitialWorkbenchTabs(props.initialTabs));
     }, [hydratedWorkspaceSnapshot, props.initialTabs]);
+
+    useEffect(() => {
+        if (windowKind !== "detached" || openTabCount > 0) {
+            return undefined;
+        }
+
+        const timerId = window.setTimeout(() => {
+            void destroyCurrentOfiveWindow();
+        }, 0);
+        return () => window.clearTimeout(timerId);
+    }, [openTabCount, windowKind]);
 
     useEffect(() => {
         persistedWorkspaceLayoutRef.current = workspaceSnapshot
@@ -1008,6 +952,16 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     useEffect(() => {
         let cancelled = false;
         const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath || null;
+
+        if (mainOnly) {
+            workspaceLayoutInitialDecisionVaultPathRef.current = null;
+            workspaceLayoutRestorePendingRef.current = false;
+            setWorkspaceLayoutHydrationComplete(true);
+            setHydratedWorkspaceSnapshot(null);
+            return () => {
+                cancelled = true;
+            };
+        }
 
         if (
             currentVaultPath
@@ -1114,6 +1068,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         configState.featureSettings.restoreWorkspaceLayout,
         configState.backendConfig,
         configState.loadedVaultPath,
+        mainOnly,
         vaultState.currentVaultPath,
     ]);
 
@@ -1227,12 +1182,13 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     );
     const canOpenRandomHomeNote = markdownNotePaths.length > 0 && !vaultState.isLoadingTree;
     const shouldWaitForWorkspaceRestore = Boolean(
+        !mainOnly &&
         configState.featureSettings.restoreWorkspaceLayout &&
         (vaultState.currentVaultPath || configState.loadedVaultPath) &&
         configState.backendConfig &&
         !workspaceLayoutHydrationComplete,
     );
-    const shouldShowHomeEmptyState = openTabCount === 0 && !shouldWaitForWorkspaceRestore;
+    const shouldShowHomeEmptyState = !mainOnly && openTabCount === 0 && !shouldWaitForWorkspaceRestore;
 
     const handleCreateHomeNote = useCallback((): void => {
         executeCommand("note.createNew", buildCommandContext());
@@ -1462,6 +1418,8 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             leftSidebarVisibleRef.current = state.left.visible;
             rightSidebarVisibleRef.current = state.right.visible;
 
+            if (mainOnly) return;
+
             // Sync right sidebar visibility bridge
             setRightSidebarVisibilitySnapshot(hasRightSidebar && state.right.visible);
 
@@ -1499,6 +1457,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             configState.backendConfig,
             configState.loadedVaultPath,
             configState.featureSettings.restoreWorkspaceLayout,
+            mainOnly,
             scheduleSidebarLayoutPersist,
             vaultState.currentVaultPath,
         ],
@@ -1562,6 +1521,8 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         (ratios: Record<string, number>) => {
             sectionRatiosRef.current = ratios;
 
+            if (mainOnly) return;
+
             const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
             if (!currentVaultPath || !configState.backendConfig) return;
             if (workspaceLayoutBlockedVaultPathRef.current === currentVaultPath && configState.loadedVaultPath !== currentVaultPath) return;
@@ -1597,12 +1558,15 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             configState.loadedVaultPath,
             configState.featureSettings.restoreWorkspaceLayout,
             scheduleSidebarLayoutPersist,
+            mainOnly,
             vaultState.currentVaultPath,
         ],
     );
 
     const handlePanelLayoutChange = useCallback(
         (panelLayout: WorkbenchPanelLayoutSnapshot) => {
+            if (mainOnly) return;
+
             const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
             if (!currentVaultPath || !configState.backendConfig) return;
             if (workspaceLayoutBlockedVaultPathRef.current === currentVaultPath && configState.loadedVaultPath !== currentVaultPath) return;
@@ -1640,6 +1604,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             configState.loadedVaultPath,
             configState.featureSettings.restoreWorkspaceLayout,
             scheduleSidebarLayoutPersist,
+            mainOnly,
             vaultState.currentVaultPath,
         ],
     );
@@ -1647,6 +1612,8 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
     const handleWorkspaceLayoutSnapshotChange = useCallback(
         (snapshot: WorkbenchLayoutSnapshot) => {
             setOpenTabCount(countWorkspaceLayoutTabs(snapshot));
+
+            if (mainOnly) return;
 
             const currentVaultPath = vaultState.currentVaultPath || configState.loadedVaultPath;
             if (!currentVaultPath || !configState.backendConfig) return;
@@ -1680,6 +1647,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             vaultState.currentVaultPath,
             workspaceLayoutHydrationComplete,
             workspaceSnapshot,
+            mainOnly,
         ],
     );
 
@@ -1923,18 +1891,23 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 shouldShowHomeEmptyState ? "workbench-layout-v2--home-empty" : "",
             ].filter(Boolean).join(" ")}
             data-workbench-layout-mode="layout-v2"
+            data-workbench-window-kind={windowKind}
+            data-workbench-main-only={mainOnly ? "true" : "false"}
         >
             <WorkbenchOverlayLayerProvider target={overlayLayerTarget}>
                 <VSCodeWorkbench
+                    workbenchId={tabWindowDragBridge.workbenchId}
+                    windowLabel={tabWindowDragBridge.windowLabel}
+                    mainOnly={mainOnly}
                     activities={activityDefinitions}
                     panels={panelDefinitions}
                     tabComponents={tabComponents}
                     initialTabs={initialTabs}
                     hasRightSidebar={hasRightSidebar}
                     initialSidebarState={initialSidebarState}
-                    initialSectionRatios={sidebarSnapshot?.sectionRatios}
-                    initialPanelLayoutSnapshot={sidebarSnapshot?.panelLayout}
-                    initialLayoutSnapshot={hydratedWorkspaceSnapshot}
+                    initialSectionRatios={mainOnly ? undefined : sidebarSnapshot?.sectionRatios}
+                    initialPanelLayoutSnapshot={mainOnly ? undefined : sidebarSnapshot?.panelLayout}
+                    initialLayoutSnapshot={mainOnly ? null : hydratedWorkspaceSnapshot}
                     hideEmptyPanelBar
                     renderInactiveTabContent={shouldRenderInactiveTabContent}
                     deferTabContentPresentation={shouldDeferTabContentPresentation}
@@ -1957,6 +1930,9 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                     onActivityIconContextMenu={handleActivityIconContextMenu}
                     onActivityBarsChange={handleActivityBarsChange}
                     onActiveTabChange={handleActiveTabChange}
+                    onTabDragOutside={tabWindowDragBridge.onTabDragOutside}
+                    onTabDragInside={tabWindowDragBridge.onTabDragInside}
+                    onTabDragEnd={tabWindowDragBridge.onTabDragEnd}
                     onActivityBarBackgroundContextMenu={handleActivityBarBackgroundContextMenu}
                     apiRef={workbenchApiRef}
                     className="workbench-layout-v2__layout"

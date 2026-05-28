@@ -141,6 +141,150 @@ async function setEditorSelectionToLineText(page: Page, lineText: string, offset
     }, { targetLineText: lineText, targetOffset: offset });
 }
 
+async function replaceActiveEditorDoc(page: Page, markdown: string, cursorNeedle: string): Promise<void> {
+    await page.evaluate(({ nextMarkdown, needle }) => {
+        const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as (HTMLElement & {
+            cmTile?: {
+                view?: {
+                    focus: () => void;
+                    dispatch: (spec: unknown) => void;
+                    state: {
+                        doc: {
+                            length: number;
+                        };
+                    };
+                };
+            };
+        }) | null;
+        const view = content?.cmTile?.view;
+        if (!view) {
+            throw new Error("EditorView not found.");
+        }
+
+        const needleIndex = nextMarkdown.indexOf(needle);
+        if (needleIndex < 0) {
+            throw new Error(`Needle not found: ${needle}`);
+        }
+
+        view.focus();
+        view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: nextMarkdown },
+            selection: { anchor: needleIndex },
+            scrollIntoView: true,
+        });
+    }, { nextMarkdown: markdown, needle: cursorNeedle });
+    await waitForEditorFrames(page, 4);
+}
+
+async function dragSelectEditorTextRange(
+    page: Page,
+    startNeedle: string,
+    endNeedle: string,
+): Promise<void> {
+    const coords = await page.evaluate(({ startText, endText }) => {
+        const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as (HTMLElement & {
+            cmTile?: {
+                view?: {
+                    coordsAtPos(position: number): { left: number; right: number; top: number; bottom: number } | null;
+                    state: {
+                        doc: {
+                            toString(): string;
+                        };
+                    };
+                };
+            };
+        }) | null;
+        const view = content?.cmTile?.view;
+        if (!view) {
+            throw new Error("EditorView not found.");
+        }
+
+        const docText = view.state.doc.toString();
+        const start = docText.indexOf(startText);
+        const endStart = docText.indexOf(endText);
+        if (start < 0 || endStart < 0) {
+            throw new Error(`Selection anchors not found: ${startText} / ${endText}`);
+        }
+
+        const end = endStart + endText.length;
+        const startCoords = view.coordsAtPos(start);
+        const endCoords = view.coordsAtPos(end);
+        if (!startCoords || !endCoords) {
+            throw new Error("Selection coordinates not found.");
+        }
+
+        return {
+            start: {
+                x: startCoords.left + 2,
+                y: startCoords.top + Math.max(4, (startCoords.bottom - startCoords.top) / 2),
+            },
+            end: {
+                x: endCoords.right - 2,
+                y: endCoords.top + Math.max(4, (endCoords.bottom - endCoords.top) / 2),
+            },
+        };
+    }, { startText: startNeedle, endText: endNeedle });
+
+    await page.mouse.move(coords.start.x, coords.start.y);
+    await page.mouse.down();
+    await page.mouse.move(coords.end.x, coords.end.y, { steps: 20 });
+    await waitForEditorFrames(page, 2);
+    await page.mouse.up();
+    await waitForEditorFrames(page, 2);
+}
+
+async function readMouseSelectionRenderState(page: Page): Promise<{
+    cmSelectionEmpty: boolean;
+    cmSelectionBackgroundCount: number;
+    nativeSelectionText: string;
+    nativeRangeCount: number;
+    nativeSelectionRectCount: number;
+    vimVisualMode: boolean | null;
+}> {
+    return page.evaluate(() => {
+        const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as (HTMLElement & {
+            cmTile?: {
+                view?: {
+                    cm?: {
+                        state?: {
+                            vim?: {
+                                visualMode?: boolean;
+                            };
+                        };
+                    };
+                    state: {
+                        selection: {
+                            main: {
+                                empty: boolean;
+                            };
+                        };
+                    };
+                };
+            };
+        }) | null;
+        const view = content?.cmTile?.view;
+        if (!view) {
+            throw new Error("EditorView not found.");
+        }
+
+        const nativeSelection = window.getSelection();
+        return {
+            cmSelectionEmpty: view.state.selection.main.empty,
+            cmSelectionBackgroundCount: document.querySelectorAll(
+                ".layout-v2-tab-section__card--active .cm-selectionBackground",
+            ).length,
+            nativeSelectionText: nativeSelection?.toString() ?? "",
+            nativeRangeCount: nativeSelection?.rangeCount ?? 0,
+            nativeSelectionRectCount: nativeSelection && nativeSelection.rangeCount > 0
+                ? nativeSelection.getRangeAt(0).getClientRects().length
+                : 0,
+            vimVisualMode: typeof view.cm?.state?.vim?.visualMode === "boolean"
+                ? view.cm.state.vim.visualMode
+                : null,
+        };
+    });
+}
+
 async function enterNormalModeAtLine(page: Page, lineText: string, offset = 0): Promise<void> {
     await setEditorSelectionToLineText(page, lineText, offset);
     await page.keyboard.press("Escape");
@@ -289,6 +433,32 @@ test.describe("vim editing boundaries", () => {
         expect(after.docText).toBe(before.docText);
         expect(after.lineNumber).toBe(before.lineNumber + 1);
         expect(after.vimInsertMode).toBe(false);
+    });
+
+    test("mouse selection in Vim mode should use native selection without rectangular CodeMirror overpaint", async ({ page }) => {
+        const selectionProbe = [
+            "# Selection Probe",
+            "",
+            "静态贝叶斯博弈（Static Bayesian Game）是指参与者在拥有各自私有类型信息的情况下同时选择行动，",
+            "且每个参与者只知道其他参与者类型的概率分布，而不知道其真实类型的不完全信息博弈。",
+            "",
+            "tail",
+        ].join("\n");
+
+        await replaceActiveEditorDoc(page, selectionProbe, "静态贝叶斯博弈");
+        await page.keyboard.press("Escape");
+        await waitForEditorFrames(page, 2);
+
+        await dragSelectEditorTextRange(page, "静态贝叶斯博弈", "概率分布");
+        const selectionState = await readMouseSelectionRenderState(page);
+
+        expect(selectionState.cmSelectionEmpty).toBe(false);
+        expect(selectionState.vimVisualMode).toBe(true);
+        expect(selectionState.nativeSelectionText).toContain("静态贝叶斯博弈");
+        expect(selectionState.nativeSelectionText).toContain("概率分布");
+        expect(selectionState.nativeRangeCount).toBe(1);
+        expect(selectionState.nativeSelectionRectCount).toBeGreaterThan(0);
+        expect(selectionState.cmSelectionBackgroundCount).toBe(0);
     });
 
     test("undo and redo should preserve Vim mode and restore document content", async ({ page }) => {

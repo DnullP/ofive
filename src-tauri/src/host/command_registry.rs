@@ -148,6 +148,10 @@ define_app_commands![
         crate::host::commands::window_commands::reload_current_window
     ),
     (
+        "create_detached_tab_window",
+        crate::host::commands::window_commands::create_detached_tab_window
+    ),
+    (
         "forward_frontend_log",
         crate::host::commands::frontend_log_commands::forward_frontend_log
     ),
@@ -495,13 +499,15 @@ mod tests {
 
     #[test]
     fn reload_window_command_should_be_declared_and_registered_through_host_boundary() {
-        assert!(
-            WINDOW_COMMAND_IDS.contains(&"reload_current_window"),
-            "Window command fact source must declare reload_current_window",
-        );
-        assert!(
-            REGISTERED_APP_COMMAND_IDS.contains(&"reload_current_window"),
-            "Host command registry must register reload_current_window",
-        );
+        for command_id in ["reload_current_window", "create_detached_tab_window"] {
+            assert!(
+                WINDOW_COMMAND_IDS.contains(&command_id),
+                "Window command fact source must declare {command_id}",
+            );
+            assert!(
+                REGISTERED_APP_COMMAND_IDS.contains(&command_id),
+                "Host command registry must register {command_id}",
+            );
+        }
     }
 }

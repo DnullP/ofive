@@ -36,6 +36,7 @@ related:
 - [前后端功能扩展长期工作流](feature-extension-workflow.md)
 - [插件开发教程](plugin-development-guide.md)
 - [后端模块扩展标准流程](backend-module-extension-workflow.md)
+- [Obsidian 对齐迭代计划](obsidian-alignment-iteration-plan.md)
 - [测试体系与测试手册](testing-handbook.md)
 - [语义索引/向量存储设计草案](vector-storage-module-design.md)
 - [同步模块续做清单](sync-module-roadmap.md)
