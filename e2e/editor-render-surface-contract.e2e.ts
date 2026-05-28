@@ -236,6 +236,38 @@ async function readListTextAlignment(
     }, { targetText: contentText, listKind: kind, shouldReadEditing: editing });
 }
 
+async function readHeaderFlowMetrics(page: Page, targetText: string): Promise<{
+    headerHeight: number;
+    nextLineTop: number;
+    sourceLineVisible: boolean;
+}> {
+    return page.evaluate((needle) => {
+        const activeCard = document.querySelector<HTMLElement>(".layout-v2-tab-section__card--active");
+        if (!activeCard) {
+            throw new Error("Active tab card not found.");
+        }
+
+        const lines = Array.from(activeCard.querySelectorAll<HTMLElement>(".cm-line"));
+        const headerLine = lines.find((candidate) => candidate.textContent?.includes(needle));
+        if (!headerLine) {
+            throw new Error(`Header line not found: ${needle}`);
+        }
+
+        const headerIndex = lines.indexOf(headerLine);
+        const nextLine = lines.slice(headerIndex + 1)
+            .find((candidate) => candidate.textContent?.trim());
+        if (!nextLine) {
+            throw new Error(`Next content line not found after: ${needle}`);
+        }
+
+        return {
+            headerHeight: headerLine.getBoundingClientRect().height,
+            nextLineTop: nextLine.getBoundingClientRect().top,
+            sourceLineVisible: headerLine.classList.contains("cm-rendered-header-source-line"),
+        };
+    }, targetText);
+}
+
 async function dispatchPreviewHoverOnFirstWikiLink(page: Page): Promise<void> {
     await page.evaluate(() => {
         const activeCard = document.querySelector<HTMLElement>(".layout-v2-tab-section__card--active");
@@ -324,6 +356,34 @@ test.describe("editor render surface contract", () => {
         await page.keyboard.type(" [[gu");
         await expect(page.locator(".cm-wikilink-suggest-popup")).toBeVisible();
         await expect(page.locator(".cm-wikilink-suggest-item").first()).toContainText(/guide/i);
+    });
+
+    test("标题展开源码时保留横线占位，避免下方正文上下抖动", async ({ page }) => {
+        await waitForMockWorkbench(page);
+        await openGuideNote(page);
+        await replaceActiveEditorDoc(
+            page,
+            [
+                "# Stable Heading",
+                "Body should not jump",
+                "",
+                "Plain tail",
+            ].join("\n"),
+            "Plain tail",
+        );
+
+        const renderedMetrics = await readHeaderFlowMetrics(page, "Stable Heading");
+
+        await setActiveEditorSelectionToNeedleEnd(page, "Stable Heading");
+        await page.locator(".layout-v2-tab-section__card--active .cm-line.cm-rendered-header-source-line", {
+            hasText: "Stable Heading",
+        }).waitFor({ state: "visible" });
+        const sourceMetrics = await readHeaderFlowMetrics(page, "Stable Heading");
+
+        expect(renderedMetrics.sourceLineVisible).toBe(false);
+        expect(sourceMetrics.sourceLineVisible).toBe(true);
+        expect(Math.abs(sourceMetrics.headerHeight - renderedMetrics.headerHeight)).toBeLessThanOrEqual(1);
+        expect(Math.abs(sourceMetrics.nextLineTop - renderedMetrics.nextLineTop)).toBeLessThanOrEqual(1);
     });
 
     test("列表展开源码后正文起点应与渲染态对齐", async ({ page }) => {

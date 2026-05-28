@@ -39,13 +39,16 @@ test.describe("仓库切换 UI 失效", () => {
         /* layout-v2 uses tabbed panels: check outline tab is visible, then verify empty state */
         const outlineTab = rightSidebar.locator(".layout-v2-panel-section__panel-tab[title='Outline']");
         const backlinksTab = rightSidebar.locator(".layout-v2-panel-section__panel-tab[title='Backlinks']");
-        const paneBody = rightSidebar.locator(".layout-v2-panel-section__pane-body");
+        const activePaneBody = rightSidebar.locator(
+            ".layout-v2-panel-section__pane[data-layout-presentation-state='committed'] " +
+            ".layout-v2-panel-section__pane-body",
+        );
 
         await outlineTab.click();
-        await expect(paneBody.getByText("No focused article")).toBeVisible();
+        await expect(activePaneBody.getByText("No focused article")).toBeVisible();
 
         await backlinksTab.click();
-        await expect(paneBody.getByText("No focused article")).toBeVisible();
+        await expect(activePaneBody.getByText("No focused article")).toBeVisible();
 
         await page.getByTestId("activity-bar-item-calendar").click();
         await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "Calendar" })).toBeVisible();
@@ -62,8 +65,8 @@ test.describe("仓库切换 UI 失效", () => {
         await expect(page.locator(".workbench-home-empty")).toBeVisible();
 
         await outlineTab.click();
-        await expect(paneBody.getByText("No focused article")).toBeVisible();
-        await expect(paneBody.getByText("Failed to load outline")).toHaveCount(0);
+        await expect(activePaneBody.getByText("No focused article")).toBeVisible();
+        await expect(activePaneBody.getByText("Failed to load outline")).toHaveCount(0);
 
         await page.getByTestId("activity-bar-item-architecture-devtools").click();
         await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "Architecture DevTools" })).toBeVisible();

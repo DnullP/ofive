@@ -23,6 +23,7 @@
  *  - ActiveEditorState: 活跃编辑器快照
  *  - reportActiveEditor: 上报当前活跃 Markdown 编辑器
  *  - clearActiveEditor: 清空当前活跃编辑器
+ *  - subscribeActiveEditor: 订阅活跃编辑器状态
  *  - useActiveEditor: React Hook，订阅活跃编辑器状态
  *  - getActiveEditorSnapshot: 非响应式读取当前活跃编辑器
  */
@@ -170,6 +171,16 @@ export function reportActiveEditor(payload: {
  */
 export function clearActiveEditor(): void {
     activeEditorStore.clearActiveEditor();
+}
+
+/**
+ * @function subscribeActiveEditor
+ * @description 对外暴露：订阅活跃编辑器状态变化，供非 React store owner 消费。
+ * @param listener 订阅回调。
+ * @returns 取消订阅函数。
+ */
+export function subscribeActiveEditor(listener: () => void): () => void {
+    return activeEditorStore.subscribe(listener);
 }
 
 /**

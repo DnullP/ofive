@@ -906,9 +906,15 @@ async function runSectionDragScenario(page: Page, scenario: PerformanceScenarioC
         scenario: scenario.id,
         dom: await page.evaluate(() => ({
             tabSections: document.querySelectorAll(".layout-v2-tab-section").length,
-            taskCards: document.querySelectorAll(".task-board__task-card").length,
-            calendarDays: document.querySelectorAll(".calendar-tab__day").length,
-            editors: document.querySelectorAll(".cm-editor:not([data-editor-preview-mirror-node='true'])").length,
+            taskCards: document.querySelectorAll(
+                ".layout-v2-tab-section__card--active .task-board__task-card",
+            ).length,
+            calendarDays: document.querySelectorAll(
+                ".layout-v2-tab-section__card--active .calendar-tab__day",
+            ).length,
+            editors: document.querySelectorAll(
+                ".layout-v2-tab-section__card--active .cm-editor:not([data-editor-preview-mirror-node='true'])",
+            ).length,
         })),
         liveResize,
         sampler,

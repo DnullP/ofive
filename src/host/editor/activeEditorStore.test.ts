@@ -14,6 +14,7 @@ import {
     clearActiveEditor,
     getActiveEditorSnapshot,
     reportActiveEditor,
+    subscribeActiveEditor,
 } from "./activeEditorStore";
 
 describe("activeEditorStore", () => {
@@ -72,5 +73,26 @@ describe("activeEditorStore", () => {
         clearActiveEditor();
 
         expect(getActiveEditorSnapshot()).toBeNull();
+    });
+
+    it("should notify non-React subscribers", () => {
+        clearActiveEditor();
+        let notifyCount = 0;
+        const unlisten = subscribeActiveEditor(() => {
+            notifyCount += 1;
+        });
+
+        reportActiveEditor({
+            articleId: "file:notes/subscribed.md",
+            path: "notes/subscribed.md",
+        });
+        clearActiveEditor();
+        unlisten();
+        reportActiveEditor({
+            articleId: "file:notes/ignored.md",
+            path: "notes/ignored.md",
+        });
+
+        expect(notifyCount).toBe(2);
     });
 });

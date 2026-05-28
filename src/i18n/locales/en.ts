@@ -482,6 +482,7 @@ const en = {
         newFilePrompt: "New File",
         newCanvasPrompt: "New Canvas",
         closeCurrentTab: "Close Current Tab",
+        detachCurrentTabToWindow: "Detach Current Tab to New Window",
         exitApp: "Exit Application",
         reloadApp: "Reload Application",
         toggleLeftSidebar: "Toggle Left Sidebar",

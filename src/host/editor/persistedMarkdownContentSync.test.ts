@@ -11,6 +11,7 @@ import { subscribePersistedContentUpdatedEvent } from "../events/appEventBus";
 import type { WorkbenchContainerApi, WorkbenchPanelHandle } from "../layout/workbenchContracts";
 import {
     getArticleSnapshotById,
+    getArticleSnapshotByPath,
     reportArticleContent,
     resetEditorContext,
 } from "./editorContextStore";
@@ -69,6 +70,7 @@ describe("syncPersistedMarkdownContentToOpenEditors", () => {
         expect(result.updatedPanelCount).toBe(1);
         expect(panel.params?.content).toBe(nextContent);
         expect(getArticleSnapshotById("file:notes/task.md")?.content).toBe(nextContent);
+        expect(getArticleSnapshotByPath(relativePath)?.content).toBe(nextContent);
         expect(persistedEvents).toEqual([{
             relativePath,
             source: "save",
@@ -101,6 +103,7 @@ describe("syncPersistedMarkdownContentToOpenEditors", () => {
         unlisten();
 
         expect(getArticleSnapshotById("file:notes/service-save.md")?.content).toBe(nextContent);
+        expect(getArticleSnapshotByPath(relativePath)?.content).toBe(nextContent);
         expect(persistedEvents).toEqual([{
             relativePath,
             source: "save",

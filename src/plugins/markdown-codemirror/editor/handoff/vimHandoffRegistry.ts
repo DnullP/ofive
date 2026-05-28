@@ -35,6 +35,11 @@ export type VimHandoffResult =
     | {
         kind: "move-selection";
         targetLineNumber: number;
+        postFocusWidget?: {
+            widget: VimHandoffWidget;
+            position: VimHandoffWidgetPosition;
+            blockFrom?: number;
+        };
         reason: string;
     }
     | {

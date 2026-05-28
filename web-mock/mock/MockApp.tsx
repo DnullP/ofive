@@ -529,6 +529,9 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
             const accumulatedText = `${reply}${contextText}`;
             const shouldEmitToolRecord = normalizedMessage.includes("tool record");
             const shouldEmitConfirmation = normalizedMessage.includes("approval menu");
+            const streamDelayMultiplier = normalizedMessage.includes("slow sidebar")
+                ? 3
+                : 1;
 
             await new Promise((resolve) => window.setTimeout(resolve, 40));
 
@@ -590,7 +593,7 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
                         error: null,
                         done: false,
                     });
-                }, 90);
+                }, 90 * streamDelayMultiplier);
 
                 schedule(streamId, () => {
                     emit({
@@ -613,7 +616,7 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
                         error: null,
                         done: false,
                     });
-                }, 300);
+                }, 300 * streamDelayMultiplier);
 
                 schedule(streamId, () => {
                     emit({
@@ -636,7 +639,7 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
                         error: null,
                         done: false,
                     });
-                }, 340);
+                }, 340 * streamDelayMultiplier);
 
                 schedule(streamId, () => {
                     emit({
@@ -659,7 +662,7 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
                         error: null,
                         done: false,
                     });
-                }, 430);
+                }, 430 * streamDelayMultiplier);
             }
 
             schedule(streamId, () => {
@@ -683,7 +686,7 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
                     error: null,
                     done: false,
                 });
-            }, 160);
+            }, 160 * streamDelayMultiplier);
 
             schedule(streamId, () => {
                 emit({
@@ -710,7 +713,7 @@ function createMockAiRuntime(): BrowserMockAiRuntime {
                     done: true,
                 });
                 timersByStreamId.delete(streamId);
-            }, 640);
+            }, 640 * streamDelayMultiplier);
 
             return { streamId };
         },

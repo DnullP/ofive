@@ -19,15 +19,25 @@ import {
     emitTabWindowDragDrop,
     emitTabWindowDragMove,
     getCurrentOfiveWindowLabel,
+    listenDetachedTabWindowReady,
     listenTabWindowDragAccepted,
     listenTabWindowDragCancel,
     listenTabWindowDragDrop,
     listenTabWindowDragMove,
+    moveOfiveWindowByLabel,
+    showAndFocusOfiveWindowByLabel,
     type DetachedTabWindowTab,
+    type DetachedTabWindowReadyPayload,
     type OfiveWindowKind,
     type TabWindowDragAcceptedPayload,
     type TabWindowDragEventPayload,
 } from "../../api/windowApi";
+
+export interface DetachedTabWindowReadyGateState {
+    detachedReadyPromise: Promise<void>;
+    resolveDetachedReady: () => void;
+    detachedWindowReady: boolean;
+}
 
 interface TabDragPointerEvent {
     clientX: number;
@@ -45,6 +55,9 @@ interface SourceTabDragState {
     tab: WorkbenchTabDragPayload;
     detachedWindowLabel: string | null;
     detachedCreatePromise: Promise<string | null> | null;
+    detachedReadyGate: DetachedTabWindowReadyGateState;
+    detachedWindowShown: boolean;
+    lastPointer: TabDragPointerEvent;
     sourceClosed: boolean;
     cancelled: boolean;
 }
@@ -107,6 +120,48 @@ function isSameTabDrag(
     return Boolean(state && state.tab.id === payload.id && !state.cancelled);
 }
 
+export function resolveDetachedWindowPosition(pointer: TabDragPointerEvent): { x: number; y: number } {
+    return {
+        x: pointer.screenX - 220,
+        y: pointer.screenY - 28,
+    };
+}
+
+export function createDetachedReadyGate(): DetachedTabWindowReadyGateState {
+    let resolveDetachedReady: () => void = () => undefined;
+    const detachedReadyPromise = new Promise<void>((resolve) => {
+        resolveDetachedReady = resolve;
+    });
+    return {
+        detachedReadyPromise,
+        resolveDetachedReady,
+        detachedWindowReady: false,
+    };
+}
+
+export async function waitForDetachedWindowReady(
+    state: Pick<DetachedTabWindowReadyGateState, "detachedWindowReady" | "detachedReadyPromise">,
+    timeoutMs = 2200,
+): Promise<boolean> {
+    if (state.detachedWindowReady) {
+        return true;
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    try {
+        return await Promise.race([
+            state.detachedReadyPromise.then(() => true),
+            new Promise<boolean>((resolve) => {
+                timeoutId = setTimeout(() => resolve(false), timeoutMs);
+            }),
+        ]);
+    } finally {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+    }
+}
+
 export function useTabWindowDragBridge(
     options: UseTabWindowDragBridgeOptions,
 ): TabWindowDragBridge {
@@ -161,6 +216,28 @@ export function useTabWindowDragBridge(
         }
     }, []);
 
+    const syncDetachedWindowPresentation = useCallback(async (state: SourceTabDragState): Promise<void> => {
+        const label = state.detachedWindowLabel;
+        if (!label || !state.detachedReadyGate.detachedWindowReady || state.cancelled) {
+            return;
+        }
+
+        await moveOfiveWindowByLabel(label, resolveDetachedWindowPosition(state.lastPointer));
+        if (!state.detachedWindowShown) {
+            state.detachedWindowShown = true;
+            await showAndFocusOfiveWindowByLabel(label);
+        }
+    }, []);
+
+    const moveDetachedWindowWithPointer = useCallback((state: SourceTabDragState): void => {
+        const label = state.detachedWindowLabel;
+        if (!label || !state.detachedWindowShown || state.cancelled) {
+            return;
+        }
+
+        void moveOfiveWindowByLabel(label, resolveDetachedWindowPosition(state.lastPointer));
+    }, []);
+
     const ensureDetachedWindowForDrag = useCallback((
         state: SourceTabDragState,
         event: TabDragPointerEvent,
@@ -187,6 +264,7 @@ export function useTabWindowDragBridge(
                 }
 
                 current.detachedWindowLabel = label;
+                void syncDetachedWindowPresentation(current);
                 return label;
             })
             .catch((error) => {
@@ -195,7 +273,7 @@ export function useTabWindowDragBridge(
                 });
                 return null;
             });
-    }, []);
+    }, [syncDetachedWindowPresentation]);
 
     const isOwnDragEvent = useCallback((payload: TabWindowDragEventPayload): boolean => (
         payload.sourceWorkbenchId === workbenchId ||
@@ -260,6 +338,17 @@ export function useTabWindowDragBridge(
         void destroyAutoDetachedWindow(state, payload.targetWindowLabel);
     }, [closeSourceTab, destroyAutoDetachedWindow]);
 
+    const handleDetachedWindowReady = useCallback((payload: DetachedTabWindowReadyPayload): void => {
+        const state = sourceDragRef.current;
+        if (!state || state.cancelled || state.detachedWindowLabel !== payload.windowLabel) {
+            return;
+        }
+
+        state.detachedReadyGate.detachedWindowReady = true;
+        state.detachedReadyGate.resolveDetachedReady();
+        void syncDetachedWindowPresentation(state);
+    }, [syncDetachedWindowPresentation]);
+
     useEffect(() => {
         let disposed = false;
         const unlisteners: Array<() => void> = [];
@@ -269,6 +358,7 @@ export function useTabWindowDragBridge(
             listenTabWindowDragDrop(handleIncomingDragDrop),
             listenTabWindowDragCancel(handleIncomingDragCancel),
             listenTabWindowDragAccepted(handleIncomingDragAccepted),
+            listenDetachedTabWindowReady(handleDetachedWindowReady),
         ]).then((nextUnlisteners) => {
             if (disposed) {
                 nextUnlisteners.forEach((unlisten) => unlisten());
@@ -282,6 +372,7 @@ export function useTabWindowDragBridge(
             unlisteners.forEach((unlisten) => unlisten());
         };
     }, [
+        handleDetachedWindowReady,
         handleIncomingDragAccepted,
         handleIncomingDragCancel,
         handleIncomingDragDrop,
@@ -299,6 +390,9 @@ export function useTabWindowDragBridge(
                 tab: payload,
                 detachedWindowLabel: null,
                 detachedCreatePromise: null,
+                detachedReadyGate: createDetachedReadyGate(),
+                detachedWindowShown: false,
+                lastPointer: event,
                 sourceClosed: false,
                 cancelled: false,
             };
@@ -306,13 +400,15 @@ export function useTabWindowDragBridge(
             ensureDetachedWindowForDrag(state, event);
         }
 
+        state.lastPointer = event;
+        moveDetachedWindowWithPointer(state);
         void emitTabWindowDragMove(buildWindowDragPayload({
             state,
             pointer: event,
             workbenchId,
             windowLabel: windowLabelRef.current,
         }));
-    }, [ensureDetachedWindowForDrag, workbenchId]);
+    }, [ensureDetachedWindowForDrag, moveDetachedWindowWithPointer, workbenchId]);
 
     const handleTabDragInside = useCallback((
         payload: WorkbenchTabDragPayload,
@@ -370,6 +466,23 @@ export function useTabWindowDragBridge(
             }
 
             if (detachedLabel) {
+                const ready = await waitForDetachedWindowReady(state.detachedReadyGate);
+                if (sourceDragRef.current?.dragId !== state.dragId) {
+                    return;
+                }
+
+                if (!ready) {
+                    state.cancelled = true;
+                    sourceDragRef.current = null;
+                    await destroyAutoDetachedWindow(state);
+                    console.warn("[tab-window-bridge] detached tab window did not become ready before drop timeout", {
+                        detachedWindowLabel: detachedLabel,
+                        tabId: state.tab.id,
+                    });
+                    return;
+                }
+
+                await syncDetachedWindowPresentation(state);
                 await closeSourceTab(state);
                 sourceDragRef.current = null;
                 return;
@@ -380,7 +493,7 @@ export function useTabWindowDragBridge(
                 }
             }, 600);
         })();
-    }, [closeSourceTab, destroyAutoDetachedWindow, workbenchId]);
+    }, [closeSourceTab, destroyAutoDetachedWindow, syncDetachedWindowPresentation, workbenchId]);
 
     return {
         workbenchId,

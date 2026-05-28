@@ -33,7 +33,7 @@ import {
 } from "../../../utils/canvasFileSpec";
 import { buildCreatedMarkdownInitialContent } from "../../../utils/frontmatterTemplate";
 import { getConfigSnapshot } from "../../../host/config/configStore";
-import { getArticleSnapshotById, useFocusedArticle } from "../../../host/editor/editorContextStore";
+import { getArticleSnapshotByPath, useFocusedArticle } from "../../../host/editor/editorContextStore";
 import { savePersistedMarkdownContent } from "../../../host/editor/persistedMarkdownContentSync";
 import { deletePersistedCanvasFile, deletePersistedMarkdownFile, movePersistedCanvasFileToDirectory, movePersistedFileToDirectory, movePersistedMarkdownFileToDirectory, renamePersistedCanvasFile, renamePersistedMarkdownFile } from "../../../host/vault/vaultMutationService";
 import { useVaultState } from "../../../host/vault/vaultStore";
@@ -56,6 +56,7 @@ interface VaultPanelProps {
         preferredOpenerId?: string;
     }) => Promise<void>;
     closeTab?: (tabId: string) => void;
+    closeFileTabsByPath?: (relativePath: string) => void;
     requestMoveFileToDirectory?: (relativePath: string) => void;
 }
 
@@ -235,12 +236,21 @@ function splitVaultDisplayPath(fullPath: string): [string, string] {
  */
 export function VaultPanel(props: VaultPanelProps): ReactNode {
     const { t } = useTranslation();
-    const { openTab, closeTab } = props;
+    const { openTab, closeTab, closeFileTabsByPath } = props;
     const { currentVaultPath, files, isLoadingTree, error } = useVaultState();
     const focusedArticle = useFocusedArticle();
     const [moveSelection, setMoveSelection] = useState<FileTreeItem[] | null>(null);
     const [renameRequest, setRenameRequest] = useState<FileTreeRenameRequestedBusEvent | null>(null);
     const [vaultPathPrefix, vaultPathRootName] = splitVaultDisplayPath(currentVaultPath);
+
+    const closeFileViews = (relativePath: string): void => {
+        if (closeFileTabsByPath) {
+            closeFileTabsByPath(relativePath);
+            return;
+        }
+
+        closeTab?.(`file:${relativePath}`);
+    };
 
     useEffect(() => {
         return subscribeFileTreeRenameRequestedEvent((payload) => {
@@ -351,8 +361,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
         }
 
         try {
-            const sourceTabId = `file:${item.path}`;
-            const sourceSnapshot = getArticleSnapshotById(sourceTabId);
+            const sourceSnapshot = getArticleSnapshotByPath(item.path);
 
             if (isCanvasPath(item.path)) {
                 await renamePersistedCanvasFile(item.path, targetPath);
@@ -367,7 +376,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                 });
             }
 
-            closeTab?.(sourceTabId);
+            closeFileViews(item.path);
 
             const latestContent = sourceSnapshot
                 ? sourceSnapshot.content
@@ -448,7 +457,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             } else {
                 await deletePersistedMarkdownFile(item.path);
             }
-            closeTab?.(`file:${item.path}`);
+            closeFileViews(item.path);
             console.info("[vault-ui] delete success", {
                 path: item.path,
             });
@@ -498,7 +507,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                     : await movePersistedMarkdownFileToDirectory(sourceRelativePath, targetDirectoryRelativePath);
 
             if (isEditableFilePath(sourceRelativePath)) {
-                closeTab?.(`file:${sourceRelativePath}`);
+                closeFileViews(sourceRelativePath);
                 const latestContent = await readEditableFileContent(result.relativePath);
                 await openFileWithResolver({
                     relativePath: result.relativePath,
@@ -544,8 +553,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
             return;
         }
 
-        const sourceTabId = `file:${item.path}`;
-        const sourceSnapshot = getArticleSnapshotById(sourceTabId);
+        const sourceSnapshot = getArticleSnapshotByPath(item.path);
         const result = isCanvasPath(item.path)
             ? await movePersistedCanvasFileToDirectory(item.path, targetDirectoryRelativePath)
             : await movePersistedMarkdownFileToDirectory(item.path, targetDirectoryRelativePath);
@@ -556,7 +564,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                 relativePath: targetPath,
                 content: sourceSnapshot.content,
             });
-            closeTab?.(sourceTabId);
+            closeFileViews(item.path);
             await openFileWithResolver({
                 relativePath: targetPath,
                 currentVaultPath,
@@ -564,7 +572,7 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                 openTab,
             });
         } else {
-            closeTab?.(sourceTabId);
+            closeFileViews(item.path);
             const latestContent = await readEditableFileContent(targetPath);
             await openFileWithResolver({
                 relativePath: targetPath,
@@ -626,13 +634,13 @@ export function VaultPanel(props: VaultPanelProps): ReactNode {
                     });
                 } else if (isCanvasPath(item.path)) {
                     await deletePersistedCanvasFile(item.path);
-                    closeTab?.(`file:${item.path}`);
+                    closeFileViews(item.path);
                     console.info("[vault-ui] batch delete file success", {
                         path: item.path,
                     });
                 } else if (isMarkdownPath(item.path)) {
                     await deletePersistedMarkdownFile(item.path);
-                    closeTab?.(`file:${item.path}`);
+                    closeFileViews(item.path);
                     console.info("[vault-ui] batch delete file success", {
                         path: item.path,
                     });

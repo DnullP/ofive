@@ -12,8 +12,8 @@
  *   // 在 CodeMirror extensions 中注入 extension
  */
 
-import { RangeSetBuilder } from "@codemirror/state";
-import type { Extension } from "@codemirror/state";
+import { RangeSetBuilder, StateField } from "@codemirror/state";
+import type { EditorState, Extension, Transaction } from "@codemirror/state";
 import i18n from "../../../../i18n";
 import {
     Decoration,
@@ -29,8 +29,6 @@ import YAML from "yaml";
 import { FrontmatterYamlVisualEditor } from "../components/FrontmatterYamlVisualEditor";
 import {
     createBlockAtomicRangesExtension,
-    hiddenBlockAnchorLineDecoration,
-    hiddenBlockLineDecoration,
     rangeTouchesBlock,
 } from "./blockWidgetReplace";
 import { setExclusionZones } from "../syntaxExclusionZones";
@@ -74,6 +72,11 @@ interface FrontmatterSyntaxExtensionOptions {
     onRequestFocusVimNavigation?: (position: "first" | "last") => void;
 }
 
+interface FrontmatterSyntaxState {
+    block: FrontmatterBlock | null;
+    decorations: DecorationSet;
+}
+
 /**
  * @interface FrontmatterSelectionRange
  * @description frontmatter 选区判断所需的最小选区结构。
@@ -88,6 +91,9 @@ interface FrontmatterSelectionRange {
 }
 
 const FRONTMATTER_DELIMITER = "---";
+const FRONTMATTER_WIDGET_BASE_HEIGHT = 92;
+const FRONTMATTER_WIDGET_ROW_HEIGHT = 44;
+const FRONTMATTER_WIDGET_EMPTY_HEIGHT = 108;
 
 /**
  * @function isFrontmatterBlockSelected
@@ -201,6 +207,34 @@ function scheduleFrontmatterNavigationRedirect(
         });
         onRequestFocusVimNavigation?.("first");
     });
+}
+
+function countFrontmatterVisualRows(yamlText: string): number {
+    try {
+        const parsed = YAML.parse(yamlText) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            return Object.keys(parsed as Record<string, unknown>).length;
+        }
+        return parsed == null ? 0 : 1;
+    } catch {
+        return yamlText
+            .split("\n")
+            .filter((line) => line.trim().length > 0 && !line.trimStart().startsWith("#"))
+            .length;
+    }
+}
+
+/**
+ * @function estimateFrontmatterWidgetHeight
+ * @description 为离屏 frontmatter widget 提供稳定高度，避免向上滚动接近文档顶部时
+ *   CodeMirror 在真实 DOM 测量后大幅修正 height map 和 scrollTop。
+ */
+export function estimateFrontmatterWidgetHeight(yamlText: string): number {
+    const rowCount = countFrontmatterVisualRows(yamlText);
+    if (rowCount === 0) {
+        return FRONTMATTER_WIDGET_EMPTY_HEIGHT;
+    }
+    return FRONTMATTER_WIDGET_BASE_HEIGHT + rowCount * FRONTMATTER_WIDGET_ROW_HEIGHT;
 }
 
 /**
@@ -361,9 +395,6 @@ class FrontmatterYamlWidget extends WidgetType {
     /** 当前 widget 是否处于选中高亮态。 */
     private readonly isSelected: boolean;
 
-    /** 保存回调。 */
-    private readonly onSave: (yamlText: string) => SaveFrontmatterResult;
-
     /** 请求退出 frontmatter Vim 导航。 */
     private readonly onRequestExitVimNavigation?: () => void;
 
@@ -373,13 +404,11 @@ class FrontmatterYamlWidget extends WidgetType {
     constructor(
         yamlText: string,
         isSelected: boolean,
-        onSave: (yamlText: string) => SaveFrontmatterResult,
         onRequestExitVimNavigation?: () => void,
     ) {
         super();
         this.yamlText = yamlText;
         this.isSelected = isSelected;
-        this.onSave = onSave;
         this.onRequestExitVimNavigation = onRequestExitVimNavigation;
     }
 
@@ -387,11 +416,16 @@ class FrontmatterYamlWidget extends WidgetType {
         return this.yamlText === other.yamlText && this.isSelected === other.isSelected;
     }
 
-    toDOM(): HTMLElement {
+    get estimatedHeight(): number {
+        return estimateFrontmatterWidgetHeight(this.yamlText);
+    }
+
+    toDOM(view: EditorView): HTMLElement {
         const wrapper = document.createElement("section");
         wrapper.className = this.isSelected
             ? "cm-frontmatter-widget cm-frontmatter-widget-selected"
             : "cm-frontmatter-widget";
+        wrapper.style.height = `${String(estimateFrontmatterWidgetHeight(this.yamlText))}px`;
 
         // React root 创建和渲染必须在 try-catch 中执行：
         // toDOM() 在 CM6 DocView 构造期间被调用，此时 EditorView.docView 尚未赋值。
@@ -405,10 +439,15 @@ class FrontmatterYamlWidget extends WidgetType {
             this.root.render(
                 createElement(FrontmatterYamlVisualEditor, {
                     initialYamlText: this.yamlText,
-                    onCommitYaml: (yamlText: string) => this.onSave(yamlText),
+                    onCommitYaml: (yamlText: string) => saveFrontmatterYaml(view, yamlText),
                     onRequestExitVimNavigation: this.onRequestExitVimNavigation,
                 }),
             );
+            window.requestAnimationFrame(() => {
+                if (isViewAlive(view)) {
+                    view.requestMeasure();
+                }
+            });
         } catch (error) {
             console.error("[editor-frontmatter] widget toDOM render failed", {
                 message: error instanceof Error ? error.message : String(error),
@@ -437,34 +476,84 @@ class FrontmatterYamlWidget extends WidgetType {
     }
 }
 
+function buildFrontmatterDecorations(
+    state: EditorState,
+    block: FrontmatterBlock | null,
+    options: FrontmatterSyntaxExtensionOptions,
+): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>();
+    if (!block || shouldKeepFrontmatterSourceVisible(block, state.selection.ranges)) {
+        return builder.finish();
+    }
+
+    const isSelected = isFrontmatterBlockSelected(block, state.selection.ranges);
+    builder.add(
+        block.from,
+        block.to,
+        Decoration.replace({
+            widget: new FrontmatterYamlWidget(
+                block.yamlText,
+                isSelected,
+                options.onRequestExitVimNavigation,
+            ),
+            block: false,
+            side: -1,
+        }),
+    );
+
+    return builder.finish();
+}
+
+function buildFrontmatterSyntaxState(
+    state: EditorState,
+    options: FrontmatterSyntaxExtensionOptions,
+): FrontmatterSyntaxState {
+    const block = parseFrontmatterBlock(state);
+    return {
+        block,
+        decorations: buildFrontmatterDecorations(state, block, options),
+    };
+}
+
+function shouldRebuildFrontmatterSyntaxState(transaction: Transaction): boolean {
+    return transaction.docChanged || transaction.selection !== undefined;
+}
+
 /**
  * @function createFrontmatterSyntaxExtension
  * @description 创建 frontmatter 渲染扩展：用 YAML 编辑器组件显示并编辑顶部 frontmatter。
- * 内部通过以下机制协作：
- * 1. `Decoration.line` 将 frontmatter 源码行隐藏（CSS `height:0`）；
- *    对应的 gutter 元素通过 CSS `overflow:hidden` 自动随行高折叠为 0 并裁剪溢出行号。
- * 2. `Decoration.widget` 在隐藏行之后插入可视化编辑组件；
- * 3. `atomicRanges` 阻止光标通过键盘导航进入隐藏区域。
+ * 内部通过 StateField 提供 direct decorations，使多行替换在 viewport 计算前进入
+ * CodeMirror height map，避免滚动接近文档顶部时出现 late measure 抖动。
  *
- * 注意：widget 使用 `block: false`（行内模式），
- * 不使用 `block: true` 或 `gutterLineClass/StateField`，
- * 因为这两者会在 EditorView 构造/销毁的 React 生命周期窗口中
- * 触发额外的 gutter measure 调度，导致 `cursorLayer.markers` 在
- * `docView` 尚未就绪时调用 `coordsAtPos` 抛出空引用异常。
- *
- * @returns CodeMirror Extension 数组（ViewPlugin + atomicRanges）。
+ * @returns CodeMirror Extension 数组（StateField + 生命周期 ViewPlugin + atomicRanges）。
  * @throws 无显式异常；内部异常将降级为空装饰并记录日志。
  */
 export function createFrontmatterSyntaxExtension(options: FrontmatterSyntaxExtensionOptions = {}): Extension {
-    const plugin = ViewPlugin.fromClass(
-        class {
-            decorations: DecorationSet;
+    const syntaxStateField = StateField.define<FrontmatterSyntaxState>({
+        create(state) {
+            return buildFrontmatterSyntaxState(state, options);
+        },
+        update(value, transaction) {
+            if (!shouldRebuildFrontmatterSyntaxState(transaction)) {
+                return value;
+            }
 
+            return buildFrontmatterSyntaxState(transaction.state, options);
+        },
+        provide(field) {
+            return EditorView.decorations.from(field, (value) => value.decorations);
+        },
+    });
+
+    const lifecyclePlugin = ViewPlugin.fromClass(
+        class {
             constructor(view: EditorView) {
-                this.decorations = this.safeBuildDecorations(view);
+                this.syncExclusionZones(view);
             }
 
             update(update: ViewUpdate): void {
+                this.syncExclusionZones(update.view);
+
                 if (update.selectionSet) {
                     const block = parseFrontmatterBlock(update.view.state);
                     const selection = update.view.state.selection.main;
@@ -480,78 +569,19 @@ export function createFrontmatterSyntaxExtension(options: FrontmatterSyntaxExten
                         );
                     }
                 }
-
-                if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged) {
-                    this.decorations = this.safeBuildDecorations(update.view);
-                }
             }
 
-            private safeBuildDecorations(view: EditorView): DecorationSet {
-                try {
-                    return this.buildDecorations(view);
-                } catch (error) {
-                    console.error("[editor-frontmatter] build decorations failed", {
-                        message: error instanceof Error ? error.message : String(error),
-                    });
-                    return new RangeSetBuilder<Decoration>().finish();
-                }
-            }
-
-            private buildDecorations(view: EditorView): DecorationSet {
-                const builder = new RangeSetBuilder<Decoration>();
-                if (!isViewAlive(view)) {
-                    return builder.finish();
-                }
-
+            private syncExclusionZones(view: EditorView): void {
                 const block = parseFrontmatterBlock(view.state);
                 if (!block) {
-                    /* 无 frontmatter：清空排斥区域 */
                     setExclusionZones(view, "frontmatter", []);
-                    return builder.finish();
+                    return;
                 }
 
-                /* 声明排斥区域，供其他插件（code-fence / latex / 行级渲染器）跳过 */
                 setExclusionZones(view, "frontmatter", [
                     { from: block.from, to: block.to },
                 ]);
-
-                if (shouldKeepFrontmatterSourceVisible(block, view.state.selection.ranges)) {
-                    return builder.finish();
-                }
-
-                const isSelected = isFrontmatterBlockSelected(block, view.state.selection.ranges);
-
-                // 通过 Decoration.line 为每行添加隐藏类，CSS 将行高设为 0。
-                // 对应的 gutter 元素通过 CSS overflow:hidden 自动裁剪溢出行号。
-                for (let lineNumber = block.startLineNumber; lineNumber < block.endLineNumber; lineNumber += 1) {
-                    const line = view.state.doc.line(lineNumber);
-                    builder.add(line.from, line.from, hiddenBlockLineDecoration);
-                }
-
-                const anchorLine = view.state.doc.line(block.endLineNumber);
-                builder.add(anchorLine.from, anchorLine.from, hiddenBlockAnchorLineDecoration);
-
-                // 在隐藏行之后插入 Widget（行内模式，避免 block widget 引发 measure 异常）。
-                builder.add(
-                    block.to,
-                    block.to,
-                    Decoration.widget({
-                        widget: new FrontmatterYamlWidget(
-                            block.yamlText,
-                            isSelected,
-                            (nextYamlText) => saveFrontmatterYaml(view, nextYamlText),
-                            options.onRequestExitVimNavigation,
-                        ),
-                        block: false,
-                        side: -1,
-                    }),
-                );
-
-                return builder.finish();
             }
-        },
-        {
-            decorations: (p) => p.decorations,
         },
     );
 
@@ -567,5 +597,5 @@ export function createFrontmatterSyntaxExtension(options: FrontmatterSyntaxExten
         return { from: block.from, to: block.to };
     });
 
-    return [plugin, atomicRanges];
+    return [syntaxStateField, lifecyclePlugin, atomicRanges];
 }

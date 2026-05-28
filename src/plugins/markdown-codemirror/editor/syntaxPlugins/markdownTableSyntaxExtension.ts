@@ -12,8 +12,8 @@
  *  - ../syntaxExclusionZones
  */
 
-import { RangeSet, RangeSetBuilder } from "@codemirror/state";
-import type { EditorState, Extension } from "@codemirror/state";
+import { RangeSet, RangeSetBuilder, StateField } from "@codemirror/state";
+import type { EditorState, Extension, Text, Transaction } from "@codemirror/state";
 import {
     Decoration,
     type DecorationSet,
@@ -26,6 +26,7 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { WorkbenchContainerApi } from "../../../../host/layout/workbenchContracts";
 import i18n from "../../../../i18n";
+import { detectExcludedLineRanges } from "../../../../utils/markdownBlockDetector";
 import { MarkdownTableVisualEditor } from "../components/MarkdownTableVisualEditor";
 import {
     parseMarkdownTableLayoutComment,
@@ -34,10 +35,10 @@ import {
     type MarkdownTableLayout,
     type MarkdownTableModel,
 } from "../markdownTableModel";
+import { estimateMarkdownTableWidgetHeight as estimateMarkdownTableWidgetHeightFromModel } from "../markdownTableRowHeightEstimate";
+import { MarkdownTableWheelForwarder } from "../markdownTableWheelForwarding";
 import {
     type BlockSelectionRange,
-    hiddenBlockAnchorLineDecoration,
-    hiddenBlockLineDecoration,
     rangeTouchesBlock,
 } from "./blockWidgetReplace";
 import {
@@ -71,9 +72,17 @@ interface MarkdownTableSyntaxExtensionOptions {
     }) => void;
 }
 
-const MARKDOWN_TABLE_WIDGET_VERTICAL_CHROME_HEIGHT = 50;
-const MARKDOWN_TABLE_WIDGET_HEADER_HEIGHT = 38;
-const MARKDOWN_TABLE_WIDGET_MIN_ROW_HEIGHT = 38;
+interface MarkdownTablePriorityExclusionRange {
+    from: number;
+    to: number;
+}
+
+interface MarkdownTableSyntaxState {
+    blocks: MarkdownTableBlock[];
+    decorations: DecorationSet;
+}
+
+export { resolveMarkdownTableEditorWheelDeltaY } from "../markdownTableWheelForwarding";
 
 /**
  * @function estimateMarkdownTableWidgetHeight
@@ -85,36 +94,10 @@ export function estimateMarkdownTableWidgetHeight(
     model: Pick<MarkdownTableModel, "rows">,
     layout: MarkdownTableLayout | null | undefined,
 ): number {
-    const bodyRowsHeight = model.rows.reduce((totalHeight, _row, rowIndex) => {
-        const persistedHeight = Number(layout?.rowHeights?.[rowIndex]);
-        const rowHeight = Number.isFinite(persistedHeight) && persistedHeight > 0
-            ? persistedHeight
-            : MARKDOWN_TABLE_WIDGET_MIN_ROW_HEIGHT;
-
-        return totalHeight + Math.max(
-            MARKDOWN_TABLE_WIDGET_MIN_ROW_HEIGHT,
-            Math.round(rowHeight),
-        );
-    }, 0);
-
-    return MARKDOWN_TABLE_WIDGET_VERTICAL_CHROME_HEIGHT
-        + MARKDOWN_TABLE_WIDGET_HEADER_HEIGHT
-        + bodyRowsHeight;
-}
-
-function estimateMarkdownTableWidgetHeightContribution(options: {
-    model: Pick<MarkdownTableModel, "rows">;
-    layout: MarkdownTableLayout | null | undefined;
-    hiddenSourceLineCount: number;
-    sourceLineHeight: number;
-}): number {
-    const visualHeight = estimateMarkdownTableWidgetHeight(options.model, options.layout);
-    const hiddenSourceHeight = Math.max(0, options.hiddenSourceLineCount)
-        * Math.max(0, options.sourceLineHeight);
-
-    return Math.max(
-        MARKDOWN_TABLE_WIDGET_MIN_ROW_HEIGHT,
-        visualHeight - hiddenSourceHeight,
+    return estimateMarkdownTableWidgetHeightFromModel(
+        model,
+        layout?.columnWidths,
+        layout?.rowHeights,
     );
 }
 
@@ -172,29 +155,54 @@ function resolveTableCandidateLines(
     return lines;
 }
 
+function rangeIntersectsMarkdownTablePriorityExclusion(
+    ranges: readonly MarkdownTablePriorityExclusionRange[],
+    from: number,
+    to: number,
+): boolean {
+    return ranges.some((range) => from <= range.to && to >= range.from);
+}
+
+function resolveMarkdownTablePriorityExclusionRanges(doc: Text): MarkdownTablePriorityExclusionRange[] {
+    return detectExcludedLineRanges(doc.toString())
+        .filter((range) => range.type === "frontmatter" || range.type === "code-fence" || range.type === "latex-block")
+        .map((range) => ({
+            from: doc.line(range.fromLine).from,
+            to: doc.line(range.toLine).to,
+        }));
+}
+
 /**
- * @function parseMarkdownTableBlocks
- * @description 从文档中解析全部 Markdown 表格块。
- * @param view 编辑器视图。
+ * @function parseMarkdownTableBlocksFromState
+ * @description 从编辑器状态中解析全部 Markdown 表格块。
+ * @param state 编辑器状态。
+ * @param isRangeExcluded 额外排斥区判断。
  * @returns 表格块数组。
  */
-function parseMarkdownTableBlocks(view: EditorView): MarkdownTableBlock[] {
+function parseMarkdownTableBlocksFromState(
+    state: EditorState,
+    isRangeExcluded: (from: number, to: number) => boolean = () => false,
+): MarkdownTableBlock[] {
     const blocks: MarkdownTableBlock[] = [];
+    const priorityExclusionRanges = resolveMarkdownTablePriorityExclusionRanges(state.doc);
     let lineNumber = 1;
 
-    while (lineNumber < view.state.doc.lines) {
-        const line = view.state.doc.line(lineNumber);
+    while (lineNumber < state.doc.lines) {
+        const line = state.doc.line(lineNumber);
         if (!line.text.includes("|")) {
             lineNumber += 1;
             continue;
         }
 
-        if (isRangeInsideHigherPriorityZone(view, line.from, line.to, "markdown-table")) {
+        if (
+            rangeIntersectsMarkdownTablePriorityExclusion(priorityExclusionRanges, line.from, line.to)
+            || isRangeExcluded(line.from, line.to)
+        ) {
             lineNumber += 1;
             continue;
         }
 
-        const candidateLines = resolveTableCandidateLines(view.state, lineNumber);
+        const candidateLines = resolveTableCandidateLines(state, lineNumber);
         const model = parseMarkdownTableLines(candidateLines);
         if (!model) {
             lineNumber += 1;
@@ -204,16 +212,19 @@ function parseMarkdownTableBlocks(view: EditorView): MarkdownTableBlock[] {
         const tableEndLineNumber = lineNumber + candidateLines.length - 1;
         let blockEndLineNumber = tableEndLineNumber;
         let layout: MarkdownTableLayout | null = null;
-        if (tableEndLineNumber < view.state.doc.lines) {
-            const possibleLayoutLine = view.state.doc.line(tableEndLineNumber + 1);
+        if (tableEndLineNumber < state.doc.lines) {
+            const possibleLayoutLine = state.doc.line(tableEndLineNumber + 1);
             layout = parseMarkdownTableLayoutComment(possibleLayoutLine.text);
             if (layout) {
                 blockEndLineNumber = tableEndLineNumber + 1;
             }
         }
 
-        const blockEndLine = view.state.doc.line(blockEndLineNumber);
-        if (isRangeInsideHigherPriorityZone(view, line.from, blockEndLine.to, "markdown-table")) {
+        const blockEndLine = state.doc.line(blockEndLineNumber);
+        if (
+            rangeIntersectsMarkdownTablePriorityExclusion(priorityExclusionRanges, line.from, blockEndLine.to)
+            || isRangeExcluded(line.from, blockEndLine.to)
+        ) {
             lineNumber += 1;
             continue;
         }
@@ -230,6 +241,19 @@ function parseMarkdownTableBlocks(view: EditorView): MarkdownTableBlock[] {
     }
 
     return blocks;
+}
+
+/**
+ * @function parseMarkdownTableBlocks
+ * @description 从当前编辑器视图解析全部 Markdown 表格块。
+ * @param view 编辑器视图。
+ * @returns 表格块数组。
+ */
+function parseMarkdownTableBlocks(view: EditorView): MarkdownTableBlock[] {
+    return parseMarkdownTableBlocksFromState(
+        view.state,
+        (from, to) => isRangeInsideHigherPriorityZone(view, from, to, "markdown-table"),
+    );
 }
 
 /**
@@ -327,18 +351,17 @@ class MarkdownTableWidget extends WidgetType {
     /** 表格布局元数据。 */
     private readonly layout: MarkdownTableLayout | null;
 
-    /** 同一表格块中会被 CSS 折叠为 0 高的源码行数量。 */
-    private readonly hiddenSourceLineCount: number;
-
     /** React 根实例。 */
     private root: Root | null = null;
+
+    private wheelEventListener: ((event: WheelEvent) => void) | null = null;
+
+    private wheelForwarder: MarkdownTableWheelForwarder | null = null;
 
     constructor(
         blockFrom: number,
         model: MarkdownTableModel,
         layout: MarkdownTableLayout | null,
-        hiddenSourceLineCount: number,
-        private readonly view: EditorView,
         private readonly containerApi: WorkbenchContainerApi,
         private readonly getCurrentFilePath: () => string,
     ) {
@@ -346,7 +369,6 @@ class MarkdownTableWidget extends WidgetType {
         this.blockFrom = blockFrom;
         this.model = model;
         this.layout = layout;
-        this.hiddenSourceLineCount = hiddenSourceLineCount;
     }
 
     eq(other: MarkdownTableWidget): boolean {
@@ -356,18 +378,28 @@ class MarkdownTableWidget extends WidgetType {
     }
 
     get estimatedHeight(): number {
-        return estimateMarkdownTableWidgetHeightContribution({
-            model: this.model,
-            layout: this.layout,
-            hiddenSourceLineCount: this.hiddenSourceLineCount,
-            sourceLineHeight: this.view.defaultLineHeight,
-        });
+        return estimateMarkdownTableWidgetHeight(this.model, this.layout);
     }
 
-    toDOM(): HTMLElement {
+    toDOM(view: EditorView): HTMLElement {
         const wrapper = document.createElement("section");
         wrapper.className = "cm-markdown-table-widget";
-        wrapper.style.minHeight = `${String(estimateMarkdownTableWidgetHeight(this.model, this.layout))}px`;
+        wrapper.style.height = `${String(estimateMarkdownTableWidgetHeight(this.model, this.layout))}px`;
+        const scrollDOM = view.scrollDOM;
+        this.wheelForwarder = new MarkdownTableWheelForwarder({
+            scrollTarget: scrollDOM,
+            getLineHeight: () => view.defaultLineHeight,
+            getPageHeight: () => scrollDOM.clientHeight,
+            isAlive: () => isViewAlive(view),
+            requestFrame: (callback) => window.requestAnimationFrame(callback),
+            cancelFrame: (frameId) => window.cancelAnimationFrame(frameId),
+            createScrollEvent: () => new Event("scroll"),
+        });
+        const handleWheel = (event: WheelEvent): void => {
+            this.wheelForwarder?.handleWheel(event);
+        };
+        this.wheelEventListener = handleWheel;
+        wrapper.addEventListener("wheel", handleWheel, { capture: true, passive: false });
 
         try {
             this.root = createRoot(wrapper);
@@ -376,20 +408,20 @@ class MarkdownTableWidget extends WidgetType {
                     blockFrom: this.blockFrom,
                     initialModel: this.model,
                     initialLayout: this.layout,
-                    onCommitMarkdown: (markdownText: string) => saveMarkdownTable(this.view, this.blockFrom, markdownText),
+                    onCommitMarkdown: (markdownText: string) => saveMarkdownTable(view, this.blockFrom, markdownText),
                     onRequestExitVimNavigation: (direction: "previous" | "next") => {
-                        exitMarkdownTableVimNavigation(this.view, this.blockFrom, direction);
+                        exitMarkdownTableVimNavigation(view, this.blockFrom, direction);
                     },
                     containerApi: this.containerApi,
                     currentFilePath: this.getCurrentFilePath(),
                 }),
             );
             window.requestAnimationFrame(() => {
-                if (!isViewAlive(this.view)) {
+                if (!isViewAlive(view)) {
                     return;
                 }
 
-                this.view.requestMeasure();
+                view.requestMeasure();
             });
         } catch (error) {
             console.error("[markdown-table-syntax-extension] widget render failed", {
@@ -405,7 +437,13 @@ class MarkdownTableWidget extends WidgetType {
         return event.type !== "mousemove";
     }
 
-    destroy(): void {
+    destroy(dom?: HTMLElement): void {
+        if (this.wheelEventListener) {
+            dom?.removeEventListener("wheel", this.wheelEventListener, true);
+            this.wheelEventListener = null;
+        }
+        this.wheelForwarder?.destroy();
+        this.wheelForwarder = null;
         const root = this.root;
         if (root !== null) {
             queueMicrotask(() => {
@@ -422,6 +460,55 @@ class MarkdownTableWidget extends WidgetType {
     }
 }
 
+function buildMarkdownTableDecorations(
+    state: EditorState,
+    blocks: readonly MarkdownTableBlock[],
+    containerApi: WorkbenchContainerApi,
+    getCurrentFilePath: () => string,
+): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>();
+
+    blocks.forEach((block) => {
+        if (shouldKeepMarkdownTableSourceVisible(block, state.selection.ranges)) {
+            return;
+        }
+
+        builder.add(
+            block.from,
+            block.to,
+            Decoration.replace({
+                widget: new MarkdownTableWidget(
+                    block.from,
+                    block.model,
+                    block.layout,
+                    containerApi,
+                    getCurrentFilePath,
+                ),
+                side: -1,
+                block: false,
+            }),
+        );
+    });
+
+    return builder.finish();
+}
+
+function buildMarkdownTableSyntaxState(
+    state: EditorState,
+    containerApi: WorkbenchContainerApi,
+    getCurrentFilePath: () => string,
+): MarkdownTableSyntaxState {
+    const blocks = parseMarkdownTableBlocksFromState(state);
+    return {
+        blocks,
+        decorations: buildMarkdownTableDecorations(state, blocks, containerApi, getCurrentFilePath),
+    };
+}
+
+function shouldRebuildMarkdownTableSyntaxState(transaction: Transaction): boolean {
+    return transaction.docChanged || transaction.selection !== undefined;
+}
+
 /**
  * @function createMarkdownTableSyntaxExtension
  * @description 创建 Markdown 表格可视化编辑扩展。
@@ -432,21 +519,43 @@ export function createMarkdownTableSyntaxExtension(
     getCurrentFilePath: () => string,
     options: MarkdownTableSyntaxExtensionOptions = {},
 ): Extension {
-    const plugin = ViewPlugin.fromClass(
+    const syntaxStateField = StateField.define<MarkdownTableSyntaxState>({
+        create(state) {
+            return buildMarkdownTableSyntaxState(state, containerApi, getCurrentFilePath);
+        },
+        update(value, transaction) {
+            if (!shouldRebuildMarkdownTableSyntaxState(transaction)) {
+                return value;
+            }
+
+            return buildMarkdownTableSyntaxState(transaction.state, containerApi, getCurrentFilePath);
+        },
+        compare(left, right) {
+            return left.blocks === right.blocks
+                && RangeSet.eq([left.decorations], [right.decorations]);
+        },
+        provide(field) {
+            return EditorView.decorations.from(field, (value) => value.decorations);
+        },
+    });
+
+    const lifecyclePlugin = ViewPlugin.fromClass(
         class {
-            decorations: DecorationSet;
             blocks: MarkdownTableBlock[];
 
             constructor(view: EditorView) {
-                this.blocks = [];
-                this.decorations = this.safeBuildDecorations(view);
+                this.blocks = this.readBlocks(view);
+                this.syncExclusionZones(view);
             }
 
             update(update: ViewUpdate): void {
+                this.blocks = this.readBlocks(update.view);
+                this.syncExclusionZones(update.view);
+
                 if (update.selectionSet) {
                     const selection = update.view.state.selection.main;
                     if (selection.empty) {
-                        const touchedBlock = parseMarkdownTableBlocks(update.view)
+                        const touchedBlock = this.blocks
                             .find((block) => selection.head >= block.from && selection.head < block.to);
                         if (touchedBlock) {
                             queueMicrotask(() => {
@@ -480,87 +589,42 @@ export function createMarkdownTableSyntaxExtension(
                         }
                     }
                 }
-
-                if (update.docChanged || update.selectionSet || update.focusChanged) {
-                    this.decorations = this.safeBuildDecorations(update.view);
-                }
             }
 
-            private safeBuildDecorations(view: EditorView): DecorationSet {
+            private readBlocks(view: EditorView): MarkdownTableBlock[] {
                 try {
-                    return this.buildDecorations(view);
+                    return view.state.field(syntaxStateField).blocks;
                 } catch (error) {
-                    console.error("[markdown-table-syntax-extension] build decorations failed", {
+                    console.error("[markdown-table-syntax-extension] read syntax state failed", {
                         message: error instanceof Error ? error.message : String(error),
                     });
-                    this.blocks = [];
-                    setExclusionZones(view, "markdown-table", []);
-                    return new RangeSetBuilder<Decoration>().finish();
+                    return [];
                 }
             }
 
-            private buildDecorations(view: EditorView): DecorationSet {
-                const builder = new RangeSetBuilder<Decoration>();
+            private syncExclusionZones(view: EditorView): void {
                 if (!isViewAlive(view)) {
-                    this.blocks = [];
-                    return builder.finish();
+                    setExclusionZones(view, "markdown-table", []);
+                    return;
                 }
 
-                const blocks = parseMarkdownTableBlocks(view);
-                this.blocks = blocks;
-                setExclusionZones(view, "markdown-table", blocks.map((block) => ({ from: block.from, to: block.to })));
-
-                blocks.forEach((block) => {
-                    if (shouldKeepMarkdownTableSourceVisible(block, view.state.selection.ranges)) {
-                        return;
-                    }
-
-                    for (let lineNumber = block.startLineNumber; lineNumber < block.endLineNumber; lineNumber += 1) {
-                        const line = view.state.doc.line(lineNumber);
-                        builder.add(line.from, line.from, hiddenBlockLineDecoration);
-                    }
-
-                    const anchorLine = view.state.doc.line(block.endLineNumber);
-                    builder.add(anchorLine.from, anchorLine.from, hiddenBlockAnchorLineDecoration);
-                    builder.add(
-                        block.to,
-                        block.to,
-                        Decoration.widget({
-                            widget: new MarkdownTableWidget(
-                                block.from,
-                                block.model,
-                                block.layout,
-                                block.endLineNumber - block.startLineNumber,
-                                view,
-                                containerApi,
-                                getCurrentFilePath,
-                            ),
-                            side: -1,
-                            block: false,
-                        }),
-                    );
-                });
-
-                return builder.finish();
+                setExclusionZones(view, "markdown-table", this.blocks.map((block) => ({ from: block.from, to: block.to })));
             }
-        },
-        {
-            decorations: (instance) => instance.decorations,
         },
     );
 
     const atomicRanges = EditorView.atomicRanges.of((view) => {
-        const pluginValue = view.plugin(plugin);
-        if (!pluginValue || pluginValue.blocks.length === 0) {
+        const syntaxState = view.state.field(syntaxStateField, false);
+        if (!syntaxState || syntaxState.blocks.length === 0) {
             return RangeSet.empty;
         }
 
         return RangeSet.of(
-            pluginValue.blocks
+            syntaxState.blocks
                 .filter((block) => !shouldKeepMarkdownTableSourceVisible(block, view.state.selection.ranges))
                 .map((block) => markdownTableAtomicMarker.range(block.from, block.to)),
         );
     });
 
-    return [plugin, atomicRanges];
+    return [syntaxStateField, lifecyclePlugin, atomicRanges];
 }

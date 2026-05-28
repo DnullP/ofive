@@ -14,6 +14,8 @@ import {
 interface MarkdownTableBoundaryMatch {
     blockFrom: number;
     position: "first" | "last";
+    sourceMode: "adjacent-body" | "inside-source";
+    targetLineNumber?: number;
 }
 
 function areOnlyBlankLinesBetween(
@@ -87,11 +89,26 @@ function resolveTableBoundaryMatch(
         const enteredFromBelow = context.key === "k"
             && context.currentLineNumber > endLineNumber
             && areOnlyBlankLinesBetween(lines, endLineNumber, context.currentLineNumber);
+        const movingInsideSourceTowardLastRow = context.key === "k"
+            && context.currentLineNumber >= startLineNumber
+            && context.currentLineNumber <= endLineNumber
+            && context.selectionHead >= (lineOffsets[lineIndex] ?? 0)
+            && context.selectionHead <= (lineOffsets[endLineIndex] ?? 0) + (lines[endLineIndex]?.length ?? 0);
 
         if (enteredFromAbove || enteredFromBelow) {
             return {
                 blockFrom: lineOffsets[lineIndex] ?? 0,
                 position: enteredFromAbove ? "first" : "last",
+                sourceMode: "adjacent-body",
+            };
+        }
+
+        if (movingInsideSourceTowardLastRow) {
+            return {
+                blockFrom: lineOffsets[lineIndex] ?? 0,
+                position: "last",
+                sourceMode: "inside-source",
+                targetLineNumber: endLineNumber + 1,
             };
         }
 
@@ -112,6 +129,19 @@ export function registerMarkdownTableBodyVimHandoff(): () => void {
             const match = resolveTableBoundaryMatch(context);
             if (!match) {
                 return null;
+            }
+
+            if (match.sourceMode === "inside-source") {
+                return {
+                    kind: "move-selection" as const,
+                    targetLineNumber: match.targetLineNumber ?? context.currentLineNumber,
+                    postFocusWidget: {
+                        widget: "markdown-table" as const,
+                        position: match.position,
+                        blockFrom: match.blockFrom,
+                    },
+                    reason: "enter-markdown-table-from-source",
+                };
             }
 
             return {

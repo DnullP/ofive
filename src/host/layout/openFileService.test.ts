@@ -10,6 +10,7 @@
  */
 
 import { afterEach, describe, expect, it } from "bun:test";
+import { syncConfigStateForVault, updateBackendConfig } from "../config/configStore";
 import {
     registerFileOpener,
     unregisterFileOpener,
@@ -23,6 +24,8 @@ import {
     TAB_LIFECYCLE_SCOPE_PARAM,
 } from "./vaultTabScope";
 import {
+    buildFileViewTabId,
+    buildUniqueFileViewTabId,
     buildFileTabId,
     openFileInWorkbench,
     resolveFileTabDefinition,
@@ -31,9 +34,10 @@ import {
 import type { WorkbenchContainerApi, WorkbenchPanelHandle } from "./workbenchContracts";
 
 describe("openFileService", () => {
-    afterEach(() => {
+    afterEach(async () => {
         unregisterFileOpener("test.markdown");
         unregisterTabComponent("codemirror");
+        await syncConfigStateForVault("", true);
     });
 
     /**
@@ -329,5 +333,176 @@ describe("openFileService", () => {
         expect(replacedPanel).toBe(false);
         expect(panels.has(buildFileTabId("notes/a.md"))).toBe(true);
         expect(panels.has(buildFileTabId("notes/b.md"))).toBe(true);
+    });
+
+    it("should assign a unique view tab id when new-tab mode opens the same file path", async () => {
+        registerTabComponent({
+            id: "codemirror",
+            component: () => null,
+            lifecycleScope: "vault",
+        });
+
+        registerFileOpener({
+            id: "test.markdown",
+            label: "Test Markdown",
+            kind: "markdown",
+            priority: 100,
+            matches: ({ relativePath }) => relativePath.endsWith(".md"),
+            resolveTab: async ({ relativePath }) => ({
+                id: buildFileTabId(relativePath),
+                title: relativePath.split("/").pop() ?? relativePath,
+                component: "codemirror",
+                params: {
+                    path: relativePath,
+                    content: `# ${relativePath}`,
+                },
+            }),
+        });
+
+        const baseTabId = buildFileTabId("notes/split.md");
+        const panels = new Map<string, WorkbenchPanelHandle>([
+            [baseTabId, {
+                id: baseTabId,
+                title: "split.md",
+                component: "codemirror",
+                params: { path: "notes/split.md", content: "# split" },
+                api: {
+                    setActive: () => undefined,
+                },
+            }],
+        ]);
+        let activatedPanelId = "";
+        const containerApi: WorkbenchContainerApi = {
+            getPanel: (panelId) => panels.get(panelId) ?? null,
+            get panels() {
+                return Array.from(panels.values());
+            },
+            addPanel: (options) => {
+                panels.set(options.id, {
+                    id: options.id,
+                    title: options.title,
+                    component: options.component,
+                    params: options.params,
+                    api: {
+                        setActive: () => {
+                            activatedPanelId = options.id;
+                        },
+                    },
+                });
+            },
+        };
+
+        const tab = await openFileInWorkbench({
+            relativePath: "notes/split.md",
+            containerApi,
+            openMode: "new-tab",
+        });
+
+        const expectedViewId = buildFileViewTabId(baseTabId, 2);
+        expect(tab?.id).toBe(expectedViewId);
+        expect(panels.has(baseTabId)).toBe(true);
+        expect(panels.get(expectedViewId)?.params?.path).toBe("notes/split.md");
+        expect(activatedPanelId).toBe(expectedViewId);
+    });
+
+    it("should assign a unique view tab id when configured new-tab mode opens the same file path", async () => {
+        await syncConfigStateForVault("/tmp/open-file-service-new-tab-mode", true);
+
+        registerTabComponent({
+            id: "codemirror",
+            component: () => null,
+            lifecycleScope: "vault",
+        });
+
+        registerFileOpener({
+            id: "test.markdown",
+            label: "Test Markdown",
+            kind: "markdown",
+            priority: 100,
+            matches: ({ relativePath }) => relativePath.endsWith(".md"),
+            resolveTab: async ({ relativePath }) => ({
+                id: buildFileTabId(relativePath),
+                title: relativePath.split("/").pop() ?? relativePath,
+                component: "codemirror",
+                params: {
+                    path: relativePath,
+                    content: `# ${relativePath}`,
+                },
+            }),
+        });
+
+        await updateBackendConfig((config) => ({
+            ...config,
+            entries: {
+                ...config.entries,
+                features: {
+                    ...(
+                        config.entries.features
+                        && typeof config.entries.features === "object"
+                        && !Array.isArray(config.entries.features)
+                            ? config.entries.features
+                            : {}
+                    ),
+                    fileOpenMode: "new-tab",
+                },
+            },
+        }));
+
+        const baseTabId = buildFileTabId("notes/configured.md");
+        const panels = new Map<string, WorkbenchPanelHandle>([
+            [baseTabId, {
+                id: baseTabId,
+                title: "configured.md",
+                component: "codemirror",
+                params: { path: "notes/configured.md", content: "# configured" },
+                api: {
+                    setActive: () => undefined,
+                },
+            }],
+        ]);
+        const containerApi: WorkbenchContainerApi = {
+            getPanel: (panelId) => panels.get(panelId) ?? null,
+            get panels() {
+                return Array.from(panels.values());
+            },
+            addPanel: (options) => {
+                panels.set(options.id, {
+                    id: options.id,
+                    title: options.title,
+                    component: options.component,
+                    params: options.params,
+                    api: {
+                        setActive: () => undefined,
+                    },
+                });
+            },
+        };
+
+        const tab = await openFileInWorkbench({
+            relativePath: "notes/configured.md",
+            containerApi,
+        });
+
+        expect(tab?.id).toBe(buildFileViewTabId(baseTabId, 2));
+        expect(panels.has(baseTabId)).toBe(true);
+        expect(panels.has(buildFileViewTabId(baseTabId, 2))).toBe(true);
+    });
+
+    it("should resolve the next available file view tab id", () => {
+        const baseTabId = buildFileTabId("notes/split.md");
+        const secondViewId = buildFileViewTabId(baseTabId, 2);
+        const thirdViewId = buildFileViewTabId(baseTabId, 3);
+        const panels: WorkbenchPanelHandle[] = [
+            { id: baseTabId, api: { setActive: () => undefined } },
+            { id: secondViewId, api: { setActive: () => undefined } },
+        ];
+
+        expect(buildUniqueFileViewTabId({
+            baseTabId,
+            containerApi: {
+                panels,
+                getPanel: (panelId) => panels.find((panel) => panel.id === panelId) ?? null,
+            },
+        })).toBe(thirdViewId);
     });
 });

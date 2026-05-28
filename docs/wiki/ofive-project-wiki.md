@@ -2,7 +2,7 @@
 title: "ofive 项目 Wiki"
 kind: "wiki-index"
 status: "active"
-updated: "2026-04-27"
+updated: "2026-05-29"
 owners:
   - "maintainers"
 tags:
@@ -44,6 +44,7 @@ related:
   - [[ofive-workbench-host|Workbench Host]]
   - [[ofive-app-event-bus|App Event Bus]]
   - [[ofive-managed-store|Managed Store]]
+  - [[ofive-state-governance|State Governance]]
 - [[ofive-plugin-system|插件系统]]
 - [[ofive-vault-and-query-index|Vault 与查询索引]]
   - [[ofive-content-source-of-truth|Content Source of Truth]]

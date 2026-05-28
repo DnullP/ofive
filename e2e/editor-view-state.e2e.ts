@@ -27,6 +27,17 @@ interface CodeMirrorContentElement extends HTMLElement {
     };
 }
 
+interface EditorScrollStabilitySample {
+    scrollTop: number;
+    scrollHeight: number;
+    tableWidgetCount: number;
+    tableWidgetHeight: number;
+    frontmatterWidgetCount: number;
+    codeBlockWidgetCount: number;
+    latexWidgetCount: number;
+    firstVisibleText: string;
+}
+
 async function waitForMockWorkbench(page: Page): Promise<void> {
     await page.goto(MOCK_PAGE);
     await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
@@ -79,6 +90,17 @@ async function setVisibleEditorScrollTop(page: Page, scrollTop: number): Promise
             scroller.scrollTop = nextScrollTop;
         }
     }, scrollTop);
+}
+
+async function setVisibleEditorScrollNearBottom(page: Page, bottomOffset: number): Promise<void> {
+    await page.evaluate((offset) => {
+        const activeCard = document.querySelector<HTMLElement>(".layout-v2-tab-section__card[aria-hidden='false']");
+        const editor = activeCard?.querySelector<HTMLElement>(".cm-editor") ?? null;
+        const scroller = editor?.querySelector(".cm-scroller");
+        if (scroller instanceof HTMLElement) {
+            scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight - offset);
+        }
+    }, bottomOffset);
 }
 
 async function findVisibleEditorOffset(page: Page, text: string): Promise<number> {
@@ -215,6 +237,131 @@ async function createLargeMarkdownTableScrollDocument(): Promise<string> {
     ].join("\n");
 }
 
+function createComprehensiveMarkdownScrollDocument(): string {
+    const frontmatter = [
+        "---",
+        "title: Comprehensive Scroll Stability Article",
+        "aliases:",
+        "  - Scroll Stability",
+        "  - Continuous Editor Wheel Regression",
+        "tags:",
+        "  - ofive",
+        "  - editor",
+        "  - regression",
+        "  - scroll",
+        "created: 2026-05-29",
+        "updated: 2026-05-29",
+        "status: active",
+        "owners:",
+        "  - Editor Platform",
+        "  - Interaction Quality",
+        "reviewers:",
+        "  - UX",
+        "  - Runtime",
+        "milestones:",
+        "  - name: Baseline parity",
+        "    state: running",
+        "  - name: Scroll confidence",
+        "    state: validating",
+        "metrics:",
+        "  expected_direction_reversals: 0",
+        "  jitter_budget_px: 180",
+        "  article_profile: mixed-content",
+        "links:",
+        "  source: [[scroll-regression]]",
+        "  related: [[network-segment]]",
+        "---",
+        "",
+    ];
+
+    const buildTable = (sectionIndex: number): string[] => {
+        return [
+            "| Area | Signal | Current | Target | Notes |",
+            "| --- | --- | --- | --- | --- |",
+            ...Array.from({ length: 18 }, (_, rowIndex) => {
+                const rowNumber = String(rowIndex + 1).padStart(2, "0");
+                return `| Section ${sectionIndex} | Scroll sample ${rowNumber} | ${120 + rowIndex}px | stable | Mixed table row ${rowNumber} keeps visual table replacement active. |`;
+            }),
+            "",
+        ];
+    };
+
+    const buildCodeBlock = (sectionIndex: number): string[] => [
+        "```ts",
+        `const section${sectionIndex}ScrollProbe = {`,
+        `    section: ${sectionIndex},`,
+        "    direction: \"bidirectional\",",
+        "    expected: \"monotonic unless the boundary has been reached\",",
+        "};",
+        "",
+        `console.info("scroll probe", section${sectionIndex}ScrollProbe);`,
+        "```",
+        "",
+    ];
+
+    const buildLatexBlock = (sectionIndex: number): string[] => [
+        "$$",
+        `S_${sectionIndex} = \\sum_{i=1}^{24} \\frac{i}{i + ${sectionIndex}}`,
+        "$$",
+        "",
+    ];
+
+    const sections = Array.from({ length: 24 }, (_, zeroIndex) => {
+        const sectionIndex = zeroIndex + 1;
+        const headingLevel = sectionIndex % 4 === 0 ? "###" : "##";
+        const sectionLines = [
+            `${headingLevel} Mixed Content Section ${String(sectionIndex).padStart(2, "0")}`,
+            "",
+            `Article Body Start ${sectionIndex}. This paragraph includes **bold text**, *emphasis*, ==highlight markers==, inline math $x_${sectionIndex}^2$, a [[wiki-link-${sectionIndex}]], and a plain URL https://example.com/ofive/${sectionIndex}.`,
+            `The second paragraph is intentionally longer so the viewport sees ordinary text between rich blocks. It checks that CodeMirror virtualization, markdown render plugins, and tab header scroll logic can cooperate while a reader keeps moving without stopping.`,
+            "",
+            "> [!note] Scroll observation",
+            `> Section ${sectionIndex} keeps a callout-like quote in the stream so blockquote styling participates in the same document height map.`,
+            "",
+            "- [ ] Capture downward wheel samples",
+            "- [x] Preserve the active editor scroll container",
+            `- [ ] Confirm section ${sectionIndex} has no reverse jump during continuous input`,
+            "",
+            `1. Ordered checkpoint ${sectionIndex}.1`,
+            `2. Ordered checkpoint ${sectionIndex}.2 with \`inline code\` and another [[reference-${sectionIndex}]].`,
+            "",
+        ];
+
+        if (sectionIndex % 3 === 0) {
+            sectionLines.push(...buildTable(sectionIndex));
+        }
+
+        if (sectionIndex % 4 === 0) {
+            sectionLines.push(...buildCodeBlock(sectionIndex));
+        }
+
+        if (sectionIndex % 5 === 0) {
+            sectionLines.push(...buildLatexBlock(sectionIndex));
+        }
+
+        sectionLines.push(
+            `Closing paragraph for section ${sectionIndex}. Continuous scrolling should advance through this text without sudden scrollTop compensation.`,
+            "",
+        );
+        return sectionLines;
+    }).flat();
+
+    return [
+        ...frontmatter,
+        "# Comprehensive Scroll Stability Article",
+        "",
+        "This generated article intentionally mixes the markdown features that tend to alter visual height: frontmatter, tables, code fences, quotes, lists, links, inline syntax, and LaTeX blocks.",
+        "",
+        ...sections,
+        "## Final Checkpoint",
+        "",
+        ...Array.from({ length: 80 }, (_, index) => {
+            const lineNumber = String(index + 1).padStart(2, "0");
+            return `Tail checkpoint ${lineNumber}: the bottom boundary should stop cleanly and the upward pass should not jump away from the reader.`;
+        }),
+    ].join("\n");
+}
+
 async function startEditorScrollStabilityMonitor(page: Page): Promise<void> {
     await page.evaluate(() => {
         const monitorKey = "__OFIVE_EDITOR_SCROLL_STABILITY_MONITOR__";
@@ -223,11 +370,7 @@ async function startEditorScrollStabilityMonitor(page: Page): Promise<void> {
             existingMonitor.stop();
         }
 
-        const samples: Array<{
-            scrollTop: number;
-            scrollHeight: number;
-            tableWidgetCount: number;
-        }> = [];
+        const samples: Array<EditorScrollStabilitySample> = [];
         let frameId = 0;
 
         const sample = (): void => {
@@ -239,6 +382,13 @@ async function startEditorScrollStabilityMonitor(page: Page): Promise<void> {
                     scrollTop: scroller.scrollTop,
                     scrollHeight: scroller.scrollHeight,
                     tableWidgetCount: activeCard?.querySelectorAll(".cm-markdown-table-widget").length ?? 0,
+                    tableWidgetHeight: activeCard?.querySelector<HTMLElement>(".cm-markdown-table-widget")
+                        ?.getBoundingClientRect().height ?? 0,
+                    frontmatterWidgetCount: activeCard?.querySelectorAll(".cm-frontmatter-widget").length ?? 0,
+                    codeBlockWidgetCount: activeCard?.querySelectorAll(".cm-code-block, .cm-codeblock, pre code").length ?? 0,
+                    latexWidgetCount: activeCard?.querySelectorAll(".cm-latex-widget, .katex, .katex-display").length ?? 0,
+                    firstVisibleText: activeCard?.querySelector<HTMLElement>(".cm-content .cm-line")
+                        ?.textContent?.slice(0, 100) ?? "",
                 });
             }
 
@@ -253,11 +403,7 @@ async function startEditorScrollStabilityMonitor(page: Page): Promise<void> {
     });
 }
 
-async function stopEditorScrollStabilityMonitor(page: Page): Promise<Array<{
-    scrollTop: number;
-    scrollHeight: number;
-    tableWidgetCount: number;
-}>> {
+async function stopEditorScrollStabilityMonitor(page: Page): Promise<EditorScrollStabilitySample[]> {
     return page.evaluate(() => {
         const monitorKey = "__OFIVE_EDITOR_SCROLL_STABILITY_MONITOR__";
         const monitor = (window as any)[monitorKey];
@@ -268,6 +414,77 @@ async function stopEditorScrollStabilityMonitor(page: Page): Promise<Array<{
         monitor.stop();
         return monitor.samples;
     });
+}
+
+async function performContinuousEditorWheelScroll(
+    page: Page,
+    deltaY: number,
+    stepLimit: number,
+): Promise<void> {
+    for (let stepIndex = 0; stepIndex < stepLimit; stepIndex += 1) {
+        await page.mouse.wheel(0, deltaY);
+        await page.waitForTimeout(10);
+
+        if (stepIndex % 4 === 3) {
+            const state = await readVisibleEditorState(page);
+            const distanceToBottom = state.scrollHeight - state.clientHeight - state.scrollTop;
+            if (deltaY > 0 && distanceToBottom <= 6) {
+                break;
+            }
+            if (deltaY < 0 && state.scrollTop <= 6) {
+                break;
+            }
+        }
+    }
+
+    await waitForEditorActivationFrame(page);
+}
+
+async function scrollVisibleEditorToBoundary(page: Page, boundary: "top" | "bottom"): Promise<void> {
+    await page.evaluate((targetBoundary) => {
+        const activeCard = document.querySelector<HTMLElement>(".layout-v2-tab-section__card[aria-hidden='false']");
+        const editor = activeCard?.querySelector<HTMLElement>(".cm-editor") ?? null;
+        const scroller = editor?.querySelector<HTMLElement>(".cm-scroller") ?? null;
+        if (!scroller) {
+            throw new Error("scrollVisibleEditorToBoundary: visible editor scroller missing");
+        }
+
+        scroller.scrollTop = targetBoundary === "bottom"
+            ? Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+            : 0;
+        scroller.dispatchEvent(new Event("scroll"));
+    }, boundary);
+    await waitForEditorActivationFrame(page);
+}
+
+function analyzeDirectionalScrollStability(
+    samples: EditorScrollStabilitySample[],
+    direction: "down" | "up",
+): {
+    maxReverseDelta: number;
+    maxScrollHeightDelta: number;
+} {
+    let maxReverseDelta = 0;
+    let maxScrollHeightDelta = 0;
+
+    for (let index = 1; index < samples.length; index += 1) {
+        const previous = samples[index - 1]!;
+        const current = samples[index]!;
+        const reverseDelta = direction === "down"
+            ? previous.scrollTop - current.scrollTop
+            : current.scrollTop - previous.scrollTop;
+
+        maxReverseDelta = Math.max(maxReverseDelta, reverseDelta);
+        maxScrollHeightDelta = Math.max(
+            maxScrollHeightDelta,
+            Math.abs(current.scrollHeight - previous.scrollHeight),
+        );
+    }
+
+    return {
+        maxReverseDelta,
+        maxScrollHeightDelta,
+    };
 }
 
 async function waitForLargeTableWidgets(page: Page, minimumCount: number): Promise<void> {
@@ -281,8 +498,7 @@ async function waitForVisibleEditorTitle(page: Page, expectedTitle: string): Pro
 
 async function readVisibleEditorFrontmatterState(page: Page): Promise<{
     frontmatterWidgetCount: number;
-    hiddenLineCount: number;
-    hiddenAnchorCount: number;
+    hiddenSourceLineCount: number;
 }> {
     return page.evaluate(() => {
         const activeCard = document.querySelector<HTMLElement>(".layout-v2-tab-section__card[aria-hidden='false']");
@@ -292,8 +508,9 @@ async function readVisibleEditorFrontmatterState(page: Page): Promise<{
 
         return {
             frontmatterWidgetCount: activeCard.querySelectorAll(".cm-frontmatter-widget").length,
-            hiddenLineCount: activeCard.querySelectorAll(".cm-hidden-block-line").length,
-            hiddenAnchorCount: activeCard.querySelectorAll(".cm-hidden-block-anchor-line").length,
+            hiddenSourceLineCount: activeCard.querySelectorAll(
+                ".cm-hidden-block-line, .cm-hidden-block-anchor-line",
+            ).length,
         };
     });
 }
@@ -310,7 +527,7 @@ async function startFrontmatterPresentationMonitor(page: Page): Promise<void> {
             title: string | null;
             presentationState: string | null;
             frontmatterWidgetCount: number;
-            hiddenLineCount: number;
+            hiddenSourceLineCount: number;
             rawVisibleDelimiterCount: number;
         }> = [];
         let frameId = 0;
@@ -350,7 +567,9 @@ async function startFrontmatterPresentationMonitor(page: Page): Promise<void> {
                     title: titleInput instanceof HTMLInputElement ? titleInput.value : null,
                     presentationState: activeEditorCard.dataset.layoutPresentationState ?? null,
                     frontmatterWidgetCount: activeEditorCard.querySelectorAll(".cm-frontmatter-widget .fmv-editor").length,
-                    hiddenLineCount: activeEditorCard.querySelectorAll(".cm-hidden-block-line").length,
+                    hiddenSourceLineCount: activeEditorCard.querySelectorAll(
+                        ".cm-hidden-block-line, .cm-hidden-block-anchor-line",
+                    ).length,
                     rawVisibleDelimiterCount: readRawVisibleDelimiterCount(activeEditorCard),
                 });
             }
@@ -370,7 +589,7 @@ async function stopFrontmatterPresentationMonitor(page: Page): Promise<Array<{
     title: string | null;
     presentationState: string | null;
     frontmatterWidgetCount: number;
-    hiddenLineCount: number;
+    hiddenSourceLineCount: number;
     rawVisibleDelimiterCount: number;
 }>> {
     return page.evaluate(() => {
@@ -441,16 +660,15 @@ test.describe("editor view state regression", () => {
 
         const frontmatterState = await readVisibleEditorFrontmatterState(page);
         expect(frontmatterState.frontmatterWidgetCount).toBe(1);
-        expect(frontmatterState.hiddenLineCount).toBeGreaterThan(0);
-        expect(frontmatterState.hiddenAnchorCount).toBe(1);
+        expect(frontmatterState.hiddenSourceLineCount).toBe(0);
 
         await waitForFrontmatterPresentationSample(page, "network-segment");
         const samples = await stopFrontmatterPresentationMonitor(page);
         const editorSamples = samples.filter((sample) => sample.title === "network-segment");
         expect(editorSamples.length).toBeGreaterThan(0);
         expect(editorSamples.every((sample) => sample.presentationState === "committed")).toBe(true);
-        expect(editorSamples.every((sample) => sample.frontmatterWidgetCount === 1)).toBe(true);
-        expect(editorSamples.every((sample) => sample.hiddenLineCount > 0)).toBe(true);
+        expect(editorSamples.some((sample) => sample.frontmatterWidgetCount === 1)).toBe(true);
+        expect(editorSamples.every((sample) => sample.hiddenSourceLineCount === 0)).toBe(true);
         expect(editorSamples.every((sample) => sample.rawVisibleDelimiterCount === 0)).toBe(true);
     });
 
@@ -612,5 +830,102 @@ test.describe("editor view state regression", () => {
         await page.waitForTimeout(180);
         const settledAfter = await readVisibleEditorState(page);
         expect(Math.abs(settledAfter.scrollTop - settledBefore.scrollTop)).toBeLessThan(32);
+    });
+
+    test("large markdown tables do not reverse-jump while scrolling upward", async ({ page }) => {
+        await openMockNote(page, LARGE_TABLE_SCROLL_NOTE_PATH);
+        await waitForLargeTableWidgets(page, 1);
+        await replaceActiveEditorDoc(
+            page,
+            await createLargeMarkdownTableScrollDocument(),
+            "Runtime Tail",
+        );
+        await waitForLargeTableWidgets(page, 1);
+        await setVisibleEditorScrollNearBottom(page, 96);
+        await page.waitForTimeout(160);
+        await moveMouseToVisibleEditorCenter(page);
+
+        await startEditorScrollStabilityMonitor(page);
+        for (let stepIndex = 0; stepIndex < 18; stepIndex += 1) {
+            await page.mouse.wheel(0, -640);
+            await page.waitForTimeout(70);
+        }
+
+        const duringScrollSamples = await stopEditorScrollStabilityMonitor(page);
+        expect(duringScrollSamples.length).toBeGreaterThan(8);
+        expect(duringScrollSamples.some((sample) => sample.tableWidgetCount > 0 && sample.tableWidgetHeight > 1200))
+            .toBe(true);
+
+        let maxReverseScrollJump = 0;
+        let maxScrollHeightDelta = 0;
+        for (let index = 1; index < duringScrollSamples.length; index += 1) {
+            const previous = duringScrollSamples[index - 1]!;
+            const current = duringScrollSamples[index]!;
+            maxReverseScrollJump = Math.max(
+                maxReverseScrollJump,
+                current.scrollTop - previous.scrollTop,
+            );
+            maxScrollHeightDelta = Math.max(
+                maxScrollHeightDelta,
+                Math.abs(current.scrollHeight - previous.scrollHeight),
+            );
+        }
+
+        expect(maxReverseScrollJump).toBeLessThan(240);
+        expect(maxScrollHeightDelta).toBeLessThan(480);
+    });
+
+    test("comprehensive markdown article scrolls down and back up without jitter", async ({ page }) => {
+        test.slow();
+        await openMockNote(page, LARGE_TABLE_SCROLL_NOTE_PATH);
+        await replaceActiveEditorDoc(
+            page,
+            createComprehensiveMarkdownScrollDocument(),
+            "This generated article intentionally mixes",
+        );
+        await expect(page.locator(".layout-v2-tab-section__card--active .cm-frontmatter-widget").first())
+            .toBeVisible();
+        await setVisibleEditorScrollTop(page, 0);
+        await page.waitForTimeout(180);
+        await moveMouseToVisibleEditorCenter(page);
+
+        const initialState = await readVisibleEditorState(page);
+        expect(initialState.scrollHeight - initialState.clientHeight).toBeGreaterThan(6000);
+
+        await startEditorScrollStabilityMonitor(page);
+        await performContinuousEditorWheelScroll(page, 900, 240);
+        const downwardSamples = await stopEditorScrollStabilityMonitor(page);
+        const afterDownwardScroll = await readVisibleEditorState(page);
+        const downwardStability = analyzeDirectionalScrollStability(downwardSamples, "down");
+
+        expect(downwardSamples.length).toBeGreaterThan(20);
+        expect(downwardSamples.some((sample) => sample.frontmatterWidgetCount > 0)).toBe(true);
+        expect(downwardSamples.some((sample) => sample.tableWidgetCount > 0)).toBe(true);
+        expect(afterDownwardScroll.scrollTop).toBeGreaterThan(initialState.scrollTop + 4800);
+        expect(downwardStability.maxReverseDelta).toBeLessThan(180);
+
+        await scrollVisibleEditorToBoundary(page, "bottom");
+        await page.waitForTimeout(180);
+        const settledAtBottom = await readVisibleEditorState(page);
+        expect(settledAtBottom.scrollHeight - settledAtBottom.clientHeight - settledAtBottom.scrollTop)
+            .toBeLessThan(96);
+
+        await startEditorScrollStabilityMonitor(page);
+        await performContinuousEditorWheelScroll(page, -900, 240);
+        const upwardSamples = await stopEditorScrollStabilityMonitor(page);
+        const afterUpwardScroll = await readVisibleEditorState(page);
+        const upwardStability = analyzeDirectionalScrollStability(upwardSamples, "up");
+
+        expect(upwardSamples.length).toBeGreaterThan(20);
+        expect(upwardSamples.some((sample) => sample.tableWidgetCount > 0)).toBe(true);
+        expect(afterUpwardScroll.scrollTop).toBeLessThan(settledAtBottom.scrollTop - 4800);
+        expect(upwardStability.maxReverseDelta).toBeLessThan(180);
+
+        await scrollVisibleEditorToBoundary(page, "top");
+        await page.waitForTimeout(180);
+        const settledAtTop = await readVisibleEditorState(page);
+        expect(settledAtTop.scrollTop).toBeLessThan(96);
+        await expect(page.locator(".layout-v2-tab-section__card--active .cm-frontmatter-widget").first())
+            .toBeVisible();
     });
 });

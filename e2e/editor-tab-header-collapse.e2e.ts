@@ -66,6 +66,38 @@ test.describe("editor tab header scroll behavior", () => {
         await expect(titleInput).toHaveCSS("background-color", "rgb(255, 255, 255)");
     });
 
+    test("标题白底不会覆盖编辑器右侧滚动条", async ({ page }) => {
+        await waitForMockWorkbench(page, LIGHT_THEME_MOCK_PAGE);
+        await openScrollRegressionNote(page);
+
+        const hitTest = await page.evaluate(() => {
+            const activeCard = document.querySelector<HTMLElement>(".layout-v2-tab-section__card--active");
+            const scroller = activeCard?.querySelector<HTMLElement>(".cm-scroller");
+            const header = activeCard?.querySelector<HTMLElement>(".cm-tab-header");
+            if (!scroller || !header) {
+                throw new Error("Editor scroller or header not found");
+            }
+
+            const scrollerRect = scroller.getBoundingClientRect();
+            const headerRect = header.getBoundingClientRect();
+            const target = document.elementFromPoint(
+                scrollerRect.right - 4,
+                headerRect.top + Math.min(20, headerRect.height / 2),
+            );
+
+            return {
+                headerRight: headerRect.right,
+                scrollerRight: scrollerRect.right,
+                hitClassName: target instanceof HTMLElement ? target.className : "",
+                headerOwnsHit: target instanceof HTMLElement ? header.contains(target) : false,
+            };
+        });
+
+        expect(hitTest.headerRight).toBeLessThanOrEqual(hitTest.scrollerRight - 12);
+        expect(hitTest.headerOwnsHit).toBe(false);
+        expect(String(hitTest.hitClassName)).not.toContain("cm-tab-title-input");
+    });
+
     test("超过阈值后防抖收起/展开，且不推动 editor 区域", async ({ page }) => {
         await waitForMockWorkbench(page);
         await openScrollRegressionNote(page);

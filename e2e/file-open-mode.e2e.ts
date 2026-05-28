@@ -16,6 +16,20 @@ const IMAGE_NOTE_PATH = "test-resources/notes/mock-image.png";
 type FileOpenMode = "new-tab" | "replace-active-tab";
 type MockTabKind = "markdown" | "canvas" | "image";
 
+interface CodeMirrorContentElement extends HTMLElement {
+    cmTile?: {
+        view?: {
+            focus(): void;
+            state: {
+                doc: {
+                    toString(): string;
+                };
+            };
+            dispatch(spec: unknown): void;
+        };
+    };
+}
+
 async function waitForMockWorkbench(page: Page, testName: string): Promise<void> {
     await gotoMockVaultPage(page, testName, MOCK_PAGE);
     await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
@@ -119,7 +133,7 @@ async function dragMockFileFromTreeToActiveTabContent(page: Page, relativePath: 
     await expect(
         page.locator("[data-layout-tab-preview-overlay='true'] .layout-v2-tab-section__tab", {
             hasText: noteTitle(relativePath),
-        }),
+        }).first(),
     ).toBeVisible({ timeout: 3000 });
 
     await page.mouse.up();
@@ -138,6 +152,49 @@ async function readFileTabTitles(page: Page): Promise<string[]> {
     return page.locator(".layout-v2-tab-section__tab-main[data-layout-tab-id^='file:'] .layout-v2-tab-section__tab-title").evaluateAll((nodes) =>
         nodes.map((node) => node.textContent?.trim() ?? "").filter(Boolean),
     );
+}
+
+async function readFileTabs(page: Page): Promise<Array<{ id: string | null; title: string; path: string | null }>> {
+    return page.evaluate(() => {
+        return Array.from(document.querySelectorAll<HTMLElement>(".layout-v2-tab-section__tab-main[data-layout-tab-id^='file:']")).map((tab) => {
+            const id = tab.getAttribute("data-layout-tab-id");
+            return {
+                id,
+                title: tab.querySelector<HTMLElement>(".layout-v2-tab-section__tab-title")?.textContent?.trim() ?? "",
+                path: id?.replace(/^file:/, "").replace(/#view-\d+$/, "") ?? null,
+            };
+        });
+    });
+}
+
+async function appendTextToActiveEditor(page: Page, text: string): Promise<void> {
+    await page.evaluate((insertText) => {
+        const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as CodeMirrorContentElement | null;
+        const view = content?.cmTile?.view;
+        if (!view) {
+            throw new Error("appendTextToActiveEditor: active EditorView missing");
+        }
+
+        view.dispatch({
+            changes: {
+                from: view.state.doc.toString().length,
+                insert: insertText,
+            },
+        });
+        view.focus();
+    }, text);
+}
+
+async function readActiveEditorText(page: Page): Promise<string> {
+    return page.evaluate(() => {
+        const content = document.querySelector(".layout-v2-tab-section__card--active .cm-content") as CodeMirrorContentElement | null;
+        const view = content?.cmTile?.view;
+        if (!view) {
+            throw new Error("readActiveEditorText: active EditorView missing");
+        }
+
+        return view.state.doc.toString();
+    });
 }
 
 async function expectFocusedTab(page: Page, title: string): Promise<void> {
@@ -245,6 +302,30 @@ test.describe("file open mode", () => {
             noteTitle(GUIDE_NOTE_PATH),
         ]));
         expect(titles.length).toBeGreaterThanOrEqual(2);
+    });
+
+    test("file-tree drag of the same note creates a second view that consumes the same path state", async ({ page }) => {
+        await waitForMockWorkbench(page, "file-open-mode-drag-same-note-shared-state");
+        await setFileOpenMode(page, "replace-active-tab");
+
+        await openMockNoteFromTree(page, GUIDE_NOTE_PATH);
+        await dragMockFileFromTreeToActiveTabContent(page, GUIDE_NOTE_PATH);
+        await expect(page.locator(".layout-v2-tab-section")).toHaveCount(2);
+        await expect(page.locator(".layout-v2-tab-section__tab--focused", {
+            hasText: noteTitle(GUIDE_NOTE_PATH),
+        })).toHaveCount(2);
+
+        const fileTabs = await readFileTabs(page);
+        const guideTabs = fileTabs.filter((tab) => tab.title === noteTitle(GUIDE_NOTE_PATH));
+        expect(guideTabs).toHaveLength(2);
+        expect(new Set(guideTabs.map((tab) => tab.id)).size).toBe(2);
+        expect(new Set(guideTabs.map((tab) => tab.path)).size).toBe(1);
+
+        await appendTextToActiveEditor(page, "\n\nShared view edit marker");
+        await page.locator(".layout-v2-tab-section__tab-main", { hasText: noteTitle(GUIDE_NOTE_PATH) }).first().click();
+
+        await expect.poll(() => readActiveEditorText(page), { timeout: 3_000 })
+            .toContain("Shared view edit marker");
     });
 
     test("open note in new tab command uses quick switcher and ignores replace-active-tab mode", async ({ page }) => {

@@ -11,13 +11,20 @@
  */
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import {
+    installDragPerformanceSampler,
+    LIVE_EDITOR_SELECTOR,
+    PREVIEW_MIRROR_EDITOR_SELECTOR,
+    PREVIEW_MIRROR_FALLBACK_SELECTOR,
+    PREVIEW_MIRROR_SELECTOR,
+    readPreviewFrame,
+    stopDragPerformanceSampler,
+    waitOneAnimationFrame,
+} from "./helpers/editorSplitPerformance";
 
 const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
 const MOUSE_DRAG_TAG = "@mouse-drag";
-const LIVE_EDITOR_SELECTOR = ".cm-editor:not([data-editor-preview-mirror-node='true'])";
-const PREVIEW_MIRROR_SELECTOR = "[data-editor-preview-mirror='true']";
-const PREVIEW_MIRROR_EDITOR_SELECTOR = ".cm-editor[data-editor-preview-mirror-node='true']";
-const PREVIEW_MIRROR_FALLBACK_SELECTOR = ".cm-editor-preview-mirror__fallback";
+const LARGE_TABLE_NOTE_PATH = "test-resources/notes/big-tables-drift.md";
 const NOTES_TO_OPEN = [
     "test-resources/notes/guide.md",
     "test-resources/notes/network-segment.md",
@@ -210,6 +217,75 @@ test.describe("editor split performance", () => {
         await expect(page.locator(PREVIEW_MIRROR_SELECTOR)).toHaveCount(0);
         await expect(page.locator(LIVE_EDITOR_SELECTOR)).toHaveCount(2);
         expect(pageErrors).toEqual([]);
+    });
+
+    test(`large table split preview should appear immediately without cloning heavy table DOM ${MOUSE_DRAG_TAG}`, async ({ page }) => {
+        test.slow();
+        const pageErrors: string[] = [];
+        const consoleErrors: string[] = [];
+        page.on("pageerror", (error) => {
+            pageErrors.push(error.message);
+        });
+        page.on("console", (message) => {
+            if (message.type() === "error") {
+                consoleErrors.push(message.text());
+            }
+        });
+
+        await waitForMockWorkbench(page);
+        await openMockNote(page, "test-resources/notes/guide.md");
+        await openMockNote(page, LARGE_TABLE_NOTE_PATH);
+        await expect(page.locator(".layout-v2-tab-section__tab-main", { hasText: "guide.md" })).toBeVisible();
+        await expect(page.locator(".layout-v2-tab-section__tab-main", { hasText: "big-tables-drift.md" })).toBeVisible();
+        await expect(page.locator(".cm-markdown-table-widget .mtv-shell").first()).toBeVisible();
+        await expect(page.locator(LIVE_EDITOR_SELECTOR)).toHaveCount(1);
+
+        const sourceTab = page.locator(".layout-v2-tab-section__tab-main", { hasText: "big-tables-drift.md" }).first();
+        const targetContent = page.locator(".layout-v2-tab-section__content").first();
+        const sourceBounds = await sourceTab.boundingBox();
+        const targetBounds = await targetContent.boundingBox();
+        if (!sourceBounds || !targetBounds) {
+            throw new Error("large table split preview: bounds missing");
+        }
+
+        await page.mouse.move(sourceBounds.x + sourceBounds.width / 2, sourceBounds.y + sourceBounds.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(targetBounds.x + targetBounds.width - 16, targetBounds.y + targetBounds.height / 2, { steps: 20 });
+        await installDragPerformanceSampler(page);
+
+        const frames = [];
+        for (let frameIndex = 0; frameIndex < 8; frameIndex += 1) {
+            await waitOneAnimationFrame(page);
+            frames.push(await readPreviewFrame(page));
+        }
+
+        const firstVisibleFrameIndex = frames.findIndex((frame) => frame.overlayCount === 1);
+        expect(firstVisibleFrameIndex).toBeGreaterThanOrEqual(0);
+        expect(firstVisibleFrameIndex).toBeLessThanOrEqual(1);
+        for (const frame of frames.slice(Math.max(0, firstVisibleFrameIndex))) {
+            expect(frame.overlaySectionCount).toBe(2);
+            expect(frame.previewMirrorCount).toBeGreaterThanOrEqual(1);
+            expect(frame.previewMirrorEditorCount).toBeGreaterThanOrEqual(1);
+            expect(frame.previewMirrorEditorCount).toBeLessThanOrEqual(2);
+            expect(frame.previewFallbackCount).toBe(0);
+            expect(frame.previewTableSkeletonCount).toBeGreaterThan(0);
+            expect(frame.previewRealTableShellCount).toBe(0);
+            expect(frame.liveEditorCount).toBe(1);
+        }
+
+        const dragPerf = await stopDragPerformanceSampler(page);
+
+        await page.mouse.up();
+        await waitOneAnimationFrame(page);
+
+        await expect(page.locator("[data-layout-tab-preview-overlay='true']")).toHaveCount(0);
+        await expect(page.locator(".layout-v2-tab-section")).toHaveCount(2);
+        await expect(page.locator(PREVIEW_MIRROR_SELECTOR)).toHaveCount(0);
+        await expect(page.locator(LIVE_EDITOR_SELECTOR)).toHaveCount(2);
+        expect(pageErrors).toEqual([]);
+        expect(consoleErrors).toEqual([]);
+        expect(dragPerf.framesOver50).toBe(0);
+        expect(dragPerf.longTaskMax).toBeLessThan(80);
     });
 
     test(`leaving split zone before mouseup should not commit stale split ${MOUSE_DRAG_TAG}`, async ({ page }) => {

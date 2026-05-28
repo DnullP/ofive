@@ -51,7 +51,10 @@ export interface ArticleState {
 interface EditorContextState {
     focusedArticleId: string | null;
     articles: Map<string, ArticleState>;
+    contentByPath: Map<string, Pick<ArticleState, "content" | "hasContentSnapshot" | "updatedAt">>;
 }
+
+type ArticleContentSnapshot = Pick<ArticleState, "content" | "hasContentSnapshot" | "updatedAt">;
 
 /**
  * @interface ArticleFocusPayload
@@ -96,9 +99,11 @@ class EditorContextStore {
     private state: EditorContextState = {
         focusedArticleId: null,
         articles: new Map<string, ArticleState>(),
+        contentByPath: new Map(),
     };
 
     private listeners = new Set<() => void>();
+    private mergedArticleSnapshotCache = new Map<string, ArticleState>();
 
     /**
      * @function subscribe
@@ -121,6 +126,42 @@ class EditorContextStore {
         this.listeners.forEach((listener) => listener());
     }
 
+    private clearDerivedSnapshotCache(): void {
+        this.mergedArticleSnapshotCache.clear();
+    }
+
+    private mergeArticleWithContentSnapshot(
+        article: ArticleState,
+        contentSnapshot: ArticleContentSnapshot | null | undefined,
+    ): ArticleState {
+        if (!contentSnapshot) {
+            return article;
+        }
+
+        const updatedAt = Math.max(article.updatedAt, contentSnapshot.updatedAt);
+        const cacheKey = [
+            article.articleId,
+            normalizeArticlePath(article.path),
+            article.updatedAt,
+            contentSnapshot.updatedAt,
+            contentSnapshot.hasContentSnapshot ? "1" : "0",
+            contentSnapshot.content,
+        ].join("\u0000");
+        const cached = this.mergedArticleSnapshotCache.get(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        const mergedArticle: ArticleState = {
+            ...article,
+            content: contentSnapshot.content,
+            hasContentSnapshot: contentSnapshot.hasContentSnapshot,
+            updatedAt,
+        };
+        this.mergedArticleSnapshotCache.set(cacheKey, mergedArticle);
+        return mergedArticle;
+    }
+
     /**
      * @function getSnapshot
      * @description 读取当前状态快照。
@@ -137,21 +178,39 @@ class EditorContextStore {
      */
     reportArticleFocus(payload: ArticleFocusPayload): void {
         const existing = this.state.articles.get(payload.articleId);
-        const nextPath = payload.path || existing?.path || payload.articleId;
+        const nextPath = normalizeArticlePath(payload.path || existing?.path || payload.articleId);
         const title = nextPath.split("/").pop() ?? nextPath;
+        const existingContent = this.state.contentByPath.get(nextPath);
+        const contentSnapshot = payload.content === undefined
+            ? existingContent
+            : {
+                content: payload.content,
+                hasContentSnapshot: true,
+                updatedAt: Date.now(),
+            };
         const nextArticle: ArticleState = {
             articleId: payload.articleId,
             path: nextPath,
             title,
-            content: payload.content ?? existing?.content ?? "",
-            hasContentSnapshot: payload.content !== undefined || existing?.hasContentSnapshot === true,
-            updatedAt: Date.now(),
+            content: contentSnapshot?.content ?? existing?.content ?? "",
+            hasContentSnapshot: contentSnapshot?.hasContentSnapshot ?? existing?.hasContentSnapshot === true,
+            updatedAt: contentSnapshot?.updatedAt ?? Date.now(),
         };
+        const nextContentByPath = new Map(this.state.contentByPath);
+        if (payload.content !== undefined) {
+            nextContentByPath.set(nextPath, {
+                content: nextArticle.content,
+                hasContentSnapshot: true,
+                updatedAt: nextArticle.updatedAt,
+            });
+        }
 
         this.state = {
             focusedArticleId: payload.articleId,
             articles: new Map(this.state.articles).set(payload.articleId, nextArticle),
+            contentByPath: nextContentByPath,
         };
+        this.clearDerivedSnapshotCache();
 
         console.info("[editorContextStore] focus changed", {
             articleId: payload.articleId,
@@ -175,8 +234,9 @@ class EditorContextStore {
      */
     reportArticleContent(payload: ArticleContentPayload): void {
         const existing = this.state.articles.get(payload.articleId);
-        const path = payload.path ?? existing?.path ?? payload.articleId;
+        const path = normalizeArticlePath(payload.path ?? existing?.path ?? payload.articleId);
         const title = path.split("/").pop() ?? path;
+        const updatedAt = Date.now();
 
         const nextArticle: ArticleState = {
             articleId: payload.articleId,
@@ -184,13 +244,33 @@ class EditorContextStore {
             title,
             content: payload.content,
             hasContentSnapshot: true,
-            updatedAt: Date.now(),
+            updatedAt,
         };
+        const nextArticles = new Map(this.state.articles);
+        nextArticles.forEach((article, articleId) => {
+            if (normalizeArticlePath(article.path) !== path) {
+                return;
+            }
+
+            nextArticles.set(articleId, {
+                ...article,
+                content: payload.content,
+                hasContentSnapshot: true,
+                updatedAt,
+            });
+        });
+        nextArticles.set(payload.articleId, nextArticle);
 
         this.state = {
             focusedArticleId: this.state.focusedArticleId,
-            articles: new Map(this.state.articles).set(payload.articleId, nextArticle),
+            articles: nextArticles,
+            contentByPath: new Map(this.state.contentByPath).set(path, {
+                content: payload.content,
+                hasContentSnapshot: true,
+                updatedAt,
+            }),
         };
+        this.clearDerivedSnapshotCache();
 
         emitEditorContentChangedEvent({
             articleId: nextArticle.articleId,
@@ -211,7 +291,7 @@ class EditorContextStore {
         if (!this.state.focusedArticleId) {
             return null;
         }
-        return this.state.articles.get(this.state.focusedArticleId) ?? null;
+        return this.getArticleById(this.state.focusedArticleId);
     }
 
     /**
@@ -222,6 +302,7 @@ class EditorContextStore {
      */
     getArticleByPath(path: string): ArticleState | null {
         const targetPath = normalizeArticlePath(path);
+        const contentSnapshot = this.state.contentByPath.get(targetPath) ?? null;
         let latestArticle: ArticleState | null = null;
 
         for (const article of this.state.articles.values()) {
@@ -234,7 +315,108 @@ class EditorContextStore {
             }
         }
 
+        if (latestArticle && contentSnapshot) {
+            return this.mergeArticleWithContentSnapshot(latestArticle, contentSnapshot);
+        }
+
         return latestArticle;
+    }
+
+    getArticleById(articleId: string): ArticleState | null {
+        const article = this.state.articles.get(articleId) ?? null;
+        if (!article) {
+            return null;
+        }
+
+        const contentSnapshot = this.state.contentByPath.get(normalizeArticlePath(article.path));
+        return this.mergeArticleWithContentSnapshot(article, contentSnapshot);
+    }
+
+    getContentArticleSnapshots(): ArticleState[] {
+        const latestByPath = new Map<string, ArticleState>();
+        this.state.articles.forEach((article) => {
+            const normalizedPath = normalizeArticlePath(article.path);
+            const contentSnapshot = this.state.contentByPath.get(normalizedPath);
+            if (!contentSnapshot?.hasContentSnapshot) {
+                return;
+            }
+
+            const nextArticle: ArticleState = {
+                ...article,
+                path: normalizedPath,
+                content: contentSnapshot.content,
+                hasContentSnapshot: true,
+                updatedAt: Math.max(article.updatedAt, contentSnapshot.updatedAt),
+            };
+            const existing = latestByPath.get(normalizedPath);
+            if (!existing || nextArticle.updatedAt >= existing.updatedAt) {
+                latestByPath.set(normalizedPath, nextArticle);
+            }
+        });
+
+        this.state.contentByPath.forEach((contentSnapshot, path) => {
+            if (!contentSnapshot.hasContentSnapshot || latestByPath.has(path)) {
+                return;
+            }
+
+            latestByPath.set(path, {
+                articleId: `path:${path}`,
+                path,
+                title: path.split("/").pop() ?? path,
+                content: contentSnapshot.content,
+                hasContentSnapshot: true,
+                updatedAt: contentSnapshot.updatedAt,
+            });
+        });
+
+        return Array.from(latestByPath.values());
+    }
+
+    /**
+     * @function releaseArticle
+     * @description 释放已关闭编辑器的文章快照；同路径仍有打开 view 时保留 canonical 内容。
+     * @param articleId 已关闭文章 id。
+     */
+    releaseArticle(articleId: string): void {
+        const existing = this.state.articles.get(articleId);
+        if (!existing) {
+            return;
+        }
+
+        const releasedPath = normalizeArticlePath(existing.path);
+        const nextArticles = new Map(this.state.articles);
+        nextArticles.delete(articleId);
+
+        const syntheticPathArticleId = buildPathArticleId(releasedPath);
+        const syntheticPathArticle = nextArticles.get(syntheticPathArticleId);
+        if (syntheticPathArticle && normalizeArticlePath(syntheticPathArticle.path) === releasedPath) {
+            nextArticles.delete(syntheticPathArticleId);
+        }
+
+        const hasOpenArticleForPath = Array.from(nextArticles.values()).some((article) => {
+            return normalizeArticlePath(article.path) === releasedPath
+                && article.articleId !== buildPathArticleId(releasedPath);
+        });
+        const nextContentByPath = new Map(this.state.contentByPath);
+        if (!hasOpenArticleForPath) {
+            nextContentByPath.delete(releasedPath);
+        }
+
+        this.state = {
+            focusedArticleId: this.state.focusedArticleId === articleId ? null : this.state.focusedArticleId,
+            articles: nextArticles,
+            contentByPath: nextContentByPath,
+        };
+        this.clearDerivedSnapshotCache();
+
+        console.info("[editorContextStore] released article snapshot", {
+            articleId,
+            path: releasedPath,
+            remainingArticleCount: nextArticles.size,
+            retainedPathSnapshot: nextContentByPath.has(releasedPath),
+        });
+
+        this.emit();
     }
 
     /**
@@ -242,7 +424,11 @@ class EditorContextStore {
      * @description 重置全部编辑上下文缓存，用于仓库切换后的失效处理。
      */
     reset(): void {
-        if (this.state.focusedArticleId === null && this.state.articles.size === 0) {
+        if (
+            this.state.focusedArticleId === null
+            && this.state.articles.size === 0
+            && this.state.contentByPath.size === 0
+        ) {
             return;
         }
 
@@ -254,7 +440,9 @@ class EditorContextStore {
         this.state = {
             focusedArticleId: null,
             articles: new Map<string, ArticleState>(),
+            contentByPath: new Map(),
         };
+        this.clearDerivedSnapshotCache();
         this.emit();
     }
 }
@@ -263,6 +451,10 @@ const editorContextStore = new EditorContextStore();
 
 function normalizeArticlePath(path: string): string {
     return path.replace(/\\/g, "/");
+}
+
+function buildPathArticleId(path: string): string {
+    return `path:${normalizeArticlePath(path)}`;
 }
 
 /**
@@ -292,6 +484,15 @@ export function resetEditorContext(): void {
 }
 
 /**
+ * @function releaseArticleSnapshot
+ * @description 对外暴露：释放已关闭编辑器的文章快照，避免关闭后重开消费 stale 前端缓存。
+ * @param articleId 已关闭文章 id。
+ */
+export function releaseArticleSnapshot(articleId: string): void {
+    editorContextStore.releaseArticle(articleId);
+}
+
+/**
  * @function useFocusedArticle
  * @description React Hook：订阅当前聚焦文章。
  * @returns 当前聚焦文章。
@@ -313,8 +514,22 @@ export function useFocusedArticle(): ArticleState | null {
 export function useArticleById(articleId: string): ArticleState | null {
     return useSyncExternalStore(
         (listener) => editorContextStore.subscribe(listener),
-        () => editorContextStore.getSnapshot().articles.get(articleId) ?? null,
-        () => editorContextStore.getSnapshot().articles.get(articleId) ?? null,
+        () => editorContextStore.getArticleById(articleId),
+        () => editorContextStore.getArticleById(articleId),
+    );
+}
+
+/**
+ * @function useArticleByPath
+ * @description React Hook：按文章路径订阅 canonical 内容快照。
+ * @param path 文章路径。
+ * @returns 对应路径最新文章快照或 null。
+ */
+export function useArticleByPath(path: string): ArticleState | null {
+    return useSyncExternalStore(
+        (listener) => editorContextStore.subscribe(listener),
+        () => editorContextStore.getArticleByPath(path),
+        () => editorContextStore.getArticleByPath(path),
     );
 }
 
@@ -334,8 +549,7 @@ export function getFocusedArticleSnapshot(): ArticleState | null {
  * @returns 对应文章或 null。
  */
 export function getArticleSnapshotById(articleId: string): ArticleState | null {
-    const snapshot = editorContextStore.getSnapshot();
-    return snapshot.articles.get(articleId) ?? null;
+    return editorContextStore.getArticleById(articleId);
 }
 
 /**
@@ -358,6 +572,10 @@ export function hasArticleSnapshotByPath(path: string): boolean {
     const snapshot = editorContextStore.getSnapshot();
     const targetPath = normalizeArticlePath(path);
 
+    if (snapshot.contentByPath.has(targetPath)) {
+        return true;
+    }
+
     for (const article of snapshot.articles.values()) {
         if (normalizeArticlePath(article.path) === targetPath) {
             return true;
@@ -376,16 +594,35 @@ export function hasArticleSnapshotByPath(path: string): boolean {
 export function reportArticleContentByPath(path: string, content: string): void {
     const snapshot = editorContextStore.getSnapshot();
     const targetPath = normalizeArticlePath(path);
+    let matched = false;
 
     snapshot.articles.forEach((article) => {
         if (normalizeArticlePath(article.path) !== targetPath) {
             return;
         }
 
+        matched = true;
         editorContextStore.reportArticleContent({
             articleId: article.articleId,
             path: targetPath,
             content,
         });
     });
+
+    if (!matched) {
+        editorContextStore.reportArticleContent({
+            articleId: buildPathArticleId(targetPath),
+            path: targetPath,
+            content,
+        });
+    }
+}
+
+/**
+ * @function getArticleContentSnapshots
+ * @description 获取所有已有 canonical 内容的文章快照，按路径去重。
+ * @returns 按路径去重后的文章内容快照。
+ */
+export function getArticleContentSnapshots(): ArticleState[] {
+    return editorContextStore.getContentArticleSnapshots();
 }

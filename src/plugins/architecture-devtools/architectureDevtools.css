@@ -8,7 +8,7 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    overscroll-behavior: contain;
+    overscroll-behavior-y: none;
     background:
         radial-gradient(circle at top left, var(--architecture-bg-accent-1), transparent 28%),
         radial-gradient(circle at top right, var(--architecture-bg-accent-2), transparent 24%),
@@ -341,7 +341,7 @@
     border-radius: 0;
     border: 1px solid var(--architecture-border-color-weak);
     overscroll-behavior-x: contain;
-    overscroll-behavior-y: auto;
+    overscroll-behavior-y: none;
     touch-action: pan-x pan-y;
     background:
         var(--architecture-surface-grid),

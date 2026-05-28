@@ -130,7 +130,7 @@ describe("editor built-in syntax renderer contract", () => {
         expect(snapshot.map((renderer) => renderer.id)).toEqual(BUILTIN_LINE_RENDERER_IDS);
         expect(snapshot
             .filter((renderer) => renderer.allowComposingSelectionLine === true)
-            .map((renderer) => renderer.id)).toEqual(["header-line"]);
+            .map((renderer) => renderer.id)).toEqual(["header-line", "list-line"]);
     });
 
     test("anchors representative inline and line decoration behavior", () => {

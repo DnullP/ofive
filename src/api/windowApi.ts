@@ -16,6 +16,7 @@ export const OFIVE_TAB_WINDOW_DRAG_MOVE_EVENT = "ofive://tab-window-drag-move";
 export const OFIVE_TAB_WINDOW_DRAG_DROP_EVENT = "ofive://tab-window-drag-drop";
 export const OFIVE_TAB_WINDOW_DRAG_CANCEL_EVENT = "ofive://tab-window-drag-cancel";
 export const OFIVE_TAB_WINDOW_DRAG_ACCEPTED_EVENT = "ofive://tab-window-drag-accepted";
+export const OFIVE_DETACHED_TAB_WINDOW_READY_EVENT = "ofive://detached-tab-window-ready";
 
 export interface DetachedTabWindowTab {
     id: string;
@@ -43,6 +44,10 @@ export interface TabWindowDragAcceptedPayload {
     dragId: string;
     tabId: string;
     targetWindowLabel?: string | null;
+}
+
+export interface DetachedTabWindowReadyPayload {
+    windowLabel: string;
 }
 
 export interface OfiveWindowBootstrap {
@@ -217,9 +222,38 @@ export async function destroyOfiveWindowByLabel(label: string | null | undefined
         return;
     }
 
-    const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-    const targetWindow = await WebviewWindow.getByLabel(label);
+    const { Window } = await import("@tauri-apps/api/window");
+    const targetWindow = await Window.getByLabel(label);
     await targetWindow?.destroy();
+}
+
+export async function moveOfiveWindowByLabel(
+    label: string | null | undefined,
+    position: { x: number; y: number },
+): Promise<void> {
+    if (!label || !isTauriRuntime()) {
+        return;
+    }
+
+    const { LogicalPosition, Window } = await import("@tauri-apps/api/window");
+    const targetWindow = await Window.getByLabel(label);
+    await targetWindow?.setPosition(new LogicalPosition(position.x, position.y));
+}
+
+export async function showAndFocusOfiveWindowByLabel(label: string | null | undefined): Promise<void> {
+    if (!label || !isTauriRuntime()) {
+        return;
+    }
+
+    const { Window } = await import("@tauri-apps/api/window");
+    const targetWindow = await Window.getByLabel(label);
+    if (!targetWindow) {
+        return;
+    }
+
+    await targetWindow.setFocusable(true);
+    await targetWindow.show();
+    await targetWindow.setFocus();
 }
 
 async function emitRuntimeEvent<T>(eventName: string, payload: T): Promise<void> {
@@ -264,6 +298,10 @@ export async function emitTabWindowDragAccepted(payload: TabWindowDragAcceptedPa
     await emitRuntimeEvent(OFIVE_TAB_WINDOW_DRAG_ACCEPTED_EVENT, payload);
 }
 
+export async function emitDetachedTabWindowReady(payload: DetachedTabWindowReadyPayload): Promise<void> {
+    await emitRuntimeEvent(OFIVE_DETACHED_TAB_WINDOW_READY_EVENT, payload);
+}
+
 export async function listenTabWindowDragMove(
     handler: (payload: TabWindowDragEventPayload) => void,
 ): Promise<UnlistenFn> {
@@ -286,4 +324,10 @@ export async function listenTabWindowDragAccepted(
     handler: (payload: TabWindowDragAcceptedPayload) => void,
 ): Promise<UnlistenFn> {
     return await listenRuntimeEvent(OFIVE_TAB_WINDOW_DRAG_ACCEPTED_EVENT, handler);
+}
+
+export async function listenDetachedTabWindowReady(
+    handler: (payload: DetachedTabWindowReadyPayload) => void,
+): Promise<UnlistenFn> {
+    return await listenRuntimeEvent(OFIVE_DETACHED_TAB_WINDOW_READY_EVENT, handler);
 }

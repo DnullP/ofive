@@ -10,6 +10,7 @@
  *
  * @exports
  *   - getAiChatRuntimeSnapshot
+ *   - subscribeAiChatRuntimeSnapshot
  *   - updateAiChatRuntimeSnapshot
  *   - resetAiChatRuntimeSnapshot
  */
@@ -73,6 +74,26 @@ function createEmptyAiChatRuntimeSnapshot(
 }
 
 let runtimeSnapshot = createEmptyAiChatRuntimeSnapshot();
+const listeners = new Set<() => void>();
+
+function emit(): void {
+    listeners.forEach((listener) => {
+        listener();
+    });
+}
+
+/**
+ * @function subscribeAiChatRuntimeSnapshot
+ * @description 订阅 AI 聊天运行态快照变化。
+ * @param listener 订阅回调。
+ * @returns 取消订阅函数。
+ */
+export function subscribeAiChatRuntimeSnapshot(listener: () => void): () => void {
+    listeners.add(listener);
+    return () => {
+        listeners.delete(listener);
+    };
+}
 
 /**
  * @function getAiChatRuntimeSnapshot
@@ -95,6 +116,7 @@ export function updateAiChatRuntimeSnapshot(
         ...runtimeSnapshot,
         ...patch,
     };
+    emit();
 }
 
 /**
@@ -104,4 +126,5 @@ export function updateAiChatRuntimeSnapshot(
  */
 export function resetAiChatRuntimeSnapshot(vaultPath: string | null = null): void {
     runtimeSnapshot = createEmptyAiChatRuntimeSnapshot(vaultPath);
+    emit();
 }

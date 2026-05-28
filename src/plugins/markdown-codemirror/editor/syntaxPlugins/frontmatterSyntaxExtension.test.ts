@@ -7,6 +7,7 @@
 import { EditorState } from "@codemirror/state";
 import { describe, expect, test } from "bun:test";
 import {
+    estimateFrontmatterWidgetHeight,
     isFrontmatterBlockSelected,
     parseFrontmatterBlock,
     shouldKeepFrontmatterSourceVisible,
@@ -45,6 +46,25 @@ describe("parseFrontmatterBlock", () => {
         expect(block).not.toBeNull();
         expect(block?.to).toBe(state.doc.line(3).to);
         expect(block?.endLineNumber).toBe(3);
+    });
+});
+
+describe("estimateFrontmatterWidgetHeight", () => {
+    test("按 YAML 字段数量提供离屏 widget 高度估算", () => {
+        const estimatedHeight = estimateFrontmatterWidgetHeight([
+            "title: Demo",
+            "tags:",
+            "  - alpha",
+            "  - beta",
+            "metrics:",
+            "  score: 42",
+        ].join("\n"));
+
+        expect(estimatedHeight).toBeGreaterThan(180);
+    });
+
+    test("空 frontmatter 仍保留稳定高度", () => {
+        expect(estimateFrontmatterWidgetHeight("")).toBeGreaterThan(80);
     });
 });
 

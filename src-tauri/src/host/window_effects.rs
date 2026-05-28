@@ -8,11 +8,11 @@
 //! 该模块仅负责窗口层视觉效果，不处理前端透明样式。
 
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "macos")]
+use tauri::window::Color;
 #[cfg(any(target_os = "macos", test))]
 use tauri::Theme;
 use tauri::WebviewWindow;
-#[cfg(target_os = "macos")]
-use tauri::window::Color;
 
 #[cfg(target_os = "windows")]
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -24,7 +24,10 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::c_void;
 
 #[cfg(target_os = "macos")]
-use objc2::{msg_send, runtime::AnyObject};
+use objc2::{msg_send, runtime::AnyObject, sel};
+
+#[cfg(target_os = "macos")]
+use std::collections::HashSet;
 
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::{
@@ -210,12 +213,90 @@ pub(crate) fn apply_transparent_window_background(window: &WebviewWindow) {
         } else {
             log::info!("[window] applied transparent macOS window/webview background");
         }
+
+        if let Err(error) = disable_macos_scroll_elasticity(window) {
+            log::warn!(
+                "[window] setup warning: failed to disable macOS scroll elasticity: {error}"
+            );
+        }
     }
 
     #[cfg(not(target_os = "macos"))]
     {
         let _ = window;
     }
+}
+
+#[cfg(target_os = "macos")]
+fn disable_macos_scroll_elasticity(
+    window: &WebviewWindow,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let window_handle = window.window_handle()?;
+    let RawWindowHandle::AppKit(handle) = window_handle.as_raw() else {
+        return Err("unsupported raw window handle for macOS scroll elasticity".into());
+    };
+
+    let view = handle.ns_view.as_ptr() as *mut AnyObject;
+    if view.is_null() {
+        return Err("macOS ns_view unavailable for scroll elasticity".into());
+    }
+
+    let mut visited = HashSet::new();
+    let updated_count = unsafe { disable_scroll_elasticity_in_view_tree(view, &mut visited) };
+    log::info!(
+        "[window] disabled macOS scroll elasticity for {} scroll views",
+        updated_count
+    );
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn disable_scroll_elasticity_in_view_tree(
+    view: *mut AnyObject,
+    visited: &mut HashSet<usize>,
+) -> usize {
+    if view.is_null() {
+        return 0;
+    }
+
+    let view_address = view as usize;
+    if !visited.insert(view_address) {
+        return 0;
+    }
+
+    let mut updated_count = 0;
+    let supports_vertical_elasticity: bool =
+        msg_send![view, respondsToSelector: sel!(setVerticalScrollElasticity:)];
+    let supports_horizontal_elasticity: bool =
+        msg_send![view, respondsToSelector: sel!(setHorizontalScrollElasticity:)];
+
+    if supports_vertical_elasticity {
+        let () = msg_send![view, setVerticalScrollElasticity: 1isize];
+        updated_count += 1;
+    }
+
+    if supports_horizontal_elasticity {
+        let () = msg_send![view, setHorizontalScrollElasticity: 1isize];
+    }
+
+    let supports_scroll_view: bool = msg_send![view, respondsToSelector: sel!(scrollView)];
+    if supports_scroll_view {
+        let scroll_view: *mut AnyObject = msg_send![view, scrollView];
+        updated_count += disable_scroll_elasticity_in_view_tree(scroll_view, visited);
+    }
+
+    let subviews: *mut AnyObject = msg_send![view, subviews];
+    if subviews.is_null() {
+        return updated_count;
+    }
+
+    let subview_count: usize = msg_send![subviews, count];
+    for index in 0..subview_count {
+        let subview: *mut AnyObject = msg_send![subviews, objectAtIndex: index];
+        updated_count += disable_scroll_elasticity_in_view_tree(subview, visited);
+    }
+
+    updated_count
 }
 
 #[cfg(target_os = "macos")]

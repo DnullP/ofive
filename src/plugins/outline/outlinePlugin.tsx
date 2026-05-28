@@ -3,8 +3,8 @@
  * @description 文章大纲插件：自注册式插件，展示当前聚焦笔记的标题大纲。
  *
  *   本模块是"内容型读插件"的标准样板：
- *   - 以后端持久化文件为数据来源（调用 get_vault_markdown_outline 接口）
- *   - 监听持久态内容更新事件和聚焦文件变化事件刷新数据
+ *   - 优先从前端 canonical Markdown 内容快照派生大纲，缺失时回退后端持久态
+ *   - 监听编辑内容、持久态内容更新事件和聚焦文件变化事件刷新数据
  *   - 自包含 activity / panel / i18n 注册，无需修改任何已有代码
  *
  *   放置在 src/plugins/ 目录下后，由 main.tsx 的 import.meta.glob
@@ -24,27 +24,24 @@
  *   - activatePlugin 注册并返回清理函数
  */
 
-import React, { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
+import React, { useCallback, type ReactNode } from "react";
 import { Compass, FileText } from "lucide-react";
 import { registerCommand } from "../../host/commands/commandSystem";
 import { registerActivity } from "../../host/registry/activityRegistry";
 import { registerPanel } from "../../host/registry/panelRegistry";
-import { useActiveEditor } from "../../host/editor/activeEditorStore";
-import { getVaultMarkdownOutline, type OutlineHeading } from "../../api/vaultApi";
+import type { OutlineHeading } from "../../api/vaultApi";
+import {
+    ensureOutlineStoreStarted,
+    useOutlineSnapshot,
+} from "./outlineStore";
+import { registerOutlineManagedStore } from "./outlineManagedStoreRegistration";
 import {
     emitEditorRevealRequestedEvent,
-    subscribePersistedContentUpdatedEvent,
-    type PersistedContentUpdatedBusEvent,
 } from "../../host/events/appEventBus";
 import i18n from "../../i18n";
 import "./outlinePlugin.css";
 
 const OUTLINE_PANEL_ID = "outline";
-
-/* ────────────────── 防抖辅助 ────────────────── */
-
-/** 防抖延迟（毫秒），避免短时间内重复请求后端 */
-const REFRESH_DEBOUNCE_MS = 200;
 
 /* ────────────────── React 组件 ────────────────── */
 
@@ -55,11 +52,12 @@ const REFRESH_DEBOUNCE_MS = 200;
  * @returns 面板 ReactNode。
  */
 export function OutlinePanelPlugin(): ReactNode {
-    const activeEditor = useActiveEditor();
-    const [headings, setHeadings] = useState<OutlineHeading[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const {
+        activeEditor,
+        headings,
+        loading,
+        error,
+    } = useOutlineSnapshot();
 
     /**
      * 翻译辅助函数，使用插件注册的 i18n 资源。
@@ -114,86 +112,6 @@ export function OutlinePanelPlugin(): ReactNode {
             </div>
         );
     };
-
-    /**
-     * 加载大纲数据：调用后端 get_vault_markdown_outline 接口。
-     * 内置防抖机制，避免短时间内重复请求。
-     */
-    const loadOutline = useCallback((relativePath: string) => {
-        if (debounceTimerRef.current !== null) {
-            clearTimeout(debounceTimerRef.current);
-        }
-
-        debounceTimerRef.current = setTimeout(() => {
-            debounceTimerRef.current = null;
-
-            setLoading(true);
-            setError(null);
-
-            console.info("[outlinePlugin] loading outline for", { relativePath });
-
-            getVaultMarkdownOutline(relativePath)
-                .then((result) => {
-                    setHeadings(result.headings);
-                    setLoading(false);
-                    console.info("[outlinePlugin] outline state updated", {
-                        relativePath,
-                        count: result.headings.length,
-                    });
-                })
-                .catch((err) => {
-                    const message = err instanceof Error ? err.message : String(err);
-                    setError(message);
-                    setLoading(false);
-                    console.error("[outlinePlugin] failed to load outline", {
-                        relativePath,
-                        error: message,
-                    });
-                });
-        }, REFRESH_DEBOUNCE_MS);
-    }, []);
-
-    /* ── 当聚焦文章切换时加载大纲 ── */
-    useEffect(() => {
-        if (!activeEditor?.path) {
-            setHeadings([]);
-            setError(null);
-            return;
-        }
-
-        loadOutline(activeEditor.path);
-
-        return () => {
-            if (debounceTimerRef.current !== null) {
-                clearTimeout(debounceTimerRef.current);
-                debounceTimerRef.current = null;
-            }
-        };
-    }, [activeEditor?.path, loadOutline]);
-
-    /* ── 订阅持久态内容更新事件，刷新当前聚焦文件的大纲 ── */
-    useEffect(() => {
-        const currentPath = activeEditor?.path;
-        if (!currentPath) {
-            return;
-        }
-
-        const unlisten = subscribePersistedContentUpdatedEvent(
-            (event: PersistedContentUpdatedBusEvent) => {
-                if (event.relativePath !== currentPath) {
-                    return;
-                }
-                console.info("[outlinePlugin] persisted content updated, refreshing outline", {
-                    eventId: event.eventId,
-                    source: event.source,
-                    relativePath: event.relativePath,
-                });
-                loadOutline(currentPath);
-            },
-        );
-
-        return unlisten;
-    }, [activeEditor?.path, loadOutline]);
 
     /* ── 未聚焦文章状态 ── */
     if (!activeEditor) {
@@ -263,6 +181,9 @@ export function OutlinePanelPlugin(): ReactNode {
  * @returns 插件清理函数。
  */
 export function activatePlugin(): () => void {
+    ensureOutlineStoreStarted();
+    const unregisterOutlineStore = registerOutlineManagedStore();
+
     const unregisterCommand = registerCommand({
         id: "outline.open",
         title: "outlinePlugin.openCommand",
@@ -301,6 +222,7 @@ export function activatePlugin(): () => void {
         unregisterPanel();
         unregisterActivity();
         unregisterCommand();
+        unregisterOutlineStore();
         console.info("[outlinePlugin] unregistered outline plugin");
     };
 }

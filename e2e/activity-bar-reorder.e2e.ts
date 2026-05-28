@@ -139,7 +139,10 @@ test.describe("activity bar reorder", () => {
         await expectIconBefore(page, "search", "files");
 
         await filesButton.click();
-        await expect(page.locator(".file-tree")).toBeVisible();
+        await expect(page.locator(
+            "[data-layout-role='panel-content'][data-layout-panel-id='files'] " +
+            ".layout-v2-panel-section__pane[data-layout-presentation-state='committed'] .file-tree",
+        )).toBeVisible();
         await expectIconBefore(page, "search", "files");
         expect(pageErrors).toEqual([]);
     });

@@ -422,7 +422,9 @@ async function expectCollapsedSidebarControlsUsable(page: Page): Promise<void> {
 
     await leftToggle.click();
     await expect(leftSidebar.getByRole("button", { name: "Collapse pane content" })).toBeVisible();
-    await expect(leftSidebar.locator(".file-tree")).toBeVisible();
+    await expect(leftSidebar.locator(
+        ".layout-v2-panel-section__pane[data-layout-presentation-state='committed'] .file-tree",
+    )).toBeVisible();
 }
 
 async function waitForMockLayoutReady(page: Page): Promise<void> {

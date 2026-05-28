@@ -73,7 +73,7 @@ test.describe("agent skills panel", () => {
 
         const activeEditor = page.locator(".layout-v2-tab-section__card--active");
         await expect(activeEditor.locator(".cm-content")).toBeVisible();
-        await expect(activeEditor.locator(".cm-content")).toContainText("name: research-helper");
+        await expect.poll(() => readActiveEditorDocument(page)).toContain("name: research-helper");
     });
 
     test("reopens a SKILL file with latest vault content instead of stale editor context", async ({ page }) => {

@@ -2,7 +2,7 @@
 title: "ofive Managed Store"
 kind: "architecture-term"
 status: "active"
-updated: "2026-04-27"
+updated: "2026-05-29"
 owners:
   - "frontend"
   - "maintainers"
@@ -77,6 +77,7 @@ Managed Store 适合管理以下状态：
 2. 插件暴露给设置页或其他宿主表面的状态。
 3. 需要维护者审计字段、动作和失败模式的共享状态。
 4. 需要在插件卸载时同步移除的状态贡献。
+5. 需要跨 panel/tab remount 保持体验一致的插件运行态，例如 AI chat runtime、outline 派生状态。
 
 Managed Store 不适合管理以下状态：
 
@@ -112,6 +113,7 @@ Managed Store 不适合管理以下状态：
 3. 新增动作时，说明会更新哪些字段、有哪些副作用。
 4. 新增设置贡献时，确认它随 store 注册和注销。
 5. 修改 Vault 切换行为时，确认相关 store 的作用域是否需要重置或重载。
+6. 新增或修改注册 store 时，同步更新 `scripts/store-state-flow-coverage.config.mjs`，让 action、flow 和 failure mode 绑定真实测试。
 
 ## 反模式
 

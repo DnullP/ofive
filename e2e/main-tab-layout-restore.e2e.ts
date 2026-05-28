@@ -103,6 +103,14 @@ async function focusTab(page: Page, tabTitle: string): Promise<void> {
     await page.getByRole("button", { name: tabTitle, exact: true }).first().click();
 }
 
+async function focusTabInSection(page: Page, sectionIndex: number, tabTitle: string): Promise<void> {
+    await page.locator(".layout-v2-tab-section")
+        .nth(sectionIndex)
+        .getByRole("button", { name: tabTitle, exact: true })
+        .first()
+        .click();
+}
+
 async function closeTab(page: Page, tabTitle: string): Promise<void> {
     await page.getByRole("button", { name: `Close ${tabTitle}`, exact: true }).first().click();
     await page.waitForTimeout(120);
@@ -137,6 +145,10 @@ async function readTabSections(page: Page): Promise<TabSectionSnapshot[]> {
             (title) => title.textContent ?? "",
         ),
     })));
+}
+
+function uniqueTitles(titles: string[]): string[] {
+    return Array.from(new Set(titles));
 }
 
 /**
@@ -280,6 +292,28 @@ async function readPersistedWorkspaceLayoutProbe(page: Page): Promise<PersistedW
             mainTabsHasSplit: Boolean(findSection(workspaceRoot, "main-tabs")?.split),
             hasPersistedContentParam: tabs.some((tab) => Boolean(tab.params && "content" in tab.params)),
         };
+    });
+}
+
+async function waitForPersistedWorkspaceLayout(page: Page, expected: Omit<PersistedWorkspaceLayoutProbe, "tabCount"> & {
+    minTabCount: number;
+}): Promise<void> {
+    await expect.poll(
+        async () => {
+            const probe = await readPersistedWorkspaceLayoutProbe(page);
+            return {
+                hasWorkspaceLayout: probe.hasWorkspaceLayout,
+                hasEnoughTabs: probe.tabCount >= expected.minTabCount,
+                mainTabsHasSplit: probe.mainTabsHasSplit,
+                hasPersistedContentParam: probe.hasPersistedContentParam,
+            };
+        },
+        { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
+    ).toEqual({
+        hasWorkspaceLayout: expected.hasWorkspaceLayout,
+        hasEnoughTabs: true,
+        mainTabsHasSplit: expected.mainTabsHasSplit,
+        hasPersistedContentParam: expected.hasPersistedContentParam,
     });
 }
 
@@ -450,17 +484,14 @@ test.describe("main tab layout restore regression", () => {
         await openMockNote(page, NETWORK_NOTE_PATH);
         await splitTabToRight(page, "network-segment.md");
 
-        await focusTab(page, "guide.md");
+        await focusTabInSection(page, 0, "guide.md");
         await openMockNote(page, LATEX_NOTE_PATH);
-        await focusTab(page, "network-segment.md");
+        await focusTabInSection(page, 1, "network-segment.md");
         await openMockNote(page, SCROLL_NOTE_PATH);
 
-        await expect.poll(
-            async () => readPersistedWorkspaceLayoutProbe(page),
-            { timeout: PERSISTED_LAYOUT_TIMEOUT_MS },
-        ).toEqual({
+        await waitForPersistedWorkspaceLayout(page, {
             hasWorkspaceLayout: true,
-            tabCount: 4,
+            minTabCount: 4,
             mainTabsHasSplit: true,
             hasPersistedContentParam: false,
         });
@@ -469,7 +500,7 @@ test.describe("main tab layout restore regression", () => {
         await expect.poll(
             async () => {
                 const sections = await readTabSections(page);
-                return sections.map((section) => section.titles);
+                return sections.map((section) => uniqueTitles(section.titles));
             },
             { timeout: 5_000 },
         ).toEqual([

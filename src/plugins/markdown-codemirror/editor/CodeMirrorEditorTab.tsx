@@ -21,7 +21,7 @@ import "katex/dist/katex.min.css";
 import {
     reportArticleContent,
     reportArticleFocus,
-    useArticleById,
+    useArticleByPath,
 } from "../../../host/editor/editorContextStore";
 import {
     executeCommand,
@@ -318,11 +318,13 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
     const editorTabOutEnabled = featureSettings.editorTabOutEnabled;
     const editorTabRestoreMode = featureSettings.editorTabRestoreMode;
     const editorLineNumbers = featureSettings.editorLineNumbers;
+    const articleId = props.api.id;
     const sharedTypographyVariables = useMemo(() => ({
         "--cm-editor-font-family": editorFontFamily,
         "--cm-editor-font-size": `${editorFontSize}px`,
     } as CSSProperties), [editorFontFamily, editorFontSize]);
     const currentFilePath = String(props.params.path ?? i18n.t("editor.untitledFile"));
+    const articleSnapshot = useArticleByPath(currentFilePath);
     const initialCursorOffset = typeof props.params.initialCursorOffset === "number"
         ? props.params.initialCursorOffset
         : null;
@@ -333,15 +335,18 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         || props.params.initialDisplayMode === "read";
     const isReadOnlyTab = props.params.readOnly === true || isForcedReadMode;
     const initialDoc = useMemo(() => {
+        if (articleSnapshot?.hasContentSnapshot) {
+            return articleSnapshot.content;
+        }
+
         const content = props.params.content;
         if (typeof content === "string") {
             return content;
         }
         return buildDefaultContent(currentFilePath);
-    }, [props.params.content, currentFilePath]);
+    }, [articleSnapshot?.content, articleSnapshot?.hasContentSnapshot, props.params.content, currentFilePath]);
     const [readContent, setReadContent] = useState<string>(initialDoc);
 
-    const articleId = props.api.id;
     useLayoutEffect(() => {
         return registerCodeMirrorEditorPreviewSource(articleId, () => tabRootRef.current);
     }, [articleId]);
@@ -362,7 +367,6 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         scheduleActiveLineSegmentation,
         trySelectWordAtMouseEvent,
     } = segmentationController;
-    const articleSnapshot = useArticleById(articleId);
     const displayFilePath = resolveDisplayFilePath(articleSnapshot?.path, currentFilePath);
     const displayTitle = useMemo(
         () => resolveMarkdownNoteTitle(displayFilePath),

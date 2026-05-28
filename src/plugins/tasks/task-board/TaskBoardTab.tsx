@@ -49,8 +49,12 @@ import {
     type VaultTaskItem,
 } from "../../../api/vaultApi";
 import { getArticleSnapshotByPath } from "../../../host/editor/editorContextStore";
+import { overlayMarkdownContentTaskSnapshots } from "../../../host/editor/markdownContentTaskSnapshots";
 import { savePersistedMarkdownContent } from "../../../host/editor/persistedMarkdownContentSync";
-import { subscribePersistedContentUpdatedEvent } from "../../../host/events/appEventBus";
+import {
+    subscribeEditorContentBusEvent,
+    subscribePersistedContentUpdatedEvent,
+} from "../../../host/events/appEventBus";
 import { openFileInWorkbench } from "../../../host/layout/openFileService";
 import { useWorkbenchOverlayLayer, WorkbenchOverlayPortal } from "../../../host/layout/workbenchOverlayLayer";
 import i18n from "../../../i18n";
@@ -567,6 +571,7 @@ export function TaskBoardTab(
     const resizeStateRef = useRef<ColumnResizeState | null>(null);
     const reorderStateRef = useRef<ColumnReorderState | null>(null);
     const requestIdRef = useRef<number>(0);
+    const persistedTasksRef = useRef<VaultTaskItem[]>([]);
 
     const t = useCallback((key: string, options?: Record<string, unknown>) => {
         return i18n.t(key, options);
@@ -584,11 +589,13 @@ export function TaskBoardTab(
         });
 
         try {
-            const nextTasks = await queryVaultTasks();
+            const persistedTasks = await queryVaultTasks();
+            const nextTasks = overlayMarkdownContentTaskSnapshots(persistedTasks);
             if (requestIdRef.current !== requestId) {
                 return;
             }
 
+            persistedTasksRef.current = persistedTasks;
             setTasks(nextTasks);
             setLoading(false);
             console.info("[taskBoardTab] load tasks success", {
@@ -699,6 +706,18 @@ export function TaskBoardTab(
 
         return unlisten;
     }, [loadTasks]);
+
+    useEffect(() => {
+        const unlisten = subscribeEditorContentBusEvent((event) => {
+            console.info("[taskBoardTab] editor content changed, overlay task board snapshot", {
+                eventId: event.eventId,
+                relativePath: event.path,
+            });
+            setTasks(overlayMarkdownContentTaskSnapshots(persistedTasksRef.current));
+        });
+
+        return unlisten;
+    }, []);
 
     useEffect(() => {
         if (!editingTask) {

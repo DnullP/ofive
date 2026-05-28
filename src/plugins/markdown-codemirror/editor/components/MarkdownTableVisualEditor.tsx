@@ -32,7 +32,6 @@ import {
     type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import katex from "katex";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -63,6 +62,16 @@ import {
 } from "../markdownTableModel";
 import { prepareMarkdownTableCellPreviewMarkdown } from "../markdownTableCellPreview";
 import {
+    getMarkdownTableCellFlatIndex,
+    resolveInitialRichPreviewLimit,
+} from "../markdownTablePreviewPolicy";
+import {
+    MARKDOWN_TABLE_MIN_ROW_HEIGHT,
+    estimateMarkdownTableBodyRowHeights,
+} from "../markdownTableRowHeightEstimate";
+import { resolveMarkdownTableVirtualRange } from "../markdownTableVirtualization";
+import { resolveMarkdownTableVirtualViewport } from "../markdownTableVirtualViewport";
+import {
     detectOpenWikiLink,
     resolveWikiLinkSuggestionAcceptanceAtCursor,
     type OpenWikiLinkMatch,
@@ -83,6 +92,7 @@ import {
     isImeComposing,
     shouldSubmitPlainEnter,
 } from "../../../../utils/imeInputGuard";
+import { TableCellLatex } from "./MarkdownTableCellLatex";
 import "./MarkdownTableVisualEditor.css";
 
 const TABLE_WIDGET_EDITOR_FOCUS_CLASS = "cm-table-widget-focused";
@@ -192,7 +202,7 @@ interface TableResizeDragState {
 
 const DEFAULT_TABLE_COLUMN_WIDTH = 164;
 const MIN_TABLE_COLUMN_WIDTH = 88;
-const MIN_TABLE_ROW_HEIGHT = 34;
+const MIN_TABLE_ROW_HEIGHT = MARKDOWN_TABLE_MIN_ROW_HEIGHT;
 const TABLE_EDGE_DRAG_MIME_TYPE = "application/x-ofive-markdown-table-edge";
 const INACTIVE_WIKILINK_SUGGEST_STATE: TableWikiLinkSuggestState = {
     active: false,
@@ -214,83 +224,6 @@ interface SaveResult {
     success: boolean;
     /** 状态消息。 */
     message: string;
-}
-
-interface TableCellLatexProps {
-    /** LaTeX 公式源码。 */
-    latex: string;
-    /** 是否按 display 模式排版。 */
-    displayMode: boolean;
-}
-
-interface TableCellLatexRenderResult {
-    /** KaTeX 渲染后的 HTML。 */
-    html: string;
-    /** 是否渲染失败。 */
-    isError: boolean;
-}
-
-const tableCellLatexCache = new Map<string, TableCellLatexRenderResult>();
-
-function renderTableCellLatex(latex: string, displayMode: boolean): TableCellLatexRenderResult {
-    const cacheKey = `${displayMode ? "block" : "inline"}::${latex}`;
-    const cachedResult = tableCellLatexCache.get(cacheKey);
-    if (cachedResult) {
-        return cachedResult;
-    }
-
-    try {
-        const html = katex.renderToString(latex, {
-            displayMode,
-            throwOnError: false,
-            strict: false,
-            trust: false,
-            output: "htmlAndMathml",
-        });
-        const renderResult = { html, isError: false };
-        tableCellLatexCache.set(cacheKey, renderResult);
-        return renderResult;
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const renderResult = {
-            // i18n-guard-ignore-next-line -- KaTeX provides the dynamic diagnostic text.
-            html: `<span class="cm-latex-error" title="${escapeHtml(errorMessage)}">${escapeHtml(latex)}</span>`,
-            isError: true,
-        };
-        tableCellLatexCache.set(cacheKey, renderResult);
-        return renderResult;
-    }
-}
-
-/**
- * @function TableCellLatex
- * @description 在表格单元格预览中渲染 LaTeX。
- * @param props 公式参数。
- * @returns 公式节点。
- */
-function TableCellLatex(props: TableCellLatexProps): ReactNode {
-    const renderResult = useMemo(
-        () => renderTableCellLatex(props.latex, props.displayMode),
-        [props.displayMode, props.latex],
-    );
-
-    return (
-        <span
-            className={[
-                props.displayMode ? "mtv-cell-latex-display" : "cm-latex-inline-widget",
-                renderResult.isError ? "cm-latex-inline-error" : "",
-            ].filter(Boolean).join(" ")}
-            dangerouslySetInnerHTML={{ __html: renderResult.html }}
-        />
-    );
-}
-
-function escapeHtml(text: string): string {
-    return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
 }
 
 /**
@@ -606,6 +539,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const initialColumnWidths = resolveInitialColumnWidths(props.initialModel, props.initialLayout);
     const initialRowHeights = resolveInitialRowHeights(props.initialModel, props.initialLayout);
     const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const tableScrollRef = useRef<HTMLTableElement | null>(null);
     const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
     const navigationRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const headerMeasureRef = useRef<HTMLElement | null>(null);
@@ -616,6 +550,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const wikiLinkSuggestRequestSeqRef = useRef<number>(0);
     const wikiLinkSuggestDebounceTimerRef = useRef<number | null>(null);
     const resizeDragStateRef = useRef<TableResizeDragState | null>(null);
+    const pendingActiveCellRevealRef = useRef<MarkdownTableCellPosition | null>(null);
     const [tableModel, setTableModel] = useState<MarkdownTableModel>(() => props.initialModel);
     const [activeCell, setActiveCell] = useState<MarkdownTableCellPosition>(() =>
         resolveDefaultActiveCell(props.initialModel),
@@ -625,6 +560,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     const [edgeSelection, setEdgeSelection] = useState<TableEdgeSelection | null>(null);
     const [contextMenuState, setContextMenuState] = useState<TableContextMenuState>(null);
     const [dragState, setDragState] = useState<TableDragState>(null);
+    const [hasCustomLayout, setHasCustomLayout] = useState<boolean>(() => hasMarkdownTableLayout(props.initialLayout));
     const [columnWidths, setColumnWidths] = useState<number[]>(() =>
         initialColumnWidths,
     );
@@ -633,14 +569,22 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     );
     const [renderedHeaderHeight, setRenderedHeaderHeight] = useState<number>(MIN_TABLE_ROW_HEIGHT);
     const [renderedRowHeights, setRenderedRowHeights] = useState<number[]>(() =>
-        Array.from({ length: props.initialModel.rows.length }, () => MIN_TABLE_ROW_HEIGHT),
+        estimateMarkdownTableBodyRowHeights(props.initialModel, initialColumnWidths, initialRowHeights),
+    );
+    const [virtualViewport, setVirtualViewport] = useState<{ top: number; bottom: number }>(() => ({
+        top: 0,
+        bottom: 720,
+    }));
+    const richPreviewLimit = useMemo<number>(
+        () => resolveInitialRichPreviewLimit(tableModel),
+        [tableModel.headers.length, tableModel.rows.length],
     );
     const [wikiLinkSuggestState, setWikiLinkSuggestState] = useState<TableWikiLinkSuggestState>(
         INACTIVE_WIKILINK_SUGGEST_STATE,
     );
     const columnWidthsRef = useRef<number[]>(initialColumnWidths);
     const rowHeightsRef = useRef<number[]>(initialRowHeights);
-    const hasCustomLayoutRef = useRef<boolean>(hasMarkdownTableLayout(props.initialLayout));
+    const hasCustomLayoutRef = useRef<boolean>(hasCustomLayout);
     const lastCommittedMarkdownRef = useRef<string>(serializeMarkdownTableWithLayout(
         props.initialModel,
         hasCustomLayoutRef.current
@@ -837,6 +781,23 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         () => buildColumnWidthStyle(columnWidths),
         [columnWidths],
     );
+    const bodyRowRenderHeights = useMemo<number[]>(
+        () => estimateMarkdownTableBodyRowHeights(tableModel, columnWidths, hasCustomLayout ? rowHeights : null),
+        [columnWidths, hasCustomLayout, rowHeights, tableModel],
+    );
+    const virtualRange = useMemo(
+        () => resolveMarkdownTableVirtualRange({
+            rowCount: tableModel.rows.length,
+            rowHeights: bodyRowRenderHeights,
+            viewportTop: virtualViewport.top,
+            viewportBottom: virtualViewport.bottom,
+        }),
+        [bodyRowRenderHeights, tableModel.rows.length, virtualViewport],
+    );
+    const visibleBodyRows = useMemo(
+        () => tableModel.rows.slice(virtualRange.startIndex, virtualRange.endIndex),
+        [tableModel.rows, virtualRange.endIndex, virtualRange.startIndex],
+    );
 
     useEffect(() => {
         tableModelRef.current = tableModel;
@@ -873,9 +834,10 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                 MIN_TABLE_ROW_HEIGHT,
                 Math.ceil(headerMeasureRef.current?.getBoundingClientRect().height ?? MIN_TABLE_ROW_HEIGHT),
             );
-            const nextRowHeights = tableModelRef.current.rows.map((_, rowIndex) => {
+            const nextRowHeights = bodyRowRenderHeights.map((estimatedHeight, rowIndex) => {
                 const measuredHeight = bodyRowMeasureRefs.current.get(rowIndex)?.getBoundingClientRect().height;
                 return Math.max(
+                    estimatedHeight,
                     rowHeights[rowIndex] ?? MIN_TABLE_ROW_HEIGHT,
                     Math.ceil(measuredHeight ?? MIN_TABLE_ROW_HEIGHT),
                 );
@@ -915,7 +877,83 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         return () => {
             observer.disconnect();
         };
-    }, [rowHeights, tableModel.headers.length, tableModel.rows.length]);
+    }, [bodyRowRenderHeights, rowHeights, tableModel.headers.length, tableModel.rows.length]);
+
+    useLayoutEffect(() => {
+        const tableScroll = tableScrollRef.current;
+        if (!tableScroll) {
+            return;
+        }
+
+        const updateVirtualViewport = (): void => {
+            const editorScroller = wrapperRef.current?.closest<HTMLElement>(".cm-scroller");
+            const tableRect = tableScroll.getBoundingClientRect();
+            const scrollerRect = editorScroller?.getBoundingClientRect();
+            if (!editorScroller || !scrollerRect) {
+                setVirtualViewport({ top: tableScroll.scrollTop, bottom: tableScroll.scrollTop + tableScroll.clientHeight });
+                return;
+            }
+
+            setVirtualViewport(resolveMarkdownTableVirtualViewport({
+                scrollerScrollTop: editorScroller.scrollTop,
+                scrollerClientHeight: editorScroller.clientHeight,
+                scrollerTop: scrollerRect.top,
+                tableTop: tableRect.top,
+                headerHeight: renderedHeaderHeight,
+            }));
+        };
+
+        updateVirtualViewport();
+        const editorScroller = wrapperRef.current?.closest<HTMLElement>(".cm-scroller");
+        editorScroller?.addEventListener("scroll", updateVirtualViewport, { passive: true });
+        window.addEventListener("resize", updateVirtualViewport);
+        return () => {
+            editorScroller?.removeEventListener("scroll", updateVirtualViewport);
+            window.removeEventListener("resize", updateVirtualViewport);
+        };
+    }, [bodyRowRenderHeights.length, renderedHeaderHeight, tableModel.headers.length]);
+
+    useLayoutEffect(() => {
+        const pendingReveal = pendingActiveCellRevealRef.current;
+        if (
+            !pendingReveal
+            || !isSameCellPosition(pendingReveal, activeCell)
+            || activeCell.section !== "body"
+            || !virtualRange.enabled
+        ) {
+            return;
+        }
+
+        if (activeCell.rowIndex >= virtualRange.startIndex && activeCell.rowIndex < virtualRange.endIndex) {
+            pendingActiveCellRevealRef.current = null;
+            window.requestAnimationFrame(() => {
+                const cellKey = buildCellKey(activeCell);
+                if (interactionMode === "editing") {
+                    inputRefs.current.get(cellKey)?.focus();
+                    return;
+                }
+
+                const target = navigationRefs.current.get(cellKey);
+                target?.focus();
+                if (target && document.activeElement === target) {
+                    clearPendingMarkdownTableNavigationRestore(props.blockFrom, activeCell);
+                }
+            });
+            return;
+        }
+
+        const widget = wrapperRef.current?.closest<HTMLElement>(".cm-markdown-table-widget");
+        const editorScroller = wrapperRef.current?.closest<HTMLElement>(".cm-scroller");
+        if (!widget || !editorScroller) {
+            return;
+        }
+
+        const bodyOffsetTop = tableScrollRef.current?.offsetTop ?? 0;
+        const rowTop = bodyRowRenderHeights
+            .slice(0, activeCell.rowIndex)
+            .reduce((totalHeight, rowHeight) => totalHeight + rowHeight, 0);
+        editorScroller.scrollTop = widget.offsetTop + bodyOffsetTop + rowTop - Math.max(40, editorScroller.clientHeight / 3);
+    }, [activeCell, bodyRowRenderHeights, interactionMode, props.blockFrom, virtualRange]);
 
     useEffect(() => {
         const pendingSelection = pendingInputSelectionRef.current;
@@ -1003,6 +1041,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         const handlePointerEnd = (): void => {
             if (resizeDragStateRef.current) {
                 hasCustomLayoutRef.current = true;
+                setHasCustomLayout(true);
                 resizeDragStateRef.current = null;
                 commitDraftModel();
                 return;
@@ -1304,6 +1343,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         setEdgeSelection(null);
         setInteractionMode("editing");
         setTableFocusState(true);
+        pendingActiveCellRevealRef.current = position;
         setActiveCell(position);
         window.requestAnimationFrame(() => {
             inputRefs.current.get(buildCellKey(position))?.focus();
@@ -1317,6 +1357,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
         };
         setInteractionMode("navigation");
         setTableFocusState(true);
+        pendingActiveCellRevealRef.current = position;
         setActiveCell(position);
         window.requestAnimationFrame(() => {
             const target = navigationRefs.current.get(buildCellKey(position));
@@ -2122,7 +2163,9 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
     ): ReactNode => {
         const isEmpty = value.trim().length === 0;
         const cellKey = buildCellKey(position);
-        const previewMarkdown = isEmpty || isNavigationTarget
+        const canRenderRichPreview =
+            getMarkdownTableCellFlatIndex(position, tableModel.headers.length) < richPreviewLimit;
+        const previewMarkdown = isEmpty || isNavigationTarget || !canRenderRichPreview
             ? ""
             : prepareMarkdownTableCellPreviewMarkdown(value);
 
@@ -2144,6 +2187,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                 data-markdown-table-row-index={position.rowIndex}
                 data-markdown-table-column-index={position.columnIndex}
                 data-markdown-table-entry-anchor={isTableBodyEntryAnchor(position) ? true : undefined}
+                data-rich-preview-ready={!isEmpty && canRenderRichPreview ? true : undefined}
                 data-vim-nav-active={isNavigationTarget ? true : undefined}
                 tabIndex={isNavigationTarget ? 0 : -1}
                 onFocus={() => {
@@ -2229,7 +2273,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
             >
                 {isEmpty ? (
                     <span className="mtv-cell-preview-placeholder">{placeholder}</span>
-                ) : isNavigationTarget ? (
+                ) : isNavigationTarget || !canRenderRichPreview ? (
                     <span className="mtv-cell-preview-text">{value}</span>
                 ) : (
                     <span className="mtv-cell-preview-markdown">
@@ -2292,9 +2336,30 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                 className="mtv-row-header-spacer"
                                 style={{ height: renderedHeaderHeight }}
                             />
-                            {tableModel.rows.map((_, rowIndex) => renderRowEdgeHandle(rowIndex))}
+                            {virtualRange.enabled && virtualRange.beforeHeight > 0 ? (
+                                <div
+                                    className="mtv-row-virtual-spacer"
+                                    style={{ height: virtualRange.beforeHeight }}
+                                />
+                            ) : null}
+                            {visibleBodyRows.map((_, visibleRowIndex) =>
+                                renderRowEdgeHandle(virtualRange.startIndex + visibleRowIndex),
+                            )}
+                            {virtualRange.enabled && virtualRange.afterHeight > 0 ? (
+                                <div
+                                    className="mtv-row-virtual-spacer"
+                                    style={{ height: virtualRange.afterHeight }}
+                                />
+                            ) : null}
                         </div>
-                        <table className="mtv-table" style={columnWidthStyle}>
+                        <table
+                            ref={tableScrollRef}
+                            className="mtv-table"
+                            data-row-virtualized={virtualRange.enabled ? true : undefined}
+                            data-total-body-rows={tableModel.rows.length}
+                            data-rendered-body-rows={visibleBodyRows.length}
+                            style={columnWidthStyle}
+                        >
                             <thead>
                                 <tr>
                             {tableModel.headers.map((header, columnIndex) => {
@@ -2373,13 +2438,30 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                 </tr>
                             </thead>
                             <tbody>
-                                {tableModel.rows.map((row, rowIndex) => (
+                                {virtualRange.enabled && virtualRange.beforeHeight > 0 ? (
+                                    <tr
+                                        className="mtv-table-virtual-spacer-row"
+                                        aria-hidden="true"
+                                        style={{ height: virtualRange.beforeHeight }}
+                                    >
+                                        <td
+                                            className="mtv-table-virtual-spacer-cell"
+                                            style={{
+                                                gridColumn: `span ${tableModel.headers.length}`,
+                                                height: virtualRange.beforeHeight,
+                                            }}
+                                        />
+                                    </tr>
+                                ) : null}
+                                {visibleBodyRows.map((row, visibleRowIndex) => {
+                                    const rowIndex = virtualRange.startIndex + visibleRowIndex;
+                                    return (
                             <tr
                                 key={`body-row-${rowIndex}`}
                                 className="mtv-table-body-row"
                                 data-edge-selected={edgeSelection?.kind === "row" && edgeSelection.index === rowIndex ? true : undefined}
                                 style={{
-                                    height: rowHeights[rowIndex] ?? MIN_TABLE_ROW_HEIGHT,
+                                    height: bodyRowRenderHeights[rowIndex] ?? rowHeights[rowIndex] ?? MIN_TABLE_ROW_HEIGHT,
                                 }}
                             >
                                 {row.map((cell, columnIndex) => {
@@ -2408,7 +2490,7 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                                 }
                                                 : undefined}
                                             style={{
-                                                minHeight: rowHeights[rowIndex] ?? MIN_TABLE_ROW_HEIGHT,
+                                                minHeight: bodyRowRenderHeights[rowIndex] ?? rowHeights[rowIndex] ?? MIN_TABLE_ROW_HEIGHT,
                                             }}
                                         >
                                             <div className="mtv-cell-frame">
@@ -2464,7 +2546,23 @@ export function MarkdownTableVisualEditor(props: MarkdownTableVisualEditorProps)
                                     );
                                 })}
                             </tr>
-                                ))}
+                                    );
+                                })}
+                                {virtualRange.enabled && virtualRange.afterHeight > 0 ? (
+                                    <tr
+                                        className="mtv-table-virtual-spacer-row"
+                                        aria-hidden="true"
+                                        style={{ height: virtualRange.afterHeight }}
+                                    >
+                                        <td
+                                            className="mtv-table-virtual-spacer-cell"
+                                            style={{
+                                                gridColumn: `span ${tableModel.headers.length}`,
+                                                height: virtualRange.afterHeight,
+                                            }}
+                                        />
+                                    </tr>
+                                ) : null}
                             </tbody>
                         </table>
                     </div>

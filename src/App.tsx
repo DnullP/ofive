@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   CustomTitlebar,
   SettingsTab,
@@ -15,7 +15,7 @@ import { ensureBuiltinComponentsRegistered } from "./host/registry/registerBuilt
 import { useWindowEffectsSync } from "./host/window/useWindowEffectsSync";
 import { useMainWindowFullscreenEscapeGuard } from "./host/window/useMainWindowFullscreenEscapeGuard";
 import { useGlobalContextMenuBlocker } from "./host/layout/contextMenuCenter";
-import { readOfiveWindowBootstrap } from "./api/windowApi";
+import { emitDetachedTabWindowReady, getCurrentOfiveWindowLabel, readOfiveWindowBootstrap } from "./api/windowApi";
 import "./App.css";
 
 function App() {
@@ -32,6 +32,32 @@ function App() {
   useConfigSync(vaultState.currentVaultPath, !vaultState.isLoadingTree && !vaultState.error);
   const windowBootstrap = useMemo(() => readOfiveWindowBootstrap(), []);
   const isDetachedWindow = windowBootstrap.kind === "detached";
+
+  useEffect(() => {
+    if (!isDetachedWindow) {
+      return;
+    }
+
+    let secondFrameId: number | null = null;
+    const firstFrameId = requestAnimationFrame(() => {
+      secondFrameId = requestAnimationFrame(() => {
+        void getCurrentOfiveWindowLabel().then((label) => {
+          if (!label) {
+            return;
+          }
+
+          void emitDetachedTabWindowReady({ windowLabel: label });
+        });
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(firstFrameId);
+      if (secondFrameId !== null) {
+        cancelAnimationFrame(secondFrameId);
+      }
+    };
+  }, [isDetachedWindow]);
 
   /* ── 注册内置组件（幂等，只执行一次） ── */
   const builtinRefs = useMemo(() => ({

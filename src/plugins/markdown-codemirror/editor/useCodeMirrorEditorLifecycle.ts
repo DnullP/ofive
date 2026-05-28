@@ -68,11 +68,7 @@ import { vim } from "@replit/codemirror-vim";
 import {
     createVaultBinaryFile,
 } from "../../../api/vaultApi";
-import {
-    reportArticleContent,
-    reportArticleFocus,
-    type ArticleState,
-} from "../../../host/editor/editorContextStore";
+import { releaseArticleSnapshot, reportArticleContent, reportArticleFocus, type ArticleState } from "../../../host/editor/editorContextStore";
 import type { WorkbenchContainerApi } from "../../../host/layout/workbenchContracts";
 import {
     getEditorViewStateSnapshot,
@@ -239,12 +235,7 @@ function isEditorInitialPresentationReady(view: EditorView): boolean {
         return true;
     }
 
-    const visualFrontmatter = view.dom.querySelector(".cm-frontmatter-widget .fmv-editor");
-    const hiddenFrontmatterLines = view.dom.querySelectorAll(
-        ".cm-hidden-block-line, .cm-hidden-block-anchor-line",
-    );
-
-    return visualFrontmatter instanceof HTMLElement && hiddenFrontmatterLines.length > 0;
+    return view.dom.querySelector(".cm-frontmatter-widget .fmv-editor") instanceof HTMLElement;
 }
 
 /**
@@ -1129,6 +1120,7 @@ export function useCodeMirrorEditorLifecycle(
                 unregisterVimTokenProvider(viewRef.current);
                 safeDestroyEditorView(viewRef.current);
             }
+            releaseArticleSnapshot(options.articleId);
             viewRef.current = null;
         };
     }, [options.articleId, options.containerApi]);

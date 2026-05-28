@@ -130,6 +130,18 @@
     display: contents;
 }
 
+.mtv-table-virtual-spacer-cell,
+.mtv-row-virtual-spacer {
+    display: block;
+    padding: 0;
+    border: 0;
+    pointer-events: none;
+}
+
+.mtv-table-virtual-spacer-cell {
+    min-width: 0;
+}
+
 .mtv-table-head-cell,
 .mtv-table-body-cell {
     position: relative;

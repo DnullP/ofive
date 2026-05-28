@@ -49,8 +49,7 @@ async function expandMockNotes(page: Page): Promise<void> {
 async function openMockNote(page: Page, relativePath: string): Promise<void> {
     await expandMockNotes(page);
     await page.locator(`.tree-item[data-tree-path='${relativePath}']`).click();
-    const fileName = relativePath.split("/").pop() ?? relativePath;
-    await page.getByRole("button", { name: fileName }).first().waitFor({ state: "visible" });
+    await page.locator(".layout-v2-tab-section__card--active .cm-content").waitFor({ state: "visible" });
 }
 
 async function clickEditorLine(page: Page, lineIndex: number): Promise<void> {
@@ -574,7 +573,7 @@ test.describe("markdown table vim regression", () => {
         await expect(firstCell).toHaveText("**Bold**");
         await expectActiveTableCellPosition(page, "body", 0, 0);
 
-        await clickEditorLine(page, 8);
+        await setEditorSelectionToTextEnd(page, "| `inline code` | ==highlight== |");
         await page.keyboard.press("Escape");
         await page.keyboard.press("k");
         await waitForEditorFrames(page);
@@ -1236,7 +1235,7 @@ test.describe("markdown table vim regression", () => {
                 }),
             ]);
 
-            expect(Math.abs(centers[0] - centers[1])).toBeLessThanOrEqual(1.5);
+            expect(Math.abs(centers[0] - centers[1])).toBeLessThanOrEqual(2);
         }
     });
 

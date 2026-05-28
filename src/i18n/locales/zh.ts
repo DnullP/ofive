@@ -492,6 +492,7 @@ const zh = {
         newFilePrompt: "新建文件",
         newCanvasPrompt: "新建 Canvas",
         closeCurrentTab: "关闭当前标签页",
+        detachCurrentTabToWindow: "分离当前标签页到新窗口",
         exitApp: "退出应用",
         reloadApp: "重载应用",
         toggleLeftSidebar: "显示/隐藏左侧边栏",

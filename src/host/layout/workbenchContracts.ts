@@ -88,6 +88,7 @@ export interface PanelRenderContext {
         openMode?: FileOpenMode;
     }) => Promise<void>;
     closeTab: (tabId: string) => void;
+    closeFileTabsByPath?: (relativePath: string) => void;
     setActiveTab: (tabId: string) => void;
     activatePanel: (panelId: string) => void;
     markContentReady?: () => void;

@@ -1078,6 +1078,7 @@
 
 * {
   box-sizing: border-box;
+  overscroll-behavior-y: none;
 }
 
 html,
@@ -1100,6 +1101,7 @@ body {
 /* 根节点不参与滚动，滚动仅发生在面板内容区 */
 #root {
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 html,

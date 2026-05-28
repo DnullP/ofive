@@ -33,6 +33,7 @@ const AI_PUBLIC_SURFACES: &[BackendModulePublicSurface] = &[
             "src/infra/persistence/ai_chat_store.rs",
             "src/host/commands/ai_commands.rs",
             "src/host/events/ai_events.rs",
+            "src/test_support/",
         ],
         rationale: "AI protobuf 与流式事件 payload 属于 AI 模块共享契约边界",
     },
@@ -47,7 +48,7 @@ const AI_PRIVATE_NAMESPACES: &[ModulePrivateNamespaceTemplate] = &[
     },
     ModulePrivateNamespaceTemplate {
         namespace: "crate::infra::ai::",
-        allowed_paths: &["src/app/ai/", "src/infra/ai/"],
+        allowed_paths: &["src/app/ai/", "src/infra/ai/", "src/test_support/"],
         rationale: "AI infra adapter 不应被其他模块直接依赖",
     },
     ModulePrivateNamespaceTemplate {

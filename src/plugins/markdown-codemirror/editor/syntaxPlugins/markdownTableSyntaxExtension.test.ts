@@ -7,6 +7,7 @@
 import { describe, expect, test } from "bun:test";
 import {
     estimateMarkdownTableWidgetHeight,
+    resolveMarkdownTableEditorWheelDeltaY,
     shouldKeepMarkdownTableSourceVisible,
 } from "./markdownTableSyntaxExtension";
 
@@ -42,6 +43,14 @@ describe("estimateMarkdownTableWidgetHeight", () => {
         expect(estimatedHeight).toBeGreaterThan(1800);
     });
 
+    test("估算高度应覆盖完整可视 widget，避免向上滚动时二次补偿 scrollTop", () => {
+        const estimatedHeight = estimateMarkdownTableWidgetHeight({
+            rows: Array.from({ length: 44 }, () => ["metric", "owner", "status", "detail"]),
+        }, null);
+
+        expect(estimatedHeight).toBe(1760);
+    });
+
     test("应优先使用持久化行高估算已调整过的表格", () => {
         const estimatedHeight = estimateMarkdownTableWidgetHeight({
             rows: [
@@ -53,5 +62,65 @@ describe("estimateMarkdownTableWidgetHeight", () => {
         });
 
         expect(estimatedHeight).toBe(312);
+    });
+});
+
+describe("resolveMarkdownTableEditorWheelDeltaY", () => {
+    test("竖向触控板滚动应交给主编辑器滚动容器", () => {
+        expect(resolveMarkdownTableEditorWheelDeltaY({
+            deltaX: 1,
+            deltaY: 24,
+            deltaMode: 0,
+            lineHeight: 18,
+            pageHeight: 600,
+        })).toBe(24);
+    });
+
+    test("横向滚动应保留给表格自身横向滚动容器", () => {
+        expect(resolveMarkdownTableEditorWheelDeltaY({
+            deltaX: 48,
+            deltaY: 12,
+            deltaMode: 0,
+            lineHeight: 18,
+            pageHeight: 600,
+        })).toBe(0);
+    });
+
+    test("Shift 横滚与 Ctrl 缩放手势不应被表格转成编辑器竖向滚动", () => {
+        expect(resolveMarkdownTableEditorWheelDeltaY({
+            deltaX: 0,
+            deltaY: 42,
+            deltaMode: 0,
+            lineHeight: 18,
+            pageHeight: 600,
+            shiftKey: true,
+        })).toBe(0);
+
+        expect(resolveMarkdownTableEditorWheelDeltaY({
+            deltaX: 0,
+            deltaY: 42,
+            deltaMode: 0,
+            lineHeight: 18,
+            pageHeight: 600,
+            ctrlKey: true,
+        })).toBe(0);
+    });
+
+    test("非像素 wheel delta 应按行高或视口高度归一化", () => {
+        expect(resolveMarkdownTableEditorWheelDeltaY({
+            deltaX: 0,
+            deltaY: 3,
+            deltaMode: 1,
+            lineHeight: 20,
+            pageHeight: 600,
+        })).toBe(60);
+
+        expect(resolveMarkdownTableEditorWheelDeltaY({
+            deltaX: 0,
+            deltaY: 1,
+            deltaMode: 2,
+            lineHeight: 20,
+            pageHeight: 480,
+        })).toBe(480);
     });
 });

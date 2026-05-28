@@ -125,3 +125,6 @@ if is_byte_offset_excluded(match_start, &excluded) {
 - 模块间依赖应清晰，导出过多时评估拆分
 - 后端导出方法必须有单元测试，覆盖率 ≥ 80%
 - 前后端接口和状态管理需有集成测试
+- 用户体验一致性状态（编辑器内容、outline、AI chat runtime、布局恢复）必须有唯一前端 owner；组件 mount/unmount 不应改变事实源。
+- UI 组件不得直接订阅后端事件/stream；后端订阅应收敛到 API wrapper、App Event Bus bridge、plugin-level hub 或插件激活 owner。
+- 读型插件优先消费前端 canonical Markdown 内容快照和 `persisted.content.updated` 语义事件，缺失时才回退后端持久态读取。

@@ -3,7 +3,7 @@
  * @description 文件树拖拽到仓库根目录的回归测试。
  */
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { gotoMockVaultPage } from "./helpers/mockVault";
 
 const MOCK_PAGE = "/web-mock/mock-tauri-test.html?showControls=0";
@@ -13,21 +13,30 @@ const ROOT_TARGET_NOTE_PATH = "root-target.md";
 const ROOT_NOTE_PATH = "guide.md";
 const ROOT_FOLDER_PATH = "notes";
 
+function activeFileTree(page: Page): Locator {
+    return page.locator(
+        "[data-layout-role='panel-content'][data-layout-panel-id='files'] " +
+        ".layout-v2-panel-section__pane[data-layout-presentation-state='committed'] .file-tree",
+    );
+}
+
 async function waitForMockFileTree(page: Page): Promise<void> {
     await gotoMockVaultPage(page, "file-tree-root-drop", MOCK_PAGE);
     await page.locator("[data-workbench-layout-mode='layout-v2']").waitFor({ state: "visible" });
-    await page.locator(".file-tree").waitFor({ state: "visible" });
+    await activeFileTree(page).waitFor({ state: "visible" });
 }
 
 async function expandMockNotes(page: Page): Promise<void> {
-    await page.locator(".tree-item[data-tree-path='test-resources']").click();
-    await page.locator(".tree-item[data-tree-path='test-resources/notes']").click();
-    await expect(page.locator(`.tree-item[data-tree-path='${SOURCE_NOTE_PATH}']`)).toBeVisible();
+    const tree = activeFileTree(page);
+    await tree.locator(".tree-item[data-tree-path='test-resources']").click();
+    await tree.locator(".tree-item[data-tree-path='test-resources/notes']").click();
+    await expect(tree.locator(`.tree-item[data-tree-path='${SOURCE_NOTE_PATH}']`)).toBeVisible();
 }
 
 async function expandMockTestResources(page: Page): Promise<void> {
-    await page.locator(".tree-item[data-tree-path='test-resources']").click();
-    await expect(page.locator(`.tree-item[data-tree-path='${SOURCE_FOLDER_PATH}']`)).toBeVisible();
+    const tree = activeFileTree(page);
+    await tree.locator(".tree-item[data-tree-path='test-resources']").click();
+    await expect(tree.locator(`.tree-item[data-tree-path='${SOURCE_FOLDER_PATH}']`)).toBeVisible();
 }
 
 async function dragTreeItemToRootLevelFile(
@@ -35,8 +44,9 @@ async function dragTreeItemToRootLevelFile(
     sourceRelativePath: string,
     targetRelativePath: string,
 ): Promise<void> {
-    const source = page.locator(`.tree-item[data-tree-path='${sourceRelativePath}']`);
-    const target = page.locator(`.tree-item[data-tree-path='${targetRelativePath}']`);
+    const tree = activeFileTree(page);
+    const source = tree.locator(`.tree-item[data-tree-path='${sourceRelativePath}']`);
+    const target = tree.locator(`.tree-item[data-tree-path='${targetRelativePath}']`);
     await source.scrollIntoViewIfNeeded();
     await target.scrollIntoViewIfNeeded();
 
@@ -57,24 +67,26 @@ test.describe("file tree root drop", () => {
     test("moves a nested file into the vault root by dropping on a root-level file @mouse-drag", async ({ page }) => {
         await waitForMockFileTree(page);
         await expandMockNotes(page);
-        await expect(page.locator("[data-tree-root-drop-target='true']")).toHaveCount(0);
-        await expect(page.locator(`.tree-item[data-tree-path='${ROOT_TARGET_NOTE_PATH}']`)).toBeVisible();
+        const tree = activeFileTree(page);
+        await expect(tree.locator("[data-tree-root-drop-target='true']")).toHaveCount(0);
+        await expect(tree.locator(`.tree-item[data-tree-path='${ROOT_TARGET_NOTE_PATH}']`)).toBeVisible();
 
         await dragTreeItemToRootLevelFile(page, SOURCE_NOTE_PATH, ROOT_TARGET_NOTE_PATH);
 
-        await expect(page.locator(`.tree-item[data-tree-path='${SOURCE_NOTE_PATH}']`)).toHaveCount(0);
-        await expect(page.locator(`.tree-item[data-tree-path='${ROOT_NOTE_PATH}']`)).toBeVisible();
+        await expect(tree.locator(`.tree-item[data-tree-path='${SOURCE_NOTE_PATH}']`)).toHaveCount(0);
+        await expect(tree.locator(`.tree-item[data-tree-path='${ROOT_NOTE_PATH}']`)).toBeVisible();
     });
 
     test("moves a nested folder into the vault root by dropping on a root-level file @mouse-drag", async ({ page }) => {
         await waitForMockFileTree(page);
         await expandMockTestResources(page);
-        await expect(page.locator("[data-tree-root-drop-target='true']")).toHaveCount(0);
-        await expect(page.locator(`.tree-item[data-tree-path='${ROOT_TARGET_NOTE_PATH}']`)).toBeVisible();
+        const tree = activeFileTree(page);
+        await expect(tree.locator("[data-tree-root-drop-target='true']")).toHaveCount(0);
+        await expect(tree.locator(`.tree-item[data-tree-path='${ROOT_TARGET_NOTE_PATH}']`)).toBeVisible();
 
         await dragTreeItemToRootLevelFile(page, SOURCE_FOLDER_PATH, ROOT_TARGET_NOTE_PATH);
 
-        await expect(page.locator(`.tree-item[data-tree-path='${SOURCE_FOLDER_PATH}']`)).toHaveCount(0);
-        await expect(page.locator(`.tree-item[data-tree-path='${ROOT_FOLDER_PATH}']`)).toBeVisible();
+        await expect(tree.locator(`.tree-item[data-tree-path='${SOURCE_FOLDER_PATH}']`)).toHaveCount(0);
+        await expect(tree.locator(`.tree-item[data-tree-path='${ROOT_FOLDER_PATH}']`)).toBeVisible();
     });
 });

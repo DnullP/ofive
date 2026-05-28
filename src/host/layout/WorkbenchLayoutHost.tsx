@@ -73,13 +73,24 @@ import {
     subscribeRightSidebarToggleRequest,
 } from "./rightSidebarVisibilityBridge";
 import {
+    buildUniqueFileViewTabId,
+    normalizeRelativePath,
     openFileInWorkbench,
     resolveFileTabDefinition,
     TAB_NAVIGATION_HISTORY_PARAM,
     type TabNavigationHistoryState,
 } from "./openFileService";
 import { useConfigState, type FileOpenMode } from "../config/configStore";
-import { destroyCurrentOfiveWindow, type OfiveWindowKind } from "../../api/windowApi";
+import {
+    createDetachedTabWindow,
+    destroyCurrentOfiveWindow,
+    destroyOfiveWindowByLabel,
+    listenDetachedTabWindowReady,
+    moveOfiveWindowByLabel,
+    showAndFocusOfiveWindowByLabel,
+    type DetachedTabWindowReadyPayload,
+    type OfiveWindowKind,
+} from "../../api/windowApi";
 import {
     hasWorkspaceFileDragPayloadFiles,
     readWorkspaceFileDragPayload,
@@ -116,7 +127,12 @@ import {
     decorateTabParamsWithLifecycle,
     shouldCloseTabOnVaultChange,
 } from "./vaultTabScope";
-import { useTabWindowDragBridge } from "../window/useTabWindowDragBridge";
+import {
+    createDetachedReadyGate,
+    resolveDetachedWindowPosition,
+    useTabWindowDragBridge,
+    waitForDetachedWindowReady,
+} from "../window/useTabWindowDragBridge";
 
 const WORKBENCH_ACTIVITY_ITEM_CONTEXT_MENU_ID = "workbench-v2.activity.item";
 const WORKBENCH_ACTIVITY_BACKGROUND_CONTEXT_MENU_ID = "workbench-v2.activity.background";
@@ -454,6 +470,19 @@ function createWorkbenchContainerApi(
     };
 }
 
+function closeWorkbenchFileTabsByPath(workbenchApi: WorkbenchApi | null, relativePath: string): void {
+    if (!workbenchApi) {
+        return;
+    }
+
+    const targetPath = normalizeRelativePath(relativePath);
+    workbenchApi.getTabs()
+        .filter((tab) => normalizeRelativePath(String(tab.params?.path ?? "")) === targetPath)
+        .forEach((tab) => {
+            workbenchApi.closeTab(tab.id);
+        });
+}
+
 function isMarkdownFilePath(path: string): boolean {
     const normalizedPath = path.toLowerCase();
     return normalizedPath.endsWith(".md") || normalizedPath.endsWith(".markdown");
@@ -501,6 +530,9 @@ function buildPanelRenderContext(
         },
         openFile: openFileHelper,
         closeTab: workbenchContext.closeTab,
+        closeFileTabsByPath: (relativePath) => {
+            closeWorkbenchFileTabsByPath(workbenchApi, relativePath);
+        },
         setActiveTab: workbenchContext.setActiveTab,
         activatePanel: workbenchContext.activatePanel,
         markContentReady: workbenchContext.markContentReady,
@@ -828,6 +860,72 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         setOpenTabCount((currentCount) => currentCount === nextCount ? currentCount : nextCount);
     }, []);
 
+    const detachActiveTabToWindow = useCallback(async (): Promise<void> => {
+        const api = workbenchApiRef.current;
+        const activeTabId = activeTabIdRef.current;
+        const tab = activeTabId ? api?.getTab(activeTabId) : null;
+        if (!api || !tab) {
+            console.warn("[workbenchLayoutHost] detach active tab skipped: no active tab");
+            return;
+        }
+
+        const readyGate = createDetachedReadyGate();
+        let detachedWindowLabel: string | null = null;
+        const readyWindowLabels = new Set<string>();
+        const unlistenReady = await listenDetachedTabWindowReady((payload: DetachedTabWindowReadyPayload) => {
+            if (payload.windowLabel !== detachedWindowLabel) {
+                readyWindowLabels.add(payload.windowLabel);
+                return;
+            }
+
+            readyGate.detachedWindowReady = true;
+            readyGate.resolveDetachedReady();
+        });
+
+        try {
+            const pointer = {
+                clientX: 0,
+                clientY: 0,
+                screenX: window.screenX + 260,
+                screenY: window.screenY + 96,
+            };
+            detachedWindowLabel = await createDetachedTabWindow({
+                tab: {
+                    id: tab.id,
+                    title: tab.title,
+                    component: tab.component,
+                    params: tab.params,
+                },
+                screenX: pointer.screenX,
+                screenY: pointer.screenY,
+            });
+            if (!detachedWindowLabel) {
+                return;
+            }
+            if (readyWindowLabels.has(detachedWindowLabel)) {
+                readyGate.detachedWindowReady = true;
+                readyGate.resolveDetachedReady();
+            }
+
+            const ready = await waitForDetachedWindowReady(readyGate);
+            if (!ready) {
+                await destroyOfiveWindowByLabel(detachedWindowLabel);
+                console.warn("[workbenchLayoutHost] detach active tab window did not become ready before timeout", {
+                    detachedWindowLabel,
+                    tabId: tab.id,
+                });
+                return;
+            }
+
+            await moveOfiveWindowByLabel(detachedWindowLabel, resolveDetachedWindowPosition(pointer));
+            await showAndFocusOfiveWindowByLabel(detachedWindowLabel);
+            api.closeTab(tab.id);
+            syncOpenTabCountFromApi();
+        } finally {
+            unlistenReady();
+        }
+    }, [syncOpenTabCountFromApi]);
+
     const tabWindowDragBridge = useTabWindowDragBridge({
         workbenchApiRef,
         windowKind,
@@ -942,12 +1040,26 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 return null;
             }
 
-            return resolveFileTabDefinition({
+            const resolvedTab = await resolveFileTabDefinition({
                 relativePath: targetItem.path,
                 currentVaultPath: vaultState.currentVaultPath || configState.loadedVaultPath || undefined,
             });
+            if (!resolvedTab) {
+                return null;
+            }
+
+            const api = workbenchApiRef.current;
+            return {
+                ...resolvedTab,
+                id: buildUniqueFileViewTabId({
+                    baseTabId: resolvedTab.id,
+                    containerApi: api
+                        ? createWorkbenchContainerApi(api, () => activeTabIdRef.current, decorateTabDefinition)
+                        : null,
+                }),
+            };
         },
-    }), [configState.loadedVaultPath, vaultState.currentVaultPath]);
+    }), [configState.loadedVaultPath, decorateTabDefinition, vaultState.currentVaultPath]);
 
     useEffect(() => {
         let cancelled = false;
@@ -1136,6 +1248,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
                 params: tab.params,
             }));
         },
+        detachActiveTabToWindow,
         getExistingMarkdownPaths: () => [],
         activatePanel: (panelId: string) => workbenchApiRef.current?.activatePanel(panelId),
         toggleLeftSidebarVisibility: () => {
@@ -1159,7 +1272,7 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         getFileTreePasteTargetDirectory: resolveFocusedFileTreePasteTargetDirectory,
         requestDeleteConfirmation: requestVaultDeleteConfirmation,
         requestCreateEntryDraft,
-    }), [decorateTabDefinition, openFileHelper, requestCreateEntryDraft]);
+    }), [decorateTabDefinition, detachActiveTabToWindow, openFileHelper, requestCreateEntryDraft]);
 
     const markdownNotePaths = useMemo(
         () => vaultState.files
@@ -1367,6 +1480,9 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         },
         openFile: openFileHelper,
         closeTab: (tabId: string) => workbenchApiRef.current?.closeTab(tabId),
+        closeFileTabsByPath: (relativePath: string) => {
+            closeWorkbenchFileTabsByPath(workbenchApiRef.current, relativePath);
+        },
         setActiveTab: (tabId: string) => workbenchApiRef.current?.setActiveTab(tabId),
         activatePanel: (panelId: string) => workbenchApiRef.current?.activatePanel(panelId),
         executeCommand: (commandId: string) => {

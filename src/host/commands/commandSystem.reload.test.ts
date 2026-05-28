@@ -41,3 +41,29 @@ describe("commandSystem app.reload", () => {
         expect(command?.shortcut?.editableInSettings).toBe(true);
     });
 });
+
+describe("commandSystem tab.detachFocusedToWindow", () => {
+    it("should route detach command to window detach capability", () => {
+        let detachRequested = false;
+
+        executeCommand("tab.detachFocusedToWindow", {
+            activeTabId: "file:notes/guide.md",
+            closeTab: () => undefined,
+            openFileTab: () => undefined,
+            getExistingMarkdownPaths: () => [],
+            detachActiveTabToWindow: () => {
+                detachRequested = true;
+            },
+        });
+
+        expect(detachRequested).toBe(true);
+    });
+
+    it("should expose detach as an editable command without a default shortcut", () => {
+        const command = getCommandDefinition("tab.detachFocusedToWindow");
+
+        expect(command?.title).toBe("commands.detachCurrentTabToWindow");
+        expect(command?.shortcut?.defaultBinding).toBe("");
+        expect(command?.shortcut?.editableInSettings).toBe(true);
+    });
+});

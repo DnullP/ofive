@@ -2,7 +2,7 @@
 title: "ofive 文档地图"
 kind: "documentation-map"
 status: "active"
-updated: "2026-05-26"
+updated: "2026-05-29"
 owners:
   - "maintainers"
 tags:
@@ -36,6 +36,7 @@ Wiki 层回答“系统是什么、边界是什么、为什么这样设计”。
 - [[ofive-workbench-host]]：工作台投影层。
 - [[ofive-app-event-bus]]：前端语义事件层。
 - [[ofive-managed-store]]：前端状态治理模型。
+- [[ofive-state-governance]]：编辑、阅读、检索和 AI 会话的三层状态一致性模型。
 - [[ofive-module-glossary]]：后端模块。
 - [[ofive-architecture-overview]]：整体架构。
 - [[ofive-maintainer-dashboard]]：维护者视图。

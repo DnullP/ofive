@@ -36,6 +36,7 @@ import type { ShortcutBindingPolicy } from "./shortcutPolicies";
  */
 export type BuiltinCommandId =
     | "tab.closeFocused"
+    | "tab.detachFocusedToWindow"
     | "app.quit"
     | "app.reload"
     | "sidebar.left.toggle"
@@ -170,6 +171,8 @@ export interface CommandContext {
         component: string;
         params?: Record<string, unknown>;
     }) => void;
+    /** 将当前激活 tab 分离到新窗口 */
+    detachActiveTabToWindow?: () => void | Promise<void>;
     /** 获取当前文件树中的 Markdown 相对路径列表 */
     getExistingMarkdownPaths: () => string[];
     /** 激活侧边栏面板能力 */

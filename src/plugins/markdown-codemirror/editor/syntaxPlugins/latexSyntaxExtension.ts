@@ -16,7 +16,8 @@
  *  - createLatexSyntaxExtension: 创建 LaTeX 语法渲染扩展
  */
 
-import { RangeSet, RangeSetBuilder, type Text } from "@codemirror/state";
+import { RangeSet, RangeSetBuilder, StateField, type Text } from "@codemirror/state";
+import type { EditorState, Transaction } from "@codemirror/state";
 import {
     Decoration,
     type DecorationSet,
@@ -29,8 +30,6 @@ import katex from "katex";
 import { detectExcludedLineRanges } from "../../../../utils/markdownBlockDetector";
 import { rangeIntersectsSelection } from "../syntaxRenderRegistry";
 import {
-    hiddenBlockLineDecoration,
-    hiddenBlockAnchorLineDecoration,
     rangeTouchesBlock,
     type BlockRange,
 } from "./blockWidgetReplace";
@@ -63,6 +62,11 @@ const BLOCK_LATEX_CLOSE_PATTERN = /^\s*\$\$\s*$/;
  * 使用负向后顾确保不匹配 `$$` 开头，使用负向前瞻确保不匹配 `$$` 结尾。
  */
 const INLINE_LATEX_PATTERN = /(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/g;
+
+const BLOCK_LATEX_WIDGET_BASE_HEIGHT = 60;
+const BLOCK_LATEX_WIDGET_EXTRA_LINE_HEIGHT = 20;
+const BLOCK_LATEX_WIDGET_TALL_TOKEN_HEIGHT = 8;
+const BLOCK_LATEX_WIDGET_MAX_ESTIMATED_HEIGHT = 360;
 
 /* ─────────────────── KaTeX 渲染缓存 ─────────────────── */
 
@@ -125,6 +129,22 @@ function escapeHtml(text: string): string {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+/**
+ * @function estimateBlockLatexWidgetHeight
+ * @description 为离屏块级 LaTeX widget 提供保守高度，避免 KaTeX 进入视口后
+ *   CodeMirror 大幅修正 scrollHeight。
+ */
+export function estimateBlockLatexWidgetHeight(latex: string): number {
+    const logicalLineCount = Math.max(1, latex.split("\n").length);
+    const tallTokenCount = (latex.match(/\\(?:frac|sum|int|prod|sqrt|begin|matrix|cases)/g) ?? []).length;
+    return Math.min(
+        BLOCK_LATEX_WIDGET_MAX_ESTIMATED_HEIGHT,
+        BLOCK_LATEX_WIDGET_BASE_HEIGHT
+            + (logicalLineCount - 1) * BLOCK_LATEX_WIDGET_EXTRA_LINE_HEIGHT
+            + tallTokenCount * BLOCK_LATEX_WIDGET_TALL_TOKEN_HEIGHT,
+    );
 }
 
 /* ─────────────────── Widget 类 ─────────────────── */
@@ -218,6 +238,10 @@ class BlockLatexWidget extends WidgetType {
         return this.latex === other.latex && this.isError === other.isError;
     }
 
+    get estimatedHeight(): number {
+        return estimateBlockLatexWidgetHeight(this.latex);
+    }
+
     /**
      * @method toDOM
      * @description 创建块级公式的 DOM 元素。
@@ -229,6 +253,7 @@ class BlockLatexWidget extends WidgetType {
         wrapper.className = this.isError
             ? "cm-latex-block-widget cm-latex-block-error"
             : "cm-latex-block-widget";
+        wrapper.style.minHeight = `${String(estimateBlockLatexWidgetHeight(this.latex))}px`;
         wrapper.innerHTML = this.renderedHtml;
         return wrapper;
     }
@@ -254,10 +279,21 @@ interface BlockLatexRange {
     from: number;
     /** 范围结束偏移（块级公式最后一行 to） */
     to: number;
+    /** LaTeX 源码内容（不含 $$ delimiter）。 */
+    latex: string;
+    /** 是否渲染失败。 */
+    isError: boolean;
+    /** KaTeX 渲染后的 HTML。 */
+    renderedHtml: string;
 }
 
 /** 通过 WeakMap 在 ViewPlugin 实例间共享块级公式范围 */
 const blockLatexRangesMap = new WeakMap<EditorView, BlockLatexRange[]>();
+
+interface BlockLatexSyntaxState {
+    ranges: BlockLatexRange[];
+    decorations: DecorationSet;
+}
 
 interface LatexPriorityExclusionRange {
     from: number;
@@ -286,21 +322,15 @@ function rangeIntersectsLatexPriorityExclusion(
  * @description 块级公式源码隐藏与 widget 挂载策略。
  */
 interface BlockLatexWidgetPlacement {
-    /** 需要完全压缩隐藏的源码行号。 */
-    hiddenLineNumbers: number[];
-    /** 承载 widget 的锚点行号。 */
-    anchorLineNumber: number;
-    /** widget 挂载偏移。 */
-    widgetPos: number;
-    /** widget 在锚点位置的 side。 */
-    widgetSide: -1 | 1;
+    /** replace decoration 起始偏移。 */
+    from: number;
+    /** replace decoration 结束偏移。 */
+    to: number;
 }
 
 /**
  * @function resolveLatexBlockWidgetPlacement
- * @description 为块级公式计算源码隐藏范围与 widget 挂载锚点。
- *   closing delimiter 所在行会保留为 anchor line，避免在文末场景下因为整行被压成
- *   `height: 0` 而吞掉 widget。
+ * @description 为块级公式计算整块替换范围。
  * @param doc 编辑器文档。
  * @param startLineNumber 块级公式起始行号。
  * @param endLineNumber 块级公式结束行号。
@@ -311,105 +341,43 @@ export function resolveLatexBlockWidgetPlacement(
     startLineNumber: number,
     endLineNumber: number,
 ): BlockLatexWidgetPlacement {
-    const hiddenLineNumbers: number[] = [];
-    for (let lineNumber = startLineNumber; lineNumber < endLineNumber; lineNumber += 1) {
-        hiddenLineNumbers.push(lineNumber);
-    }
-
     return {
-        hiddenLineNumbers,
-        anchorLineNumber: endLineNumber,
-        widgetPos: doc.line(endLineNumber).to,
-        widgetSide: -1,
+        from: doc.line(startLineNumber).from,
+        to: doc.line(endLineNumber).to,
     };
 }
 
 /* ─────────────────── 装饰构建 ─────────────────── */
 
-/**
- * @function buildLatexDecorations
- * @description 遍历可见行，检测并构建 LaTeX 公式装饰。
- *   支持三种公式形式：
- *   1. 单行块级：`$$ ... $$`（整行）
- *   2. 多行块级：`$$` 开始行 + 内容行 + `$$` 结束行
- *   3. 行内公式：`$...$`（不能跨行，不能为 `$$`）
- *
- *   当光标处于公式范围内时，跳过渲染（回退源码）。
- *
- * @param view 编辑器视图。
- * @returns 装饰集合。
- */
-function buildLatexDecorations(view: EditorView): DecorationSet {
-    const builder = new RangeSetBuilder<Decoration>();
-    const doc = view.state.doc;
+function parseBlockLatexRanges(state: EditorState): BlockLatexRange[] {
+    const doc = state.doc;
     const blockRanges: BlockLatexRange[] = [];
     const priorityExclusionRanges = resolveLatexPriorityExclusionRanges(doc);
-
-    /**
-     * 收集所有需要渲染的装饰，按 from 排序后再添加到 builder。
-     * 这样能保证装饰不交叉、不乱序。
-     */
-    const pendingDecorations: Array<{
-        from: number;
-        to: number;
-        decoration: Decoration;
-        /** 排序优先级：line 装饰放前面，widget 放后面 */
-        priority: number;
-    }> = [];
-
-    /** 跟踪已被块级公式覆盖的行号，避免这些行再被行内匹配 */
-    const blockCoveredLines = new Set<number>();
-
-    /** 收集本次声明的排斥区域 */
-    const exclusionZones: Array<{ from: number; to: number }> = [];
-
-    /* ── 第一遍：扫描块级公式 ── */
     let lineIndex = 1;
+
     while (lineIndex <= doc.lines) {
         const line = doc.line(lineIndex);
         const lineText = line.text;
 
-        /* 单行块级公式 $$ ... $$ */
         const singleLineMatch = lineText.match(BLOCK_LATEX_SINGLE_LINE_PATTERN);
         if (singleLineMatch) {
             const latex = (singleLineMatch[1] ?? "").trim();
             const blockFrom = line.from;
             const blockTo = line.to;
 
-            /* 跳过被更高优先级区域（frontmatter / code-fence）覆盖的范围 */
-            if (
-                rangeIntersectsLatexPriorityExclusion(priorityExclusionRanges, blockFrom, blockTo) ||
-                isRangeInsideHigherPriorityZone(view, blockFrom, blockTo, "latex-block")
-            ) {
+            if (rangeIntersectsLatexPriorityExclusion(priorityExclusionRanges, blockFrom, blockTo)) {
                 lineIndex++;
                 continue;
             }
 
             if (latex.length > 0) {
-                blockRanges.push({ from: blockFrom, to: blockTo });
-                exclusionZones.push({ from: blockFrom, to: blockTo });
-                blockCoveredLines.add(lineIndex);
-            }
-
-            const isEditing = rangeTouchesBlock({ from: blockFrom, to: blockTo }, view.state.selection.ranges);
-            if (!isEditing && latex.length > 0) {
                 const rendered = renderLatexToHtml(latex, true);
-                const widget = new BlockLatexWidget(latex, rendered.html, rendered.isError);
-                const placement = resolveLatexBlockWidgetPlacement(doc, lineIndex, lineIndex);
-
-                const anchorLine = doc.line(placement.anchorLineNumber);
-                pendingDecorations.push({
-                    from: anchorLine.from,
-                    to: anchorLine.from,
-                    decoration: hiddenBlockAnchorLineDecoration,
-                    priority: 0,
-                });
-
-                pendingDecorations.push({
-                    from: placement.widgetPos,
-                    to: placement.widgetPos,
-                    decoration: Decoration.widget({ widget, block: false, side: placement.widgetSide }),
-                    priority: 1,
+                blockRanges.push({
+                    from: blockFrom,
+                    to: blockTo,
+                    latex,
+                    renderedHtml: rendered.html,
+                    isError: rendered.isError,
                 });
             }
 
@@ -417,7 +385,6 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
             continue;
         }
 
-        /* 多行块级公式 */
         if (BLOCK_LATEX_OPEN_PATTERN.test(lineText)) {
             const openLineNumber = lineIndex;
             const openLine = line;
@@ -440,59 +407,19 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
                 const blockTo = closeLine.to;
                 const latex = contentLines.join("\n").trim();
 
-                /* 跳过被更高优先级区域覆盖的范围 */
-                if (
-                    rangeIntersectsLatexPriorityExclusion(priorityExclusionRanges, blockFrom, blockTo) ||
-                    isRangeInsideHigherPriorityZone(view, blockFrom, blockTo, "latex-block")
-                ) {
+                if (rangeIntersectsLatexPriorityExclusion(priorityExclusionRanges, blockFrom, blockTo)) {
                     lineIndex = closeLineNumber + 1;
                     continue;
                 }
 
                 if (latex.length > 0) {
-                    blockRanges.push({ from: blockFrom, to: blockTo });
-                    exclusionZones.push({ from: blockFrom, to: blockTo });
-                    for (let ln = openLineNumber; ln <= closeLineNumber; ln += 1) {
-                        blockCoveredLines.add(ln);
-                    }
-                }
-
-                const isEditing = rangeTouchesBlock({ from: blockFrom, to: blockTo }, view.state.selection.ranges);
-                if (!isEditing && latex.length > 0) {
                     const rendered = renderLatexToHtml(latex, true);
-                    const widget = new BlockLatexWidget(latex, rendered.html, rendered.isError);
-                    const placement = resolveLatexBlockWidgetPlacement(
-                        doc,
-                        openLineNumber,
-                        closeLineNumber,
-                    );
-
-                    /* 隐藏 closing delimiter 之前的源码行，closing line 保留为 anchor。 */
-                    for (const ln of placement.hiddenLineNumbers) {
-                        const targetLine = doc.line(ln);
-                        pendingDecorations.push({
-                            from: targetLine.from,
-                            to: targetLine.from,
-                            decoration: hiddenBlockLineDecoration,
-                            priority: 0,
-                        });
-                        blockCoveredLines.add(ln);
-                    }
-
-                    const anchorLine = doc.line(placement.anchorLineNumber);
-                    pendingDecorations.push({
-                        from: anchorLine.from,
-                        to: anchorLine.from,
-                        decoration: hiddenBlockAnchorLineDecoration,
-                        priority: 0,
-                    });
-                    blockCoveredLines.add(placement.anchorLineNumber);
-
-                    pendingDecorations.push({
-                        from: placement.widgetPos,
-                        to: placement.widgetPos,
-                        decoration: Decoration.widget({ widget, block: false, side: placement.widgetSide }),
-                        priority: 1,
+                    blockRanges.push({
+                        from: blockFrom,
+                        to: blockTo,
+                        latex,
+                        renderedHtml: rendered.html,
+                        isError: rendered.isError,
                     });
                 }
 
@@ -504,10 +431,61 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
         lineIndex++;
     }
 
-    /* 声明排斥区域 */
-    setExclusionZones(view, "latex-block", exclusionZones);
+    return blockRanges;
+}
 
-    /* ── 第二遍：扫描行内公式（跳过被块级覆盖的行） ── */
+function buildBlockLatexDecorations(
+    state: EditorState,
+    ranges: readonly BlockLatexRange[],
+): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>();
+
+    for (const range of ranges) {
+        if (rangeTouchesBlock(range, state.selection.ranges)) {
+            continue;
+        }
+
+        builder.add(
+            range.from,
+            range.to,
+            Decoration.replace({
+                widget: new BlockLatexWidget(range.latex, range.renderedHtml, range.isError),
+                block: false,
+                side: -1,
+            }),
+        );
+    }
+
+    return builder.finish();
+}
+
+function buildBlockLatexSyntaxState(state: EditorState): BlockLatexSyntaxState {
+    const ranges = parseBlockLatexRanges(state);
+    return {
+        ranges,
+        decorations: buildBlockLatexDecorations(state, ranges),
+    };
+}
+
+function shouldRebuildBlockLatexSyntaxState(transaction: Transaction): boolean {
+    return transaction.docChanged || transaction.selection !== undefined;
+}
+
+function isLineInsideBlockLatexRange(lineFrom: number, lineTo: number, ranges: readonly BlockLatexRange[]): boolean {
+    return ranges.some((range) => lineFrom <= range.to && lineTo >= range.from);
+}
+
+/**
+ * @function buildInlineLatexDecorations
+ * @description 遍历可见行并构建行内 LaTeX 装饰。块级 LaTeX 由 StateField 直接提供，
+ *   这里仅处理不改变垂直布局的 `$...$`。
+ */
+function buildInlineLatexDecorations(view: EditorView): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>();
+    const doc = view.state.doc;
+    const priorityExclusionRanges = resolveLatexPriorityExclusionRanges(doc);
+    const blockRanges = blockLatexRangesMap.get(view) ?? [];
+
     for (const visibleRange of view.visibleRanges) {
         let currentLine = doc.lineAt(visibleRange.from);
         const endLineNumber = doc.lineAt(visibleRange.to).number;
@@ -515,7 +493,7 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
         while (currentLine.number <= endLineNumber) {
             /* 跳过被块级公式覆盖的行和被更高优先级区域覆盖的行 */
             if (
-                !blockCoveredLines.has(currentLine.number) &&
+                !isLineInsideBlockLatexRange(currentLine.from, currentLine.to, blockRanges) &&
                 !rangeIntersectsLatexPriorityExclusion(
                     priorityExclusionRanges,
                     currentLine.from,
@@ -559,12 +537,7 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
                     const rendered = renderLatexToHtml(latex, false);
                     const widget = new InlineLatexWidget(latex, rendered.html, rendered.isError);
 
-                    pendingDecorations.push({
-                        from: tokenFrom,
-                        to: tokenTo,
-                        decoration: Decoration.replace({ widget }),
-                        priority: 0,
-                    });
+                    builder.add(tokenFrom, tokenTo, Decoration.replace({ widget }));
                 }
             }
 
@@ -574,24 +547,6 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
             currentLine = doc.line(currentLine.number + 1);
         }
     }
-
-    /* ── 排序并添加装饰 ── */
-    pendingDecorations.sort((a, b) => {
-        if (a.from !== b.from) {
-            return a.from - b.from;
-        }
-        if (a.to !== b.to) {
-            return a.to - b.to;
-        }
-        return a.priority - b.priority;
-    });
-
-    for (const item of pendingDecorations) {
-        builder.add(item.from, item.to, item.decoration);
-    }
-
-    /* 保存块级范围供 atomicRanges 使用 */
-    blockLatexRangesMap.set(view, blockRanges);
 
     return builder.finish();
 }
@@ -612,13 +567,53 @@ function buildLatexDecorations(view: EditorView): DecorationSet {
  *   ];
  */
 export function createLatexSyntaxExtension() {
-    const plugin = ViewPlugin.fromClass(
+    const blockSyntaxStateField = StateField.define<BlockLatexSyntaxState>({
+        create(state) {
+            return buildBlockLatexSyntaxState(state);
+        },
+        update(value, transaction) {
+            if (!shouldRebuildBlockLatexSyntaxState(transaction)) {
+                return value;
+            }
+
+            return buildBlockLatexSyntaxState(transaction.state);
+        },
+        provide(field) {
+            return EditorView.decorations.from(field, (value) => value.decorations);
+        },
+    });
+
+    const lifecyclePlugin = ViewPlugin.fromClass(
+        class {
+            constructor(view: EditorView) {
+                this.syncBlockRanges(view);
+            }
+
+            update(update: ViewUpdate): void {
+                if (update.docChanged || update.selectionSet) {
+                    this.syncBlockRanges(update.view);
+                }
+            }
+
+            private syncBlockRanges(view: EditorView): void {
+                const state = view.state.field(blockSyntaxStateField, false);
+                const ranges = state?.ranges ?? [];
+                blockLatexRangesMap.set(view, ranges);
+                setExclusionZones(view, "latex-block", ranges.map((range) => ({
+                    from: range.from,
+                    to: range.to,
+                })));
+            }
+        },
+    );
+
+    const inlinePlugin = ViewPlugin.fromClass(
         class {
             /** 当前装饰集合 */
             decorations: DecorationSet;
 
             constructor(view: EditorView) {
-                this.decorations = buildLatexDecorations(view);
+                this.decorations = buildInlineLatexDecorations(view);
             }
 
             /**
@@ -633,7 +628,7 @@ export function createLatexSyntaxExtension() {
                     update.viewportChanged ||
                     update.focusChanged
                 ) {
-                    this.decorations = buildLatexDecorations(update.view);
+                    this.decorations = buildInlineLatexDecorations(update.view);
                 }
             }
         },
@@ -656,5 +651,5 @@ export function createLatexSyntaxExtension() {
         return RangeSet.of(hiddenRanges.map((range: BlockRange) => Decoration.mark({}).range(range.from, range.to)));
     });
 
-    return [plugin, atomicRanges];
+    return [blockSyntaxStateField, lifecyclePlugin, inlinePlugin, atomicRanges];
 }

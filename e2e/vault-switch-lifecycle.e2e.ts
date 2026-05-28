@@ -51,8 +51,8 @@ async function ensureMockNotesTreeExpanded(page: Page): Promise<void> {
 async function openMockNote(page: Page, relativePath: string): Promise<void> {
     await ensureMockNotesTreeExpanded(page);
     const fileName = relativePath.split("/").pop() ?? relativePath;
-    await page.locator(`.tree-item[data-tree-path='${relativePath}']`).dblclick();
-    await page.locator(".layout-v2-tab-section__tab-main", { hasText: fileName }).waitFor({ state: "visible" });
+    await page.locator(`.tree-item[data-tree-path='${relativePath}']`).click();
+    await page.locator(".layout-v2-tab-section__tab-main", { hasText: fileName }).first().waitFor({ state: "visible" });
 }
 
 test.describe("vault switch lifecycle", () => {
@@ -65,8 +65,8 @@ test.describe("vault switch lifecycle", () => {
 
         await openMockNote(page, GUIDE_NOTE_PATH);
         await openMockNote(page, NETWORK_NOTE_PATH);
-        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "guide.md" })).toBeVisible();
-        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "network-segment.md" })).toBeVisible();
+        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "guide.md" }).first()).toBeVisible();
+        await expect(page.locator(".layout-v2-tab-section__tab", { hasText: "network-segment.md" }).first()).toBeVisible();
 
         await page.evaluate(async ({ path }) => {
             const events = await import("/src/host/events/appEventBus.ts");

@@ -7,6 +7,7 @@
 import { EditorState } from "@codemirror/state";
 import { describe, expect, test } from "bun:test";
 import {
+    estimateBlockLatexWidgetHeight,
     resolveLatexBlockWidgetPlacement,
     resolveLatexPriorityExclusionRanges,
 } from "./latexSyntaxExtension";
@@ -22,26 +23,39 @@ function createDoc(content: string) {
 }
 
 describe("resolveLatexBlockWidgetPlacement", () => {
-    test("单行块级公式位于文末时应保留当前行为 anchor", () => {
+    test("单行块级公式位于文末时应替换当前行范围", () => {
         const doc = createDoc("$$x^2$$");
 
         const placement = resolveLatexBlockWidgetPlacement(doc, 1, 1);
 
-        expect(placement.hiddenLineNumbers).toEqual([]);
-        expect(placement.anchorLineNumber).toBe(1);
-        expect(placement.widgetPos).toBe(doc.line(1).to);
-        expect(placement.widgetSide).toBe(-1);
+        expect(placement).toEqual({
+            from: doc.line(1).from,
+            to: doc.line(1).to,
+        });
     });
 
-    test("多行块级公式应仅隐藏 closing line 之前的源码行", () => {
+    test("多行块级公式应替换 opening 到 closing delimiter 范围", () => {
         const doc = createDoc(["before", "$$", "x^2", "$$"].join("\n"));
 
         const placement = resolveLatexBlockWidgetPlacement(doc, 2, 4);
 
-        expect(placement.hiddenLineNumbers).toEqual([2, 3]);
-        expect(placement.anchorLineNumber).toBe(4);
-        expect(placement.widgetPos).toBe(doc.line(4).to);
-        expect(placement.widgetSide).toBe(-1);
+        expect(placement).toEqual({
+            from: doc.line(2).from,
+            to: doc.line(4).to,
+        });
+    });
+});
+
+describe("estimateBlockLatexWidgetHeight", () => {
+    test("复杂块级公式应获得高于默认行高的离屏估算", () => {
+        const estimatedHeight = estimateBlockLatexWidgetHeight("\\sum_{i=1}^{24} \\frac{i}{i + 5}");
+
+        expect(estimatedHeight).toBeGreaterThan(estimateBlockLatexWidgetHeight("x"));
+    });
+
+    test("多行块级公式随逻辑行数增加估算高度", () => {
+        expect(estimateBlockLatexWidgetHeight(["a", "b", "c"].join("\n")))
+            .toBeGreaterThan(estimateBlockLatexWidgetHeight("a"));
     });
 });
 

@@ -30,9 +30,12 @@ import {
     type VaultTaskItem,
 } from "../../api/vaultApi";
 import {
+    subscribeEditorContentBusEvent,
     subscribePersistedContentUpdatedEvent,
     subscribeVaultFsBusEvent,
 } from "../../host/events/appEventBus";
+import { overlayMarkdownContentFrontmatterMatches } from "../../host/editor/markdownContentFrontmatterSnapshots";
+import { overlayMarkdownContentTaskSnapshots } from "../../host/editor/markdownContentTaskSnapshots";
 import {
     showRegisteredContextMenu,
     useContextMenuProvider,
@@ -699,6 +702,8 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
     const reloadRef = useRef<(() => Promise<void>) | null>(null);
     const rootRef = useRef<HTMLElement | null>(null);
     const hasMarkedReadyRef = useRef(false);
+    const persistedMatchesRef = useRef<FrontmatterQueryMatchItem[]>([]);
+    const persistedTasksRef = useRef<VaultTaskItem[]>([]);
     const [dayContextMenuId] = useState(
         () => `${CALENDAR_DAY_CONTEXT_MENU_ID}:${String(++nextCalendarContextMenuInstanceId)}`,
     );
@@ -841,6 +846,12 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                     queryVaultMarkdownFrontmatter("date"),
                     queryVaultTasks(),
                 ]);
+                persistedMatchesRef.current = response.matches;
+                persistedTasksRef.current = taskItems;
+                const resolvedMatches = overlayMarkdownContentFrontmatterMatches(response.matches, {
+                    fieldName: response.fieldName,
+                });
+                const resolvedTaskItems = overlayMarkdownContentTaskSnapshots(taskItems);
                 if (cancelled) {
                     return;
                 }
@@ -848,8 +859,8 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                 setLoadState({
                     loading: false,
                     error: null,
-                    matches: response.matches,
-                    taskItems,
+                    matches: resolvedMatches,
+                    taskItems: resolvedTaskItems,
                     hasLoadedSnapshot: true,
                     loadedVaultPath: currentVaultPath,
                 });
@@ -858,8 +869,8 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                     onReady?.();
                 }
                 console.info("[calendar-view] load success", {
-                    matchCount: response.matches.length,
-                    taskCount: taskItems.length,
+                    matchCount: resolvedMatches.length,
+                    taskCount: resolvedTaskItems.length,
                     mode,
                     stateKey,
                 });
@@ -922,6 +933,30 @@ export function CalendarView(props: CalendarViewProps): ReactElement {
                 source: event.source,
             });
             void reloadRef.current?.();
+        });
+
+        return () => {
+            unlisten();
+        };
+    }, []);
+
+    useEffect(() => {
+        const unlisten = subscribeEditorContentBusEvent((event) => {
+            if (!isMarkdownRelativePath(event.path)) {
+                return;
+            }
+
+            console.info("[calendar-view] overlay requested by editor content event", {
+                eventId: event.eventId,
+                relativePath: event.path,
+            });
+            setLoadState((previous) => ({
+                ...previous,
+                matches: overlayMarkdownContentFrontmatterMatches(persistedMatchesRef.current, {
+                    fieldName: "date",
+                }),
+                taskItems: overlayMarkdownContentTaskSnapshots(persistedTasksRef.current),
+            }));
         });
 
         return () => {

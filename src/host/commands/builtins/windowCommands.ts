@@ -35,6 +35,35 @@ export const WINDOW_COMMAND_DEFINITIONS = {
             context.closeTab(context.activeTabId);
         },
     },
+    "tab.detachFocusedToWindow": {
+        id: "tab.detachFocusedToWindow",
+        title: "commands.detachCurrentTabToWindow",
+        routeClass: "frontend-window",
+        shortcut: {
+            defaultBinding: "",
+            editableInSettings: true,
+        },
+        execute(context) {
+            if (!context.activeTabId) {
+                console.warn("[command-system] detachFocusedToWindow skipped: no active tab");
+                return;
+            }
+
+            if (!context.detachActiveTabToWindow) {
+                console.warn("[command-system] detachFocusedToWindow skipped: detach capability missing");
+                return;
+            }
+
+            const result = context.detachActiveTabToWindow();
+            if (result instanceof Promise) {
+                void result.catch((error) => {
+                    console.error("[command-system] detachFocusedToWindow failed", {
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                });
+            }
+        },
+    },
     "app.quit": {
         id: "app.quit",
         title: "commands.exitApp",

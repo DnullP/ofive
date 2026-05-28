@@ -243,6 +243,7 @@ ofive 的架构约束已经有一部分变成可执行 guard。
 | 主题色 guard | `scripts/check-theme-colors.mjs` | 约束主题颜色来源 |
 | i18n 文案 guard | `scripts/check-i18n-copy.mjs` | 约束用户可见文案治理 |
 | 编辑态/阅读态一致性 | `scripts/check-editor-read-parity.mjs` | 防止编辑增强渲染和阅读态漂移 |
+| 后端事件订阅 lifecycle | `scripts/check-event-subscription-guards.mjs` | 防止 UI 组件直接订阅后端事件/stream，要求经由 bus、store 或 plugin hub |
 | store 状态测试 guard | `scripts/check-store-state-tests.mjs` | 确保 managed store schema 有真实测试锚点 |
 | settings 测试 guard | `scripts/check-settings-tests.mjs` | 确保设置面有测试锚点 |
 

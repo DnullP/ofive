@@ -68,6 +68,13 @@ export interface OpenFileInWorkbenchOptions extends ResolveFileTabOptions {
     openMode?: FileOpenMode;
 }
 
+export interface UniqueFileTabIdentityOptions {
+    /** 基础文件 tab id。 */
+    baseTabId: string;
+    /** 可选 workbench 容器实例；存在时用当前已打开 tab 检查冲突。 */
+    containerApi?: Pick<WorkbenchContainerApi, "getPanel" | "panels"> | null;
+}
+
 /**
  * @function normalizeRelativePath
  * @description 将路径统一为正斜杠格式。
@@ -86,6 +93,46 @@ export function normalizeRelativePath(relativePath: string): string {
  */
 export function buildFileTabId(relativePath: string): string {
     return `file:${normalizeRelativePath(relativePath)}`;
+}
+
+/**
+ * @function buildFileViewTabId
+ * @description 根据基础文件 tab id 和序号生成同一路径的附加视图 tab id。
+ * @param baseTabId 基础文件 tab id。
+ * @param index 视图序号。
+ * @returns 附加视图 tab id。
+ */
+export function buildFileViewTabId(baseTabId: string, index: number): string {
+    return `${baseTabId}#view-${index}`;
+}
+
+/**
+ * @function buildUniqueFileViewTabId
+ * @description 为同一路径分屏视图生成不与当前 workbench 冲突的 tab id。
+ * @param options 唯一 id 选项。
+ * @returns 可用于新增 view 的 tab id。
+ */
+export function buildUniqueFileViewTabId(options: UniqueFileTabIdentityOptions): string {
+    const usedIds = new Set<string>();
+    options.containerApi?.panels?.forEach((panel) => {
+        usedIds.add(panel.id);
+    });
+
+    const hasPanel = (tabId: string): boolean =>
+        usedIds.has(tabId) || Boolean(options.containerApi?.getPanel(tabId));
+
+    if (!hasPanel(options.baseTabId)) {
+        return options.baseTabId;
+    }
+
+    let index = 2;
+    while (true) {
+        const candidate = buildFileViewTabId(options.baseTabId, index);
+        if (!hasPanel(candidate)) {
+            return candidate;
+        }
+        index += 1;
+    }
 }
 
 /**
@@ -351,7 +398,9 @@ export async function openFileInWorkbench(
     const normalizedPath = normalizeRelativePath(options.relativePath);
     const tabId = buildFileTabId(normalizedPath);
     const openMode = resolveOpenMode(options.openMode);
-    const existingPanel = options.containerApi.getPanel(tabId)
+    const existingPanel = openMode === "new-tab"
+        ? null
+        : options.containerApi.getPanel(tabId)
         ?? findExistingFilePanelByPath(options.containerApi, normalizedPath);
 
     if (existingPanel) {
@@ -381,6 +430,17 @@ export async function openFileInWorkbench(
         return null;
     }
 
+    const targetPanelId = buildUniqueFileViewTabId({
+        baseTabId: tab.id,
+        containerApi: options.containerApi,
+    });
+    const nextTab = targetPanelId === tab.id
+        ? tab
+        : {
+            ...tab,
+            id: targetPanelId,
+        };
+
     if (replaceActiveFilePanelIfRequested(options.containerApi, tab, openMode)) {
         console.info("[openFileService] replaced active file tab", {
             relativePath: normalizedPath,
@@ -392,16 +452,16 @@ export async function openFileInWorkbench(
     }
 
     options.containerApi.addPanel({
-        id: tab.id,
-        title: tab.title,
-        component: tab.component,
-        params: tab.params,
+        id: nextTab.id,
+        title: nextTab.title,
+        component: nextTab.component,
+        params: nextTab.params,
     });
-    options.containerApi.getPanel(tab.id)?.api.setActive();
+    options.containerApi.getPanel(nextTab.id)?.api.setActive();
     console.info("[openFileService] opened file in workbench", {
         relativePath: normalizedPath,
-        tabId: tab.id,
-        component: tab.component,
+        tabId: nextTab.id,
+        component: nextTab.component,
     });
-    return tab;
+    return nextTab;
 }

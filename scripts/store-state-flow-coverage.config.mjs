@@ -16,6 +16,7 @@ export const explicitlyGovernedStoreLogicModules = [
     "src/host/editor/activeBacklinkTargetStore.ts",
     "src/host/editor/editorContextStore.ts",
     "src/host/editor/autoSaveService.ts",
+    "src/plugins/outline/outlineStore.ts",
 ];
 
 /**
@@ -42,10 +43,21 @@ export const registeredStoreLogicCoverage = {
     ],
     "ai-chat:settings": [
         "src/plugins/ai-chat/aiChatSettingsStore.test.ts",
+        "src/plugins/ai-chat/aiChatManagedStoreRegistration.test.ts",
+    ],
+    "ai-chat:runtime": [
+        "src/plugins/ai-chat/aiChatRuntimeStore.test.ts",
+        "src/plugins/ai-chat/aiChatStreamEventHub.test.ts",
+        "e2e/ai-chat-ux.e2e.ts",
     ],
     "knowledge-graph:settings": [
         "src/plugins/knowledge-graph/tab/knowledgeGraphSettings.test.ts",
         "tests/knowledgeGraphInteractions.test.ts",
+    ],
+    "outline:outline": [
+        "src/plugins/outline/outlineStore.test.ts",
+        "src/plugins/outline/outlineManagedStoreRegistration.test.ts",
+        "e2e/outline-reveal.e2e.ts",
     ],
 };
 
@@ -77,6 +89,10 @@ export const explicitStoreLogicCoverage = {
     ],
     "src/host/editor/autoSaveService.ts": [
         "src/host/editor/autoSaveService.test.ts",
+    ],
+    "src/plugins/outline/outlineStore.ts": [
+        "src/plugins/outline/outlineStore.test.ts",
+        "e2e/outline-reveal.e2e.ts",
     ],
 };
 
@@ -268,6 +284,50 @@ export const registeredStoreSchemaCoverage = {
             ],
         },
     },
+    "ai-chat:runtime": {
+        actions: {
+            "hydrate-runtime": [
+                "src/plugins/ai-chat/aiChatRuntimeStore.test.ts",
+                "e2e/ai-chat-ux.e2e.ts",
+            ],
+            "persist-runtime-patch": [
+                "src/plugins/ai-chat/aiChatRuntimeStore.test.ts",
+                "e2e/ai-chat-ux.e2e.ts",
+            ],
+            "reset-runtime": [
+                "src/plugins/ai-chat/aiChatRuntimeStore.test.ts",
+            ],
+        },
+        flow: {
+            "component-hydrate": [
+                "src/plugins/ai-chat/aiChatRuntimeStore.test.ts",
+                "e2e/ai-chat-ux.e2e.ts",
+            ],
+            "stream-start": [
+                "src/plugins/ai-chat/aiChatStreamEventHub.test.ts",
+                "e2e/ai-chat-ux.e2e.ts",
+            ],
+            "stream-settle": [
+                "src/plugins/ai-chat/aiChatStreamEventHub.test.ts",
+                "e2e/ai-chat-ux.e2e.ts",
+            ],
+            "reset-context": [
+                "src/plugins/ai-chat/aiChatRuntimeStore.test.ts",
+            ],
+        },
+        failureModes: {
+            "backend stream events received while no view is mounted are buffered by aiChatStreamEventHub and replayed after remount": [
+                "src/plugins/ai-chat/aiChatStreamEventHub.test.ts",
+            ],
+            "component remount must not unsubscribe the backend stream listener or lose pending stream bindings": [
+                "src/plugins/ai-chat/aiChatStreamEventHub.test.ts",
+                "e2e/ai-chat-ux.e2e.ts",
+            ],
+            "vault switch resets runtime snapshot before loading the next vault history": [
+                "src/plugins/ai-chat/aiChatRuntimeStore.test.ts",
+            ],
+        },
+    },
     "knowledge-graph:settings": {
         actions: {
             "load-settings": [
@@ -300,6 +360,50 @@ export const registeredStoreSchemaCoverage = {
             ],
             "save failure preserves the current in-memory snapshot plus error": [
                 "src/plugins/knowledge-graph/tab/knowledgeGraphSettings.test.ts",
+            ],
+        },
+    },
+    "outline:outline": {
+        actions: {
+            "follow-active-editor": [
+                "src/plugins/outline/outlineStore.test.ts",
+            ],
+            "refresh-from-canonical-content": [
+                "src/plugins/outline/outlineStore.test.ts",
+                "src/host/editor/markdownContentOutlineSnapshots.test.ts",
+            ],
+            "load-persisted-fallback": [
+                "src/plugins/outline/outlineStore.test.ts",
+            ],
+        },
+        flow: {
+            "active-editor-changed": [
+                "src/plugins/outline/outlineStore.test.ts",
+                "e2e/outline-reveal.e2e.ts",
+            ],
+            "fallback-request": [
+                "src/plugins/outline/outlineStore.test.ts",
+            ],
+            "fallback-success": [
+                "src/plugins/outline/outlineStore.test.ts",
+            ],
+            "fallback-failure": [
+                "src/plugins/outline/outlineStore.test.ts",
+            ],
+            "content-or-persisted-update": [
+                "src/plugins/outline/outlineStore.test.ts",
+            ],
+        },
+        failureModes: {
+            "panel unmount or activity switch must not reset the outline snapshot": [
+                "src/plugins/outline/outlineStore.test.ts",
+                "e2e/outline-reveal.e2e.ts",
+            ],
+            "newer active editor changes invalidate older persisted fallback responses by request id": [
+                "src/plugins/outline/outlineStore.test.ts",
+            ],
+            "persisted update should not reload backend when canonical frontend content exists": [
+                "src/plugins/outline/outlineStore.test.ts",
             ],
         },
     },
@@ -345,7 +449,19 @@ export const storeConsumerCoverage = {
         "e2e/project-reader.e2e.ts",
     ],
     "src/plugins/outline/outlinePlugin.tsx": [
-        "e2e/frontmatter-visibility.e2e.ts",
+        "e2e/outline-reveal.e2e.ts",
+    ],
+    "src/host/editor/markdownContentOutlineSnapshots.ts": [
+        "src/host/editor/markdownContentOutlineSnapshots.test.ts",
+        "src/plugins/outline/outlineStore.test.ts",
+    ],
+    "src/host/editor/markdownContentTaskSnapshots.ts": [
+        "src/host/editor/markdownContentTaskSnapshots.test.ts",
+        "e2e/task-board.e2e.ts",
+    ],
+    "src/host/editor/markdownContentFrontmatterSnapshots.ts": [
+        "src/host/editor/markdownContentFrontmatterSnapshots.test.ts",
+        "e2e/calendar-refresh.e2e.ts",
     ],
     "src/host/window/useWindowEffectsSync.ts": [
         "src/host/window/useWindowEffectsSync.test.ts",
@@ -403,6 +519,19 @@ export const storeConsumerCoverage = {
     ],
     "src/plugins/ai-chat/aiChatPlugin.tsx": [
         "src/plugins/ai-chat/aiChatSettingsStore.test.ts",
+        "src/plugins/ai-chat/aiChatRuntimeStore.test.ts",
+        "e2e/ai-chat-ux.e2e.ts",
+    ],
+    "src/plugins/ai-chat/aiChatSettingsManagedStoreRegistration.ts": [
+        "src/plugins/ai-chat/aiChatManagedStoreRegistration.test.ts",
+        "src/plugins/ai-chat/aiChatPlugin.settings.test.tsx",
+    ],
+    "src/plugins/ai-chat/aiChatRuntimeManagedStoreRegistration.ts": [
+        "src/plugins/ai-chat/aiChatManagedStoreRegistration.test.ts",
+        "src/plugins/ai-chat/aiChatRuntimeStore.test.ts",
+    ],
+    "src/plugins/outline/outlineManagedStoreRegistration.ts": [
+        "src/plugins/outline/outlineManagedStoreRegistration.test.ts",
     ],
     "src/plugins/tasks/task-board/TaskBoardTab.tsx": [
         "e2e/task-board.e2e.ts",

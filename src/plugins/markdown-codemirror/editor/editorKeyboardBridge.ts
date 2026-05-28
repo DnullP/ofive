@@ -299,6 +299,15 @@ export function applyResolvedVimHandoff(
             selection: { anchor: targetLine.from },
             scrollIntoView: true,
         });
+        if (result.postFocusWidget) {
+            queueMicrotask(() => {
+                focusWidgetNavigationTarget(
+                    result.postFocusWidget!.widget,
+                    result.postFocusWidget!.position,
+                    result.postFocusWidget!.blockFrom,
+                );
+            });
+        }
         return true;
     }
 

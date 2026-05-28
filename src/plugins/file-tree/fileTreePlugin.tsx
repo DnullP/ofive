@@ -89,6 +89,7 @@ export function activatePlugin(): () => void {
             openTab: context.openTab,
             openFile: context.openFile,
             closeTab: context.closeTab,
+            closeFileTabsByPath: context.closeFileTabsByPath,
             requestMoveFileToDirectory: context.requestMoveFileToDirectory,
         }),
     });

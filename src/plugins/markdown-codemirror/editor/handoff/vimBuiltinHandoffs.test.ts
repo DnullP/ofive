@@ -120,6 +120,38 @@ describe("builtin vim handoffs", () => {
         });
     });
 
+    test("markdown table source handoff should preserve upward entry to the last row anchor", () => {
+        cleanupCallbacks.push(registerMarkdownTableBodyVimHandoff());
+
+        expect(resolveRegisteredVimHandoff({
+            surface: "editor-body",
+            key: "k",
+            markdown: [
+                "Before",
+                "| Name | Status |",
+                "| --- | --- |",
+                "| Demo | Open |",
+                "| Last | Done |",
+                "After",
+            ].join("\n"),
+            currentLineNumber: 5,
+            selectionHead: 54,
+            hasFrontmatter: false,
+            firstBodyLineNumber: 1,
+            isVimEnabled: true,
+            isVimNormalMode: true,
+        })).toEqual({
+            kind: "move-selection",
+            targetLineNumber: 6,
+            postFocusWidget: {
+                widget: "markdown-table",
+                position: "last",
+                blockFrom: 7,
+            },
+            reason: "enter-markdown-table-from-source",
+        });
+    });
+
     test("latex block handoff should resolve to move-selection", () => {
         cleanupCallbacks.push(registerLatexBlockVimHandoff());
 

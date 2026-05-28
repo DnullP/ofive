@@ -41,6 +41,42 @@ pub struct CreateDetachedTabWindowRequest {
     pub screen_y: Option<f64>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct DetachedTabWindowChromeConfig {
+    transparent: bool,
+    decorations: bool,
+    shadow: bool,
+    visible: bool,
+    focused: bool,
+    focusable: bool,
+    #[cfg(target_os = "macos")]
+    title_bar_style: tauri::TitleBarStyle,
+    #[cfg(target_os = "macos")]
+    hidden_title: bool,
+    #[cfg(target_os = "macos")]
+    traffic_light_position: (f64, f64),
+}
+
+fn detached_tab_window_chrome_config() -> DetachedTabWindowChromeConfig {
+    DetachedTabWindowChromeConfig {
+        transparent: true,
+        #[cfg(target_os = "macos")]
+        decorations: true,
+        #[cfg(not(target_os = "macos"))]
+        decorations: false,
+        shadow: true,
+        visible: false,
+        focused: false,
+        focusable: true,
+        #[cfg(target_os = "macos")]
+        title_bar_style: tauri::TitleBarStyle::Overlay,
+        #[cfg(target_os = "macos")]
+        hidden_title: true,
+        #[cfg(target_os = "macos")]
+        traffic_light_position: (14.0, 16.0),
+    }
+}
+
 fn next_detached_window_label() -> String {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -200,9 +236,7 @@ pub async fn create_detached_tab_window(
 
     let label = next_detached_window_label();
     let encoded_tab = encode_detached_tab_for_url(&request.tab)?;
-    let window_url = format!(
-        "index.html?ofiveWindow=detached&ofiveInitialTab={encoded_tab}"
-    );
+    let window_url = format!("index.html?ofiveWindow=detached&ofiveInitialTab={encoded_tab}");
 
     let fallback_position = window.outer_position().ok();
     let fallback_x = fallback_position
@@ -216,19 +250,20 @@ pub async fn create_detached_tab_window(
     let target_x = request.screen_x.map(|x| x - 220.0).unwrap_or(fallback_x);
     let target_y = request.screen_y.map(|y| y - 28.0).unwrap_or(fallback_y);
 
-    let mut builder = WebviewWindowBuilder::new(
-        &app,
-        label.clone(),
-        WebviewUrl::App(window_url.into()),
-    )
-    .title(format!("ofive - {}", request.tab.title))
-    .inner_size(980.0, 700.0)
-    .min_inner_size(360.0, 240.0)
-    .position(target_x, target_y)
-    .transparent(true)
-    .decorations(false)
-    .shadow(true)
-    .disable_drag_drop_handler();
+    let chrome = detached_tab_window_chrome_config();
+    let mut builder =
+        WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(window_url.into()))
+            .title(format!("ofive - {}", request.tab.title))
+            .inner_size(980.0, 700.0)
+            .min_inner_size(360.0, 240.0)
+            .position(target_x, target_y)
+            .transparent(chrome.transparent)
+            .decorations(chrome.decorations)
+            .shadow(chrome.shadow)
+            .visible(chrome.visible)
+            .focused(chrome.focused)
+            .focusable(chrome.focusable)
+            .disable_drag_drop_handler();
 
     #[cfg(windows)]
     {
@@ -238,8 +273,12 @@ pub async fn create_detached_tab_window(
     #[cfg(target_os = "macos")]
     {
         builder = builder
-            .title_bar_style(tauri::TitleBarStyle::Overlay)
-            .hidden_title(true);
+            .title_bar_style(chrome.title_bar_style)
+            .hidden_title(chrome.hidden_title)
+            .traffic_light_position(tauri::LogicalPosition::new(
+                chrome.traffic_light_position.0,
+                chrome.traffic_light_position.1,
+            ));
     }
 
     let detached_window = builder
@@ -264,10 +303,6 @@ pub async fn create_detached_tab_window(
         log::warn!("[window] detached setup warning: failed to apply window effect: {error}");
     }
 
-    if let Err(error) = detached_window.set_focus() {
-        log::warn!("[window] detached setup warning: failed to focus detached window: {error}");
-    }
-
     log::info!(
         "[command] create_detached_tab_window completed label={} in {:?}",
         label,
@@ -278,7 +313,7 @@ pub async fn create_detached_tab_window(
 
 #[cfg(test)]
 mod tests {
-    use super::cleanup_runtime_for_reload_state;
+    use super::{cleanup_runtime_for_reload_state, detached_tab_window_chrome_config};
     use crate::host::window_effects::WindowsAcrylicEffectConfig;
     use crate::state::{AiChatStreamControl, AppState, PendingVaultWriteTrace};
     use std::collections::HashMap;
@@ -338,5 +373,35 @@ mod tests {
             .expect("stream controls should be readable")
             .is_empty());
         assert!(stop_rx.blocking_recv().is_ok());
+    }
+
+    #[test]
+    fn detached_tab_window_chrome_should_start_hidden_until_frontend_ready() {
+        let config = detached_tab_window_chrome_config();
+
+        assert!(config.transparent);
+        assert!(config.shadow);
+        assert!(!config.visible);
+        assert!(!config.focused);
+        assert!(config.focusable);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn detached_tab_window_chrome_should_match_macos_overlay_main_window() {
+        let config = detached_tab_window_chrome_config();
+
+        assert!(config.decorations);
+        assert_eq!(config.title_bar_style, tauri::TitleBarStyle::Overlay);
+        assert!(config.hidden_title);
+        assert_eq!(config.traffic_light_position, (14.0, 16.0));
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn detached_tab_window_chrome_should_keep_custom_frame_off_macos() {
+        let config = detached_tab_window_chrome_config();
+
+        assert!(!config.decorations);
     }
 }

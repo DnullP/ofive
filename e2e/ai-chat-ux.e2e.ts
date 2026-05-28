@@ -149,6 +149,23 @@ test.describe("ai chat ux", () => {
         await expect(page.locator(".ai-chat-message.user", { hasText: "second prompt" })).toBeVisible();
     });
 
+    test("sidebar panel switch should not interrupt an active chat stream", async ({ page }) => {
+        await waitForAiChatReady(page);
+
+        await page.locator(".ai-chat-input").fill("slow sidebar stream");
+        await page.locator(".ai-chat-send-button").click();
+        await expect(page.locator(".ai-chat-send-button")).toContainText(/Stop|终止/);
+
+        await page.locator("[data-testid='sidebar-right'] [data-layout-panel-id='outline'][data-layout-role='panel']").click();
+        await expect(page.locator(".outline-panel")).toBeVisible();
+        await page.waitForTimeout(900);
+        await page.locator("[data-testid='sidebar-right'] [data-layout-panel-id='ai-chat'][data-layout-role='panel']").click();
+
+        await expect(page.locator(".ai-chat-message.assistant", { hasText: "Mock response for: slow sidebar stream" })).toBeVisible({ timeout: 4_000 });
+        await expect(page.locator(".ai-chat-send-button")).toContainText(/Send|发送/, { timeout: 4_000 });
+        await expect(page.locator(".ai-chat-message.assistant .ai-chat-message-duration").first()).toBeVisible();
+    });
+
     test("assistant tool calls should be visible and expandable", async ({ page }) => {
         await waitForAiChatReady(page);
 

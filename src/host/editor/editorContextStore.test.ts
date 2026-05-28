@@ -15,6 +15,7 @@ import {
     getArticleSnapshotByPath,
     getFocusedArticleSnapshot,
     hasArticleSnapshotByPath,
+    releaseArticleSnapshot,
     reportArticleContent,
     reportArticleContentByPath,
     reportArticleFocus,
@@ -124,6 +125,84 @@ describe("editorContextStore content snapshot boundary", () => {
         expect(snapshot2?.content).toBe(content);
         expect(snapshot1?.hasContentSnapshot).toBe(true);
         expect(snapshot2?.hasContentSnapshot).toBe(true);
+    });
+
+    /**
+     * @function should_fan_out_content_changes_to_all_views_of_the_same_path
+     * @description 同一路径的多个编辑器 view 应消费同一份 canonical 内容快照。
+     */
+    it("should fan out content changes to all views of the same path", () => {
+        resetEditorContext();
+
+        const path = "notes/split.md";
+        reportArticleFocus({
+            articleId: "file:notes/split.md",
+            path,
+            content: "# Split\n\nleft",
+        });
+        reportArticleFocus({
+            articleId: "file:notes/split.md#view-2",
+            path,
+        });
+
+        reportArticleContent({
+            articleId: "file:notes/split.md#view-2",
+            path,
+            content: "# Split\n\nright",
+        });
+
+        expect(getArticleSnapshotById("file:notes/split.md")?.content).toBe("# Split\n\nright");
+        expect(getArticleSnapshotById("file:notes/split.md#view-2")?.content).toBe("# Split\n\nright");
+        expect(getArticleSnapshotByPath(path)?.content).toBe("# Split\n\nright");
+    });
+
+    /**
+     * @function should_release_path_snapshot_after_last_editor_view_closes
+     * @description 最后一个编辑器 view 关闭后，应移除按路径缓存，避免重开时覆盖后端最新内容。
+     */
+    it("should release path snapshot after the last editor view closes", () => {
+        resetEditorContext();
+
+        const articleId = "file:.ofive/skills/research-helper/SKILL.md";
+        const path = ".ofive/skills/research-helper/SKILL.md";
+        reportArticleContent({
+            articleId,
+            path,
+            content: "# stale",
+        });
+
+        expect(hasArticleSnapshotByPath(path)).toBe(true);
+
+        releaseArticleSnapshot(articleId);
+
+        expect(getArticleSnapshotById(articleId)).toBeNull();
+        expect(getArticleSnapshotByPath(path)).toBeNull();
+        expect(hasArticleSnapshotByPath(path)).toBe(false);
+    });
+
+    /**
+     * @function should_keep_path_snapshot_when_another_view_remains_open
+     * @description 同一路径还有其它打开 view 时，关闭其中一个 view 不应清空 canonical 内容。
+     */
+    it("should keep path snapshot when another view remains open", () => {
+        resetEditorContext();
+
+        const path = "notes/split-still-open.md";
+        reportArticleFocus({
+            articleId: "file:notes/split-still-open.md",
+            path,
+            content: "# shared",
+        });
+        reportArticleFocus({
+            articleId: "file:notes/split-still-open.md#view-2",
+            path,
+        });
+
+        releaseArticleSnapshot("file:notes/split-still-open.md#view-2");
+
+        expect(getArticleSnapshotById("file:notes/split-still-open.md")).not.toBeNull();
+        expect(getArticleSnapshotByPath(path)?.content).toBe("# shared");
+        expect(hasArticleSnapshotByPath(path)).toBe(true);
     });
 
     /**

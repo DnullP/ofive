@@ -790,6 +790,8 @@ test.describe("knowledge graph node dynamics", () => {
         expect(draggedScreenPointDelta.dy).toBeLessThan(0);
         expect(await getSimulationRunning(page)).toBe(false);
 
+        await page.mouse.move(4, 4);
+        await waitForAnimationFrames(page, 2);
         const clearedHoverState = await setGraphHoverPoint(page, null);
         expect(clearedHoverState.selectedIndices).toEqual([]);
         expect(clearedHoverState.linkWidths.length).toBe(EXPECTED_EDGE_COUNT);

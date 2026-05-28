@@ -12,6 +12,7 @@ import {
 import {
     __resetManagedStoreRegistryForTests,
     enableManagedStoreSettings,
+    getManagedStoresSnapshot,
 } from "../../host/store/storeRegistry";
 import { activatePlugin } from "./aiChatPlugin";
 
@@ -32,6 +33,10 @@ describe("aiChatPlugin settings registration", () => {
         expect(section?.items.map((item) => item.id)).toEqual([
             "ai-chat-provider-settings-panel",
             "ai-chat-tool-approval-settings-panel",
+        ]);
+        expect(getManagedStoresSnapshot().map((store) => store.id)).toEqual([
+            "ai-chat:runtime",
+            "ai-chat:settings",
         ]);
 
         dispose();
