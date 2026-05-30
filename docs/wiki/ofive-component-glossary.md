@@ -27,6 +27,7 @@ related:
   - "ofive-workbench-host"
   - "ofive-app-event-bus"
   - "ofive-managed-store"
+  - "ofive-frontend-component-state-convergence-plan"
 ---
 
 # ofive 核心组件词条
@@ -59,6 +60,7 @@ related:
 - [[ofive-state-schema|State Schema]]：共享状态字段和动作契约。
 - [[ofive-state-flow|State Flow]]：共享状态变化路径。
 - [[ofive-store-contribution|Store Contribution]]：store 向宿主暴露的设置或治理能力。
+- [[ofive-frontend-component-state-convergence-plan|Frontend Component State Convergence Plan]]：逐个前端组件声明状态 owner、局部状态边界和测试锚点的执行清单。
 
 ## 内容组件
 
