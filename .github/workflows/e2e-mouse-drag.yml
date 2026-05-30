@@ -26,6 +26,9 @@ jobs:
       - name: Setup local layout-v2 dependency
         uses: ./.github/actions/setup-local-layout-v2
 
+      - name: Setup local obeditor dependency
+        uses: ./.github/actions/setup-local-obeditor
+
       - name: Install Linux system dependencies
         run: |
           sudo apt-get update

@@ -1,0 +1,29 @@
+name: Setup local obeditor dependency
+description: Checkout and build obeditor as ../obeditor for the ofive file dependency.
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout and build obeditor
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        editor_root="${GITHUB_WORKSPACE}/../obeditor"
+        editor_ref="${OBEDITOR_REF:-${GITHUB_REF_NAME:-}}"
+        clone_args=(--depth=1)
+
+        if [[ -n "${editor_ref}" ]] && git ls-remote --exit-code --heads https://github.com/DnullP/obeditor.git "${editor_ref}" >/dev/null 2>&1; then
+          clone_args+=(--branch "${editor_ref}")
+          echo "[obeditor] using branch ${editor_ref}"
+        else
+          echo "[obeditor] using repository default branch"
+        fi
+
+        rm -rf "${editor_root}"
+        git clone "${clone_args[@]}" https://github.com/DnullP/obeditor.git "${editor_root}"
+
+        test -f "${GITHUB_WORKSPACE}/../obeditor/package.json"
+        bun install --cwd "${editor_root}" --ignore-scripts
+        bun run --cwd "${editor_root}" build
+        test -f "${GITHUB_WORKSPACE}/../obeditor/dist/index.js"

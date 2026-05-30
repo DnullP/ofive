@@ -2,6 +2,21 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 const host = process.env.TAURI_DEV_HOST;
+const singletonDependencies = [
+  "@codemirror/autocomplete",
+  "@codemirror/commands",
+  "@codemirror/lang-markdown",
+  "@codemirror/language",
+  "@codemirror/lint",
+  "@codemirror/search",
+  "@codemirror/state",
+  "@codemirror/view",
+  "@lezer/highlight",
+  "codemirror",
+  "react",
+  "react-dom",
+  "react/jsx-runtime",
+];
 
 /**
  * 将大型依赖拆分到稳定 chunk，避免主入口包过大。
@@ -102,10 +117,13 @@ function resolveManualChunk(id: string): string | undefined {
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
+  resolve: {
+    dedupe: singletonDependencies,
+  },
   optimizeDeps: {
-    // layout-v2 is linked via `file:../layout-v2`; excluding it avoids stale
-    // optimized-dep caches after local rebuilds during tauri dev restarts.
-    exclude: ["layout-v2"],
+    // Sibling packages are linked via local file dependencies; excluding them
+    // avoids stale optimized-dep caches after local rebuilds during dev restarts.
+    exclude: ["layout-v2", "obeditor"],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

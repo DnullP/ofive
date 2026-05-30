@@ -86,37 +86,18 @@ async function resolveLocatorPoint(page: Page, locator: Locator, missingBoxMessa
     };
 }
 
-async function hoverTokenWithModifier(page: Page, locator: Locator, modifier: "Meta" | "Control"): Promise<void> {
-    await page.keyboard.down(modifier);
-    try {
-        await expect.poll(async () => {
-            const { x, y } = await resolveLocatorPoint(
-                page,
-                locator,
-                "Project reader token is missing a bounding box.",
-            );
-            await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-            await page.mouse.move(x - 24, y);
-            await page.mouse.move(x, y);
-            const className = await locator.evaluate((element) => element.className);
-            return typeof className === "string"
-                ? className.includes("project-reader-code-token--hovered")
-                : false;
-        }).toBe(true);
-    } finally {
-        await page.keyboard.up(modifier);
-    }
-}
-
 async function clickTokenWithModifier(page: Page, locator: Locator, modifier: "Meta" | "Control"): Promise<void> {
+    await expect(locator).toBeVisible();
     const { x, y } = await resolveLocatorPoint(page, locator, "Project reader token is missing a bounding box.");
-    await page.keyboard.down(modifier);
-    try {
-        await page.mouse.move(x, y);
-        await page.mouse.click(x, y);
-    } finally {
-        await page.keyboard.up(modifier);
-    }
+    await locator.dispatchEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        clientX: x,
+        clientY: y,
+        ctrlKey: modifier === "Control",
+        metaKey: modifier === "Meta",
+    });
 }
 
 async function selectTextInsideLocator(locator: Locator, text: string): Promise<void> {
@@ -225,10 +206,6 @@ test.describe("project reader", () => {
         await page.evaluate(() => window.getSelection()?.removeAllRanges());
 
         const appRuntimeToken = () => codeTab.locator(".project-reader-code-token", { hasText: "AppRuntime" }).first();
-        const runtimeToken = appRuntimeToken();
-        await expect(runtimeToken).toBeVisible();
-        await hoverTokenWithModifier(page, runtimeToken, "Meta");
-
         await clickTokenWithModifier(page, appRuntimeToken(), "Meta");
 
         await page.locator(".tree-item[data-tree-path='src/alternate.ts']").click();

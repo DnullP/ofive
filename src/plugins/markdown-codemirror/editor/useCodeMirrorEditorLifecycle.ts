@@ -34,7 +34,7 @@ import {
 } from "../../../api/vaultApi";
 import { releaseArticleSnapshot, type ArticleState } from "../../../host/editor/editorContextStore";
 import type { WorkbenchContainerApi } from "../../../host/layout/workbenchContracts";
-import type { EditorService } from "../../../../packages/editor/src";
+import type { EditorService } from "obeditor";
 import {
     getEditorViewStateSnapshot,
     saveEditorViewStateSnapshot,

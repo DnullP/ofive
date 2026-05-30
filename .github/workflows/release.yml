@@ -86,6 +86,12 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
+
+      - name: Setup local obeditor dependency
+        uses: ./.github/actions/setup-local-obeditor
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -119,6 +125,9 @@ jobs:
       - name: Setup local layout-v2 dependency
         uses: ./.github/actions/setup-local-layout-v2
 
+      - name: Setup local obeditor dependency
+        uses: ./.github/actions/setup-local-obeditor
+
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
@@ -140,6 +149,9 @@ jobs:
 
       - name: Setup local layout-v2 dependency
         uses: ./.github/actions/setup-local-layout-v2
+
+      - name: Setup local obeditor dependency
+        uses: ./.github/actions/setup-local-obeditor
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -196,6 +208,9 @@ jobs:
 
       - name: Setup local layout-v2 dependency
         uses: ./.github/actions/setup-local-layout-v2
+
+      - name: Setup local obeditor dependency
+        uses: ./.github/actions/setup-local-obeditor
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -262,6 +277,9 @@ jobs:
       - name: Setup local layout-v2 dependency
         uses: ./.github/actions/setup-local-layout-v2
 
+      - name: Setup local obeditor dependency
+        uses: ./.github/actions/setup-local-obeditor
+
       - name: Install Linux system dependencies
         run: |
           sudo apt-get update
@@ -312,6 +330,9 @@ jobs:
       - name: Setup local layout-v2 dependency
         uses: ./.github/actions/setup-local-layout-v2
 
+      - name: Setup local obeditor dependency
+        uses: ./.github/actions/setup-local-obeditor
+
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
@@ -347,6 +368,9 @@ jobs:
 
       - name: Setup local layout-v2 dependency
         uses: ./.github/actions/setup-local-layout-v2
+
+      - name: Setup local obeditor dependency
+        uses: ./.github/actions/setup-local-obeditor
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -499,6 +523,12 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup local layout-v2 dependency
+        uses: ./.github/actions/setup-local-layout-v2
+
+      - name: Setup local obeditor dependency
+        uses: ./.github/actions/setup-local-obeditor
 
       - name: Setup Go
         uses: actions/setup-go@v5

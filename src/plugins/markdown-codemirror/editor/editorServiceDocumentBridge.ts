@@ -4,7 +4,7 @@
  */
 
 import type { MutableRefObject } from "react";
-import type { EditorService } from "../../../../packages/editor/src";
+import type { EditorService } from "obeditor";
 
 export interface SyncEditorServiceDocumentOptions {
     editorService: EditorService;

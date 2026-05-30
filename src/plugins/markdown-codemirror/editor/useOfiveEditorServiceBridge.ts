@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useMemo } from "react";
-import type { EditorMode, EditorService } from "../../../../packages/editor/src";
+import type { EditorMode, EditorService } from "obeditor";
 import { createDefaultOfiveEditorService } from "../../../host/editor/ofiveEditorService";
 import type { WorkbenchContainerApi } from "../../../host/layout/workbenchContracts";
 
