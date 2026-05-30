@@ -1,0 +1,56 @@
+{
+  "name": "@ofive/editor",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/ofive-editor.umd.cjs",
+  "module": "./dist/ofive-editor.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./adapters/ofive": {
+      "types": "./src/adapters/ofive/index.ts",
+      "import": "./src/adapters/ofive/index.ts"
+    },
+    "./styles.css": "./src/styles/editor.css"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4317 --strictPort",
+    "build": "tsc --noEmit && vite build && vite build --config vite.lib.config.ts",
+    "test": "bun test",
+    "preview": "vite preview --host 127.0.0.1 --port 4318 --strictPort"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.0",
+    "@codemirror/commands": "^6.10.0",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language": "^6.11.3",
+    "@codemirror/lint": "^6.8.5",
+    "@codemirror/search": "^6.5.11",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "6.39.16",
+    "@lezer/highlight": "^1.2.3",
+    "codemirror": "^6.0.2",
+    "lucide-react": "^0.564.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-markdown": "^10.1.0",
+    "remark-breaks": "^4.0.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.13",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "~5.8.3",
+    "vite": "^7.3.2"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

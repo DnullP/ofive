@@ -68,7 +68,6 @@ import {
 } from "./editorModePolicy";
 import { MarkdownReadView, revealMarkdownReadViewLine } from "./MarkdownReadView";
 import {
-    updateEditorDisplayMode,
     useEditorDisplayModeState,
     type EditorDisplayMode,
 } from "../../../host/editor/editorDisplayModeStore";
@@ -95,6 +94,8 @@ import {
 import { attachEditorKeyboardBridge } from "./editorKeyboardBridge";
 import { useCodeMirrorEditorLifecycle } from "./useCodeMirrorEditorLifecycle";
 import { registerCodeMirrorEditorPreviewSource } from "./CodeMirrorEditorPreviewMirror";
+import { syncEditorServiceDocument } from "./editorServiceDocumentBridge";
+import { useOfiveEditorServiceBridge } from "./useOfiveEditorServiceBridge";
 import type { WorkbenchTabProps } from "../../../host/layout/workbenchContracts";
 
 ensureBuiltinSyntaxRenderersRegistered();
@@ -372,6 +373,14 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         () => resolveMarkdownNoteTitle(displayFilePath),
         [displayFilePath],
     );
+    const editorService = useOfiveEditorServiceBridge({
+        articleId,
+        path: displayFilePath,
+        title: displayTitle,
+        content: initialDoc,
+        mode: isForcedReadMode ? "read" : "edit",
+        containerApi: props.containerApi,
+    });
     // TODO(editor): Extract title interaction controller for draft state,
     // composition/blur guards, and focus handoff around title rename.
     const [titleDraft, setTitleDraft] = useState<string>(displayTitle);
@@ -413,10 +422,6 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         setTitleDraft(displayTitle);
     }, [displayTitle]);
 
-    /**
-     * @function focusEditorBodyStart
-     * @description 将编辑器焦点移动到正文首个可编辑位置；若存在 frontmatter，则跳至其后第一行。
-     */
     const focusEditorBodyStart = (): void => {
         window.requestAnimationFrame(() => {
             const liveView = viewRef.current;
@@ -433,10 +438,6 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         });
     };
 
-    /**
-     * @function focusActiveEditorSurface
-     * @description 当编辑器重新成为活跃页签时，确保焦点不落入 frontmatter 隐藏源码，并在 Vim 模式下回到 normal。
-     */
     const focusActiveEditorSurface = (): void => {
         const liveView = viewRef.current;
         if (!liveView) {
@@ -461,21 +462,11 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         liveView.focus();
     };
 
-    /**
-     * @function commitInitialContentPresentation
-     * @description 编辑器首开内容 ready 后通知 layout 提交展示，并补发活跃页签焦点恢复。
-     */
     const commitInitialContentPresentation = (): void => {
         props.api.markContentReady?.();
         setInitialContentPresented(true);
     };
 
-    /**
-     * @function focusFrontmatterVimNavigationTarget
-     * @description 将焦点切入 frontmatter 的 Vim 导航层。
-     * @param position 进入时优先聚焦首项或末项。
-     * @returns 是否成功切入 frontmatter。
-     */
     const focusFrontmatterVimNavigationTarget = (position: "first" | "last"): boolean => {
         const view = viewRef.current;
         if (!view) {
@@ -593,6 +584,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
     const { viewRef } = useCodeMirrorEditorLifecycle({
         articleId,
         containerApi: props.containerApi,
+        editorService,
         tabRootRef,
         hostRef,
         initialDoc,
@@ -1040,6 +1032,9 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
 
         try {
             const sourcePath = currentFilePathRef.current;
+            const latestContent = viewRef.current?.state.doc.toString()
+                ?? articleSnapshot?.content
+                ?? readContent;
             const result = await commitEditorTitleRename({
                 articleId,
                 panelId: articleId,
@@ -1050,9 +1045,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                 currentVaultPath,
                 sourcePath,
                 draftTitle: titleDraft,
-                latestContent: viewRef.current?.state.doc.toString()
-                    ?? articleSnapshot?.content
-                    ?? readContent,
+                latestContent,
                 submitReason,
                 displayMode: displayModeRef.current,
                 isActiveEditor,
@@ -1074,6 +1067,13 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
             setTitleDraft(result.nextTitleDraft);
             if (result.status === "success") {
                 currentFilePathRef.current = result.nextPath;
+                syncEditorServiceDocument({
+                    editorService,
+                    articleId,
+                    path: result.nextPath,
+                    title: result.nextTitleDraft,
+                    content: latestContent,
+                });
             }
         } finally {
             titleRenameInFlightRef.current = false;
@@ -1152,7 +1152,7 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                                 aria-label={modeToggleLabel}
                                 aria-pressed={displayMode === "read"}
                                 onClick={() => {
-                                    updateEditorDisplayMode(toggleEditorDisplayMode(displayMode));
+                                    editorService.setMode(toggleEditorDisplayMode(displayMode));
                                 }}
                             >
                                 {displayMode === "read"

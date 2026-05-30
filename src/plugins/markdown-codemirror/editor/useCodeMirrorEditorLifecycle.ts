@@ -16,42 +16,6 @@
  *  - ./lineNumbersModeExtension
  *  - ./vimChineseMotionExtension
  *
- * @example
- *   const { viewRef } = useCodeMirrorEditorLifecycle({
- *     articleId,
- *     containerApi: props.containerApi,
- *     hostRef,
- *     tabRootRef,
- *     initialDoc,
- *     displayFilePath,
- *     readContent,
- *     currentFilePath,
- *     currentFilePathRef,
- *     displayModeRef,
- *     effectiveDisplayMode,
- *     vimModeEnabled,
- *     editorTabSize,
- *     editorLineWrapping,
- *     editorTabOutEnabled,
- *     editorLineNumbers,
- *     initialAutoFocus: props.params.autoFocus === true,
- *     initialCursorOffset: typeof props.params.initialCursorOffset === "number"
- *       ? props.params.initialCursorOffset
- *       : null,
- *     readOnly: false,
- *     hasAppliedInitialAutoFocusRef,
- *     articleSnapshot,
- *     setReadContent,
- *     registeredLineSyntaxRenderExtension,
- *     getLineTokens,
- *     clearPendingSegmentation,
- *     prefetchLineSegmentation,
- *     prefetchSegmentationAtMouseEvent,
- *     scheduleActiveLineSegmentation,
- *     trySelectWordAtMouseEvent,
- *     onRequestExitFrontmatterVimNavigation: exitFrontmatterVimNavigationToBody,
- *   });
- *
  * @exports
  *  - syncEditorTabGutterWidth: 同步标题栏 gutter 宽度补偿
  *  - safeDestroyEditorView: 安全销毁 EditorView
@@ -68,8 +32,9 @@ import { vim } from "@replit/codemirror-vim";
 import {
     createVaultBinaryFile,
 } from "../../../api/vaultApi";
-import { releaseArticleSnapshot, reportArticleContent, reportArticleFocus, type ArticleState } from "../../../host/editor/editorContextStore";
+import { releaseArticleSnapshot, type ArticleState } from "../../../host/editor/editorContextStore";
 import type { WorkbenchContainerApi } from "../../../host/layout/workbenchContracts";
+import type { EditorService } from "../../../../packages/editor/src";
 import {
     getEditorViewStateSnapshot,
     saveEditorViewStateSnapshot,
@@ -105,6 +70,10 @@ import {
 } from "./vimChineseMotionExtension";
 import { createVimImeInputPriorityExtension } from "./vimImeInputPriorityExtension";
 import { createImeCompositionGuard } from "../../../utils/imeInputGuard";
+import {
+    syncEditorServiceDocument,
+    withExternalEditorDocumentUpdate,
+} from "./editorServiceDocumentBridge";
 
 const SHARED_EDITOR_FONT_FAMILY_CSS_VALUE = "var(--cm-editor-font-family)";
 const SHARED_EDITOR_FONT_SIZE_CSS_VALUE = "var(--cm-editor-font-size)";
@@ -140,6 +109,8 @@ export interface UseCodeMirrorEditorLifecycleOptions {
     articleId: string;
     /** Workbench 容器 API。 */
     containerApi: WorkbenchContainerApi;
+    /** 通用编辑器服务，负责唯一文档快照、host 同步和插件接口。 */
+    editorService: EditorService;
     /** tab 根节点引用。 */
     tabRootRef: MutableRefObject<HTMLDivElement | null>;
     /** CodeMirror 宿主节点引用。 */
@@ -654,6 +625,7 @@ export function useCodeMirrorEditorLifecycle(
     const editorImePostCompositionAnchorRef = useRef<number | null>(null);
     const editorImePostCompositionUntilRef = useRef(0);
     const staleArticleSnapshotBoundaryRef = useRef<StaleArticleSnapshotBoundary | null>(null);
+    const applyingExternalDocumentRef = useRef(false);
 
     /**
      * @function restoreRecentCompositionAnchor
@@ -691,7 +663,8 @@ export function useCodeMirrorEditorLifecycle(
 
     const reportAuthoritativeInitialDocument = (content: string): void => {
         const { path } = markAuthoritativeInitialDocument(content);
-        reportArticleContent({
+        syncEditorServiceDocument({
+            editorService: options.editorService,
             articleId: options.articleId,
             path,
             content,
@@ -916,11 +889,16 @@ export function useCodeMirrorEditorLifecycle(
                     const nextContent = update.state.doc.toString();
                     const currentPath = options.currentFilePathRef.current;
                     options.setReadContent(nextContent);
-                    reportArticleContent({
-                        articleId: options.articleId,
-                        path: currentPath,
-                        content: nextContent,
-                    });
+                    if (applyingExternalDocumentRef.current) {
+                        syncEditorServiceDocument({
+                            editorService: options.editorService,
+                            articleId: options.articleId,
+                            path: currentPath,
+                            content: nextContent,
+                        });
+                    } else {
+                        options.editorService.updateContent(nextContent, "codemirror");
+                    }
                     syncRuntimeTabContentSnapshot({
                         containerApi: options.containerApi,
                         articleId: options.articleId,
@@ -938,11 +916,7 @@ export function useCodeMirrorEditorLifecycle(
                 }
 
                 if (update.focusChanged && update.view.hasFocus) {
-                    reportArticleFocus({
-                        articleId: options.articleId,
-                        path: options.currentFilePathRef.current,
-                        content: update.state.doc.toString(),
-                    });
+                    options.editorService.attachView(update.view);
                 }
 
                 if (update.focusChanged && !update.view.hasFocus) {
@@ -980,6 +954,7 @@ export function useCodeMirrorEditorLifecycle(
                     ? restoredViewState.scrollSnapshot ?? undefined
                     : undefined,
             });
+            options.editorService.attachView(viewRef.current, { notifyFocus: false });
         } catch (constructionError) {
             console.error("[editor] EditorView construction failed", {
                 articleId: options.articleId,
@@ -1118,12 +1093,13 @@ export function useCodeMirrorEditorLifecycle(
             if (viewRef.current) {
                 persistCurrentViewState(viewRef.current);
                 unregisterVimTokenProvider(viewRef.current);
+                options.editorService.attachView(null);
                 safeDestroyEditorView(viewRef.current);
             }
             releaseArticleSnapshot(options.articleId);
             viewRef.current = null;
         };
-    }, [options.articleId, options.containerApi]);
+    }, [options.articleId, options.containerApi, options.editorService]);
 
     useEffect(() => {
         const view = viewRef.current;
@@ -1235,27 +1211,25 @@ export function useCodeMirrorEditorLifecycle(
 
         const currentDoc = view.state.doc.toString();
         if (currentDoc === options.initialDoc) {
-            const { path, boundary } = markAuthoritativeInitialDocument(options.initialDoc);
+            const { boundary } = markAuthoritativeInitialDocument(options.initialDoc);
             if (boundary) {
-                reportArticleContent({
-                    articleId: options.articleId,
-                    path,
-                    content: options.initialDoc,
-                });
+                reportAuthoritativeInitialDocument(options.initialDoc);
             }
             return;
         }
 
         markAuthoritativeInitialDocument(options.initialDoc);
-        view.dispatch({
-            changes: {
-                from: 0,
-                to: view.state.doc.length,
-                insert: options.initialDoc,
-            },
-            selection: resolveSelectionForDocumentReplace(view, options.initialDoc),
+        withExternalEditorDocumentUpdate(applyingExternalDocumentRef, () => {
+            view.dispatch({
+                changes: {
+                    from: 0,
+                    to: view.state.doc.length,
+                    insert: options.initialDoc,
+                },
+                selection: resolveSelectionForDocumentReplace(view, options.initialDoc),
+            });
+            options.setReadContent(options.initialDoc);
         });
-        options.setReadContent(options.initialDoc);
     }, [options.initialDoc]);
 
     useEffect(() => {
@@ -1264,46 +1238,49 @@ export function useCodeMirrorEditorLifecycle(
             return;
         }
 
-        if (!options.articleSnapshot.hasContentSnapshot) {
+        const articleSnapshot = options.articleSnapshot;
+        if (!articleSnapshot.hasContentSnapshot) {
             return;
         }
 
-        if (options.articleSnapshot.path !== options.currentFilePathRef.current) {
+        if (articleSnapshot.path !== options.currentFilePathRef.current) {
             return;
         }
 
         const currentDoc = view.state.doc.toString();
         if (shouldSkipArticleSnapshotSync({
-            snapshot: options.articleSnapshot,
+            snapshot: articleSnapshot,
             boundary: staleArticleSnapshotBoundaryRef.current,
             currentDoc,
         })) {
             console.info("[editor] skipped stale editor context content", {
                 articleId: options.articleId,
-                path: options.articleSnapshot.path,
-                updatedAt: options.articleSnapshot.updatedAt,
+                path: articleSnapshot.path,
+                updatedAt: articleSnapshot.updatedAt,
             });
             return;
         }
 
-        if (currentDoc === options.articleSnapshot.content) {
+        if (currentDoc === articleSnapshot.content) {
             return;
         }
 
-        view.dispatch({
-            changes: {
-                from: 0,
-                to: view.state.doc.length,
-                insert: options.articleSnapshot.content,
-            },
-            selection: resolveSelectionForDocumentReplace(view, options.articleSnapshot.content),
+        withExternalEditorDocumentUpdate(applyingExternalDocumentRef, () => {
+            view.dispatch({
+                changes: {
+                    from: 0,
+                    to: view.state.doc.length,
+                    insert: articleSnapshot.content,
+                },
+                selection: resolveSelectionForDocumentReplace(view, articleSnapshot.content),
+            });
+            options.setReadContent(articleSnapshot.content);
         });
-        options.setReadContent(options.articleSnapshot.content);
 
         console.info("[editor] synced content from editor context state", {
             articleId: options.articleId,
-            path: options.articleSnapshot.path,
-            updatedAt: options.articleSnapshot.updatedAt,
+            path: articleSnapshot.path,
+            updatedAt: articleSnapshot.updatedAt,
         });
     }, [options.articleSnapshot?.updatedAt, options.articleSnapshot?.content, options.articleSnapshot?.path, options.articleId]);
 

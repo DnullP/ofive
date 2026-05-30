@@ -480,6 +480,9 @@ export const storeConsumerCoverage = {
         "src/host/editor/persistedMarkdownContentSync.test.ts",
         "e2e/task-board.e2e.ts",
     ],
+    "src/host/editor/ofiveEditorService.ts": [
+        "src/host/editor/ofiveEditorService.test.ts",
+    ],
     "src/host/commands/shortcutDispatcher.ts": [
         "src/host/commands/shortcutDispatcher.test.ts",
     ],
