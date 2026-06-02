@@ -28,16 +28,8 @@ import { releaseArticleSnapshot, type ArticleState } from "../../../host/editor/
 import { createOfiveEditorCapabilities } from "../../../host/editor/ofiveEditorCapabilities";
 import type { WorkbenchContainerApi } from "../../../host/layout/workbenchContracts";
 import {
-    attachPasteImageHandler,
-    createCodeBlockHighlightExtension,
-    createFrontmatterSyntaxExtension,
+    createDefaultMarkdownCodeMirrorExtensions,
     createImeCompositionGuard,
-    createImageEmbedSyntaxExtension,
-    createLatexSyntaxExtension,
-    createMarkdownTableSyntaxExtension,
-    createTaskCheckboxToggleExtension,
-    createWikiLinkNavigationExtension,
-    createWikiLinkPreviewExtension,
     createVimImeInputPriorityExtension,
     buildLineNumbersExtension,
     createEditorTabOutKeymap,
@@ -47,7 +39,6 @@ import {
     unregisterVimTokenProvider,
     type EditorService,
     type EditorChineseSegmentationController,
-    getRegisteredEditPluginExtensions,
     setLineSyntaxImeCompositionActive,
 } from "obeditor";
 import {
@@ -150,8 +141,6 @@ export interface UseCodeMirrorEditorLifecycleOptions {
     articleSnapshot: ArticleState | null;
     /** 阅读态内容写回器。 */
     setReadContent(content: string): void;
-    /** 已注册的行级语法扩展。 */
-    registeredLineSyntaxRenderExtension: Extension;
     /** 读取 Vim 分词缓存。 */
     getLineTokens: EditorChineseSegmentationController["getLineTokens"];
     /** 清理分词定时器与 pending。 */
@@ -771,46 +760,21 @@ export function useCodeMirrorEditorLifecycle(
                 buildLineNumbersExtension(options.editorLineNumbers),
             ),
             keymap.of([indentWithTab]),
-            createFrontmatterSyntaxExtension({
+            ...createDefaultMarkdownCodeMirrorExtensions({
+                getCurrentFilePath: () => options.currentFilePathRef.current,
                 capabilities: editorCapabilities,
-                onRequestExitVimNavigation: () => {
+                getCurrentDocumentContent: getCurrentEditorContent,
+                onRequestExitFrontmatterVimNavigation: () => {
                     exitFrontmatterVimNavigationRef.current();
                 },
-                onRequestFocusVimNavigation: (position) => {
+                onRequestFocusFrontmatterVimNavigation: (position) => {
                     focusFrontmatterVimNavigationRef.current(position);
                 },
+                onRequestFocusMarkdownTableVimNavigation: (request) => {
+                    focusMarkdownTableVimNavigationRef.current(request);
+                },
+                canMutateDocument: () => !options.readOnly && canMutateEditorDocument(options.displayModeRef.current),
             }),
-            createCodeBlockHighlightExtension(),
-            ...createLatexSyntaxExtension(),
-            createMarkdownTableSyntaxExtension(
-                () => options.currentFilePathRef.current,
-                {
-                    capabilities: editorCapabilities,
-                    onRequestFocusVimNavigation: (request) => {
-                        focusMarkdownTableVimNavigationRef.current(request);
-                    },
-                },
-            ),
-            options.registeredLineSyntaxRenderExtension,
-            createTaskCheckboxToggleExtension(),
-            createImageEmbedSyntaxExtension(
-                () => options.currentFilePathRef.current,
-                { capabilities: editorCapabilities },
-            ),
-            createWikiLinkPreviewExtension(
-                () => options.currentFilePathRef.current,
-                {
-                    capabilities: editorCapabilities,
-                    getCurrentDocumentContent: getCurrentEditorContent,
-                },
-            ),
-            createWikiLinkNavigationExtension(
-                () => options.currentFilePathRef.current,
-                {
-                    capabilities: editorCapabilities,
-                    getCurrentDocumentContent: getCurrentEditorContent,
-                },
-            ),
             EditorView.domEventHandlers({
                 mousedown(event, view) {
                     try {
@@ -892,10 +856,6 @@ export function useCodeMirrorEditorLifecycle(
                     setLineSyntaxImeCompositionActive(view, false);
                     return false;
                 },
-            }),
-            ...getRegisteredEditPluginExtensions({
-                getCurrentFilePath: () => options.currentFilePathRef.current,
-                capabilities: editorCapabilities(),
             }),
             EditorView.updateListener.of((update) => {
                 if (update.docChanged) {
@@ -1040,15 +1000,6 @@ export function useCodeMirrorEditorLifecycle(
 
         registerVimTokenProvider(viewRef.current, options.getLineTokens);
 
-        const cleanupPasteHandler = attachPasteImageHandler(
-            viewRef.current,
-            {
-                getCurrentFilePath: () => options.currentFilePathRef.current,
-                capabilities: editorCapabilities,
-                canMutateDocument: () => !options.readOnly && canMutateEditorDocument(options.displayModeRef.current),
-            },
-        );
-
         reportAuthoritativeInitialDocument(state.doc.toString());
 
         const focusInitialEditorIfNeeded = (): void => {
@@ -1102,7 +1053,6 @@ export function useCodeMirrorEditorLifecycle(
             options.clearPendingSegmentation();
             gutterResizeObserver?.disconnect();
             gutterMutationObserver?.disconnect();
-            cleanupPasteHandler();
             if (viewRef.current) {
                 persistCurrentViewState(viewRef.current);
                 unregisterVimTokenProvider(viewRef.current);

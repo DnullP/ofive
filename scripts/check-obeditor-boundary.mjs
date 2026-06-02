@@ -3,7 +3,7 @@
  * @description obeditor 边界守卫：防止通用 Markdown editor 插件实现回流到 ofive。
  */
 
-import { readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -21,6 +21,24 @@ export const forbiddenEditorPluginRoots = [
 export const forbiddenEditorImplementationFiles = new Set([
     "src/plugins/markdown-codemirror/editor/editorPasteImageHandler.ts",
     "src/plugins/markdown-codemirror/editor/editorPasteImageHandler.test.ts",
+]);
+
+export const forbiddenObeditorImports = new Set([
+    "attachPasteImageHandler",
+    "createCodeBlockHighlightExtension",
+    "createFrontmatterSyntaxExtension",
+    "createImageEmbedSyntaxExtension",
+    "createLatexSyntaxExtension",
+    "createMarkdownTableSyntaxExtension",
+    "createPasteImageExtension",
+    "createRegisteredLineSyntaxRenderExtension",
+    "createTaskCheckboxToggleExtension",
+    "createWikiLinkNavigationExtension",
+    "createWikiLinkPreviewExtension",
+    "ensureBuiltinEditPluginsRegistered",
+    "ensureBuiltinSyntaxRenderersRegistered",
+    "ensureBuiltinVimHandoffsRegistered",
+    "getRegisteredEditPluginExtensions",
 ]);
 
 const ignoredPathFragments = new Set([
@@ -51,6 +69,37 @@ function shouldIgnorePath(relativePath) {
     return [...ignoredPathFragments].some((fragment) => relativePath.includes(fragment));
 }
 
+function parseNamedObeditorImports(source) {
+    const imports = [];
+    const importPattern = /import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+["']obeditor["']/g;
+    let match = importPattern.exec(source);
+    while (match) {
+        const importedNames = (match[1] ?? "")
+            .split(",")
+            .map((binding) => binding.trim().split(/\s+as\s+/u)[0]?.trim())
+            .filter((binding) => Boolean(binding));
+        imports.push(...importedNames);
+        match = importPattern.exec(source);
+    }
+
+    return imports;
+}
+
+export function buildObeditorImportViolations(sourceByRelativePath) {
+    return Object.entries(sourceByRelativePath).flatMap(([relativePath, source]) => {
+        const forbiddenImports = parseNamedObeditorImports(source)
+            .filter((binding) => forbiddenObeditorImports.has(binding));
+        if (forbiddenImports.length === 0) {
+            return [];
+        }
+
+        return forbiddenImports.map((binding) => ({
+            relativePath,
+            reason: `ofive must consume obeditor's default extension pack instead of importing ${binding}`,
+        }));
+    });
+}
+
 export function buildObeditorBoundaryViolations(relativePaths) {
     return relativePaths
         .filter((relativePath) => !shouldIgnorePath(relativePath))
@@ -79,9 +128,18 @@ function isMainModule() {
 }
 
 if (isMainModule()) {
-    const relativePaths = listFiles(sourceRoot)
-        .map((filePath) => toPosixPath(path.relative(repoRoot, filePath)));
-    const violations = buildObeditorBoundaryViolations(relativePaths);
+    const sourceFiles = listFiles(sourceRoot);
+    const relativePaths = sourceFiles.map((filePath) => toPosixPath(path.relative(repoRoot, filePath)));
+    const sourceByRelativePath = Object.fromEntries(sourceFiles
+        .filter((filePath) => /\.(?:ts|tsx|js|jsx|mjs)$/u.test(filePath))
+        .map((filePath) => [
+            toPosixPath(path.relative(repoRoot, filePath)),
+            readFileSync(filePath, "utf8"),
+        ]));
+    const violations = [
+        ...buildObeditorBoundaryViolations(relativePaths),
+        ...buildObeditorImportViolations(sourceByRelativePath),
+    ];
 
     if (violations.length > 0) {
         console.error("[obeditor-boundary-guard] generic editor plugin code must live in ../obeditor:");

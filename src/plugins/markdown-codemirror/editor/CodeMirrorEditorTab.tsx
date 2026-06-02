@@ -17,11 +17,7 @@ import { openSearchPanel } from "@codemirror/search";
 import { getCM, Vim } from "@replit/codemirror-vim";
 import {
     createImeCompositionGuard,
-    createRegisteredLineSyntaxRenderExtension,
     describeRenderFeature,
-    ensureBuiltinEditPluginsRegistered,
-    ensureBuiltinSyntaxRenderersRegistered,
-    ensureBuiltinVimHandoffsRegistered,
     evaluateReadModeRenderGuard,
     createEditorChineseSegmentationController,
     insertFrontmatter,
@@ -32,7 +28,6 @@ import {
     resolveEditorBodySelectionRange,
     resolveMarkdownNoteTitle,
     shouldSubmitPlainEnter,
-    setupVimEnhancedMotions,
     toggleBlockLatex,
     toggleBold,
     toggleHighlight,
@@ -93,14 +88,6 @@ import { syncEditorServiceDocument } from "./editorServiceDocumentBridge";
 import { useOfiveEditorServiceBridge } from "./useOfiveEditorServiceBridge";
 import type { WorkbenchTabProps } from "../../../host/layout/workbenchContracts";
 
-ensureBuiltinSyntaxRenderersRegistered();
-ensureBuiltinEditPluginsRegistered();
-ensureBuiltinVimHandoffsRegistered();
-
-// 初始化 Vim 增强运动（全局仅一次）
-setupVimEnhancedMotions();
-
-const registeredLineSyntaxRenderExtension = createRegisteredLineSyntaxRenderExtension();
 const FRONTMATTER_FOCUSABLE_SELECTOR = "[data-frontmatter-field-focusable='true']";
 const FRONTMATTER_VIM_NAV_SELECTOR = "[data-frontmatter-vim-nav='true']";
 const FRONTMATTER_VIM_ROW_SELECTOR = "[data-frontmatter-vim-nav='true'][data-frontmatter-field-key]";
@@ -605,7 +592,6 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         hasAppliedInitialAutoFocusRef,
         articleSnapshot,
         setReadContent,
-        registeredLineSyntaxRenderExtension,
         getLineTokens,
         clearPendingSegmentation,
         prefetchLineSegmentation,

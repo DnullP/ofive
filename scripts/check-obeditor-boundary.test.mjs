@@ -5,7 +5,10 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { buildObeditorBoundaryViolations } from "./check-obeditor-boundary.mjs";
+import {
+    buildObeditorBoundaryViolations,
+    buildObeditorImportViolations,
+} from "./check-obeditor-boundary.mjs";
 
 describe("obeditor boundary guard", () => {
     test("allows ofive host adapter files in the markdown editor shell", () => {
@@ -45,6 +48,48 @@ describe("obeditor boundary guard", () => {
             {
                 relativePath: "src/plugins/markdown-codemirror/editor/editorPasteImageHandler.ts",
                 reason: "generic editor implementation must live in ../obeditor",
+            },
+        ]);
+    });
+
+    test("allows the default extension pack and host adapter APIs from obeditor", () => {
+        const violations = buildObeditorImportViolations({
+            "src/plugins/markdown-codemirror/editor/useCodeMirrorEditorLifecycle.ts": `
+                import {
+                    createDefaultMarkdownCodeMirrorExtensions,
+                    createImeCompositionGuard,
+                    type EditorService,
+                } from "obeditor";
+            `,
+        });
+
+        expect(violations).toEqual([]);
+    });
+
+    test("rejects concrete obeditor plugin factory imports in ofive", () => {
+        const violations = buildObeditorImportViolations({
+            "src/plugins/markdown-codemirror/editor/useCodeMirrorEditorLifecycle.ts": `
+                import {
+                    createDefaultMarkdownCodeMirrorExtensions,
+                    createFrontmatterSyntaxExtension,
+                    createMarkdownTableSyntaxExtension as tableExtension,
+                    attachPasteImageHandler,
+                } from "obeditor";
+            `,
+        });
+
+        expect(violations).toEqual([
+            {
+                relativePath: "src/plugins/markdown-codemirror/editor/useCodeMirrorEditorLifecycle.ts",
+                reason: "ofive must consume obeditor's default extension pack instead of importing createFrontmatterSyntaxExtension",
+            },
+            {
+                relativePath: "src/plugins/markdown-codemirror/editor/useCodeMirrorEditorLifecycle.ts",
+                reason: "ofive must consume obeditor's default extension pack instead of importing createMarkdownTableSyntaxExtension",
+            },
+            {
+                relativePath: "src/plugins/markdown-codemirror/editor/useCodeMirrorEditorLifecycle.ts",
+                reason: "ofive must consume obeditor's default extension pack instead of importing attachPasteImageHandler",
             },
         ]);
     });
