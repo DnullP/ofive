@@ -19,10 +19,6 @@
  *     isVimModeEnabled: () => true,
  *     executeEditorCommand: (commandId) => console.log(commandId),
  *     focusWidgetNavigationTarget: () => false,
- *     frontmatterSelectors: {
- *       focusable: "[data-frontmatter-field-focusable='true']",
- *       navigation: "[data-frontmatter-vim-nav='true']",
- *     },
  *   });
  *
  * @exports
@@ -40,22 +36,13 @@ import {
     flushFocusedMarkdownTableEditor,
     handleVimImeKeydown,
     isMarkdownTableEditorFocused,
+    resolveDefaultMarkdownInteractionTargetState,
     resolvePlainTextVimKeydownKey,
     resolveEditorBodyVimHandoff,
+    type DefaultMarkdownInteractionTargetState,
     type VimHandoffWidget,
     type VimHandoffWidgetPosition,
 } from "obeditor";
-
-interface ClosestCapableTarget extends EventTarget {
-    closest(selector: string): Element | null;
-}
-
-function isClosestCapableTarget(target: EventTarget | null): target is ClosestCapableTarget {
-    return typeof target === "object"
-        && target !== null
-        && "closest" in target
-        && typeof target.closest === "function";
-}
 
 /**
  * @interface EditorKeyboardEventLike
@@ -89,22 +76,6 @@ export interface EditorKeyboardEventLike {
 }
 
 /**
- * @interface FrontmatterKeyboardSelectors
- * @description frontmatter 焦点与导航层使用的 DOM 选择器集合。
- */
-export interface FrontmatterKeyboardSelectors {
-    /** 可编辑 frontmatter 字段。 */
-    focusable: string;
-    /** Vim 导航层目标。 */
-    navigation: string;
-}
-
-export interface MarkdownTableKeyboardSelectors {
-    /** Markdown table widget 根容器。 */
-    shell: string;
-}
-
-/**
  * @interface EditorKeyboardBridgeDependencies
  * @description 键盘桥接的可注入依赖，便于测试与后续替换实现。
  */
@@ -123,6 +94,8 @@ export interface EditorKeyboardBridgeDependencies {
     flushFocusedMarkdownTableEditor: typeof flushFocusedMarkdownTableEditor;
     /** Vim IME keydown 处理器。 */
     handleVimImeKeydown: typeof handleVimImeKeydown;
+    /** 解析 obeditor 默认 Markdown widget 交互目标。 */
+    resolveDefaultMarkdownInteractionTargetState: typeof resolveDefaultMarkdownInteractionTargetState;
 }
 
 /**
@@ -150,10 +123,6 @@ export interface EditorKeyboardBridgeBaseOptions {
         position: VimHandoffWidgetPosition,
         blockFrom?: number,
     ): boolean;
-    /** frontmatter 相关 DOM 选择器。 */
-    frontmatterSelectors: FrontmatterKeyboardSelectors;
-    /** Markdown table 相关 DOM 选择器。 */
-    markdownTableSelectors: MarkdownTableKeyboardSelectors;
     /** 可选的测试/替换依赖。 */
     dependencies?: Partial<EditorKeyboardBridgeDependencies>;
 }
@@ -175,29 +144,23 @@ const DEFAULT_DEPENDENCIES: EditorKeyboardBridgeDependencies = {
     isMarkdownTableEditorFocused,
     flushFocusedMarkdownTableEditor,
     handleVimImeKeydown,
+    resolveDefaultMarkdownInteractionTargetState,
 };
 
 /**
  * @function resolveEditorShortcutFocusedComponent
  * @description 根据事件目标解析快捷键焦点上下文。
- * @param target 当前事件目标。
- * @param selectors frontmatter 选择器集合。
+ * @param targetState obeditor 默认 Markdown widget 交互目标状态。
  * @returns 正文或 frontmatter 的焦点组件标识。
  */
 function resolveEditorShortcutFocusedComponent(
-    target: EventTarget | null,
-    selectors: FrontmatterKeyboardSelectors,
-    markdownTableSelectors: MarkdownTableKeyboardSelectors,
+    targetState: DefaultMarkdownInteractionTargetState,
 ): string {
-    if (
-        typeof HTMLElement !== "undefined" &&
-        target instanceof HTMLElement &&
-        target.closest(selectors.focusable)
-    ) {
+    if (targetState.isFrontmatterFieldTarget) {
         return "tab:codemirror-frontmatter";
     }
 
-    if (isClosestCapableTarget(target) && target.closest(markdownTableSelectors.shell)) {
+    if (targetState.isMarkdownTableTarget) {
         return "tab:codemirror-widget";
     }
 
@@ -218,13 +181,10 @@ export function handleEditorKeydown(options: HandleEditorKeydownOptions): void {
     const { event, view } = options;
     const isComposing = event.isComposing || event.keyCode === 229;
     const vimKeydownKey = resolvePlainTextVimKeydownKey(event, Boolean(isComposing));
-
-    const eventTarget = isClosestCapableTarget(event.target)
-        ? event.target
-        : null;
-    const isFrontmatterNavigationTarget = !!eventTarget?.closest(options.frontmatterSelectors.navigation);
-    const isFrontmatterFieldTarget = !!eventTarget?.closest(options.frontmatterSelectors.focusable);
-    const isMarkdownTableTarget = !!eventTarget?.closest(options.markdownTableSelectors.shell);
+    const targetState = dependencies.resolveDefaultMarkdownInteractionTargetState(event.target);
+    const isFrontmatterNavigationTarget = targetState.isFrontmatterNavigationTarget;
+    const isFrontmatterFieldTarget = targetState.isFrontmatterFieldTarget;
+    const isMarkdownTableTarget = targetState.isMarkdownTableTarget;
 
     if (
         options.isVimModeEnabled()
@@ -275,11 +235,7 @@ export function handleEditorKeydown(options: HandleEditorKeydownOptions): void {
         bindings: options.getBindings(),
         source: "editor",
         conditionContext: dependencies.createConditionContext({
-            focusedComponent: resolveEditorShortcutFocusedComponent(
-                event.target,
-                options.frontmatterSelectors,
-                options.markdownTableSelectors,
-            ),
+            focusedComponent: resolveEditorShortcutFocusedComponent(targetState),
             activeTabId: options.articleId,
             activeEditorArticleId: options.articleId,
             currentVaultPath: options.getCurrentVaultPath(),

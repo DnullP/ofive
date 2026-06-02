@@ -41,6 +41,28 @@ export const forbiddenObeditorImports = new Set([
     "getRegisteredEditPluginExtensions",
 ]);
 
+export const forbiddenEditorPluginCssPatterns = [
+    { label: ".cm-rendered-", pattern: /\.cm-rendered-/u },
+    { label: ".cm-wikilink-suggest", pattern: /\.cm-wikilink-suggest/u },
+    { label: ".cm-wikilink-preview", pattern: /\.cm-wikilink-preview/u },
+    { label: ".cm-latex", pattern: /\.cm-latex/u },
+    { label: ".cm-frontmatter-widget", pattern: /\.cm-frontmatter-widget/u },
+    { label: ".cm-image-embed", pattern: /\.cm-image-embed/u },
+    { label: ".cm-code-block", pattern: /\.cm-code-block/u },
+    { label: ".cm-mermaid-widget", pattern: /\.cm-mermaid-widget/u },
+    { label: ".cm-hidden-block", pattern: /\.cm-hidden-block/u },
+    { label: ".cm-markdown-table-widget", pattern: /\.cm-markdown-table-widget/u },
+    { label: ".hljs-", pattern: /\.hljs-/u },
+    { label: "katex/dist", pattern: /katex\/dist/u },
+];
+
+export const forbiddenEditorPluginDomPatterns = [
+    { label: ".fmv-editor", pattern: /\.fmv-editor/u },
+    { label: ".cm-frontmatter-widget .fmv-", pattern: /\.cm-frontmatter-widget\s+\.fmv-/u },
+    { label: "data-frontmatter-*", pattern: /data-frontmatter-/u },
+    { label: "data-markdown-table-*", pattern: /data-markdown-table-/u },
+];
+
 const ignoredPathFragments = new Set([
     ".DS_Store",
 ]);
@@ -123,6 +145,48 @@ export function buildObeditorBoundaryViolations(relativePaths) {
         });
 }
 
+export function buildObeditorCssViolations(sourceByRelativePath) {
+    return Object.entries(sourceByRelativePath).flatMap(([relativePath, source]) => {
+        if (!relativePath.startsWith("src/plugins/markdown-codemirror/editor/")) {
+            return [];
+        }
+
+        if (!relativePath.endsWith(".css")) {
+            return [];
+        }
+
+        return forbiddenEditorPluginCssPatterns
+            .filter(({ pattern }) => pattern.test(source))
+            .map(({ label }) => ({
+                relativePath,
+                reason: `generic editor plugin CSS selector ${label} must live in ../obeditor/styles.css`,
+            }));
+    });
+}
+
+export function buildObeditorDomContractViolations(sourceByRelativePath) {
+    return Object.entries(sourceByRelativePath).flatMap(([relativePath, source]) => {
+        if (!relativePath.startsWith("src/plugins/markdown-codemirror/editor/")) {
+            return [];
+        }
+
+        if (!/\.(?:ts|tsx|js|jsx|mjs)$/u.test(relativePath)) {
+            return [];
+        }
+
+        if (/\.(?:test|spec)\.(?:ts|tsx|js|jsx|mjs)$/u.test(relativePath)) {
+            return [];
+        }
+
+        return forbiddenEditorPluginDomPatterns
+            .filter(({ pattern }) => pattern.test(source))
+            .map(({ label }) => ({
+                relativePath,
+                reason: `ofive must use obeditor exported contracts instead of inspecting plugin DOM ${label}`,
+            }));
+    });
+}
+
 function isMainModule() {
     return import.meta.url === pathToFileURL(process.argv[1]).href;
 }
@@ -136,9 +200,17 @@ if (isMainModule()) {
             toPosixPath(path.relative(repoRoot, filePath)),
             readFileSync(filePath, "utf8"),
         ]));
+    const cssSourceByRelativePath = Object.fromEntries(sourceFiles
+        .filter((filePath) => /\.css$/u.test(filePath))
+        .map((filePath) => [
+            toPosixPath(path.relative(repoRoot, filePath)),
+            readFileSync(filePath, "utf8"),
+        ]));
     const violations = [
         ...buildObeditorBoundaryViolations(relativePaths),
         ...buildObeditorImportViolations(sourceByRelativePath),
+        ...buildObeditorCssViolations(cssSourceByRelativePath),
+        ...buildObeditorDomContractViolations(sourceByRelativePath),
     ];
 
     if (violations.length > 0) {

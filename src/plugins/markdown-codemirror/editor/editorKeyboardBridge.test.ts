@@ -5,7 +5,7 @@
 
 import { describe, expect, mock, test } from "bun:test";
 import type { EditorView } from "codemirror";
-import type { HandleVimImeKeydownOptions } from "obeditor";
+import type { DefaultMarkdownInteractionTargetState, HandleVimImeKeydownOptions } from "obeditor";
 import {
     handleEditorKeydown,
     type EditorKeyboardEventLike,
@@ -66,6 +66,17 @@ function createEventStub(
     };
 }
 
+function createInteractionTargetState(
+    overrides: Partial<DefaultMarkdownInteractionTargetState> = {},
+): DefaultMarkdownInteractionTargetState {
+    return {
+        isFrontmatterNavigationTarget: false,
+        isFrontmatterFieldTarget: false,
+        isMarkdownTableTarget: false,
+        ...overrides,
+    };
+}
+
 describe("handleEditorKeydown", () => {
     test("should route Cmd+Backspace through delete current file command", () => {
         const view = createViewStub("中文测试");
@@ -85,13 +96,6 @@ describe("handleEditorKeydown", () => {
             isVimModeEnabled: () => false,
             executeEditorCommand,
             focusWidgetNavigationTarget: mock(() => false),
-            frontmatterSelectors: {
-                focusable: "[data-frontmatter-field-focusable='true']",
-                navigation: "[data-frontmatter-vim-nav='true']",
-            },
-            markdownTableSelectors: {
-                shell: "[data-markdown-table-block-from]",
-            },
             dependencies: {
                 dispatchShortcut: () => ({
                     kind: "execute",
@@ -127,13 +131,6 @@ describe("handleEditorKeydown", () => {
             isVimModeEnabled: () => false,
             executeEditorCommand,
             focusWidgetNavigationTarget: mock(() => false),
-            frontmatterSelectors: {
-                focusable: "[data-frontmatter-field-focusable='true']",
-                navigation: "[data-frontmatter-vim-nav='true']",
-            },
-            markdownTableSelectors: {
-                shell: "[data-markdown-table-block-from]",
-            },
             dependencies: {
                 dispatchShortcut: () => ({
                     kind: "execute",
@@ -176,13 +173,6 @@ describe("handleEditorKeydown", () => {
             isVimModeEnabled: () => true,
             executeEditorCommand: mock(() => undefined),
             focusWidgetNavigationTarget,
-            frontmatterSelectors: {
-                focusable: "[data-frontmatter-field-focusable='true']",
-                navigation: "[data-frontmatter-vim-nav='true']",
-            },
-            markdownTableSelectors: {
-                shell: "[data-markdown-table-block-from]",
-            },
             dependencies: {
                 dispatchShortcut,
                 resolveEditorBodyVimHandoff: () => ({
@@ -227,13 +217,6 @@ describe("handleEditorKeydown", () => {
             isVimModeEnabled: () => true,
             executeEditorCommand: mock(() => undefined),
             focusWidgetNavigationTarget,
-            frontmatterSelectors: {
-                focusable: "[data-frontmatter-field-focusable='true']",
-                navigation: "[data-frontmatter-vim-nav='true']",
-            },
-            markdownTableSelectors: {
-                shell: "[data-markdown-table-block-from]",
-            },
             dependencies: {
                 dispatchShortcut,
                 resolveEditorBodyVimHandoff: () => ({
@@ -283,13 +266,6 @@ describe("handleEditorKeydown", () => {
             isVimModeEnabled: () => true,
             executeEditorCommand: mock(() => undefined),
             focusWidgetNavigationTarget: mock(() => false),
-            frontmatterSelectors: {
-                focusable: "[data-frontmatter-field-focusable='true']",
-                navigation: "[data-frontmatter-vim-nav='true']",
-            },
-            markdownTableSelectors: {
-                shell: "[data-markdown-table-block-from]",
-            },
             dependencies: {
                 dispatchShortcut,
                 resolveEditorBodyVimHandoff: () => null,
@@ -325,13 +301,6 @@ describe("handleEditorKeydown", () => {
             isVimModeEnabled: () => false,
             executeEditorCommand,
             focusWidgetNavigationTarget: mock(() => false),
-            frontmatterSelectors: {
-                focusable: "[data-frontmatter-field-focusable='true']",
-                navigation: "[data-frontmatter-vim-nav='true']",
-            },
-            markdownTableSelectors: {
-                shell: "[data-markdown-table-block-from]",
-            },
             dependencies: {
                 dispatchShortcut: () => ({
                     kind: "execute",
@@ -370,13 +339,6 @@ describe("handleEditorKeydown", () => {
                 isVimModeEnabled: () => false,
                 executeEditorCommand: mock(() => undefined),
                 focusWidgetNavigationTarget: mock(() => false),
-                frontmatterSelectors: {
-                    focusable: "[data-frontmatter-field-focusable='true']",
-                    navigation: "[data-frontmatter-vim-nav='true']",
-                },
-                markdownTableSelectors: {
-                    shell: "[data-markdown-table-block-from]",
-                },
             });
         }).not.toThrow();
     });
@@ -385,14 +347,6 @@ describe("handleEditorKeydown", () => {
         const view = createViewStub("| a | b |\n| --- | --- |\n| c | d |");
         const event = createEventStub({
             key: "j",
-            target: {
-                closest: (selector: string) => {
-                    if (selector === "[data-markdown-table-block-from]") {
-                        return {} as Element;
-                    }
-                    return null;
-                },
-            } as unknown as EventTarget,
         });
         const resolveEditorBodyVimHandoff = mock(() => ({
             kind: "focus-widget-navigation" as const,
@@ -419,16 +373,12 @@ describe("handleEditorKeydown", () => {
             isVimModeEnabled: () => true,
             executeEditorCommand: mock(() => undefined),
             focusWidgetNavigationTarget: mock(() => false),
-            frontmatterSelectors: {
-                focusable: "[data-frontmatter-field-focusable='true']",
-                navigation: "[data-frontmatter-vim-nav='true']",
-            },
-            markdownTableSelectors: {
-                shell: "[data-markdown-table-block-from]",
-            },
             dependencies: {
                 resolveEditorBodyVimHandoff,
                 dispatchShortcut,
+                resolveDefaultMarkdownInteractionTargetState: () => createInteractionTargetState({
+                    isMarkdownTableTarget: true,
+                }),
             },
         });
 
@@ -444,14 +394,6 @@ describe("handleEditorKeydown", () => {
         const event = createEventStub({
             key: "Backspace",
             altKey: true,
-            target: {
-                closest: (selector: string) => {
-                    if (selector === "[data-markdown-table-block-from]") {
-                        return {} as Element;
-                    }
-                    return null;
-                },
-            } as unknown as EventTarget,
         });
 
         handleEditorKeydown({
@@ -464,15 +406,11 @@ describe("handleEditorKeydown", () => {
             isVimModeEnabled: () => false,
             executeEditorCommand,
             focusWidgetNavigationTarget: mock(() => false),
-            frontmatterSelectors: {
-                focusable: "[data-frontmatter-field-focusable='true']",
-                navigation: "[data-frontmatter-vim-nav='true']",
-            },
-            markdownTableSelectors: {
-                shell: "[data-markdown-table-block-from]",
-            },
             dependencies: {
                 isMarkdownTableEditorFocused: () => true,
+                resolveDefaultMarkdownInteractionTargetState: () => createInteractionTargetState({
+                    isMarkdownTableTarget: true,
+                }),
             },
         });
 

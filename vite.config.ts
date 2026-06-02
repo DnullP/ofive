@@ -124,6 +124,16 @@ export default defineConfig(async () => ({
     // Sibling packages are linked via local file dependencies; excluding them
     // avoids stale optimized-dep caches after local rebuilds during dev restarts.
     exclude: ["layout-v2", "obeditor"],
+    // Mermaid is consumed through the linked obeditor build and imports the CJS
+    // dayjs entry directly; prebundling keeps the browser mock runtime ESM-safe.
+    include: [
+      "mermaid",
+      "dayjs",
+      "dayjs/plugin/advancedFormat.js",
+      "dayjs/plugin/customParseFormat.js",
+      "dayjs/plugin/duration.js",
+      "dayjs/plugin/isoWeek.js",
+    ],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

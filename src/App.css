@@ -1255,9 +1255,7 @@ textarea,
 }
 
 /* 浮层表面契约：为 modal/popover/编辑器补全气泡提供更高不透明度与更稳定边框。 */
-.app-runtime--tauri.app-effect--glass [data-floating-surface="true"],
-.app-runtime--tauri.app-effect--glass .cm-tooltip,
-.app-runtime--tauri.app-effect--glass .cm-wikilink-suggest-popup {
+.app-runtime--tauri.app-effect--glass :is([data-floating-surface="true"], .cm-tooltip, .cm-wikilink-suggest-popup, .cm-wikilink-preview-tooltip[data-floating-surface="true"]) {
   background:
     linear-gradient(180deg, rgba(var(--window-glass-border-rgb), 0.08), rgba(var(--window-glass-border-rgb), 0.02)),
     linear-gradient(180deg, var(--floating-surface-bg-strong), var(--floating-surface-bg));
@@ -1271,6 +1269,9 @@ textarea,
   background-clip: padding-box;
 }
 
+.app-runtime--tauri.app-effect--glass .cm-wikilink-preview-tooltip[data-floating-surface="true"] { border: 1px solid var(--floating-surface-border); }
+.app-runtime--tauri.app-effect--glass :is(.cm-wikilink-preview__body, .cm-wikilink-preview .cm-tab-reader) { background: var(--floating-surface-bg-strong); }
+
 [data-floating-surface="true"] {
   border-radius: var(--modal-panel-radius);
 }
@@ -1283,10 +1284,7 @@ textarea,
 }
 
 /* 拖拽窗口时关闭浮层补充模糊，避免连续拖拽期间的额外 GPU 压力。 */
-.app-runtime--tauri.app-effect--glass.app-window--dragging [data-floating-backdrop="true"],
-.app-runtime--tauri.app-effect--glass.app-window--dragging [data-floating-surface="true"],
-.app-runtime--tauri.app-effect--glass.app-window--dragging .cm-tooltip,
-.app-runtime--tauri.app-effect--glass.app-window--dragging .cm-wikilink-suggest-popup {
+.app-runtime--tauri.app-effect--glass.app-window--dragging :is([data-floating-backdrop="true"], [data-floating-surface="true"], .cm-tooltip, .cm-wikilink-suggest-popup, .cm-wikilink-preview-tooltip[data-floating-surface="true"]) {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -1296,10 +1294,7 @@ textarea,
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-:root[data-layout-resizing] [data-floating-backdrop="true"],
-:root[data-layout-resizing] [data-floating-surface="true"],
-:root[data-layout-resizing] .cm-tooltip,
-:root[data-layout-resizing] .cm-wikilink-suggest-popup {
+:root[data-layout-resizing] :is([data-floating-backdrop="true"], [data-floating-surface="true"], .cm-tooltip, .cm-wikilink-suggest-popup, .cm-wikilink-preview-tooltip[data-floating-surface="true"]) {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }

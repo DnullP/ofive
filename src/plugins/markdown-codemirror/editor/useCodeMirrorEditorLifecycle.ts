@@ -34,6 +34,8 @@ import {
     buildLineNumbersExtension,
     createEditorTabOutKeymap,
     editorBaseSetup,
+    isDefaultMarkdownPresentationReady,
+    markdownDocumentStartsWithFrontmatter,
     registerVimTokenProvider,
     resolveEditorBodyAnchor,
     unregisterVimTokenProvider,
@@ -167,28 +169,16 @@ export interface UseCodeMirrorEditorLifecycleOptions {
 }
 
 /**
- * @function editorDocumentStartsWithFrontmatter
- * @description 判断当前文档首行是否为 frontmatter 起始分隔符。
- * @param view CodeMirror 编辑器视图。
- * @returns 存在 frontmatter 起始分隔符时返回 true。
- */
-function editorDocumentStartsWithFrontmatter(view: EditorView): boolean {
-    const firstLine = view.state.doc.line(1).text.trim();
-    return firstLine === "---";
-}
-
-/**
  * @function isEditorInitialPresentationReady
  * @description 判断编辑器首开展示依赖的 DOM 是否已经稳定。
  * @param view CodeMirror 编辑器视图。
  * @returns 可提交展示时返回 true。
  */
 function isEditorInitialPresentationReady(view: EditorView): boolean {
-    if (!editorDocumentStartsWithFrontmatter(view)) {
-        return true;
-    }
-
-    return view.dom.querySelector(".cm-frontmatter-widget .fmv-editor") instanceof HTMLElement;
+    return isDefaultMarkdownPresentationReady({
+        state: view.state,
+        dom: view.dom,
+    });
 }
 
 /**
@@ -208,7 +198,7 @@ function scheduleEditorInitialPresentationReady(
 ): () => void {
     let disposed = false;
     let frameId = 0;
-    const hasFrontmatter = editorDocumentStartsWithFrontmatter(view);
+    const hasFrontmatter = markdownDocumentStartsWithFrontmatter(view.state);
     const observer = typeof MutationObserver !== "undefined"
         ? new MutationObserver(() => {
             queueCheck();

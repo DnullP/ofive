@@ -20,6 +20,7 @@ import {
     describeRenderFeature,
     evaluateReadModeRenderGuard,
     createEditorChineseSegmentationController,
+    focusDefaultMarkdownWidgetVimNavigationTarget,
     insertFrontmatter,
     insertLink,
     insertTable,
@@ -36,10 +37,11 @@ import {
     toggleItalic,
     toggleStrikethrough,
     toggleWikiLink,
+    type VimHandoffWidget,
+    type VimHandoffWidgetPosition,
 } from "obeditor";
+import "obeditor/styles.css";
 import "./CodeMirrorEditorTab.css";
-/* KaTeX 样式：LaTeX 数学公式渲染所需的字体和布局样式 */
-import "katex/dist/katex.min.css";
 import {
     reportArticleContent,
     reportArticleFocus,
@@ -88,12 +90,6 @@ import { syncEditorServiceDocument } from "./editorServiceDocumentBridge";
 import { useOfiveEditorServiceBridge } from "./useOfiveEditorServiceBridge";
 import type { WorkbenchTabProps } from "../../../host/layout/workbenchContracts";
 
-const FRONTMATTER_FOCUSABLE_SELECTOR = "[data-frontmatter-field-focusable='true']";
-const FRONTMATTER_VIM_NAV_SELECTOR = "[data-frontmatter-vim-nav='true']";
-const FRONTMATTER_VIM_ROW_SELECTOR = "[data-frontmatter-vim-nav='true'][data-frontmatter-field-key]";
-const MARKDOWN_TABLE_SHELL_SELECTOR = "[data-markdown-table-block-from]";
-const MARKDOWN_TABLE_VIM_NAV_SELECTOR = "[data-markdown-table-vim-nav='true']";
-const MARKDOWN_TABLE_ENTRY_SELECTOR = `${MARKDOWN_TABLE_VIM_NAV_SELECTOR}[data-markdown-table-entry-anchor='true']`;
 const TAB_HEADER_SCROLL_ACTIVATION_THRESHOLD_PX = 64;
 const TAB_HEADER_SCROLL_DEBOUNCE_MS = 90;
 const TAB_HEADER_SCROLL_TOP_EXPAND_THRESHOLD_PX = 8;
@@ -449,92 +445,32 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         setInitialContentPresented(true);
     };
 
-    const focusFrontmatterVimNavigationTarget = (position: "first" | "last"): boolean => {
-        const view = viewRef.current;
-        if (!view) {
-            return false;
-        }
-
-        const rowTargets = Array.from(view.dom.querySelectorAll<HTMLElement>(FRONTMATTER_VIM_ROW_SELECTOR));
-        const navigationTargets = Array.from(view.dom.querySelectorAll<HTMLElement>(FRONTMATTER_VIM_NAV_SELECTOR));
-        const preferredTargets = rowTargets.length > 0 ? rowTargets : navigationTargets;
-        const target = position === "first"
-            ? preferredTargets[0]
-            : preferredTargets[preferredTargets.length - 1];
-
-        if (!target) {
-            return false;
-        }
-
-        exitVimInsertMode(view);
-        target.focus();
-        console.info("[editor] frontmatter vim handoff entered", {
-            articleId,
-            position,
-        });
-        return true;
-    };
-
-    /**
-     * @function focusMarkdownTableVimNavigationTarget
-     * @description 将焦点切入 Markdown table 的 Vim 导航层。
-     * @param request 进入时的目标表格与首尾位置。
-     * @returns 是否成功切入 Markdown table 导航层。
-     */
-    const focusMarkdownTableVimNavigationTarget = (request: {
-        blockFrom: number;
-        position: "first" | "last";
-    }): boolean => {
-        const view = viewRef.current;
-        if (!view) {
-            return false;
-        }
-
-        const tableShell = view.dom.querySelector<HTMLElement>(
-            `${MARKDOWN_TABLE_SHELL_SELECTOR}[data-markdown-table-block-from='${request.blockFrom}']`,
-        );
-        if (!tableShell) {
-            return false;
-        }
-
-        const entryTargets = Array.from(tableShell.querySelectorAll<HTMLElement>(MARKDOWN_TABLE_ENTRY_SELECTOR));
-        const navigationTargets = Array.from(tableShell.querySelectorAll<HTMLElement>(MARKDOWN_TABLE_VIM_NAV_SELECTOR));
-        const preferredTargets = entryTargets.length > 0 ? entryTargets : navigationTargets;
-        const target = request.position === "first"
-            ? preferredTargets[0]
-            : preferredTargets[preferredTargets.length - 1];
-
-        if (!target) {
-            return false;
-        }
-
-        exitVimInsertMode(view);
-        target.focus();
-        console.info("[editor] markdown table vim handoff entered", {
-            articleId,
-            position: request.position,
-            blockFrom: request.blockFrom,
-        });
-        return true;
-    };
-
     const focusWidgetNavigationTarget = (
-        widget: "frontmatter" | "markdown-table",
-        position: "first" | "last",
+        widget: VimHandoffWidget,
+        position: VimHandoffWidgetPosition,
         blockFrom?: number,
     ): boolean => {
-        if (widget === "frontmatter") {
-            return focusFrontmatterVimNavigationTarget(position);
-        }
-
-        if (typeof blockFrom !== "number") {
+        const view = viewRef.current;
+        if (!view) {
             return false;
         }
 
-        return focusMarkdownTableVimNavigationTarget({
+        exitVimInsertMode(view);
+        const focused = focusDefaultMarkdownWidgetVimNavigationTarget(view.dom, {
+            widget,
             blockFrom,
             position,
         });
+        if (focused) {
+            console.info("[editor] widget vim handoff entered", {
+                articleId,
+                widget,
+                position,
+                blockFrom,
+            });
+        }
+
+        return focused;
     };
 
     /**
@@ -599,8 +535,12 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
         scheduleActiveLineSegmentation,
         trySelectWordAtMouseEvent,
         onRequestExitFrontmatterVimNavigation: exitFrontmatterVimNavigationToBody,
-        onRequestFocusFrontmatterVimNavigation: focusFrontmatterVimNavigationTarget,
-        onRequestFocusMarkdownTableVimNavigation: focusMarkdownTableVimNavigationTarget,
+        onRequestFocusFrontmatterVimNavigation: (position) => {
+            return focusWidgetNavigationTarget("frontmatter", position);
+        },
+        onRequestFocusMarkdownTableVimNavigation: (request) => {
+            return focusWidgetNavigationTarget("markdown-table", request.position, request.blockFrom);
+        },
         onInitialContentReady: commitInitialContentPresentation,
     });
 
@@ -986,13 +926,6 @@ export function CodeMirrorEditorTab(props: WorkbenchTabProps<Record<string, unkn
                 executeEditorCommandRef.current(commandId);
             },
             focusWidgetNavigationTarget,
-            frontmatterSelectors: {
-                focusable: FRONTMATTER_FOCUSABLE_SELECTOR,
-                navigation: FRONTMATTER_VIM_NAV_SELECTOR,
-            },
-            markdownTableSelectors: {
-                shell: MARKDOWN_TABLE_SHELL_SELECTOR,
-            },
         });
     }, [articleId]);
 
