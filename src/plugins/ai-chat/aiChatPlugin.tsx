@@ -69,7 +69,7 @@ import {
     withActiveProvider,
     type AiChatRuntimeOpenTabSnapshot,
 } from "./aiChatShared";
-import { resolveParentDirectory } from "../markdown-codemirror/editor/pathUtils";
+import { resolveParentDirectory } from "obeditor";
 import {
     readVaultCanvasFile,
     readVaultMarkdownFile,

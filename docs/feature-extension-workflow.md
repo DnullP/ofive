@@ -71,7 +71,7 @@ related:
 - [ ] 状态是否有明确 owner，对应 store 是否唯一。
 - [ ] 调后端是否统一经过 `src/api/` wrapper，不在组件里直接散落 `invoke/listen`。
 - [ ] 读型插件是否优先订阅语义事件，而不是直接消费底层原始事件。
-- [ ] 如果解析 Markdown 文本，是否通过 `markdownBlockDetector` 过滤块级结构。
+- [ ] 如果解析 Markdown 文本，是否通过 `obeditor` 的 `detectExcludedLineRanges` / `isLineExcluded` 过滤块级结构。
 
 ### 后端功能快速检查
 

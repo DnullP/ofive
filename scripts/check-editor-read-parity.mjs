@@ -3,8 +3,8 @@
  * @description 编辑态/阅读态一致性守卫：约束增强渲染特性必须登记到统一契约，并同步接入阅读态 guard 检测。
  *
  * 规则：
- * - 编辑态的增强渲染特性必须在 renderParityContract.ts 中登记。
- * - 每个登记特性都必须在 readModeRenderGuard.ts 中具备检测入口。
+ * - 编辑态的增强渲染特性必须在 obeditor 的 renderParityContract.ts 中登记。
+ * - 每个登记特性都必须在 obeditor 的 readModeRenderGuard.ts 中具备检测入口。
  * - 若未来阅读态补齐某项特性，允许继续保留在契约中，但不可绕过契约与 guard。
  */
 
@@ -12,50 +12,67 @@ import fs from "node:fs";
 import path from "node:path";
 
 const workspaceRoot = process.cwd();
-const editorRoot = path.join(workspaceRoot, "src", "plugins", "markdown-codemirror", "editor");
-const contractFilePath = path.join(editorRoot, "renderParityContract.ts");
-const guardFilePath = path.join(editorRoot, "readModeRenderGuard.ts");
+const defaultObeditorRoot = path.resolve(workspaceRoot, "..", "obeditor");
+
+function resolveObeditorRoot() {
+    const linkedDependencyRoot = path.join(workspaceRoot, "node_modules", "obeditor");
+    if (fs.existsSync(path.join(linkedDependencyRoot, "src", "markdown", "renderParityContract.ts"))) {
+        return fs.realpathSync(linkedDependencyRoot);
+    }
+
+    if (fs.existsSync(path.join(defaultObeditorRoot, "src", "markdown", "renderParityContract.ts"))) {
+        return defaultObeditorRoot;
+    }
+
+    throw new Error("Cannot locate obeditor source for editor read parity guard. Run `bun run build:obeditor` first.");
+}
+
+const obeditorRoot = resolveObeditorRoot();
+const obeditorMarkdownRoot = path.join(obeditorRoot, "src", "markdown");
+const obeditorPluginRoot = path.join(obeditorRoot, "src", "plugins");
+const contractFilePath = path.join(obeditorMarkdownRoot, "renderParityContract.ts");
+const guardFilePath = path.join(obeditorMarkdownRoot, "readModeRenderGuard.ts");
 
 const FEATURE_SPECS = [
     {
         id: "frontmatter",
         label: "frontmatter syntax extension",
-        sourceFilePath: path.join(editorRoot, "syntaxPlugins", "frontmatterSyntaxExtension.ts"),
+        sourceFilePath: path.join(obeditorPluginRoot, "syntaxPlugins", "frontmatterSyntaxExtension.ts"),
         sourcePatterns: [/createFrontmatterSyntaxExtension/],
         guardPatterns: [/"frontmatter"/],
     },
     {
         id: "image-embed",
         label: "image embed syntax extension",
-        sourceFilePath: path.join(editorRoot, "syntaxPlugins", "imageEmbedSyntaxExtension.ts"),
+        sourceFilePath: path.join(obeditorPluginRoot, "syntaxPlugins", "imageEmbedSyntaxExtension.ts"),
         sourcePatterns: [/createImageEmbedSyntaxExtension/, /IMAGE_EMBED_PATTERN/],
         guardPatterns: [/"image-embed"/, /IMAGE_EMBED_PATTERN/],
     },
     {
         id: "inline-highlight",
         label: "highlight syntax renderer",
-        sourceFilePath: path.join(editorRoot, "syntaxPlugins", "highlightSyntaxRenderer.ts"),
+        sourceFilePath: path.join(obeditorPluginRoot, "syntaxPlugins", "highlightSyntaxRenderer.ts"),
         sourcePatterns: [/registerHighlightSyntaxRenderer/, /HIGHLIGHT_INLINE_PATTERN/],
         guardPatterns: [/"inline-highlight"/, /HIGHLIGHT_INLINE_PATTERN/],
     },
     {
         id: "inline-tag",
         label: "tag syntax renderer",
-        sourceFilePath: path.join(editorRoot, "syntaxPlugins", "tagSyntaxRenderer.ts"),
+        sourceFilePath: path.join(obeditorPluginRoot, "syntaxPlugins", "tagSyntaxRenderer.ts"),
         sourcePatterns: [/registerTagSyntaxRenderer/, /TAG_PATTERN/],
         guardPatterns: [/"inline-tag"/, /TAG_PATTERN/],
     },
     {
         id: "latex-inline",
         label: "latex syntax extension (inline)",
-        sourceFilePath: path.join(editorRoot, "syntaxPlugins", "latexSyntaxExtension.ts"),
+        sourceFilePath: path.join(obeditorPluginRoot, "syntaxPlugins", "latexSyntaxExtension.ts"),
         sourcePatterns: [/createLatexSyntaxExtension/, /INLINE_LATEX_PATTERN/],
         guardPatterns: [/"latex-inline"/, /INLINE_LATEX_PATTERN/],
     },
     {
         id: "latex-block",
         label: "latex syntax extension (block)",
-        sourceFilePath: path.join(editorRoot, "syntaxPlugins", "latexSyntaxExtension.ts"),
+        sourceFilePath: path.join(obeditorPluginRoot, "syntaxPlugins", "latexSyntaxExtension.ts"),
         sourcePatterns: [/createLatexSyntaxExtension/, /BLOCK_LATEX_OPEN_PATTERN/, /"latex-block"/],
         guardPatterns: [/"latex-block"/],
     },
@@ -114,7 +131,7 @@ if (violations.length > 0) {
     for (const violation of violations) {
         console.error(`- ${violation}`);
     }
-    console.error("\n[editor-read-parity-guard] update renderParityContract.ts and readModeRenderGuard.ts together whenever edit-mode enhanced rendering changes.");
+    console.error("\n[editor-read-parity-guard] update obeditor renderParityContract.ts and readModeRenderGuard.ts together whenever edit-mode enhanced rendering changes.");
     process.exit(1);
 }
 

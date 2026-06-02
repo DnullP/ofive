@@ -552,7 +552,6 @@ export const storeConsumerCoverage = {
         "src/host/settings/registrars/builtinSettingsRegistrars.test.tsx",
     ],
     "src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab.tsx": [
-        "src/plugins/markdown-codemirror/editor/lineNumbersModeExtension.test.ts",
         "e2e/frontmatter-visibility.e2e.ts",
     ],
     "src/plugins/markdown-codemirror/editor/useCodeMirrorEditorLifecycle.ts": [

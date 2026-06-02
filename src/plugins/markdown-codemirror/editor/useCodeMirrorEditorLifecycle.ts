@@ -10,11 +10,8 @@
  *  - @replit/codemirror-vim
  *  - ../../../api/vaultApi
  *  - ../../../host/editor/editorContextStore
- *  - ./syntaxPlugins/*
- *  - ./editorBaseSetup
+ *  - obeditor editor runtime primitives and syntax plugins
  *  - ./editorPasteImageHandler
- *  - ./lineNumbersModeExtension
- *  - ./vimChineseMotionExtension
  *
  * @exports
  *  - syncEditorTabGutterWidth: 同步标题栏 gutter 宽度补偿
@@ -33,8 +30,30 @@ import {
     createVaultBinaryFile,
 } from "../../../api/vaultApi";
 import { releaseArticleSnapshot, type ArticleState } from "../../../host/editor/editorContextStore";
+import { createOfiveEditorCapabilities } from "../../../host/editor/ofiveEditorCapabilities";
 import type { WorkbenchContainerApi } from "../../../host/layout/workbenchContracts";
-import type { EditorService } from "obeditor";
+import {
+    createCodeBlockHighlightExtension,
+    createFrontmatterSyntaxExtension,
+    createImeCompositionGuard,
+    createImageEmbedSyntaxExtension,
+    createLatexSyntaxExtension,
+    createMarkdownTableSyntaxExtension,
+    createTaskCheckboxToggleExtension,
+    createWikiLinkNavigationExtension,
+    createWikiLinkPreviewExtension,
+    createVimImeInputPriorityExtension,
+    buildLineNumbersExtension,
+    createEditorTabOutKeymap,
+    editorBaseSetup,
+    registerVimTokenProvider,
+    resolveEditorBodyAnchor,
+    unregisterVimTokenProvider,
+    type EditorService,
+    type EditorChineseSegmentationController,
+    getRegisteredEditPluginExtensions,
+    setLineSyntaxImeCompositionActive,
+} from "obeditor";
 import {
     getEditorViewStateSnapshot,
     saveEditorViewStateSnapshot,
@@ -47,29 +66,8 @@ import {
     createCodeMirrorThemeExtension,
     createCodeMirrorTypographyThemeExtension,
 } from "./codemirrorTheme";
-import { getRegisteredEditPluginExtensions } from "./editPluginRegistry";
-import { editorBaseSetup } from "./editorBaseSetup";
-import type { EditorChineseSegmentationController } from "./editorChineseSegmentation";
-import { resolveEditorBodyAnchor } from "./editorBodyAnchor";
 import { attachPasteImageHandler } from "./editorPasteImageHandler";
-import { createEditorTabOutKeymap } from "./editorTabOutExtension";
-import { buildLineNumbersExtension } from "./lineNumbersModeExtension";
 import { canMutateEditorDocument } from "./editorModePolicy";
-import { createCodeBlockHighlightExtension } from "./syntaxPlugins/codeBlockHighlightExtension";
-import { createFrontmatterSyntaxExtension } from "./syntaxPlugins/frontmatterSyntaxExtension.ts";
-import { createImageEmbedSyntaxExtension } from "./syntaxPlugins/imageEmbedSyntaxExtension";
-import { createLatexSyntaxExtension } from "./syntaxPlugins/latexSyntaxExtension";
-import { createMarkdownTableSyntaxExtension } from "./syntaxPlugins/markdownTableSyntaxExtension";
-import { createTaskCheckboxToggleExtension } from "./syntaxPlugins/listSyntaxRenderer";
-import { createWikiLinkNavigationExtension } from "./syntaxPlugins/wikiLinkSyntaxRenderer";
-import { createWikiLinkPreviewExtension } from "./syntaxPlugins/wikiLinkPreviewExtension";
-import { setLineSyntaxImeCompositionActive } from "./syntaxRenderRegistry";
-import {
-    registerVimTokenProvider,
-    unregisterVimTokenProvider,
-} from "./vimChineseMotionExtension";
-import { createVimImeInputPriorityExtension } from "./vimImeInputPriorityExtension";
-import { createImeCompositionGuard } from "../../../utils/imeInputGuard";
 import {
     syncEditorServiceDocument,
     withExternalEditorDocumentUpdate,
@@ -729,6 +727,15 @@ export function useCodeMirrorEditorLifecycle(
             initialCursorOffset: options.initialCursorOffset,
         });
 
+        const getCurrentEditorContent = (): string =>
+            viewRef.current?.state.doc.toString()
+            ?? options.editorService.getSnapshot().document.content;
+        const editorCapabilities = () => createOfiveEditorCapabilities({
+            containerApi: options.containerApi,
+            getCurrentFilePath: () => options.currentFilePathRef.current,
+            getCurrentDocumentContent: getCurrentEditorContent,
+        });
+
         const extensions = [
             vimModeCompartmentRef.current.of(options.vimModeEnabled ? vim() : []),
             createVimImeInputPriorityExtension({
@@ -770,6 +777,7 @@ export function useCodeMirrorEditorLifecycle(
             ),
             keymap.of([indentWithTab]),
             createFrontmatterSyntaxExtension({
+                capabilities: editorCapabilities,
                 onRequestExitVimNavigation: () => {
                     exitFrontmatterVimNavigationRef.current();
                 },
@@ -780,9 +788,9 @@ export function useCodeMirrorEditorLifecycle(
             createCodeBlockHighlightExtension(),
             ...createLatexSyntaxExtension(),
             createMarkdownTableSyntaxExtension(
-                options.containerApi,
                 () => options.currentFilePathRef.current,
                 {
+                    capabilities: editorCapabilities,
                     onRequestFocusVimNavigation: (request) => {
                         focusMarkdownTableVimNavigationRef.current(request);
                     },
@@ -790,14 +798,23 @@ export function useCodeMirrorEditorLifecycle(
             ),
             options.registeredLineSyntaxRenderExtension,
             createTaskCheckboxToggleExtension(),
-            createImageEmbedSyntaxExtension(() => options.currentFilePathRef.current),
-            createWikiLinkPreviewExtension(
-                options.containerApi,
+            createImageEmbedSyntaxExtension(
                 () => options.currentFilePathRef.current,
+                { capabilities: editorCapabilities },
+            ),
+            createWikiLinkPreviewExtension(
+                () => options.currentFilePathRef.current,
+                {
+                    capabilities: editorCapabilities,
+                    getCurrentDocumentContent: getCurrentEditorContent,
+                },
             ),
             createWikiLinkNavigationExtension(
-                options.containerApi,
                 () => options.currentFilePathRef.current,
+                {
+                    capabilities: editorCapabilities,
+                    getCurrentDocumentContent: getCurrentEditorContent,
+                },
             ),
             EditorView.domEventHandlers({
                 mousedown(event, view) {
@@ -883,6 +900,7 @@ export function useCodeMirrorEditorLifecycle(
             }),
             ...getRegisteredEditPluginExtensions({
                 getCurrentFilePath: () => options.currentFilePathRef.current,
+                capabilities: editorCapabilities(),
             }),
             EditorView.updateListener.of((update) => {
                 if (update.docChanged) {

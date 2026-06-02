@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -102,20 +102,6 @@ function ensureObeditorSource(editorRoot, allowClone) {
     throw new Error(`obeditor 本地依赖缺少 package.json: ${editorPackageJsonPath}`);
 }
 
-function pathsReferToSameLocation(firstPath, secondPath) {
-    try {
-        const firstRealPath = realpathSync.native(firstPath);
-        const secondRealPath = realpathSync.native(secondPath);
-        if (process.platform === "win32") {
-            return firstRealPath.toLowerCase() === secondRealPath.toLowerCase();
-        }
-
-        return firstRealPath === secondRealPath;
-    } catch {
-        return false;
-    }
-}
-
 function removeExistingObeditorModule(modulePath) {
     if (!existsSync(modulePath)) {
         return;
@@ -129,27 +115,35 @@ function removeExistingObeditorModule(modulePath) {
     rmSync(modulePath, { recursive: true, force: true });
 }
 
-function ensureObeditorNodeModuleLink(editorRoot) {
+function installObeditorPackageSnapshot(editorRoot) {
     const nodeModulesRoot = path.join(repoRoot, "node_modules");
     const modulePath = path.join(nodeModulesRoot, "obeditor");
-    if (pathsReferToSameLocation(modulePath, editorRoot)) {
-        return;
-    }
-
     removeExistingObeditorModule(modulePath);
     mkdirSync(nodeModulesRoot, { recursive: true });
+    mkdirSync(modulePath, { recursive: true });
 
-    const linkType = process.platform === "win32" ? "junction" : "dir";
-    symlinkSync(editorRoot, modulePath, linkType);
-    console.info("[obeditor-build] linked local dependency", {
+    const packageJsonSourcePath = path.join(editorRoot, "package.json");
+    const distSourcePath = path.join(editorRoot, "dist");
+    if (!existsSync(distSourcePath)) {
+        throw new Error(`obeditor 构建产物缺失: ${distSourcePath}`);
+    }
+
+    copyFileSync(packageJsonSourcePath, path.join(modulePath, "package.json"));
+    for (const optionalFileName of ["README.md", "LICENSE"]) {
+        const sourcePath = path.join(editorRoot, optionalFileName);
+        if (existsSync(sourcePath)) {
+            copyFileSync(sourcePath, path.join(modulePath, optionalFileName));
+        }
+    }
+    cpSync(distSourcePath, path.join(modulePath, "dist"), { recursive: true });
+
+    console.info("[obeditor-build] installed package snapshot", {
         modulePath,
         editorRoot,
     });
 }
 
 function buildObeditor(editorRoot) {
-    ensureObeditorNodeModuleLink(editorRoot);
-
     if (!hasObeditorDependencies(editorRoot)) {
         installObeditorDependencies(editorRoot);
     }
@@ -171,6 +165,8 @@ function buildObeditor(editorRoot) {
     if (result.error) {
         throw result.error;
     }
+
+    installObeditorPackageSnapshot(editorRoot);
 
     console.info("[obeditor-build] success", {
         editorRoot,

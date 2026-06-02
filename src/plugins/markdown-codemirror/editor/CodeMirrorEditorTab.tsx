@@ -15,6 +15,33 @@ import { EditorView } from "codemirror";
 import { indentLess, indentMore, redo, toggleComment, undo } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
 import { getCM, Vim } from "@replit/codemirror-vim";
+import {
+    createImeCompositionGuard,
+    createRegisteredLineSyntaxRenderExtension,
+    describeRenderFeature,
+    ensureBuiltinEditPluginsRegistered,
+    ensureBuiltinSyntaxRenderersRegistered,
+    ensureBuiltinVimHandoffsRegistered,
+    evaluateReadModeRenderGuard,
+    createEditorChineseSegmentationController,
+    insertFrontmatter,
+    insertLink,
+    insertTable,
+    insertTask,
+    resolveEditorBodyAnchor,
+    resolveEditorBodySelectionRange,
+    resolveMarkdownNoteTitle,
+    shouldSubmitPlainEnter,
+    setupVimEnhancedMotions,
+    toggleBlockLatex,
+    toggleBold,
+    toggleHighlight,
+    toggleInlineCode,
+    toggleInlineLatex,
+    toggleItalic,
+    toggleStrikethrough,
+    toggleWikiLink,
+} from "obeditor";
 import "./CodeMirrorEditorTab.css";
 /* KaTeX 样式：LaTeX 数学公式渲染所需的字体和布局样式 */
 import "katex/dist/katex.min.css";
@@ -43,25 +70,7 @@ import { reportActiveEditor, useActiveEditor } from "../../../host/editor/active
 import { savePersistedMarkdownContent } from "../../../host/editor/persistedMarkdownContentSync";
 import { renamePersistedMarkdownFile } from "../../../host/vault/vaultMutationService";
 import i18n from "../../../i18n";
-import { createRegisteredLineSyntaxRenderExtension } from "./syntaxRenderRegistry";
-import { ensureBuiltinSyntaxRenderersRegistered } from "./registerBuiltinSyntaxRenderers";
-import { ensureBuiltinEditPluginsRegistered } from "./registerBuiltinEditPlugins";
-import { ensureBuiltinVimHandoffsRegistered } from "./handoff/registerBuiltinVimHandoffs";
 import { collectManagedEditorShortcutCandidates } from "./editorShortcutPolicy";
-import {
-    toggleBold,
-    toggleItalic,
-    toggleStrikethrough,
-    toggleInlineCode,
-    toggleInlineLatex,
-    toggleBlockLatex,
-    toggleHighlight,
-    toggleWikiLink,
-    insertLink,
-    insertTask,
-    insertFrontmatter,
-    insertTable,
-} from "./markdownFormattingCommands";
 import {
     canExecuteEditorNativeCommandInMode,
     toggleEditorDisplayMode,
@@ -71,22 +80,8 @@ import {
     useEditorDisplayModeState,
     type EditorDisplayMode,
 } from "../../../host/editor/editorDisplayModeStore";
-import { evaluateReadModeRenderGuard } from "./readModeRenderGuard";
-import { describeRenderFeature } from "./renderParityContract";
-import {
-    setupVimEnhancedMotions,
-} from "./vimChineseMotionExtension";
 import { openFileInWorkbench } from "../../../host/layout/openFileService";
 import { requestApplicationReload } from "../../../host/lifecycle/appLifecycle";
-import {
-    resolveMarkdownNoteTitle,
-} from "./noteTitleUtils";
-import { resolveEditorBodyAnchor, resolveEditorBodySelectionRange } from "./editorBodyAnchor";
-import {
-    createImeCompositionGuard,
-    shouldSubmitPlainEnter,
-} from "../../../utils/imeInputGuard";
-import { createEditorChineseSegmentationController } from "./editorChineseSegmentation";
 import {
     commitEditorTitleRename,
     type TitleSubmitReason,

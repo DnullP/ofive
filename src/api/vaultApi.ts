@@ -13,8 +13,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import YAML from "yaml";
+import { detectExcludedLineRanges, isLineExcluded } from "obeditor";
 import i18n from "../i18n";
-import { detectExcludedLineRanges, isLineExcluded } from "../utils/markdownBlockDetector";
 import { scorePinyinMatch } from "../utils/pinyinMatch";
 import { parseTaskBoardLine } from "../utils/taskSyntax";
 import { loadBrowserMockMarkdownContents } from "./vaultBrowserMockFixtures";

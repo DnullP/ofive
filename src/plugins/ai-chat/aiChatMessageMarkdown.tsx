@@ -19,8 +19,10 @@ import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
-import { decodeReadModeWikiLinkHref } from "../markdown-codemirror/editor/markdownReadTransform";
-import { parseWikiLinkParts } from "../markdown-codemirror/editor/syntaxPlugins/wikiLinkParser";
+import {
+    decodeReadModeWikiLinkHref,
+    parseWikiLinkParts,
+} from "obeditor";
 
 const WIKILINK_PATTERN = /(!)?\[\[([^\]\n]+?)\]\]/g;
 const INLINE_CODE_PATTERN = /`[^`\n]+`/g;

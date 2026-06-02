@@ -135,30 +135,26 @@ describe("architectureDiscovery", () => {
         })).toBe(true);
     });
 
-    it("应将内置插件注册入口识别为 plugin，而不是 ui-module", async () => {
+    it("不应再把通用 editor 内置插件注册入口保留在 ofive", async () => {
         const slice = createAutoDiscoveredArchitectureSlice({
             frontendModules: await collectRawModules("src/**/*.{ts,tsx}"),
             backendModules: await collectRawModules("src-tauri/src/**/*.rs"),
         });
 
         expect(slice.nodes.some((node) => {
-            return (
-                node.kind === "plugin" &&
-                node.title === "registerBuiltinEditPlugins" &&
-                node.location === "src/plugins/markdown-codemirror/editor/registerBuiltinEditPlugins.ts"
-            );
-        })).toBe(true);
+            return node.location === "src/plugins/markdown-codemirror/editor/registerBuiltinEditPlugins.ts";
+        })).toBe(false);
 
         expect(slice.nodes.some((node) => {
-            return (
-                node.kind === "plugin" &&
-                node.title === "registerBuiltinSyntaxRenderers" &&
-                node.location === "src/plugins/markdown-codemirror/editor/registerBuiltinSyntaxRenderers.ts"
-            );
-        })).toBe(true);
+            return node.location === "src/plugins/markdown-codemirror/editor/registerBuiltinSyntaxRenderers.ts";
+        })).toBe(false);
 
         expect(slice.nodes.some((node) => {
             return node.kind === "ui-module" && node.title === "registerBuiltinEditPlugins";
+        })).toBe(false);
+
+        expect(slice.nodes.some((node) => {
+            return node.kind === "ui-module" && node.title === "registerBuiltinSyntaxRenderers";
         })).toBe(false);
     });
 

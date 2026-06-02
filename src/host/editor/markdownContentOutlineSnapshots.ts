@@ -3,12 +3,12 @@
  * @description 从前端 canonical Markdown 内容快照派生大纲条目。
  * @dependencies
  *  - ../../api/vaultApi
- *  - ../../utils/markdownBlockDetector
+ *  - obeditor Markdown block detector
  *  - ./editorContextStore
  */
 
 import type { OutlineHeading, OutlineResponse } from "../../api/vaultApi";
-import { detectExcludedLineRanges, isLineExcluded } from "../../utils/markdownBlockDetector";
+import { detectExcludedLineRanges, isLineExcluded } from "obeditor";
 import { getArticleSnapshotByPath } from "./editorContextStore";
 
 function isMarkdownPath(path: string): boolean {

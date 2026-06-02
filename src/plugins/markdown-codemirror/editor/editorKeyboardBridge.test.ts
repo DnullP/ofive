@@ -5,8 +5,8 @@
 
 import { describe, expect, mock, test } from "bun:test";
 import type { EditorView } from "codemirror";
+import type { HandleVimImeKeydownOptions } from "obeditor";
 import {
-    type EditorKeyboardBridgeDependencies,
     handleEditorKeydown,
     type EditorKeyboardEventLike,
 } from "./editorKeyboardBridge";
@@ -185,8 +185,7 @@ describe("handleEditorKeydown", () => {
             },
             dependencies: {
                 dispatchShortcut,
-                resolveEditorBodyAnchor: () => 1,
-                resolveRegisteredVimHandoff: () => ({
+                resolveEditorBodyVimHandoff: () => ({
                     kind: "focus-widget-navigation",
                     widget: "frontmatter",
                     position: "last",
@@ -237,8 +236,7 @@ describe("handleEditorKeydown", () => {
             },
             dependencies: {
                 dispatchShortcut,
-                resolveEditorBodyAnchor: () => 1,
-                resolveRegisteredVimHandoff: () => ({
+                resolveEditorBodyVimHandoff: () => ({
                     kind: "focus-widget-navigation",
                     widget: "frontmatter",
                     position: "last",
@@ -261,15 +259,11 @@ describe("handleEditorKeydown", () => {
             isComposing: true,
         });
         (event as EditorKeyboardEventLike & { code: string }).code = "KeyJ";
-        const cm = {
-            state: {
-                vim: {
-                    insertMode: false,
-                    visualMode: false,
-                },
-            },
-        };
-        const handleVimKey = mock(() => true);
+        const handleVimImeKeydown = mock((options: HandleVimImeKeydownOptions) => {
+            options.event.preventDefault();
+            options.event.stopPropagation();
+            return true;
+        });
         const dispatchShortcut = mock(() => ({
             kind: "none" as const,
             commandId: null,
@@ -298,16 +292,16 @@ describe("handleEditorKeydown", () => {
             },
             dependencies: {
                 dispatchShortcut,
-                resolveRegisteredVimHandoff: () => null,
-                getCodeMirror: () => cm,
-                handleVimKey,
-            } as Partial<EditorKeyboardBridgeDependencies> & {
-                getCodeMirror: () => typeof cm;
-                handleVimKey: typeof handleVimKey;
+                resolveEditorBodyVimHandoff: () => null,
+                handleVimImeKeydown,
             },
         });
 
-        expect(handleVimKey).toHaveBeenCalledWith(cm, "j");
+        expect(handleVimImeKeydown).toHaveBeenCalledWith({
+            event,
+            view,
+            vimKey: "j",
+        });
         expect(event.preventDefault).toHaveBeenCalledTimes(1);
         expect(event.stopPropagation).toHaveBeenCalledTimes(1);
         expect(dispatchShortcut).not.toHaveBeenCalled();
@@ -400,7 +394,7 @@ describe("handleEditorKeydown", () => {
                 },
             } as unknown as EventTarget,
         });
-        const resolveRegisteredVimHandoff = mock(() => ({
+        const resolveEditorBodyVimHandoff = mock(() => ({
             kind: "focus-widget-navigation" as const,
             widget: "markdown-table" as const,
             position: "first" as const,
@@ -433,12 +427,12 @@ describe("handleEditorKeydown", () => {
                 shell: "[data-markdown-table-block-from]",
             },
             dependencies: {
-                resolveRegisteredVimHandoff,
+                resolveEditorBodyVimHandoff,
                 dispatchShortcut,
             },
         });
 
-        expect(resolveRegisteredVimHandoff).not.toHaveBeenCalled();
+        expect(resolveEditorBodyVimHandoff).not.toHaveBeenCalled();
         expect(dispatchShortcut).toHaveBeenCalledTimes(1);
         expect(event.preventDefault).not.toHaveBeenCalled();
         expect(event.stopPropagation).not.toHaveBeenCalled();

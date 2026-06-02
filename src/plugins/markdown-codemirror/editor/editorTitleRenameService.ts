@@ -2,7 +2,7 @@
  * @module plugins/markdown-codemirror/editor/editorTitleRenameService
  * @description 编辑器标题重命名服务：封装顶部标题栏改名的 optimistic panel 更新、文件重命名与上下文同步。
  * @dependencies
- *  - ./noteTitleUtils
+ *  - obeditor
  *  - ./editorModePolicy
  *
  * @example
@@ -26,7 +26,7 @@
  */
 
 import type { EditorDisplayMode } from "../../../host/editor/editorDisplayModeStore";
-import { resolveMarkdownNoteTitle, resolveRenamedMarkdownPath } from "./noteTitleUtils";
+import { resolveMarkdownNoteTitle, resolveRenamedMarkdownPath } from "obeditor";
 
 /**
  * @description 标题提交来源。

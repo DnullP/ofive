@@ -44,13 +44,11 @@ export const lineCountThresholds = {
 export const lineCountBaseline = {
     "src/plugins/ai-chat/aiChatPlugin.tsx": 3939,
     "src/api/vaultApi.ts": 3116,
-    "src/plugins/markdown-codemirror/editor/components/MarkdownTableVisualEditor.tsx": 2575,
     "src/plugins/architecture-devtools/ArchitectureDevtoolsTab.tsx": 2471,
     "src-tauri/src/app/project_reader/project_reader_app_service.rs": 2487,
     "src/host/layout/WorkbenchLayoutHost.tsx": 2108,
     "src/plugins/ai-chat/aiChatPlugin.css": 1984,
     "src/plugins/architecture-devtools/architectureDiscovery.ts": 1888,
-    "src/plugins/markdown-codemirror/editor/components/FrontmatterYamlVisualEditor.tsx": 1812,
     "src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab.css": 1773,
     "sidecars/go/ofive-ai-agent/internal/agent/runtime.go": 2225,
     "src/plugins/knowledge-graph/tab/KnowledgeGraphTab.tsx": 1627,
@@ -58,7 +56,6 @@ export const lineCountBaseline = {
     "src-tauri/src/app/semantic_index/index_app_service.rs": 1441,
     "src/plugins/file-tree/panel/FileTree.tsx": 1427,
     "src/App.css": 1429,
-    "src/plugins/markdown-codemirror/editor/MarkdownReadView.tsx": 1413,
     "src-tauri/src/infra/persistence/ai_chat_store.rs": 1561,
     "src-tauri/src/infra/query/query_index.rs": 1350,
     "src/host/config/configStore.ts": 1390,
@@ -74,7 +71,6 @@ export const lineCountBaseline = {
     "sidecars/go/ofive-ai-agent/internal/llms/baidu.go": 1052,
     "sidecars/go/ofive-ai-agent/internal/llms/minimax.go": 989,
     "scripts/perf-report.mjs": 987,
-    "src/plugins/markdown-codemirror/editor/syntaxPlugins/wikiLinkPreviewExtension.tsx": 978,
     "src-tauri/src/app/vault/capability_execution.rs": 1808,
     "src/plugins/architecture-devtools/architectureDevtools.css": 964,
     "src-tauri/src/infra/query/search.rs": 942,
@@ -83,7 +79,6 @@ export const lineCountBaseline = {
     "src-tauri/tests/ai_sidecar_grpc_integration.rs": 1273,
     "src/plugins/tasks/task-board/taskBoard.css": 888,
     "src/plugins/tasks/task-board/TaskBoardTab.tsx": 2020,
-    "src/plugins/markdown-codemirror/editor/editPlugins/wikilinkSuggestEditPlugin.ts": 825,
     "src/host/layout/SettingsTab.css": 735,
 };
 

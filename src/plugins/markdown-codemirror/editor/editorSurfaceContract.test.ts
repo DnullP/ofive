@@ -6,30 +6,28 @@
 
 import { EditorState } from "@codemirror/state";
 import { describe, expect, test } from "bun:test";
-import { getRegisteredEditPluginExtensions } from "./editPluginRegistry";
-import { registerFrontmatterBodyVimHandoff } from "./handoff/builtins/frontmatterBodyVimHandoff";
-import { registerLatexBlockVimHandoff } from "./handoff/builtins/latexBlockVimHandoff";
-import { registerMarkdownTableBodyVimHandoff } from "./handoff/builtins/markdownTableBodyVimHandoff";
-import { listRegisteredVimHandoffs } from "./handoff/vimHandoffRegistry";
-import { ensureBuiltinEditPluginsRegistered } from "./registerBuiltinEditPlugins";
-import { ensureBuiltinSyntaxRenderersRegistered } from "./registerBuiltinSyntaxRenderers";
-import { createRegisteredLineSyntaxRenderExtension } from "./syntaxRenderRegistry";
-import {
-    getLineSyntaxRendererSnapshot,
-    type LineSyntaxDecorationContext,
-    type SyntaxDecorationRange,
-} from "./syntaxRenderRegistry";
-import { createCodeBlockHighlightExtension } from "./syntaxPlugins/codeBlockHighlightExtension";
-import { createFrontmatterSyntaxExtension } from "./syntaxPlugins/frontmatterSyntaxExtension";
-import { createImageEmbedSyntaxExtension } from "./syntaxPlugins/imageEmbedSyntaxExtension";
-import { createLatexSyntaxExtension } from "./syntaxPlugins/latexSyntaxExtension";
 import {
     buildTaskCheckboxToggleSpec,
+    createCodeBlockHighlightExtension,
+    createFrontmatterSyntaxExtension,
+    createImageEmbedSyntaxExtension,
+    createLatexSyntaxExtension,
+    createMarkdownTableSyntaxExtension,
+    createRegisteredLineSyntaxRenderExtension,
     createTaskCheckboxToggleExtension,
-} from "./syntaxPlugins/listSyntaxRenderer";
-import { createMarkdownTableSyntaxExtension } from "./syntaxPlugins/markdownTableSyntaxExtension";
-import { createWikiLinkPreviewExtension } from "./syntaxPlugins/wikiLinkPreviewExtension";
-import { createWikiLinkNavigationExtension } from "./syntaxPlugins/wikiLinkSyntaxRenderer";
+    createWikiLinkNavigationExtension,
+    createWikiLinkPreviewExtension,
+    ensureBuiltinEditPluginsRegistered,
+    ensureBuiltinSyntaxRenderersRegistered,
+    getRegisteredEditPluginExtensions,
+    getLineSyntaxRendererSnapshot,
+    listRegisteredVimHandoffs,
+    registerFrontmatterBodyVimHandoff,
+    registerLatexBlockVimHandoff,
+    registerMarkdownTableBodyVimHandoff,
+    type LineSyntaxDecorationContext,
+    type SyntaxDecorationRange,
+} from "obeditor";
 
 type DecorationLike = {
     attrs?: { class?: string; style?: string };
@@ -298,16 +296,15 @@ describe("editor built-in syntax renderer contract", () => {
 
 describe("editor extension and interaction plugin contract", () => {
     test("creates every currently wired block or interactive CodeMirror extension", () => {
-        const containerApi = {} as never;
         const getCurrentFilePath = () => "test-resources/notes/editor-surface-contract.md";
         const extensionFactories: Array<[string, () => unknown]> = [
             ["frontmatter", () => createFrontmatterSyntaxExtension()],
             ["code-block-highlight", () => createCodeBlockHighlightExtension()],
             ["latex", () => createLatexSyntaxExtension()],
-            ["markdown-table", () => createMarkdownTableSyntaxExtension(containerApi, getCurrentFilePath)],
+            ["markdown-table", () => createMarkdownTableSyntaxExtension(getCurrentFilePath)],
             ["image-embed", () => createImageEmbedSyntaxExtension(getCurrentFilePath)],
-            ["wikilink-preview", () => createWikiLinkPreviewExtension(containerApi, getCurrentFilePath)],
-            ["wikilink-navigation", () => createWikiLinkNavigationExtension(containerApi, getCurrentFilePath)],
+            ["wikilink-preview", () => createWikiLinkPreviewExtension(getCurrentFilePath)],
+            ["wikilink-navigation", () => createWikiLinkNavigationExtension(getCurrentFilePath)],
             ["task-checkbox-toggle", () => createTaskCheckboxToggleExtension()],
             ["registered-line-syntax", () => createRegisteredLineSyntaxRenderExtension()],
         ];

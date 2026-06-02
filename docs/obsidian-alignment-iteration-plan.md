@@ -107,8 +107,8 @@ Primary owners:
 
 - `src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab.tsx`
 - `src/plugins/markdown-codemirror/editor/CodeMirrorEditorTab.css`
-- `src/plugins/markdown-codemirror/editor/components/FrontmatterYamlVisualEditor.tsx`
-- `src/plugins/markdown-codemirror/editor/components/FrontmatterYamlVisualEditor.css`
+- `../obeditor/src/plugins/components/FrontmatterYamlVisualEditor.tsx`
+- `../obeditor/src/plugins/components/FrontmatterYamlVisualEditor.css`
 
 ## P4: Context-First Right Panels
 

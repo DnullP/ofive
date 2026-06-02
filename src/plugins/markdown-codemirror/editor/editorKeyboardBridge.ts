@@ -7,9 +7,7 @@
  *  - ../../../host/commands/shortcutDispatcher
  *  - ../../../host/conditions/conditionEvaluator
  *  - ./editorModePolicy
- *  - ./editorBodyAnchor
- *  - ./handoff/vimHandoffRegistry
- *  - ./markdownTableWidgetRegistry
+ *  - obeditor
  *
  * @example
  *   const detach = attachEditorKeyboardBridge({
@@ -32,37 +30,24 @@
  *  - attachEditorKeyboardBridge: 绑定/解绑编辑器 keydown 监听
  */
 
-import { getCM, Vim, type CodeMirror } from "@replit/codemirror-vim";
 import { EditorView } from "codemirror";
 import type { CommandId } from "../../../host/commands/commandSystem";
 import { dispatchShortcut } from "../../../host/commands/shortcutDispatcher";
 import { notifyTabCloseShortcutTriggered } from "../../../host/commands/shortcutEvents";
 import { createConditionContext } from "../../../host/conditions/conditionEvaluator";
-import { resolveEditorBodyAnchor } from "./editorBodyAnchor";
 import {
-    resolveRegisteredVimHandoff,
-    type VimHandoffResult,
+    applyResolvedVimHandoff,
+    flushFocusedMarkdownTableEditor,
+    handleVimImeKeydown,
+    isMarkdownTableEditorFocused,
+    resolvePlainTextVimKeydownKey,
+    resolveEditorBodyVimHandoff,
     type VimHandoffWidget,
     type VimHandoffWidgetPosition,
-} from "./handoff/vimHandoffRegistry";
-import {
-    flushFocusedMarkdownTableEditor,
-    isMarkdownTableEditorFocused,
-} from "./markdownTableWidgetRegistry";
+} from "obeditor";
 
 interface ClosestCapableTarget extends EventTarget {
     closest(selector: string): Element | null;
-}
-
-interface VimStateLike {
-    insertMode?: boolean;
-    visualMode?: boolean;
-}
-
-interface CodeMirrorLike {
-    state?: {
-        vim?: VimStateLike | null;
-    };
 }
 
 function isClosestCapableTarget(target: EventTarget | null): target is ClosestCapableTarget {
@@ -128,20 +113,16 @@ export interface EditorKeyboardBridgeDependencies {
     dispatchShortcut: typeof dispatchShortcut;
     /** 条件上下文构造器。 */
     createConditionContext: typeof createConditionContext;
-    /** Vim handoff 解析器。 */
-    resolveRegisteredVimHandoff: typeof resolveRegisteredVimHandoff;
+    /** 编辑器正文 Vim handoff 解析器。 */
+    resolveEditorBodyVimHandoff: typeof resolveEditorBodyVimHandoff;
     /** Tab 关闭快捷键通知。 */
     notifyTabCloseShortcutTriggered: typeof notifyTabCloseShortcutTriggered;
     /** Markdown 表格编辑器焦点判断。 */
     isMarkdownTableEditorFocused: typeof isMarkdownTableEditorFocused;
     /** 刷新 Markdown 表格编辑器缓冲。 */
     flushFocusedMarkdownTableEditor: typeof flushFocusedMarkdownTableEditor;
-    /** 正文首锚点解析器。 */
-    resolveEditorBodyAnchor: typeof resolveEditorBodyAnchor;
-    /** 读取当前 CodeMirror/Vim 兼容实例。 */
-    getCodeMirror(view: EditorView): CodeMirrorLike | null;
-    /** 将按键直接交给 @replit/codemirror-vim。 */
-    handleVimKey(cm: CodeMirrorLike, key: string): boolean | undefined;
+    /** Vim IME keydown 处理器。 */
+    handleVimImeKeydown: typeof handleVimImeKeydown;
 }
 
 /**
@@ -189,171 +170,12 @@ export interface HandleEditorKeydownOptions extends EditorKeyboardBridgeBaseOpti
 const DEFAULT_DEPENDENCIES: EditorKeyboardBridgeDependencies = {
     dispatchShortcut,
     createConditionContext,
-    resolveRegisteredVimHandoff,
+    resolveEditorBodyVimHandoff,
     notifyTabCloseShortcutTriggered,
     isMarkdownTableEditorFocused,
     flushFocusedMarkdownTableEditor,
-    resolveEditorBodyAnchor,
-    getCodeMirror: (view) => getCM(view) as CodeMirrorLike | null,
-    handleVimKey: (cm, key) => Vim.handleKey(cm as CodeMirror, key, "user"),
+    handleVimImeKeydown,
 };
-
-function isVimCommandMode(cm: CodeMirrorLike | null): boolean {
-    const vimState = cm?.state?.vim ?? null;
-    return Boolean(vimState && !vimState.insertMode);
-}
-
-function isPlainLetterKeydown(event: EditorKeyboardEventLike): boolean {
-    return !event.metaKey
-        && !event.ctrlKey
-        && !event.altKey
-        && !event.getModifierState?.("AltGraph");
-}
-
-function resolveLetterKeyFromPhysicalCode(event: EditorKeyboardEventLike): string | null {
-    const match = /^Key([A-Z])$/.exec(event.code ?? "");
-    if (!match) {
-        return null;
-    }
-
-    const letter = match[1]!;
-    return event.shiftKey ? letter : letter.toLowerCase();
-}
-
-function resolvePlainTextVimKeydownKey(
-    event: EditorKeyboardEventLike,
-    isComposing: boolean,
-): string | null {
-    if (!isPlainLetterKeydown(event)) {
-        return null;
-    }
-
-    if ([...event.key].length === 1 && event.key !== "\n" && event.key !== "\r") {
-        return event.key;
-    }
-
-    if (!isComposing) {
-        return null;
-    }
-
-    return resolveLetterKeyFromPhysicalCode(event);
-}
-
-function handleVimImeKeydown(
-    event: EditorKeyboardEventLike,
-    view: EditorView,
-    dependencies: Pick<EditorKeyboardBridgeDependencies, "getCodeMirror" | "handleVimKey">,
-    vimKey: string | null,
-): boolean {
-    if (!vimKey) {
-        return false;
-    }
-
-    const cm = dependencies.getCodeMirror(view);
-    if (cm === null || !isVimCommandMode(cm)) {
-        return false;
-    }
-
-    dependencies.handleVimKey(cm, vimKey);
-    event.preventDefault();
-    event.stopPropagation();
-    return true;
-}
-
-/**
- * @function isVimNormalMode
- * @description 判断当前 EditorView 是否处于 Vim normal 模式。
- * @param view 编辑器视图。
- * @returns 是否处于 Vim normal 模式。
- */
-export function isVimNormalMode(view: EditorView): boolean {
-    const cm = getCM(view) as CodeMirrorLike | null;
-    const vimState = cm?.state?.vim;
-    if (!vimState) {
-        return false;
-    }
-
-    return !vimState.insertMode && !vimState.visualMode;
-}
-
-/**
- * @function applyResolvedVimHandoff
- * @description 执行 Vim handoff 的宿主副作用。
- * @param view 编辑器视图。
- * @param result handoff 结果。
- * @param focusWidgetNavigationTarget 隐藏 widget 导航聚焦回调。
- * @returns 是否成功消费 handoff。
- */
-export function applyResolvedVimHandoff(
-    view: EditorView,
-    result: VimHandoffResult,
-    focusWidgetNavigationTarget: (
-        widget: VimHandoffWidget,
-        position: VimHandoffWidgetPosition,
-        blockFrom?: number,
-    ) => boolean,
-): boolean {
-    if (result.kind === "move-selection") {
-        const targetLine = view.state.doc.line(result.targetLineNumber);
-        view.dispatch({
-            selection: { anchor: targetLine.from },
-            scrollIntoView: true,
-        });
-        if (result.postFocusWidget) {
-            queueMicrotask(() => {
-                focusWidgetNavigationTarget(
-                    result.postFocusWidget!.widget,
-                    result.postFocusWidget!.position,
-                    result.postFocusWidget!.blockFrom,
-                );
-            });
-        }
-        return true;
-    }
-
-    if (result.kind === "focus-widget-navigation") {
-        return focusWidgetNavigationTarget(result.widget, result.position, result.blockFrom);
-    }
-
-    return false;
-}
-
-export interface ResolveEditorBodyVimHandoffOptions {
-    view: EditorView;
-    key: string;
-    isVimModeEnabled: boolean;
-    dependencies?: Pick<EditorKeyboardBridgeDependencies, "resolveEditorBodyAnchor" | "resolveRegisteredVimHandoff">;
-}
-
-export function resolveEditorBodyVimHandoff(
-    options: ResolveEditorBodyVimHandoffOptions,
-): VimHandoffResult | null {
-    const dependencies = {
-        resolveEditorBodyAnchor,
-        resolveRegisteredVimHandoff,
-        ...options.dependencies,
-    };
-    if (!options.isVimModeEnabled) {
-        return null;
-    }
-
-    const selection = options.view.state.selection.main;
-    const bodyAnchor = dependencies.resolveEditorBodyAnchor(options.view.state);
-    const firstBodyLineNumber = options.view.state.doc.lineAt(bodyAnchor).number;
-    const currentLineNumber = options.view.state.doc.lineAt(selection.head).number;
-
-    return dependencies.resolveRegisteredVimHandoff({
-        surface: "editor-body",
-        key: options.key,
-        markdown: options.view.state.doc.toString(),
-        currentLineNumber,
-        selectionHead: selection.head,
-        hasFrontmatter: bodyAnchor > 0,
-        firstBodyLineNumber,
-        isVimEnabled: options.isVimModeEnabled,
-        isVimNormalMode: isVimNormalMode(options.view),
-    });
-}
 
 /**
  * @function resolveEditorShortcutFocusedComponent
@@ -410,14 +232,10 @@ export function handleEditorKeydown(options: HandleEditorKeydownOptions): void {
         && !isFrontmatterFieldTarget
         && !isMarkdownTableTarget
     ) {
-        const handoffResult = resolveEditorBodyVimHandoff({
+        const handoffResult = dependencies.resolveEditorBodyVimHandoff({
             view,
             key: vimKeydownKey ?? event.key,
             isVimModeEnabled: options.isVimModeEnabled(),
-            dependencies: {
-                resolveEditorBodyAnchor: dependencies.resolveEditorBodyAnchor,
-                resolveRegisteredVimHandoff: dependencies.resolveRegisteredVimHandoff,
-            },
         });
 
         if (handoffResult) {
@@ -440,7 +258,11 @@ export function handleEditorKeydown(options: HandleEditorKeydownOptions): void {
             && !isFrontmatterNavigationTarget
             && !isFrontmatterFieldTarget
             && !isMarkdownTableTarget
-            && handleVimImeKeydown(event, view, dependencies, vimKeydownKey)
+            && dependencies.handleVimImeKeydown({
+                event,
+                view,
+                vimKey: vimKeydownKey,
+            })
         ) {
             return;
         }

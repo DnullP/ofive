@@ -3,13 +3,13 @@
  * @description 从前端 canonical Markdown 内容快照派生任务条目。
  * @dependencies
  *  - ../../api/vaultApi
- *  - ../../utils/markdownBlockDetector
+ *  - obeditor Markdown block detector
  *  - ../../utils/taskSyntax
  *  - ./editorContextStore
  */
 
 import type { VaultTaskItem } from "../../api/vaultApi";
-import { detectExcludedLineRanges, isLineExcluded } from "../../utils/markdownBlockDetector";
+import { detectExcludedLineRanges, isLineExcluded } from "obeditor";
 import { parseTaskBoardLine } from "../../utils/taskSyntax";
 import { getArticleContentSnapshots } from "./editorContextStore";
 

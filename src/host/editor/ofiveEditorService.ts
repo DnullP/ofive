@@ -24,6 +24,10 @@ import {
     reportArticleFocus,
 } from "./editorContextStore";
 import { updateEditorDisplayMode } from "./editorDisplayModeStore";
+import {
+    createOfiveEditorCapabilities,
+    type OfiveEditorCapabilitiesContext,
+} from "./ofiveEditorCapabilities";
 import { savePersistedMarkdownContent } from "./persistedMarkdownContentSync";
 
 export interface CreateDefaultOfiveEditorServiceOptions {
@@ -54,6 +58,7 @@ export interface OfiveEditorHostBridge {
     reportArticleContent?: (payload: { articleId: string; path: string; content: string }) => void;
     reportActiveEditor?: (payload: { articleId: string; path: string }) => void;
     updateDisplayMode?: (mode: Extract<EditorMode, "edit" | "read">) => void;
+    getCapabilitiesContext?: () => OfiveEditorCapabilitiesContext;
     log?: EditorHostAdapter["log"];
 }
 
@@ -92,6 +97,7 @@ export function createOfiveEditorHostAdapter(
     bridge: OfiveEditorHostBridge,
 ): EditorHostAdapter {
     return {
+        capabilities: () => createOfiveEditorCapabilities(bridge.getCapabilitiesContext?.() ?? {}),
         async loadDocument(ref) {
             const relativePath = ref.path ?? ref.id;
             if (!relativePath) {
@@ -194,6 +200,9 @@ export function createDefaultOfiveEditorService(
             reportArticleContent: dependencies.reportArticleContent,
             reportActiveEditor: dependencies.reportActiveEditor,
             updateDisplayMode: (mode) => dependencies.updateDisplayMode(mode),
+            getCapabilitiesContext: () => ({
+                containerApi: options.containerApi,
+            }),
             log: dependencies.log,
         }),
         plugins: options.plugins ?? createDefaultMarkdownPlugins(),
