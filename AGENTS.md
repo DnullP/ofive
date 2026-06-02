@@ -10,7 +10,9 @@ ofive 是一个基于 Tauri + React + CodeMirror 6 的桌面笔记应用。前�
 
 ### 双轨装饰系统
 
-编辑器存在两种并行的装饰机制，修改任何语法渲染相关代码前必须理解它们的关系：
+通用编辑器能力归属独立仓库 `../obeditor`。ofive 只负责把 vault、wiki、media、i18n、native context menu 等宿主能力通过 `src/host/editor/ofiveEditorCapabilities.ts` 注入给 `obeditor`。
+
+编辑器存在两种并行的装饰机制，修改任何语法渲染相关代码前必须先进入 `../obeditor` 并理解它们的关系：
 
 | 机制 | 载体 | 成员 |
 |---|---|---|
@@ -19,7 +21,7 @@ ofive 是一个基于 Tauri + React + CodeMirror 6 的桌面笔记应用。前�
 
 ### 排斥区域系统（Exclusion Zones）—— 核心注意事项
 
-**`src/plugins/markdown-codemirror/editor/syntaxExclusionZones.ts`** 是解决多种块级语法结构嵌套冲突的通用机制。
+**`../obeditor/src/plugins/syntaxExclusionZones.ts`** 是解决多种块级语法结构嵌套冲突的通用机制。
 
 #### 问题背景
 
@@ -41,7 +43,7 @@ ofive 是一个基于 Tauri + React + CodeMirror 6 的桌面笔记应用。前�
 
 #### 扩展注册顺序
 
-在 `CodeMirrorEditorTab.tsx` 中，**块级插件必须在行级注册表之前注册**，确保排斥区域在行级渲染器运行前已声明：
+在 ofive 的 `CodeMirrorEditorTab.tsx` / `useCodeMirrorEditorLifecycle.ts` 装配 `obeditor` 扩展时，**块级插件必须在行级注册表之前注册**，确保排斥区域在行级渲染器运行前已声明：
 
 ```
 createFrontmatterSyntaxExtension()     // 优先级 0
@@ -71,16 +73,16 @@ registeredLineSyntaxRenderExtension    // 行级渲染，查询排斥区域
 
 | 层 | 模块 | 适用场景 | 数据来源 |
 |---|---|---|---|
-| **编辑器层** | `syntaxExclusionZones.ts` | CodeMirror ViewPlugin 装饰渲染 | EditorView（文档偏移） |
-| **文本层（前端）** | `markdownBlockDetector.ts` | 非编辑器组件（OutlinePanel、搜索、知识图谱等） | 纯文本字符串（行号） |
+| **编辑器层** | `../obeditor/src/plugins/syntaxExclusionZones.ts` | CodeMirror ViewPlugin 装饰渲染 | EditorView（文档偏移） |
+| **文本层（前端）** | `../obeditor/src/markdown/markdownBlockDetector.ts` | 非编辑器组件（OutlinePanel、搜索、知识图谱等） | 纯文本字符串（行号） |
 | **文本层（后端）** | `markdown_block_detector.rs` | Rust 文本解析（WikiLink / inline link 提取等） | 纯文本字符串（字节偏移） |
 
-### 前端文本层用法（`src/utils/markdownBlockDetector.ts`）
+### 前端文本层用法（`obeditor` 导出的 Markdown detector）
 
 任何需要解析 Markdown 内容的非编辑器组件，都应使用该模块跳过块级结构内的行：
 
 ```ts
-import { detectExcludedLineRanges, isLineExcluded } from "../utils/markdownBlockDetector";
+import { detectExcludedLineRanges, isLineExcluded } from "obeditor";
 
 const ranges = detectExcludedLineRanges(markdownText);
 lines.forEach((line, index) => {

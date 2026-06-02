@@ -1,4 +1,13 @@
-import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import {
+    copyFileSync,
+    existsSync,
+    lstatSync,
+    mkdirSync,
+    readFileSync,
+    readdirSync,
+    rmSync,
+    statSync,
+} from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -115,6 +124,21 @@ function removeExistingObeditorModule(modulePath) {
     rmSync(modulePath, { recursive: true, force: true });
 }
 
+function copyDirectoryRecursive(sourceDirectory, targetDirectory) {
+    mkdirSync(targetDirectory, { recursive: true });
+    for (const entryName of readdirSync(sourceDirectory)) {
+        const sourcePath = path.join(sourceDirectory, entryName);
+        const targetPath = path.join(targetDirectory, entryName);
+        const sourceStats = statSync(sourcePath);
+        if (sourceStats.isDirectory()) {
+            copyDirectoryRecursive(sourcePath, targetPath);
+            continue;
+        }
+
+        copyFileSync(sourcePath, targetPath);
+    }
+}
+
 function installObeditorPackageSnapshot(editorRoot) {
     const nodeModulesRoot = path.join(repoRoot, "node_modules");
     const modulePath = path.join(nodeModulesRoot, "obeditor");
@@ -135,7 +159,7 @@ function installObeditorPackageSnapshot(editorRoot) {
             copyFileSync(sourcePath, path.join(modulePath, optionalFileName));
         }
     }
-    cpSync(distSourcePath, path.join(modulePath, "dist"), { recursive: true });
+    copyDirectoryRecursive(distSourcePath, path.join(modulePath, "dist"));
 
     console.info("[obeditor-build] installed package snapshot", {
         modulePath,

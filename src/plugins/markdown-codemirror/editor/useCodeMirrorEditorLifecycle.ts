@@ -8,10 +8,8 @@
  *  - @codemirror/state
  *  - @codemirror/lang-markdown
  *  - @replit/codemirror-vim
- *  - ../../../api/vaultApi
  *  - ../../../host/editor/editorContextStore
  *  - obeditor editor runtime primitives and syntax plugins
- *  - ./editorPasteImageHandler
  *
  * @exports
  *  - syncEditorTabGutterWidth: 同步标题栏 gutter 宽度补偿
@@ -26,13 +24,11 @@ import { markdown } from "@codemirror/lang-markdown";
 import { indentWithTab } from "@codemirror/commands";
 import { keymap } from "@codemirror/view";
 import { vim } from "@replit/codemirror-vim";
-import {
-    createVaultBinaryFile,
-} from "../../../api/vaultApi";
 import { releaseArticleSnapshot, type ArticleState } from "../../../host/editor/editorContextStore";
 import { createOfiveEditorCapabilities } from "../../../host/editor/ofiveEditorCapabilities";
 import type { WorkbenchContainerApi } from "../../../host/layout/workbenchContracts";
 import {
+    attachPasteImageHandler,
     createCodeBlockHighlightExtension,
     createFrontmatterSyntaxExtension,
     createImeCompositionGuard,
@@ -66,7 +62,6 @@ import {
     createCodeMirrorThemeExtension,
     createCodeMirrorTypographyThemeExtension,
 } from "./codemirrorTheme";
-import { attachPasteImageHandler } from "./editorPasteImageHandler";
 import { canMutateEditorDocument } from "./editorModePolicy";
 import {
     syncEditorServiceDocument,
@@ -1049,7 +1044,7 @@ export function useCodeMirrorEditorLifecycle(
             viewRef.current,
             {
                 getCurrentFilePath: () => options.currentFilePathRef.current,
-                createBinaryFile: createVaultBinaryFile,
+                capabilities: editorCapabilities,
                 canMutateDocument: () => !options.readOnly && canMutateEditorDocument(options.displayModeRef.current),
             },
         );

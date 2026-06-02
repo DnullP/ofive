@@ -13,11 +13,13 @@ import type {
     EditorWikiLinkTargetContext,
 } from "obeditor";
 import {
+    buildImageEmbedSyntax,
     parseWikiLinkTarget,
     resolveParentDirectory,
     resolveWikiLinkSubtarget,
 } from "obeditor";
 import {
+    createVaultBinaryFile,
     readVaultBinaryFile,
     readVaultMarkdownFile,
     resolveMediaEmbedTarget,
@@ -205,6 +207,20 @@ export function createOfiveEditorCapabilities(
             },
         },
         mediaEmbeds: {
+            async createAsset(file, mediaContext) {
+                const relativePath = mediaContext.suggestedRelativePath
+                    ?? `Images/${mediaContext.suggestedFileName ?? file.name}`;
+                const base64Content = mediaContext.base64Content;
+                if (!base64Content) {
+                    throw new Error("Cannot create a pasted image asset without base64 content.");
+                }
+
+                await createVaultBinaryFile(relativePath, base64Content);
+                return {
+                    relativePath,
+                    markdown: mediaContext.markdown ?? buildImageEmbedSyntax(relativePath),
+                };
+            },
             async resolveTarget(target, mediaContext) {
                 const currentFilePath = mediaContext.currentFilePath ?? context.getCurrentFilePath?.() ?? "";
                 const currentDirectory = resolveParentDirectory(currentFilePath);
