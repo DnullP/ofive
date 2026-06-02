@@ -1192,12 +1192,12 @@ test.describe("markdown table vim regression", () => {
 
         await expect.poll(async () => {
             const state = await getActiveEditorState(page);
-            return /<!-- ofive-table-layout: \{"columns":\[[^\]]+\],"rows":\[[^\]]+\]\} -->/.test(state.docText);
+            return /<!-- obeditor-table-layout: \{"columns":\[[^\]]+\],"rows":\[[^\]]+\]\} -->/.test(state.docText);
         }).toBe(true);
 
         await flushAutoSave(page);
         const savedContent = await readBrowserMockMarkdownContent(page, TABLE_BOUNDARY_NOTE_PATH);
-        expect(savedContent).toContain("<!-- ofive-table-layout:");
+        expect(savedContent).toContain("<!-- obeditor-table-layout:");
 
         await closeMockNoteTab(page, "table-vim-boundary.md");
         await openMockNote(page, TABLE_BOUNDARY_NOTE_PATH);

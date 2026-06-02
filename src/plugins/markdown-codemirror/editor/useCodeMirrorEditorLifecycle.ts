@@ -33,7 +33,7 @@ import {
     createVimImeInputPriorityExtension,
     buildLineNumbersExtension,
     createEditorTabOutKeymap,
-    editorBaseSetup,
+    createEditorBaseSetup,
     isDefaultMarkdownPresentationReady,
     markdownDocumentStartsWithFrontmatter,
     registerVimTokenProvider,
@@ -581,6 +581,7 @@ export function useCodeMirrorEditorLifecycle(
     options: UseCodeMirrorEditorLifecycleOptions,
 ): { viewRef: MutableRefObject<EditorView | null> } {
     const viewRef = useRef<EditorView | null>(null);
+    const baseSetupCompartmentRef = useRef<Compartment>(new Compartment());
     const vimModeCompartmentRef = useRef<Compartment>(new Compartment());
     const fontFamilyCompartmentRef = useRef<Compartment>(new Compartment());
     const fontSizeCompartmentRef = useRef<Compartment>(new Compartment());
@@ -729,7 +730,9 @@ export function useCodeMirrorEditorLifecycle(
                     });
                 },
             }),
-            editorBaseSetup,
+            baseSetupCompartmentRef.current.of(createEditorBaseSetup({
+                drawSelection: !options.vimModeEnabled,
+            })),
             EditorState.readOnly.of(options.readOnly),
             EditorView.editable.of(!options.readOnly),
             markdown(),
@@ -1061,7 +1064,12 @@ export function useCodeMirrorEditorLifecycle(
         }
 
         view.dispatch({
-            effects: vimModeCompartmentRef.current.reconfigure(options.vimModeEnabled ? vim() : []),
+            effects: [
+                baseSetupCompartmentRef.current.reconfigure(createEditorBaseSetup({
+                    drawSelection: !options.vimModeEnabled,
+                })),
+                vimModeCompartmentRef.current.reconfigure(options.vimModeEnabled ? vim() : []),
+            ],
         });
 
         console.info("[editor] vim mode changed", {
