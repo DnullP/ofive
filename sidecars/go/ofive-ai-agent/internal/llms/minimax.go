@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"log"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 
@@ -36,6 +36,12 @@ type MinimaxLLM struct {
 	enableThinking   bool
 	client           *http.Client
 	trace            func(title string, text string) error
+}
+
+type minimaxAttemptResult struct {
+	Raw     string
+	Err     error
+	Emitted bool
 }
 
 // NewAnthropicCompatibleLLM creates a generic Anthropic Messages-compatible adapter.
@@ -133,44 +139,11 @@ func (m *MinimaxLLM) GenerateContent(
 	_ bool,
 ) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
-		systemPrompt, messages := buildMinimaxMessages(req)
-		payload := minimaxChatRequest{
-			Model:     m.resolveRequestModel(req.Model),
-			Messages:  messages,
-			Stream:    true,
-			MaxTokens: 4096,
-		}
-		if systemPrompt != "" {
-			payload.System = systemPrompt
-		}
-		payload.Tools = buildMinimaxTools(req)
-		if len(payload.Tools) > 0 {
-			payload.ToolChoice = &minimaxToolChoice{Type: "auto"}
-		}
-
-		if strings.TrimSpace(payload.Model) == "" {
-			yield(nil, fmt.Errorf("%s model is required; refresh the model list and save a supported model first", m.providerLabel))
+		payload, err := m.buildChatRequestPayload(req)
+		if err != nil {
+			yield(nil, err)
 			return
 		}
-
-		if req.Config != nil {
-			if req.Config.Temperature != nil {
-				payload.Temperature = req.Config.Temperature
-			}
-			if req.Config.TopP != nil {
-				payload.TopP = req.Config.TopP
-			}
-			if req.Config.MaxOutputTokens > 0 {
-				payload.MaxTokens = int(req.Config.MaxOutputTokens)
-			}
-			if len(req.Config.StopSequences) > 0 {
-				payload.StopSequences = req.Config.StopSequences
-			}
-		}
-		if m.enableThinking {
-			payload.Thinking = buildMinimaxThinkingConfig(payload.Model, payload.MaxTokens)
-		}
-
 		body, err := json.Marshal(payload)
 		if err != nil {
 			yield(nil, err)
@@ -180,90 +153,149 @@ func (m *MinimaxLLM) GenerateContent(
 			yield(nil, err)
 			return
 		}
+		summary := summarizeMinimaxRequest(payload)
+		log.Printf("[llms/minimax] Model request summary\n%s", summary)
+		if err := m.emitTrace("Model request summary", summary); err != nil {
+			yield(nil, err)
+			return
+		}
 
-		httpReq, err := http.NewRequestWithContext(
+		result := defaultAIProviderManager.ExecuteWithRetry(
 			ctx,
-			http.MethodPost,
-			resolveAnthropicMessagesEndpoint(m.endpoint, m.defaultEndpoint),
-			bytes.NewReader(body),
+			m.providerLabel,
+			func(int) providerAttemptResult {
+				next := m.generateContentAttempt(ctx, body, yield)
+				return providerAttemptResult{
+					Raw:     next.Raw,
+					Err:     next.Err,
+					Emitted: next.Emitted,
+				}
+			},
+			m.emitTrace,
 		)
-		if err != nil {
-			yield(nil, err)
+		if traceErr := m.emitTrace("Model HTTP response", result.Raw); traceErr != nil {
+			yield(nil, traceErr)
 			return
 		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("anthropic-version", m.anthropicVersion)
-		if apiKey := strings.TrimSpace(m.apiKey); apiKey != "" {
-			httpReq.Header.Set("x-api-key", apiKey)
+		if result.Err != nil {
+			yield(nil, result.Err)
 		}
+	}
+}
 
-		resp, err := m.client.Do(httpReq)
-		if err != nil {
-			yield(nil, err)
-			return
+func (m *MinimaxLLM) buildChatRequestPayload(req *model.LLMRequest) (minimaxChatRequest, error) {
+	systemPrompt, messages := buildMinimaxMessages(req)
+	payload := minimaxChatRequest{
+		Model:     m.resolveRequestModel(req.Model),
+		Messages:  messages,
+		Stream:    true,
+		MaxTokens: 4096,
+	}
+	if systemPrompt != "" {
+		payload.System = systemPrompt
+	}
+	payload.Tools = buildMinimaxTools(req)
+	if len(payload.Tools) > 0 {
+		payload.ToolChoice = &minimaxToolChoice{Type: "auto"}
+	}
+
+	if strings.TrimSpace(payload.Model) == "" {
+		return minimaxChatRequest{}, fmt.Errorf("%s model is required; refresh the model list and save a supported model first", m.providerLabel)
+	}
+
+	if req.Config != nil {
+		if req.Config.Temperature != nil {
+			payload.Temperature = req.Config.Temperature
 		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			raw, err := io.ReadAll(resp.Body)
-			if err != nil {
-				yield(nil, err)
-				return
-			}
-			if err := m.emitTrace("Model HTTP response", string(raw)); err != nil {
-				yield(nil, err)
-				return
-			}
-
-			var parsed minimaxChatResponse
-			if err := json.Unmarshal(raw, &parsed); err == nil && parsed.Error != nil {
-				yield(nil, fmt.Errorf("%s api error: type=%s message=%s", m.providerLabel, parsed.Error.Type, parsed.Error.Message))
-				return
-			}
-			yield(nil, fmt.Errorf("%s api error: status=%d body=%s", m.providerLabel, resp.StatusCode, string(raw)))
-			return
+		if req.Config.TopP != nil {
+			payload.TopP = req.Config.TopP
 		}
-
-		if isEventStreamContentType(resp.Header.Get("Content-Type")) {
-			raw, err := m.streamResponse(resp.Body, yield)
-			if traceErr := m.emitTrace("Model HTTP response", raw); traceErr != nil {
-				yield(nil, traceErr)
-				return
-			}
-			if err != nil {
-				yield(nil, err)
-			}
-			return
+		if req.Config.MaxOutputTokens > 0 {
+			payload.MaxTokens = int(req.Config.MaxOutputTokens)
 		}
+		if len(req.Config.StopSequences) > 0 {
+			payload.StopSequences = req.Config.StopSequences
+		}
+	}
+	if m.enableThinking && !minimaxMessagesContainToolResults(payload.Messages) {
+		payload.Thinking = buildMinimaxThinkingConfig(payload.Model, payload.MaxTokens)
+	}
 
+	return payload, nil
+}
+
+func (m *MinimaxLLM) generateContentAttempt(
+	ctx context.Context,
+	body []byte,
+	yield func(*model.LLMResponse, error) bool,
+) minimaxAttemptResult {
+	httpReq, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		resolveAnthropicMessagesEndpoint(m.endpoint, m.defaultEndpoint),
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return minimaxAttemptResult{Err: err}
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("anthropic-version", m.anthropicVersion)
+	if apiKey := strings.TrimSpace(m.apiKey); apiKey != "" {
+		httpReq.Header.Set("x-api-key", apiKey)
+	}
+
+	resp, err := m.client.Do(httpReq)
+	if err != nil {
+		return minimaxAttemptResult{Err: err}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		raw, err := io.ReadAll(resp.Body)
 		if err != nil {
-			yield(nil, err)
-			return
+			return minimaxAttemptResult{Err: err}
 		}
-		if err := m.emitTrace("Model HTTP response", string(raw)); err != nil {
-			yield(nil, err)
-			return
-		}
-
 		var parsed minimaxChatResponse
-		if err := json.Unmarshal(raw, &parsed); err != nil {
-			yield(nil, err)
-			return
+		if err := json.Unmarshal(raw, &parsed); err == nil && parsed.Error != nil {
+			return minimaxAttemptResult{
+				Raw: string(raw),
+				Err: fmt.Errorf("%s api error: type=%s message=%s", m.providerLabel, parsed.Error.Type, parsed.Error.Message),
+			}
 		}
-		if parsed.Error != nil {
-			yield(nil, fmt.Errorf("%s api error: type=%s message=%s", m.providerLabel, parsed.Error.Type, parsed.Error.Message))
-			return
+		return minimaxAttemptResult{
+			Raw: string(raw),
+			Err: fmt.Errorf("%s api error: status=%d body=%s", m.providerLabel, resp.StatusCode, string(raw)),
 		}
-
-		yield(buildMinimaxLLMResponse(parsed.Content, parsed.StopReason, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, true), nil)
 	}
+
+	if isEventStreamContentType(resp.Header.Get("Content-Type")) {
+		return m.streamResponse(resp.Body, yield)
+	}
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return minimaxAttemptResult{Err: err}
+	}
+
+	var parsed minimaxChatResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return minimaxAttemptResult{Raw: string(raw), Err: err}
+	}
+	if parsed.Error != nil {
+		return minimaxAttemptResult{
+			Raw: string(raw),
+			Err: fmt.Errorf("%s api error: type=%s message=%s", m.providerLabel, parsed.Error.Type, parsed.Error.Message),
+		}
+	}
+
+	yield(buildMinimaxLLMResponse(parsed.Content, parsed.StopReason, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, true), nil)
+	return minimaxAttemptResult{Raw: string(raw), Emitted: true}
 }
 
 func (m *MinimaxLLM) streamResponse(
 	body io.Reader,
 	yield func(*model.LLMResponse, error) bool,
-) (string, error) {
+) minimaxAttemptResult {
 	state := minimaxStreamState{
 		blocks: make(map[int]*minimaxStreamBlock),
 	}
@@ -403,17 +435,18 @@ func (m *MinimaxLLM) streamResponse(
 		return nil
 	})
 	if err != nil && err != io.EOF {
-		return raw, err
+		return minimaxAttemptResult{Raw: raw, Err: err, Emitted: emitted}
 	}
 	if err == io.EOF {
-		return raw, nil
+		return minimaxAttemptResult{Raw: raw, Emitted: emitted}
 	}
 
 	state.finalizeAll()
 	if !completed && (!emitted || len(state.snapshot()) > 0) {
 		yield(buildMinimaxLLMResponse(state.snapshot(), state.stopReason, state.inputTokens, state.outputTokens, true), nil)
+		emitted = true
 	}
-	return raw, nil
+	return minimaxAttemptResult{Raw: raw, Emitted: emitted}
 }
 
 func yieldMinimaxStreamResponse(
@@ -500,58 +533,6 @@ func (m *MinimaxLLM) resolveRequestModel(requestModel string) string {
 	}
 
 	return trimmedRequestModel
-}
-
-func firstNonEmptyEnv(keys ...string) string {
-	for _, key := range keys {
-		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func resolveMinimaxMessagesEndpoint(endpoint string) string {
-	return resolveAnthropicMessagesEndpoint(endpoint, "https://api.minimaxi.com/anthropic")
-}
-
-func resolveAnthropicMessagesEndpoint(endpoint string, defaultEndpoint string) string {
-	trimmed := strings.TrimSpace(endpoint)
-	if trimmed == "" {
-		trimmed = defaultEndpoint
-	}
-	trimmed = strings.TrimRight(trimmed, "/")
-	if strings.HasSuffix(trimmed, "/v1/messages") {
-		return trimmed
-	}
-	return trimmed + "/v1/messages"
-}
-
-func shouldEnableMinimaxThinking(model string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(model))
-	return strings.Contains(normalized, "minimax-m2")
-}
-
-func buildMinimaxThinkingConfig(model string, maxTokens int) *minimaxThinkingConfig {
-	if !shouldEnableMinimaxThinking(model) || maxTokens <= 1024 {
-		return nil
-	}
-
-	budget := maxTokens / 2
-	if budget > 2048 {
-		budget = 2048
-	}
-	if budget < 1024 {
-		budget = 1024
-	}
-	if budget >= maxTokens {
-		budget = maxTokens - 1
-	}
-
-	return &minimaxThinkingConfig{
-		Type:         "enabled",
-		BudgetTokens: budget,
-	}
 }
 
 func buildMinimaxMessages(req *model.LLMRequest) (string, []minimaxMessage) {

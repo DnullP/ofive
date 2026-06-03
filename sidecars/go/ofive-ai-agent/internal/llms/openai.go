@@ -161,45 +161,35 @@ func (o *OpenAICompatibleLLM) GenerateContent(
 			return
 		}
 
-		var rawAttempts []string
-		for attempt := 0; attempt <= maxOpenAICompatibleStreamRetries; attempt++ {
-			stream := o.client.Chat.Completions.NewStreaming(ctx, params)
-			allowEmptyTailRecovery := attempt == maxOpenAICompatibleStreamRetries
-			result := o.streamResponse(stream, yield, allowEmptyTailRecovery)
-			rawAttempts = append(rawAttempts, formatOpenAIStreamAttempt(attempt+1, result.Raw))
-
-			if result.Err == nil {
-				if traceErr := o.emitTrace("Model HTTP response", strings.Join(rawAttempts, "\n")); traceErr != nil {
-					yield(nil, traceErr)
+		retryPolicy := defaultAIProviderManager.retryPolicy(o.providerLabel)
+		result := defaultAIProviderManager.ExecuteWithRetry(
+			ctx,
+			o.providerLabel,
+			func(attempt int) providerAttemptResult {
+				stream := o.client.Chat.Completions.NewStreaming(ctx, params)
+				allowEmptyTailRecovery := attempt > retryPolicy.MaxRetries
+				next := o.streamResponse(stream, yield, allowEmptyTailRecovery)
+				return providerAttemptResult{
+					Raw:     next.Raw,
+					Err:     next.Err,
+					Emitted: next.Emitted,
 				}
-				return
-			}
+			},
+			o.emitTrace,
+		)
 
-			if shouldRetryOpenAIStream(ctx, result.Err, result.Emitted) &&
-				attempt < maxOpenAICompatibleStreamRetries {
-				if err := o.emitTrace(
-					"Model HTTP retry",
-					fmt.Sprintf(
-						"attempt=%d next_attempt=%d error=%s",
-						attempt+1,
-						attempt+2,
-						result.Err.Error(),
-					),
-				); err != nil {
-					yield(nil, err)
-					return
-				}
-				continue
-			}
-
-			raw := strings.Join(rawAttempts, "\n")
-			if traceErr := o.emitTrace("Model HTTP response", raw); traceErr != nil {
+		if result.Err == nil {
+			if traceErr := o.emitTrace("Model HTTP response", result.Raw); traceErr != nil {
 				yield(nil, traceErr)
-				return
 			}
-			yield(nil, o.wrapStreamError(requestModel, raw, result.Err))
 			return
 		}
+
+		if traceErr := o.emitTrace("Model HTTP response", result.Raw); traceErr != nil {
+			yield(nil, traceErr)
+			return
+		}
+		yield(nil, o.wrapStreamError(requestModel, result.Raw, result.Err))
 	}
 }
 
@@ -322,16 +312,6 @@ func formatOpenAIStreamAttempt(attempt int, raw string) string {
 		return fmt.Sprintf("[attempt %d] <empty response>", attempt)
 	}
 	return fmt.Sprintf("[attempt %d]\n%s", attempt, trimmed)
-}
-
-func shouldRetryOpenAIStream(ctx context.Context, err error, emitted bool) bool {
-	if err == nil || emitted {
-		return false
-	}
-	if ctx != nil && ctx.Err() != nil {
-		return false
-	}
-	return isRetryableOpenAIStreamError(err)
 }
 
 func isRetryableOpenAIStreamError(err error) bool {

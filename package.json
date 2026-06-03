@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "push": "bun scripts/push-with-local-sibling-deps.mjs",
-    "dev": "bun run build:local-deps && vite --host 127.0.0.1 --port 4173 --strictPort",
+    "dev": "bun run build:local-deps && vite --host 127.0.0.1 --port 4173 trui--strictPort",
     "web:dev": "bun run build:local-deps && vite --host 127.0.0.1 --port 4173 --strictPort",
     "editor:dev": "cd ../obeditor && bun run dev",
     "editor:build": "cd ../obeditor && bun run build",

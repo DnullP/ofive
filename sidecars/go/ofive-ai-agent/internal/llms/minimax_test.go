@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"google.golang.org/adk/model"
@@ -173,6 +174,97 @@ func TestMinimaxGenerateContentStreamsVendorResponseIntoMultipleYields(t *testin
 	}
 	if !responses[2].TurnComplete || responses[2].Content.Parts[0].Text != "first part second part" {
 		t.Fatalf("expected final completed response, got %+v", responses[2])
+	}
+}
+
+func TestMinimaxGenerateContentRetriesTransientUnknownAPIError(t *testing.T) {
+	t.Parallel()
+
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if requestCount.Add(1) == 1 {
+			writer.Header().Set("Content-Type", "application/json")
+			writer.WriteHeader(http.StatusInternalServerError)
+			_, _ = writer.Write([]byte(`{"error":{"type":"api_error","message":"unknown error, 999 (1000)"}}`))
+			return
+		}
+
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":"msg_1","type":"message","role":"assistant","model":"MiniMax-M2.7","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer server.Close()
+
+	llm := NewMinimaxLLM("minimax-anthropic", server.URL, "MiniMax-M2.7", "test-key")
+	var traceTitles []string
+	llm.SetTraceEmitter(func(title string, text string) error {
+		traceTitles = append(traceTitles, title)
+		return nil
+	})
+	request := &model.LLMRequest{
+		Model: "minimax-anthropic",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("你好", genai.RoleUser),
+		},
+	}
+
+	for _, err := range collectResponses(llm.GenerateContent(context.Background(), request, false)) {
+		if err != nil {
+			t.Fatalf("GenerateContent returned error: %v", err)
+		}
+	}
+
+	if requestCount.Load() != 2 {
+		t.Fatalf("expected one minimax retry, got %d requests", requestCount.Load())
+	}
+	if !stringSliceContains(traceTitles, "Model HTTP retry") {
+		t.Fatalf("expected retry trace, got %+v", traceTitles)
+	}
+}
+
+func TestMinimaxGenerateContentDoesNotRetryAfterStreamEmission(t *testing.T) {
+	t.Parallel()
+
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requestCount.Add(1)
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("event: message_start\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"MiniMax-M2.7\",\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_start\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"))
+		_, _ = writer.Write([]byte("event: content_block_delta\n"))
+		_, _ = writer.Write([]byte("data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"partial\"}}\n\n"))
+		_, _ = writer.Write([]byte("event: error\n"))
+		_, _ = writer.Write([]byte("data: {malformed\n\n"))
+	}))
+	defer server.Close()
+
+	llm := NewMinimaxLLM("minimax-anthropic", server.URL, "MiniMax-M2.7", "test-key")
+	request := &model.LLMRequest{
+		Model: "minimax-anthropic",
+		Contents: []*genai.Content{
+			genai.NewContentFromText("你好", genai.RoleUser),
+		},
+	}
+
+	var responses []*model.LLMResponse
+	var gotErr error
+	for response, err := range llm.GenerateContent(context.Background(), request, false) {
+		if err != nil {
+			gotErr = err
+			continue
+		}
+		responses = append(responses, response)
+	}
+
+	if requestCount.Load() != 1 {
+		t.Fatalf("expected no retry after emitted stream output, got %d requests", requestCount.Load())
+	}
+	if len(responses) != 1 || responses[0].Content.Parts[0].Text != "partial" {
+		t.Fatalf("expected one partial response before error, got %+v", responses)
+	}
+	if gotErr == nil {
+		t.Fatal("expected malformed stream error after emitted output")
 	}
 }
 
@@ -702,4 +794,13 @@ func TestBuildMinimaxMessagesDropsOrphanToolResultMessages(t *testing.T) {
 			t.Fatalf("expected no orphan tool result messages, got %+v", messages)
 		}
 	}
+}
+
+func stringSliceContains(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
