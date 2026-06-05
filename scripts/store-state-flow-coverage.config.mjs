@@ -493,6 +493,9 @@ export const storeConsumerCoverage = {
         "e2e/custom-activity.e2e.ts",
         "e2e/vault-switch-regression.e2e.ts",
     ],
+    "src/host/layout/workbenchLayoutBoundary.tsx": [
+        "src/host/layout/workbenchLayoutBoundary.test.tsx",
+    ],
     "src/host/vault/openVaultDialog.ts": [
         "e2e/workbench-home-empty.e2e.ts",
     ],
