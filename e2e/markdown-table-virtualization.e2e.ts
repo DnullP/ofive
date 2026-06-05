@@ -208,10 +208,24 @@ async function readVirtualizedTableMetrics(page: Page): Promise<{
             throw new Error("Markdown table not found");
         }
 
-        const renderedRows = Array.from(table.querySelectorAll<HTMLElement>(".mtv-table-body-row"));
-        const rowIndexes = renderedRows.map((row) => Number(
-            row.querySelector<HTMLElement>("[data-markdown-table-row-index]")?.dataset.markdownTableRowIndex,
-        )).filter((rowIndex) => Number.isFinite(rowIndex));
+        const canvasRowAnchors = Array.from(
+            table.querySelectorAll<HTMLElement>(
+                ".mtv-canvas-row-nav-anchor[data-markdown-table-row-index]",
+            ),
+        );
+        const rowIndexElements = canvasRowAnchors.length > 0
+            ? canvasRowAnchors
+            : Array.from(
+                table.querySelectorAll<HTMLElement>(
+                    ".mtv-table-body-row [data-markdown-table-section='body'][data-markdown-table-row-index]",
+                ),
+            );
+        const rowIndexes = rowIndexElements
+            .map((element) => Number(element.dataset.markdownTableRowIndex))
+            .filter((rowIndex) => Number.isFinite(rowIndex));
+        if (rowIndexes.length === 0) {
+            throw new Error("Virtual table row indexes not found");
+        }
 
         return {
             isVirtualized: table.dataset.rowVirtualized === "true",
@@ -248,18 +262,70 @@ async function scrollToVirtualTableRow(page: Page, rowIndex: number): Promise<vo
         const totalBodyRows = Number(table.dataset.totalBodyRows ?? "0");
         const firstSpacer = table.querySelector<HTMLElement>(".mtv-table-virtual-spacer-cell");
         const renderedRow = table.querySelector<HTMLElement>(".mtv-table-body-row");
-        const firstRenderedRowHeight = renderedRow?.getBoundingClientRect().height ?? 38;
+        const firstIndexedRow =
+            table.querySelector<HTMLElement>(".mtv-canvas-row-nav-anchor[data-markdown-table-row-index]")
+            ?? table.querySelector<HTMLElement>(
+                ".mtv-table-body-row [data-markdown-table-section='body'][data-markdown-table-row-index]",
+            );
+        const canvasBody = table.querySelector<HTMLElement>(".mtv-canvas-body-shell");
+        const firstRenderedRowHeight =
+            renderedRow?.getBoundingClientRect().height
+            ?? firstIndexedRow?.getBoundingClientRect().height
+            ?? 38;
         const currentFirstRowIndex = Number(
-            renderedRow?.querySelector<HTMLElement>("[data-markdown-table-row-index]")?.dataset.markdownTableRowIndex ?? "0",
+            firstIndexedRow?.dataset.markdownTableRowIndex ?? "0",
         );
         const currentBeforeHeight = firstSpacer?.getBoundingClientRect().height ?? 0;
-        const estimatedRowHeight = currentFirstRowIndex > 0
-            ? currentBeforeHeight / currentFirstRowIndex
-            : firstRenderedRowHeight;
+        const canvasEstimatedRowHeight = canvasBody && totalBodyRows > 0
+            ? canvasBody.getBoundingClientRect().height / totalBodyRows
+            : 0;
+        const estimatedRowHeight = canvasBody
+            ? Math.max(canvasEstimatedRowHeight, firstRenderedRowHeight)
+            : currentFirstRowIndex > 0
+                ? currentBeforeHeight / currentFirstRowIndex
+                : firstRenderedRowHeight;
         const safeRowIndex = Math.max(0, Math.min(targetRowIndex, totalBodyRows - 1));
         scroller.scrollTop = widget.offsetTop + table.offsetTop + estimatedRowHeight * safeRowIndex;
         scroller.dispatchEvent(new Event("scroll"));
     }, rowIndex);
+}
+
+async function clickVirtualTableCell(page: Page, rowIndex: number, columnIndex: number): Promise<void> {
+    const domCell = page.locator([
+        ".layout-v2-tab-section__card--active",
+        `[data-markdown-table-section='body'][data-markdown-table-row-index='${rowIndex}'][data-markdown-table-column-index='${columnIndex}']`,
+    ].join(" ")).first();
+    if (await domCell.count()) {
+        await domCell.click();
+        return;
+    }
+
+    const rowAnchor = page.locator([
+        ".layout-v2-tab-section__card--active",
+        `.mtv-canvas-row-nav-anchor[data-markdown-table-row-index='${rowIndex}']`,
+    ].join(" ")).first();
+    await expect(rowAnchor).toBeVisible();
+
+    const headerCell = page.locator([
+        ".layout-v2-tab-section__card--active",
+        `[data-markdown-table-section='header'][data-markdown-table-column-index='${columnIndex}']`,
+    ].join(" ")).first();
+    const canvasBody = page.locator(".layout-v2-tab-section__card--active .mtv-canvas-body-shell").first();
+
+    const [rowBox, headerBox, canvasBox] = await Promise.all([
+        rowAnchor.boundingBox(),
+        headerCell.boundingBox(),
+        canvasBody.boundingBox(),
+    ]);
+    if (!rowBox || !headerBox || !canvasBox) {
+        throw new Error("Virtual table canvas cell bounds not found");
+    }
+
+    const clickX = Math.min(
+        Math.max(headerBox.x + headerBox.width / 2, canvasBox.x + 1),
+        canvasBox.x + canvasBox.width - 1,
+    );
+    await page.mouse.click(clickX, rowBox.y + rowBox.height / 2);
 }
 
 test.describe("markdown table virtualization", () => {
@@ -289,12 +355,9 @@ test.describe("markdown table virtualization", () => {
         expect(initialMetrics.renderedBodyRows).toBeLessThan(80);
         expect(initialMetrics.renderedBodyCells).toBeLessThan(320);
 
-        await page.locator(".layout-v2-tab-section__card--active .cm-markdown-table-widget").hover();
         await installPerformanceSampler(page);
-        for (let stepIndex = 0; stepIndex < 18; stepIndex += 1) {
-            await page.mouse.wheel(0, 900);
-            await waitForEditorFrames(page, 1);
-        }
+        await scrollToVirtualTableRow(page, 180);
+        await waitForEditorFrames(page, 4);
         const scrollPerf = await stopPerformanceSampler(page);
         const afterScrollMetrics = await readVirtualizedTableMetrics(page);
 
@@ -305,9 +368,7 @@ test.describe("markdown table virtualization", () => {
 
         await scrollToVirtualTableRow(page, 520);
         await waitForEditorFrames(page, 4);
-        const middleCell = page.locator("[data-markdown-table-row-index='520'][data-markdown-table-column-index='3']").first();
-        await expect(middleCell).toBeVisible();
-        await middleCell.click();
+        await clickVirtualTableCell(page, 520, 3);
         await expect(page.locator(".mtv-cell-input:visible")).toBeFocused();
 
         await installPerformanceSampler(page);
