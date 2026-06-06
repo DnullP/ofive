@@ -339,6 +339,13 @@ jobs:
       - name: Verify production build
         run: bun run build
 
+      - name: Install Playwright browser
+        run: bun run test:playwright:install
+
+      # Guards against packaged-app white screens that do not reproduce in `tauri dev`.
+      - name: Verify production preview smoke
+        run: bun run check:production-preview
+
   build-macos-installer:
     name: Build macOS ARM64
     needs:

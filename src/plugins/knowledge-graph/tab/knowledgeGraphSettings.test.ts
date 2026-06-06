@@ -12,7 +12,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import {
     DEFAULT_KNOWLEDGE_GRAPH_SETTINGS,
+    KNOWLEDGE_GRAPH_RESIZE_LIGHTWEIGHT_PIXEL_RATIO,
     buildKnowledgeGraphConfig,
+    buildKnowledgeGraphResizeLightweightConfig,
     mergeKnowledgeGraphSettings,
 } from "./knowledgeGraphSettings";
 
@@ -151,5 +153,20 @@ describe("knowledgeGraphSettings", () => {
         expect(config.linkDefaultColor).toBe("rgb(107, 114, 128)");
         expect(config.hoveredLinkColor).toBe("rgb(11, 109, 255)");
         expect("nodeColorGroups" in config).toBe(false);
+    });
+
+    it("构建 resize lightweight 配置时应降低 Cosmos 连续重排开销", () => {
+        const config = buildKnowledgeGraphResizeLightweightConfig();
+
+        expect(config.pixelRatio).toBe(KNOWLEDGE_GRAPH_RESIZE_LIGHTWEIGHT_PIXEL_RATIO);
+        expect(config.renderLinks).toBe(false);
+        expect(config.renderHoveredPointRing).toBe(false);
+        expect(config.enableDrag).toBe(false);
+        expect(config.enableZoom).toBe(false);
+        expect(config.enableSimulationDuringZoom).toBe(false);
+        expect(config.pointSamplingDistance).toBeGreaterThan(
+            DEFAULT_KNOWLEDGE_GRAPH_SETTINGS.pointSamplingDistance,
+        );
+        expect(config.showFPSMonitor).toBe(false);
     });
 });

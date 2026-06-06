@@ -29,6 +29,7 @@ import { buildKnowledgeGraphPointColors } from "./knowledgeGraphNodeColoring";
 import { buildKnowledgeGraphPointSizes } from "./knowledgeGraphNodeSizing";
 import {
     buildKnowledgeGraphConfig,
+    buildKnowledgeGraphResizeLightweightConfig,
     type KnowledgeGraphNodeColorGroup,
 } from "./knowledgeGraphSettings";
 import {
@@ -46,6 +47,10 @@ import {
 import { useThemeState } from "../../../host/theme/themeStore";
 import { useVaultState } from "../../../host/vault/vaultStore";
 import { openFileInWorkbench } from "../../../host/layout/openFileService";
+import {
+    isDocumentLayoutLightweight,
+    subscribeDocumentLayoutLightweight,
+} from "../../../host/layout/layoutResizeSignal";
 import "./KnowledgeGraphTab.css";
 
 /**
@@ -82,6 +87,14 @@ interface KnowledgeGraphPerfTestHook {
     getPointPositions: () => number[];
     /** 读取图谱仿真是否仍在运行，供设置变更回归测试确认不会误暂停。 */
     getSimulationRunning: () => boolean;
+    /** 读取图谱是否处在 layout resize lightweight 渲染配置。 */
+    getResizeLightweightProfile: () => {
+        active: boolean;
+        pixelRatio: number | undefined;
+        renderLinks: boolean | undefined;
+        enableDrag: boolean | undefined;
+        enableZoom: boolean | undefined;
+    };
     /** 读取节点当前屏幕坐标，用于交互和像素采样回归测试。 */
     getPointScreenPositions: () => Array<{
         index: number;
@@ -211,6 +224,8 @@ const HOVER_END_RESUME_ALPHA = 0.08;
 const COSMOS_DEFAULT_LINK_GREYOUT_OPACITY = 0.1;
 
 const HOVER_TRANSITION_DURATION_MS = 320;
+
+const KNOWLEDGE_GRAPH_RESIZE_LIGHTWEIGHT_CONFIG = buildKnowledgeGraphResizeLightweightConfig();
 
 interface KnowledgeGraphColorQueryInputProps {
     group: KnowledgeGraphNodeColorGroup;
@@ -617,6 +632,8 @@ export function KnowledgeGraphTab(
     const dragTailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const labelRafRef = useRef<number | null>(null);
     const hoverTransitionRafRef = useRef<number | null>(null);
+    const pendingLabelLayoutAfterResizeRef = useRef(false);
+    const shouldResumeSimulationAfterLayoutResizeRef = useRef(false);
     const lastDragReheatTimeRef = useRef<number>(0);
     const graphSettingsRef = useRef(graphSettings);
     /** 节点索引到相对路径的映射表，用于点击节点时打开对应笔记 */
@@ -642,10 +659,76 @@ export function KnowledgeGraphTab(
         () => buildKnowledgeGraphConfig(graphSettings),
         [graphSettings, themeMode],
     );
+    const graphConfigRef = useRef(graphConfig);
+    const graphResizeLightweightActiveRef = useRef(false);
+    const graphResizeRestoreFrameRef = useRef<number | null>(null);
 
     useEffect(() => {
         graphSettingsRef.current = graphSettings;
     }, [graphSettings]);
+
+    useEffect(() => {
+        graphConfigRef.current = graphConfig;
+    }, [graphConfig]);
+
+    const cancelGraphResizeRestoreFrame = (): void => {
+        if (graphResizeRestoreFrameRef.current !== null) {
+            window.cancelAnimationFrame(graphResizeRestoreFrameRef.current);
+            graphResizeRestoreFrameRef.current = null;
+        }
+    };
+
+    const applyResizeLightweightGraphConfig = (graph: Graph): void => {
+        if (graphResizeLightweightActiveRef.current) {
+            return;
+        }
+
+        graphResizeLightweightActiveRef.current = true;
+        graph.setConfig(KNOWLEDGE_GRAPH_RESIZE_LIGHTWEIGHT_CONFIG);
+    };
+
+    const restoreFullGraphConfigAfterResize = (
+        graph: Graph,
+        shouldResumeSimulation: boolean,
+    ): void => {
+        cancelGraphResizeRestoreFrame();
+        graphResizeRestoreFrameRef.current = window.requestAnimationFrame(() => {
+            graphResizeRestoreFrameRef.current = null;
+            if (graphRef.current !== graph) {
+                return;
+            }
+
+            graphResizeLightweightActiveRef.current = false;
+            graph.setConfig(graphConfigRef.current);
+            graph.render(shouldResumeSimulation ? undefined : 0);
+            scheduleLabelLayoutUpdate(graph);
+            if (shouldResumeSimulation) {
+                graph.start(0.05);
+            }
+        });
+    };
+
+    const cancelGraphResizeTransientWork = (): void => {
+        if (labelRafRef.current !== null) {
+            window.cancelAnimationFrame(labelRafRef.current);
+            labelRafRef.current = null;
+        }
+        if (hoverTransitionRafRef.current !== null) {
+            window.cancelAnimationFrame(hoverTransitionRafRef.current);
+            hoverTransitionRafRef.current = null;
+        }
+    };
+
+    const enterResizeLightweightGraphMode = (graph: Graph): void => {
+        cancelGraphResizeRestoreFrame();
+        pendingLabelLayoutAfterResizeRef.current = true;
+        cancelGraphResizeTransientWork();
+        applyResizeLightweightGraphConfig(graph);
+        if (graph.isSimulationRunning) {
+            shouldResumeSimulationAfterLayoutResizeRef.current = true;
+            graph.stop();
+        }
+    };
 
     /**
      * @function registerPerfTestHook
@@ -827,6 +910,13 @@ export function KnowledgeGraphTab(
             },
             getPointPositions: () => Array.from(graph.getPointPositions()),
             getSimulationRunning: () => graph.isSimulationRunning,
+            getResizeLightweightProfile: () => ({
+                active: graphResizeLightweightActiveRef.current,
+                pixelRatio: graph.config.pixelRatio,
+                renderLinks: graph.config.renderLinks,
+                enableDrag: graph.config.enableDrag,
+                enableZoom: graph.config.enableZoom,
+            }),
             getPointScreenPositions,
             getHostRect: () => {
                 const rect = hostRef.current?.getBoundingClientRect();
@@ -900,6 +990,11 @@ export function KnowledgeGraphTab(
      * @param graph Graph 实例。
      */
     const scheduleLabelLayoutUpdate = (graph: Graph): void => {
+        if (isDocumentLayoutLightweight()) {
+            pendingLabelLayoutAfterResizeRef.current = true;
+            return;
+        }
+
         if (labelRafRef.current !== null) {
             return;
         }
@@ -999,6 +1094,38 @@ export function KnowledgeGraphTab(
             labelRenderer.render(nextVisibleLabels, opacity, viewWidth, viewHeight);
         });
     };
+
+    useEffect(() => {
+        const handleResizePhaseChange = (isResizing: boolean): void => {
+            const graph = graphRef.current;
+            if (isResizing) {
+                if (graph) {
+                    enterResizeLightweightGraphMode(graph);
+                } else {
+                    pendingLabelLayoutAfterResizeRef.current = true;
+                }
+                return;
+            }
+
+            if (!graph) {
+                pendingLabelLayoutAfterResizeRef.current = false;
+                shouldResumeSimulationAfterLayoutResizeRef.current = false;
+                return;
+            }
+
+            if (!pendingLabelLayoutAfterResizeRef.current && !graphResizeLightweightActiveRef.current) {
+                return;
+            }
+
+            pendingLabelLayoutAfterResizeRef.current = false;
+            const shouldResumeSimulation = shouldResumeSimulationAfterLayoutResizeRef.current;
+            shouldResumeSimulationAfterLayoutResizeRef.current = false;
+            restoreFullGraphConfigAfterResize(graph, shouldResumeSimulation);
+        };
+
+        handleResizePhaseChange(isDocumentLayoutLightweight());
+        return subscribeDocumentLayoutLightweight(handleResizePhaseChange);
+    }, []);
 
     /**
      * @function handleNodeClick
@@ -1247,9 +1374,14 @@ export function KnowledgeGraphTab(
             labelRendererRef.current = new KnowledgeGraphCanvasLabelRenderer(labelLayerRef.current);
         }
         registerPerfTestHook(graph);
+        if (isDocumentLayoutLightweight()) {
+            enterResizeLightweightGraphMode(graph);
+        }
         console.info("[knowledge-graph] graph instance initialized");
 
         return () => {
+            cancelGraphResizeRestoreFrame();
+            graphResizeLightweightActiveRef.current = false;
             if (dragTailTimerRef.current !== null) {
                 window.clearTimeout(dragTailTimerRef.current);
             }
@@ -1274,7 +1406,11 @@ export function KnowledgeGraphTab(
             return;
         }
 
-        graph.setConfig(graphConfig);
+        if (graphResizeLightweightActiveRef.current || isDocumentLayoutLightweight()) {
+            applyResizeLightweightGraphConfig(graph);
+        } else {
+            graph.setConfig(graphConfig);
+        }
         applyGraphNodeAppearance(graph);
         if (hoveredNodeIndexRef.current !== null) {
             const hoveredNodeIndex = hoveredNodeIndexRef.current;

@@ -103,6 +103,13 @@ import {
     saveWorkspaceLayoutSnapshot,
 } from "./workspaceLayoutPersistence";
 import {
+    syncWorkbenchTitlebarOffsetTarget,
+} from "./workbenchTitlebarOffset";
+import {
+    isDocumentLayoutResizing,
+    subscribeDocumentLayoutResizing,
+} from "./layoutResizeSignal";
+import {
     resolveActivityTitle,
     useActivities,
     useOverlays,
@@ -170,8 +177,6 @@ const DEFAULT_RIGHT_RAIL_WIDTH = 260;
 const CUSTOM_ACTIVITY_REGISTRATION_PREFIX = "custom-activity:";
 const CUSTOM_ACTIVITY_CREATE_COMMAND_ID = "customActivity.create";
 const KEEP_ALIVE_INACTIVE_TAB_COMPONENT_IDS = new Set(["knowledgegraph"]);
-const WORKBENCH_TITLEBAR_OFFSET_ATTR = "data-workbench-titlebar-offset";
-const WORKBENCH_MAC_LEFT_TITLEBAR_OFFSET = "mac-left";
 const LAYOUT_PERSIST_DEBOUNCE_MS = 300;
 
 function waitForWorkbenchLayoutCommit(): Promise<void> {
@@ -200,27 +205,6 @@ function closeVaultScopedWorkbenchTabs(api: WorkbenchApi): number {
     }
 
     return closedCount;
-}
-
-function syncWorkbenchTitlebarOffsetTarget(root: HTMLElement): void {
-    const strips = Array.from(root.querySelectorAll<HTMLElement>(".layout-v2-tab-section__strip"));
-    for (const strip of strips) {
-        strip.removeAttribute(WORKBENCH_TITLEBAR_OFFSET_ATTR);
-    }
-
-    const target = strips
-        .map((strip) => ({ strip, rect: strip.getBoundingClientRect() }))
-        .filter(({ rect }) => rect.width > 0 && rect.height > 0)
-        .sort((left, right) => {
-            const topDelta = left.rect.top - right.rect.top;
-            if (Math.abs(topDelta) > 2) {
-                return topDelta;
-            }
-
-            return left.rect.left - right.rect.left;
-        })[0]?.strip ?? null;
-
-    target?.setAttribute(WORKBENCH_TITLEBAR_OFFSET_ATTR, WORKBENCH_MAC_LEFT_TITLEBAR_OFFSET);
 }
 
 function getFocusedFileTreeElement(): HTMLElement | null {
@@ -592,7 +576,13 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
         }
 
         let frameId: number | null = null;
+        let pendingSyncAfterResize = false;
         const scheduleSync = () => {
+            if (isDocumentLayoutResizing()) {
+                pendingSyncAfterResize = true;
+                return;
+            }
+
             if (frameId !== null) {
                 return;
             }
@@ -610,7 +600,10 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             childList: true,
             subtree: true,
             attributes: true,
-            attributeFilter: ["class", "style", "data-testid", "data-section-id", "data-tab-section-id"],
+            // layout-v2 dom-flex resize updates child slot inline style every frame.
+            // Titlebar offset depends on tab strip identity/visibility, so watching
+            // `style` here would add forced layout reads to the resize hot path.
+            attributeFilter: ["class", "data-testid", "data-section-id", "data-tab-section-id"],
         });
 
         const resizeObserver = typeof ResizeObserver === "undefined"
@@ -618,9 +611,19 @@ function LayoutV2WorkbenchHost(props: WorkbenchLayoutHostProps): ReactNode {
             : new ResizeObserver(scheduleSync);
         resizeObserver?.observe(root);
 
+        const unsubscribeLayoutResizing = subscribeDocumentLayoutResizing((isResizing) => {
+            if (isResizing || !pendingSyncAfterResize) {
+                return;
+            }
+
+            pendingSyncAfterResize = false;
+            scheduleSync();
+        });
+
         return () => {
             mutationObserver.disconnect();
             resizeObserver?.disconnect();
+            unsubscribeLayoutResizing();
             if (frameId !== null) {
                 window.cancelAnimationFrame(frameId);
             }

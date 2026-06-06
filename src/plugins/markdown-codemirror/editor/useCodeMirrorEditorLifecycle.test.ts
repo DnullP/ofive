@@ -19,6 +19,8 @@ import {
     restoreEditorSelectionWithoutScrolling,
     safeDestroyEditorView,
     syncEditorTabGutterWidth,
+    updateEditorGutterResizeObserver,
+    type EditorGutterResizeObserverState,
 } from "./useCodeMirrorEditorLifecycle";
 
 /**
@@ -28,23 +30,38 @@ import {
  */
 function createStyleRecorder(): {
     style: { setProperty(name: string, value: string): void; getPropertyValue(name: string): string };
+    getWriteCount(): number;
 } {
     const values = new Map<string, string>();
+    let writeCount = 0;
     return {
         style: {
             setProperty(name: string, value: string): void {
+                writeCount += 1;
                 values.set(name, value);
             },
             getPropertyValue(name: string): string {
                 return values.get(name) ?? "";
             },
         },
+        getWriteCount(): number {
+            return writeCount;
+        },
     };
 }
 
 describe("syncEditorTabGutterWidth", () => {
+    test("skips writes when tab root is missing", () => {
+        expect(() => syncEditorTabGutterWidth({
+            tabRoot: null,
+            view: null,
+            displayMode: "read",
+        })).not.toThrow();
+    });
+
     test("clears gutter offset when not in edit mode", () => {
-        const tabRoot = createStyleRecorder() as unknown as HTMLDivElement;
+        const recorder = createStyleRecorder();
+        const tabRoot = recorder as unknown as HTMLDivElement;
 
         syncEditorTabGutterWidth({
             tabRoot,
@@ -53,10 +70,12 @@ describe("syncEditorTabGutterWidth", () => {
         });
 
         expect(tabRoot.style.getPropertyValue("--cm-tab-gutter-width")).toBe("0px");
+        expect(recorder.getWriteCount()).toBe(1);
     });
 
     test("writes measured gutter width for edit mode", () => {
-        const tabRoot = createStyleRecorder() as unknown as HTMLDivElement;
+        const recorder = createStyleRecorder();
+        const tabRoot = recorder as unknown as HTMLDivElement;
         const gutterElement = {
             getBoundingClientRect(): DOMRect {
                 return { width: 42.375 } as DOMRect;
@@ -77,6 +96,115 @@ describe("syncEditorTabGutterWidth", () => {
         });
 
         expect(tabRoot.style.getPropertyValue("--cm-tab-gutter-width")).toBe("42.38px");
+        expect(recorder.getWriteCount()).toBe(1);
+    });
+
+    test("skips duplicate CSS writes when resize does not change gutter width", () => {
+        const recorder = createStyleRecorder();
+        const tabRoot = recorder as unknown as HTMLDivElement;
+        const gutterElement = {
+            getBoundingClientRect(): DOMRect {
+                return { width: 42.375 } as DOMRect;
+            },
+        };
+        const view = {
+            dom: {
+                querySelector(selector: string): unknown {
+                    return selector === ".cm-gutters" ? gutterElement : null;
+                },
+            },
+        } as unknown as { dom: { querySelector(selector: string): unknown } };
+
+        syncEditorTabGutterWidth({
+            tabRoot,
+            view: view as never,
+            displayMode: "edit",
+        });
+        syncEditorTabGutterWidth({
+            tabRoot,
+            view: view as never,
+            displayMode: "edit",
+        });
+
+        expect(tabRoot.style.getPropertyValue("--cm-tab-gutter-width")).toBe("42.38px");
+        expect(recorder.getWriteCount()).toBe(1);
+    });
+});
+
+describe("updateEditorGutterResizeObserver", () => {
+    function createResizeObserverRecorder(): {
+        observer: Pick<ResizeObserver, "observe" | "unobserve">;
+        observed: HTMLElement[];
+        unobserved: HTMLElement[];
+    } {
+        const observed: HTMLElement[] = [];
+        const unobserved: HTMLElement[] = [];
+        return {
+            observer: {
+                observe(element: Element): void {
+                    observed.push(element as HTMLElement);
+                },
+                unobserve(element: Element): void {
+                    unobserved.push(element as HTMLElement);
+                },
+            },
+            observed,
+            unobserved,
+        };
+    }
+
+    test("observes a gutter element when live resize is not lightweight", () => {
+        const state: EditorGutterResizeObserverState = { observedElement: null, paused: false };
+        const gutter = {} as HTMLElement;
+        const recorder = createResizeObserverRecorder();
+
+        updateEditorGutterResizeObserver({
+            resizeObserver: recorder.observer,
+            state,
+            nextElement: gutter,
+            paused: false,
+        });
+
+        expect(state.observedElement).toBe(gutter);
+        expect(state.paused).toBe(false);
+        expect(recorder.observed).toEqual([gutter]);
+        expect(recorder.unobserved).toEqual([]);
+    });
+
+    test("unobserves the active gutter while layout lightweight mode is active", () => {
+        const gutter = {} as HTMLElement;
+        const state: EditorGutterResizeObserverState = { observedElement: gutter, paused: false };
+        const recorder = createResizeObserverRecorder();
+
+        updateEditorGutterResizeObserver({
+            resizeObserver: recorder.observer,
+            state,
+            nextElement: gutter,
+            paused: true,
+        });
+
+        expect(state.observedElement).toBeNull();
+        expect(state.paused).toBe(true);
+        expect(recorder.observed).toEqual([]);
+        expect(recorder.unobserved).toEqual([gutter]);
+    });
+
+    test("resumes observation after layout lightweight mode ends", () => {
+        const gutter = {} as HTMLElement;
+        const state: EditorGutterResizeObserverState = { observedElement: null, paused: true };
+        const recorder = createResizeObserverRecorder();
+
+        updateEditorGutterResizeObserver({
+            resizeObserver: recorder.observer,
+            state,
+            nextElement: gutter,
+            paused: false,
+        });
+
+        expect(state.observedElement).toBe(gutter);
+        expect(state.paused).toBe(false);
+        expect(recorder.observed).toEqual([gutter]);
+        expect(recorder.unobserved).toEqual([]);
     });
 });
 

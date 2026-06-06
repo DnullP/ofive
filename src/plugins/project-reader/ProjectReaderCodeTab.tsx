@@ -1,11 +1,13 @@
 import { createPortal } from "react-dom";
 import {
+    memo,
     useEffect,
     useMemo,
     useRef,
     useState,
     type CSSProperties,
     type MouseEvent,
+    type ReactElement,
     type ReactNode,
 } from "react";
 import { ExternalLink, Loader2, X } from "lucide-react";
@@ -81,8 +83,18 @@ interface PopupAnchorRect {
     height: number;
 }
 
+interface ProjectReaderCodeHighlightedLine {
+    number: number;
+    html: string;
+}
+
+interface ProjectReaderCodeLineViewModel extends ProjectReaderCodeHighlightedLine {
+    hasReference: boolean;
+}
+
 const PROJECT_READER_CODE_COPY_ACTION_ID = "copy";
 const PROJECT_READER_CODE_CREATE_WIKILINK_ACTION_ID = "create-wikilink";
+const PROJECT_READER_CODE_LINES_PER_CHUNK = 64;
 const PROJECT_READER_CODE_TOKEN_PATTERN = /[A-Za-z_$][A-Za-z0-9_$]*/g;
 const PROJECT_READER_CODE_TOKEN_SELECTOR = "[data-project-reader-token-id]";
 const PROJECT_READER_CODE_SKIP_TOKEN_CLASSES = new Set([
@@ -287,16 +299,55 @@ function isCodeReferenceForCurrentFile(
     return normalizeProjectRelativePath(reference.target.relativePath) === relativePath;
 }
 
-function isLineInsideProjectReaderReference(
-    lineNumber: number,
-    reference: ProjectReaderCodeReference,
+function buildProjectReaderReferenceLineSet(
+    references: readonly ProjectReaderCodeReference[],
+): ReadonlySet<number> {
+    const lineNumbers = new Set<number>();
+
+    for (const reference of references) {
+        const startLine = reference.target.lineNumber ?? null;
+        if (startLine === null) {
+            continue;
+        }
+
+        const endLine = reference.target.endLineNumber ?? startLine;
+        for (let lineNumber = startLine; lineNumber <= endLine; lineNumber += 1) {
+            lineNumbers.add(lineNumber);
+        }
+    }
+
+    return lineNumbers;
+}
+
+function areProjectReaderCodeReferencesEqual(
+    left: readonly ProjectReaderCodeReference[],
+    right: readonly ProjectReaderCodeReference[],
 ): boolean {
-    const startLine = reference.target.lineNumber ?? null;
-    if (startLine === null) {
+    if (left === right) {
+        return true;
+    }
+
+    if (left.length !== right.length) {
         return false;
     }
-    const endLine = reference.target.endLineNumber ?? startLine;
-    return lineNumber >= startLine && lineNumber <= endLine;
+
+    return left.every((reference, index) => {
+        const other = right[index];
+        if (!other) {
+            return false;
+        }
+
+        return getReferenceLineKey(reference) === getReferenceLineKey(other)
+            && reference.sourcePath === other.sourcePath
+            && reference.linkText === other.linkText
+            && reference.target.projectName === other.target.projectName
+            && normalizeProjectRelativePath(reference.target.relativePath)
+                === normalizeProjectRelativePath(other.target.relativePath)
+            && reference.target.lineNumber === other.target.lineNumber
+            && reference.target.columnNumber === other.target.columnNumber
+            && reference.target.endLineNumber === other.target.endLineNumber
+            && reference.target.endColumnNumber === other.target.endColumnNumber;
+    });
 }
 
 function readPopupAnchorRect(element: HTMLElement | null): PopupAnchorRect | null {
@@ -466,6 +517,78 @@ function resolveTokenFromPoint(event: MouseEvent<HTMLElement>): {
         lineText: codeElement?.textContent ?? null,
     };
 }
+
+const ProjectReaderCodeLine = memo(function ProjectReaderCodeLine(props: {
+    line: ProjectReaderCodeLineViewModel;
+    language: string | null;
+    targetLineNumber: number | null;
+    targetEndLineNumber: number | null;
+}): ReactElement {
+    const {
+        line,
+        language,
+        targetLineNumber,
+        targetEndLineNumber,
+    } = props;
+    const isTargetLine = line.number === targetLineNumber;
+    const isTargetRange = targetLineNumber !== null
+        && targetEndLineNumber !== null
+        && line.number >= targetLineNumber
+        && line.number <= targetEndLineNumber;
+
+    return (
+        <div
+            className={[
+                buildProjectReaderCodeReferenceLineClassName(
+                    line.hasReference,
+                    isTargetLine,
+                ),
+                isTargetLine ? "is-target-line" : "",
+                isTargetRange ? "is-target-range" : "",
+            ].filter(Boolean).join(" ")}
+            data-line-number={String(line.number)}
+        >
+            <span className="project-reader-code-gutter">{line.number}</span>
+            <code
+                className={`project-reader-code-text language-${language ?? "plaintext"}`}
+                dangerouslySetInnerHTML={{ __html: line.html }}
+            />
+        </div>
+    );
+});
+
+const ProjectReaderCodeChunk = memo(function ProjectReaderCodeChunk(props: {
+    chunk: readonly ProjectReaderCodeLineViewModel[];
+    language: string | null;
+    targetLineNumber: number | null;
+    targetEndLineNumber: number | null;
+}): ReactElement {
+    const {
+        chunk,
+        language,
+        targetLineNumber,
+        targetEndLineNumber,
+    } = props;
+    const firstLineNumber = chunk[0]?.number ?? 0;
+    const lastLineNumber = chunk[chunk.length - 1]?.number ?? 0;
+
+    return (
+        <div
+            className="project-reader-code-chunk"
+            data-project-reader-code-chunk={`${String(firstLineNumber)}:${String(lastLineNumber)}`}
+        >
+            {chunk.map((line) => (
+                <ProjectReaderCodeLine
+                    key={line.number}
+                    line={line}
+                    language={language}
+                    targetLineNumber={targetLineNumber}
+                    targetEndLineNumber={targetEndLineNumber}
+                />
+            ))}
+        </div>
+    );
+});
 
 export function ProjectReaderCodeTab(
     props: WorkbenchTabProps<Record<string, unknown>>,
@@ -641,7 +764,9 @@ export function ProjectReaderCodeTab(
                 );
                 setState((previous) => ({
                     ...previous,
-                    references,
+                    references: areProjectReaderCodeReferencesEqual(previous.references, references)
+                        ? previous.references
+                        : references,
                 }));
             })
             .catch(() => {
@@ -766,18 +891,32 @@ export function ProjectReaderCodeTab(
         };
     }, []);
 
-    const lines = useMemo(() => {
+    const highlightedLines = useMemo<ProjectReaderCodeHighlightedLine[]>(() => {
         return state.content.split("\n").map((line, index) => ({
             number: index + 1,
-            hasReference: state.references.some((reference) =>
-                isLineInsideProjectReaderReference(index + 1, reference),
-            ),
             html: decorateProjectReaderCodeLineHtml(
                 highlightProjectCodeLine(line, state.language),
                 index + 1,
             ),
         }));
-    }, [state.content, state.language, state.references]);
+    }, [state.content, state.language]);
+    const referencedLineNumbers = useMemo(
+        () => buildProjectReaderReferenceLineSet(state.references),
+        [state.references],
+    );
+    const lines = useMemo<ProjectReaderCodeLineViewModel[]>(() => (
+        highlightedLines.map((line) => ({
+            ...line,
+            hasReference: referencedLineNumbers.has(line.number),
+        }))
+    ), [highlightedLines, referencedLineNumbers]);
+    const lineChunks = useMemo(() => {
+        const chunks: typeof lines[] = [];
+        for (let index = 0; index < lines.length; index += PROJECT_READER_CODE_LINES_PER_CHUNK) {
+            chunks.push(lines.slice(index, index + PROJECT_READER_CODE_LINES_PER_CHUNK));
+        }
+        return chunks;
+    }, [lines]);
 
     const openLocation = (location: ProjectReaderSymbolLocation): void => {
         const endLineNumber = location.endLineNumber ?? location.lineNumber;
@@ -1007,30 +1146,14 @@ export function ProjectReaderCodeTab(
                     void handleCodeContextMenu(event);
                 }}
             >
-                {lines.map((line) => (
-                    <div
-                        key={line.number}
-                        className={[
-                            buildProjectReaderCodeReferenceLineClassName(
-                                line.hasReference,
-                                line.number === targetLineNumber,
-                            ),
-                            line.number === targetLineNumber ? "is-target-line" : "",
-                            targetLineNumber !== null
-                            && targetEndLineNumber !== null
-                            && line.number >= targetLineNumber
-                            && line.number <= targetEndLineNumber
-                                ? "is-target-range"
-                                : "",
-                        ].filter(Boolean).join(" ")}
-                        data-line-number={String(line.number)}
-                    >
-                        <span className="project-reader-code-gutter">{line.number}</span>
-                        <code
-                            className={`project-reader-code-text language-${state.language ?? "plaintext"}`}
-                            dangerouslySetInnerHTML={{ __html: line.html }}
-                        />
-                    </div>
+                {lineChunks.map((chunk) => (
+                    <ProjectReaderCodeChunk
+                        key={chunk[0]?.number ?? 0}
+                        chunk={chunk}
+                        language={state.language}
+                        targetLineNumber={targetLineNumber}
+                        targetEndLineNumber={targetEndLineNumber}
+                    />
                 ))}
             </div>
             {symbolPopup && typeof document !== "undefined" ? createPortal(

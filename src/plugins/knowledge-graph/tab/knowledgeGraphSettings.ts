@@ -12,6 +12,7 @@
  *  - KNOWLEDGE_GRAPH_SETTING_DEFINITIONS
  *  - mergeKnowledgeGraphSettings
  *  - buildKnowledgeGraphConfig
+ *  - buildKnowledgeGraphResizeLightweightConfig
  */
 
 import type { GraphConfigInterface } from "@cosmos.gl/graph";
@@ -239,6 +240,13 @@ export const DEFAULT_KNOWLEDGE_GRAPH_SETTINGS: KnowledgeGraphSettings = {
 };
 
 /**
+ * @constant KNOWLEDGE_GRAPH_RESIZE_LIGHTWEIGHT_PIXEL_RATIO
+ * @description section 连续 resize 时的临时 Cosmos DPR。
+ *   真实容器尺寸仍然每帧变化，只降低 WebGL 像素工作量，避免高 DPR canvas resize 拖慢主布局。
+ */
+export const KNOWLEDGE_GRAPH_RESIZE_LIGHTWEIGHT_PIXEL_RATIO = 1;
+
+/**
  * @type KnowledgeGraphSettingKey
  * @description 知识图谱设置键。
  */
@@ -351,5 +359,24 @@ export function buildKnowledgeGraphConfig(settings: KnowledgeGraphSettings): Gra
     return {
         ...graphConfig,
         ...createKnowledgeGraphThemeConfig(),
+    };
+}
+
+/**
+ * @function buildKnowledgeGraphResizeLightweightConfig
+ * @description 为 layout 连续 resize 构建临时 Cosmos 配置。
+ *   保持节点层真实重排，但降低 DPR、边绘制与交互检测开销；resize 结束后恢复完整图谱配置。
+ * @returns 图谱 resize lightweight 配置。
+ */
+export function buildKnowledgeGraphResizeLightweightConfig(): Partial<GraphConfigInterface> {
+    return {
+        pixelRatio: KNOWLEDGE_GRAPH_RESIZE_LIGHTWEIGHT_PIXEL_RATIO,
+        renderLinks: false,
+        renderHoveredPointRing: false,
+        enableDrag: false,
+        enableZoom: false,
+        enableSimulationDuringZoom: false,
+        pointSamplingDistance: 1000,
+        showFPSMonitor: false,
     };
 }

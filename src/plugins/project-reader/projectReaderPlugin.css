@@ -265,6 +265,7 @@
     min-width: 0;
     min-height: 0;
     flex-direction: column;
+    contain: layout style;
     background: var(--surface-editor-bg, var(--surface-workbench-bg));
     color: var(--text-primary);
     user-select: text;
@@ -320,6 +321,7 @@
     min-height: 0;
     overflow: auto;
     padding: 8px 0 28px;
+    contain: layout style paint;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     font-size: 12px;
     line-height: 1.55;
@@ -330,10 +332,17 @@
     app-region: no-drag;
 }
 
+.project-reader-code-chunk {
+    content-visibility: auto;
+    contain: layout style paint;
+    contain-intrinsic-size: auto 1216px;
+}
+
 .project-reader-code-line {
     display: grid;
     grid-template-columns: 56px minmax(0, 1fr);
     min-height: 19px;
+    contain: layout style paint;
     user-select: text;
     -webkit-user-select: text;
     -webkit-app-region: no-drag;

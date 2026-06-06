@@ -28,6 +28,10 @@ import { releaseArticleSnapshot, type ArticleState } from "../../../host/editor/
 import { createOfiveEditorCapabilities } from "../../../host/editor/ofiveEditorCapabilities";
 import type { WorkbenchContainerApi } from "../../../host/layout/workbenchContracts";
 import {
+    isDocumentLayoutLightweight,
+    subscribeDocumentLayoutLightweight,
+} from "../../../host/layout/layoutResizeSignal";
+import {
     createDefaultMarkdownCodeMirrorExtensions,
     createImeCompositionGuard,
     createVimImeInputPriorityExtension,
@@ -84,6 +88,20 @@ export interface SyncEditorTabGutterWidthOptions {
     view: EditorView | null;
     /** 当前显示模式。 */
     displayMode: EditorDisplayMode;
+    /** 是否跳过会触发布局结算的 gutter 几何读取。 */
+    deferLayoutRead?: boolean;
+}
+
+export interface EditorGutterResizeObserverState {
+    observedElement: HTMLElement | null;
+    paused: boolean;
+}
+
+export interface UpdateEditorGutterResizeObserverOptions {
+    resizeObserver: Pick<ResizeObserver, "observe" | "unobserve"> | null;
+    state: EditorGutterResizeObserverState;
+    nextElement: HTMLElement | null;
+    paused: boolean;
 }
 
 /**
@@ -262,12 +280,20 @@ function scheduleEditorInitialPresentationReady(
  * @function syncEditorTabGutterWidth
  * @description 将标题输入的起点与编辑器正文首列对齐；阅读态或视图缺失时清零补偿。
  * @param options gutter 同步参数。
- * @returns void
+ * @returns 是否完成了同步；拖拽轻量期跳过布局读取时返回 false。
  */
-export function syncEditorTabGutterWidth(options: SyncEditorTabGutterWidthOptions): void {
-    if (!options.tabRoot || !options.view || options.displayMode !== "edit") {
-        options.tabRoot?.style.setProperty("--cm-tab-gutter-width", "0px");
-        return;
+export function syncEditorTabGutterWidth(options: SyncEditorTabGutterWidthOptions): boolean {
+    if (!options.tabRoot) {
+        return false;
+    }
+
+    if (!options.view || options.displayMode !== "edit") {
+        setEditorTabGutterWidth(options.tabRoot, "0px");
+        return true;
+    }
+
+    if (options.deferLayoutRead) {
+        return false;
     }
 
     const gutterElement = options.view.dom.querySelector(".cm-gutters");
@@ -275,10 +301,49 @@ export function syncEditorTabGutterWidth(options: SyncEditorTabGutterWidthOption
         ? gutterElement.getBoundingClientRect().width
         : 0;
 
-    options.tabRoot.style.setProperty(
-        "--cm-tab-gutter-width",
-        `${gutterWidth.toFixed(2)}px`,
-    );
+    setEditorTabGutterWidth(options.tabRoot, `${gutterWidth.toFixed(2)}px`);
+    return true;
+}
+
+/**
+ * @function updateEditorGutterResizeObserver
+ * @description 同步 CodeMirror gutter ResizeObserver 订阅；layout lightweight 期间暂停观察，
+ *   避免连续 section resize 每帧唤醒 observer 再调度无意义的布局读取。
+ * @param options observer、状态与目标元素。
+ * @returns void
+ */
+export function updateEditorGutterResizeObserver(
+    options: UpdateEditorGutterResizeObserverOptions,
+): void {
+    const effectiveNextElement = options.paused ? null : options.nextElement;
+
+    if (options.state.observedElement !== effectiveNextElement) {
+        if (options.state.observedElement) {
+            options.resizeObserver?.unobserve(options.state.observedElement);
+        }
+
+        options.state.observedElement = effectiveNextElement;
+
+        if (options.state.observedElement) {
+            options.resizeObserver?.observe(options.state.observedElement);
+        }
+    }
+
+    options.state.paused = options.paused;
+}
+
+/**
+ * @function setEditorTabGutterWidth
+ * @description 写入标题 gutter 补偿；相同值不重复写，避免 resize 热路径触发多余 style mutation。
+ * @param tabRoot 编辑器 tab 根节点。
+ * @param widthValue CSS 宽度值。
+ */
+function setEditorTabGutterWidth(tabRoot: HTMLElement, widthValue: string): void {
+    if (tabRoot.style.getPropertyValue("--cm-tab-gutter-width") === widthValue) {
+        return;
+    }
+
+    tabRoot.style.setProperty("--cm-tab-gutter-width", widthValue);
 }
 
 /**
@@ -952,44 +1017,95 @@ export function useCodeMirrorEditorLifecycle(
             displayMode: options.effectiveDisplayMode,
         });
 
-        const gutterResizeObserver = typeof ResizeObserver !== "undefined"
-            ? new ResizeObserver(() => {
-                syncEditorTabGutterWidth({
-                    tabRoot: options.tabRootRef.current,
-                    view: viewRef.current,
-                    displayMode: options.effectiveDisplayMode,
-                });
-            })
-            : null;
-        const gutterMutationObserver = typeof MutationObserver !== "undefined"
-            ? new MutationObserver(() => {
-                syncEditorTabGutterWidth({
-                    tabRoot: options.tabRootRef.current,
-                    view: viewRef.current,
-                    displayMode: options.effectiveDisplayMode,
-                });
-            })
-            : null;
-
-        gutterResizeObserver?.observe(viewRef.current.dom);
-        const initialGutterElement = viewRef.current.dom.querySelector(".cm-gutters");
-        if (initialGutterElement instanceof HTMLElement) {
-            gutterResizeObserver?.observe(initialGutterElement);
-        }
-        gutterMutationObserver?.observe(viewRef.current.dom, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ["class", "style"],
-        });
-
-        window.requestAnimationFrame(() => {
-            syncEditorTabGutterWidth({
+        let pendingGutterSyncAfterLayoutResize = false;
+        let gutterSyncFrameId: number | null = null;
+        let forceNextGutterSync = false;
+        const syncLiveGutterWidth = (forceLayoutRead = false): void => {
+            const shouldDeferLayoutRead = !forceLayoutRead && isDocumentLayoutLightweight();
+            const didSync = syncEditorTabGutterWidth({
                 tabRoot: options.tabRootRef.current,
                 view: viewRef.current,
                 displayMode: options.effectiveDisplayMode,
+                deferLayoutRead: shouldDeferLayoutRead,
             });
+
+            if (didSync) {
+                pendingGutterSyncAfterLayoutResize = false;
+                return;
+            }
+
+            if (shouldDeferLayoutRead) {
+                pendingGutterSyncAfterLayoutResize = true;
+            }
+        };
+        const scheduleLiveGutterWidthSync = (forceLayoutRead = false): void => {
+            forceNextGutterSync = forceNextGutterSync || forceLayoutRead;
+            if (gutterSyncFrameId !== null) {
+                return;
+            }
+
+            gutterSyncFrameId = window.requestAnimationFrame(() => {
+                const shouldForceLayoutRead = forceNextGutterSync;
+                forceNextGutterSync = false;
+                gutterSyncFrameId = null;
+                syncLiveGutterWidth(shouldForceLayoutRead);
+            });
+        };
+        const gutterResizeObserver = typeof ResizeObserver !== "undefined"
+            ? new ResizeObserver(() => scheduleLiveGutterWidthSync())
+            : null;
+        const gutterResizeObserverState: EditorGutterResizeObserverState = {
+            observedElement: null,
+            paused: isDocumentLayoutLightweight(),
+        };
+        const readMeasurableGutterElement = (): HTMLElement | null => {
+            const nextGutterElement = viewRef.current?.dom.querySelector(".cm-gutters");
+            return nextGutterElement instanceof HTMLElement
+                ? nextGutterElement
+                : null;
+        };
+        const refreshObservedGutterElement = (): void => {
+            const isLightweight = isDocumentLayoutLightweight();
+            updateEditorGutterResizeObserver({
+                resizeObserver: gutterResizeObserver,
+                state: gutterResizeObserverState,
+                nextElement: readMeasurableGutterElement(),
+                paused: isLightweight,
+            });
+
+            if (isLightweight) {
+                pendingGutterSyncAfterLayoutResize = true;
+                return;
+            }
+
+            scheduleLiveGutterWidthSync();
+        };
+        const gutterMutationObserver = typeof MutationObserver !== "undefined"
+            ? new MutationObserver(refreshObservedGutterElement)
+            : null;
+
+        const unsubscribeLayoutLightweight = subscribeDocumentLayoutLightweight((isLightweight) => {
+            updateEditorGutterResizeObserver({
+                resizeObserver: gutterResizeObserver,
+                state: gutterResizeObserverState,
+                nextElement: readMeasurableGutterElement(),
+                paused: isLightweight,
+            });
+
+            if (isLightweight || !pendingGutterSyncAfterLayoutResize) {
+                return;
+            }
+
+            scheduleLiveGutterWidthSync(true);
         });
+
+        refreshObservedGutterElement();
+        gutterMutationObserver?.observe(viewRef.current.dom, {
+            childList: true,
+            subtree: true,
+        });
+
+        const refreshObservedGutterFrameId = window.requestAnimationFrame(refreshObservedGutterElement);
 
         registerVimTokenProvider(viewRef.current, options.getLineTokens);
 
@@ -1044,6 +1160,11 @@ export function useCodeMirrorEditorLifecycle(
         return () => {
             cancelInitialPresentationReady?.();
             options.clearPendingSegmentation();
+            unsubscribeLayoutLightweight();
+            window.cancelAnimationFrame(refreshObservedGutterFrameId);
+            if (gutterSyncFrameId !== null) {
+                window.cancelAnimationFrame(gutterSyncFrameId);
+            }
             gutterResizeObserver?.disconnect();
             gutterMutationObserver?.disconnect();
             if (viewRef.current) {

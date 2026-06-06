@@ -77,6 +77,12 @@ async function loadStaticBrowserMockRawModules(): Promise<RawModuleMap> {
         networkSegment,
         note1,
         note2,
+        perfSixEditor01,
+        perfSixEditor02,
+        perfSixEditor03,
+        perfSixEditor04,
+        perfSixEditor05,
+        perfSixEditor06,
         taskBoardE2E,
     ] = await Promise.all([
         import("../../test-resources/notes/code-block-test.md?raw"),
@@ -84,6 +90,12 @@ async function loadStaticBrowserMockRawModules(): Promise<RawModuleMap> {
         import("../../test-resources/notes/network-segment.md?raw"),
         import("../../test-resources/notes/note1.md?raw"),
         import("../../test-resources/notes/note2.md?raw"),
+        import("../../test-resources/notes/perf-six-editor-01.md?raw"),
+        import("../../test-resources/notes/perf-six-editor-02.md?raw"),
+        import("../../test-resources/notes/perf-six-editor-03.md?raw"),
+        import("../../test-resources/notes/perf-six-editor-04.md?raw"),
+        import("../../test-resources/notes/perf-six-editor-05.md?raw"),
+        import("../../test-resources/notes/perf-six-editor-06.md?raw"),
         import("../../test-resources/notes/task-board-e2e.md?raw"),
     ]);
 
@@ -93,6 +105,12 @@ async function loadStaticBrowserMockRawModules(): Promise<RawModuleMap> {
         "/test-resources/notes/network-segment.md": networkSegment.default,
         "/test-resources/notes/note1.md": note1.default,
         "/test-resources/notes/note2.md": note2.default,
+        "/test-resources/notes/perf-six-editor-01.md": perfSixEditor01.default,
+        "/test-resources/notes/perf-six-editor-02.md": perfSixEditor02.default,
+        "/test-resources/notes/perf-six-editor-03.md": perfSixEditor03.default,
+        "/test-resources/notes/perf-six-editor-04.md": perfSixEditor04.default,
+        "/test-resources/notes/perf-six-editor-05.md": perfSixEditor05.default,
+        "/test-resources/notes/perf-six-editor-06.md": perfSixEditor06.default,
         "/test-resources/notes/task-board-e2e.md": taskBoardE2E.default,
     };
 }

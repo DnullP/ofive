@@ -49,6 +49,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { WorkbenchTabProps } from "../../host/layout/workbenchContracts";
+import { useDocumentLayoutLightweight } from "../../host/layout/layoutResizeSignal";
 import {
     readVaultCanvasFile,
 } from "../../api/vaultApi";
@@ -115,6 +116,7 @@ interface FileNodeModalState {
 }
 
 const AUTOSAVE_DELAY_MS = 800;
+const RESIZE_LIGHTWEIGHT_CANVAS_EDGES: CanvasFlowEdge[] = [];
 
 const NODE_MIN_SIZE_BY_KIND: Record<CanvasNodeData["kind"], { minWidth: number; minHeight: number }> = {
     text: { minWidth: 220, minHeight: 120 },
@@ -333,6 +335,7 @@ const CANVAS_NODE_TYPES = {
  */
 export function CanvasTab(props: WorkbenchTabProps<Record<string, unknown>>): ReactNode {
     const { t } = useTranslation();
+    const isLayoutLightweight = useDocumentLayoutLightweight();
     const path = String(props.params.path ?? "");
     const contentOverride = typeof props.params.content === "string"
         ? props.params.content
@@ -1039,7 +1042,7 @@ export function CanvasTab(props: WorkbenchTabProps<Record<string, unknown>>): Re
                     ) : null}
                     <ReactFlow<CanvasFlowNode, CanvasFlowEdge>
                         nodes={flowNodes}
-                        edges={document.edges}
+                        edges={isLayoutLightweight ? RESIZE_LIGHTWEIGHT_CANVAS_EDGES : document.edges}
                         nodeTypes={CANVAS_NODE_TYPES}
                         onInit={(instance) => {
                             flowRef.current = instance;
@@ -1064,9 +1067,9 @@ export function CanvasTab(props: WorkbenchTabProps<Record<string, unknown>>): Re
                         selectionOnDrag
                         fitView
                     >
-                        <Background gap={18} size={1} />
-                        <Controls />
-                        <MiniMap />
+                        {!isLayoutLightweight ? <Background gap={18} size={1} /> : null}
+                        {!isLayoutLightweight ? <Controls /> : null}
+                        {!isLayoutLightweight ? <MiniMap /> : null}
                     </ReactFlow>
                     <div className="canvas-tab__actions" aria-label={t("canvas.document")}>
                         <button type="button" className="canvas-tab__action-button" onClick={addText}>

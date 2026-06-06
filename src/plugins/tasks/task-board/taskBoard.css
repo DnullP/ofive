@@ -5,6 +5,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    contain: layout style;
     background: var(--bg-primary);
 }
 
@@ -316,6 +317,7 @@
     padding: 8px 12px 12px;
     overflow-x: auto;
     overflow-y: hidden;
+    contain: layout style paint;
 }
 
 /* task-board__column：单列容器，承载同优先级任务。 */
@@ -330,6 +332,7 @@
     border-radius: 8px;
     background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
     overflow: visible;
+    contain: layout style paint;
 }
 
 /* task-board__column.is-custom：自定义过滤列用轻微边线和默认列区分。 */
@@ -474,6 +477,7 @@ body.task-board-reordering * {
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    contain: layout style paint;
 }
 
 /* task-board__task-card：任务卡片。 */
@@ -486,6 +490,9 @@ body.task-board-reordering * {
     border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
     border-radius: 6px;
     background: color-mix(in srgb, var(--bg-primary) 95%, transparent);
+    content-visibility: auto;
+    contain: layout style paint;
+    contain-intrinsic-size: auto 128px;
 }
 
 /* task-board__task-card.is-checked：已完成任务卡片，降低视觉强调。 */

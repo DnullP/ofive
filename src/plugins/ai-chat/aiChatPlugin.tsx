@@ -147,6 +147,10 @@ import {
     buildConvertibleViewTabParams,
     registerConvertibleView,
 } from "../../host/registry";
+import {
+    isDocumentLayoutLightweight,
+    subscribeDocumentLayoutLightweight,
+} from "../../host/layout/layoutResizeSignal";
 import { registerSettingsItem, registerSettingsSection } from "../../host/settings/settingsRegistry";
 import { useVaultState } from "../../host/vault/vaultStore";
 import { deletePersistedCanvasFile, deletePersistedMarkdownFile } from "../../host/vault/vaultMutationService";
@@ -751,6 +755,7 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     const debugViewportRef = useRef<HTMLDivElement | null>(null);
     const smoothingFrameRef = useRef<number | null>(null);
     const smoothingLastFrameAtRef = useRef<number | null>(null);
+    const smoothingPausedByLayoutResizeRef = useRef(false);
     const modelSwitcherRef = useRef<HTMLDivElement | null>(null);
     const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
     const modelSwitcherLoadKeyRef = useRef<string | null>(null);
@@ -933,16 +938,37 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
         setSmoothedMessagesById(nextMessages);
     };
 
+    const cancelSmoothingFrame = (): void => {
+        if (smoothingFrameRef.current !== null) {
+            window.cancelAnimationFrame(smoothingFrameRef.current);
+            smoothingFrameRef.current = null;
+        }
+        smoothingLastFrameAtRef.current = null;
+    };
+
     /**
      * @function scheduleSmoothingFrame
      * @description 在存在未追平文本时启动 requestAnimationFrame 循环推进展示层 reveal。
      */
     const scheduleSmoothingFrame = (): void => {
+        if (isDocumentLayoutLightweight()) {
+            smoothingPausedByLayoutResizeRef.current = true;
+            cancelSmoothingFrame();
+            return;
+        }
+
         if (smoothingFrameRef.current !== null) {
             return;
         }
 
         const animate = (timestamp: number): void => {
+            if (isDocumentLayoutLightweight()) {
+                smoothingPausedByLayoutResizeRef.current = true;
+                smoothingFrameRef.current = null;
+                smoothingLastFrameAtRef.current = null;
+                return;
+            }
+
             const previousTimestamp = smoothingLastFrameAtRef.current;
             smoothingLastFrameAtRef.current = timestamp;
             const elapsedMs = previousTimestamp === null
@@ -1665,12 +1691,27 @@ function AiChatView(props: AiChatViewProps = {}): ReactNode {
     }, [smoothedMessagesById]);
 
     useEffect(() => {
-        return () => {
-            if (smoothingFrameRef.current !== null) {
-                window.cancelAnimationFrame(smoothingFrameRef.current);
-                smoothingFrameRef.current = null;
+        return subscribeDocumentLayoutLightweight((isLightweight) => {
+            if (isLightweight) {
+                smoothingPausedByLayoutResizeRef.current = true;
+                cancelSmoothingFrame();
+                return;
             }
-            smoothingLastFrameAtRef.current = null;
+
+            if (!smoothingPausedByLayoutResizeRef.current) {
+                return;
+            }
+
+            smoothingPausedByLayoutResizeRef.current = false;
+            if (hasPendingSmoothedMessages(smoothedMessagesRef.current)) {
+                scheduleSmoothingFrame();
+            }
+        });
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            cancelSmoothingFrame();
         };
     }, []);
 

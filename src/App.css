@@ -1290,13 +1290,639 @@ textarea,
 }
 
 /* 拖拽 section 分隔条时暂停所有 backdrop-filter，避免每帧重新合成模糊的 GPU 开销。 */
-:root[data-layout-resizing] .app-shell {
+:root[data-layout-lightweight] .app-shell {
+  background: var(--bg-primary) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-:root[data-layout-resizing] :is([data-floating-backdrop="true"], [data-floating-surface="true"], .cm-tooltip, .cm-wikilink-suggest-popup, .cm-wikilink-preview-tooltip[data-floating-surface="true"]) {
+
+:root[data-layout-lightweight] .app-shell::before,
+:root[data-layout-lightweight] .app-content::before {
+  opacity: 0 !important;
+}
+
+:root[data-layout-lightweight] .app-content {
+  background: var(--bg-primary) !important;
+  box-shadow: none !important;
+}
+:root[data-layout-lightweight] :is([data-floating-backdrop="true"], [data-floating-surface="true"], .cm-tooltip, .cm-wikilink-suggest-popup, .cm-wikilink-preview-tooltip[data-floating-surface="true"]) {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+}
+
+/* section 实时 resize 是布局热路径：暂停宿主 chrome 动效，降低每帧 paint/raster 成本。 */
+:root[data-layout-lightweight] .app-shell,
+:root[data-layout-lightweight] .app-shell :is(
+  .layout-v2__divider-line,
+  .layout-v2-tab-section__tab,
+  .layout-v2-tab-section__card,
+  .layout-v2-panel-section__pane,
+  .layout-v2-panel-section__pane-symbol,
+  .cm-tab,
+  .calendar-tab,
+  .calendar-tab__calendar-surface,
+  .calendar-tab__day,
+  .calendar-tab__task-bar,
+  .task-board,
+  .task-board__column,
+  .task-board__task-card,
+  .vault-panel-root,
+  .file-tree,
+  .tree-root,
+  .tree-item,
+  .tree-rename-input,
+  .vault-separator,
+  .outline-panel,
+  .outline-list,
+  .outline-item,
+  .backlinks-panel,
+  .backlinks-list,
+  .backlinks-item,
+  .backlinks-count,
+  .backlinks-item-weight,
+  .search-panel,
+  .search-toolbar,
+  .search-query-field,
+  .search-tag-field,
+  .search-scope-button,
+  .search-meta-chip,
+  .search-result,
+  .ai-chat-panel,
+  .ai-chat-header,
+  .ai-chat-composer,
+  .ai-chat-message,
+  .ai-chat-history-item,
+  .canvas-tab,
+  .canvas-tab__surface,
+  .canvas-tab__node,
+  .canvas-tab__action-button,
+  .canvas-tab .react-flow__controls,
+  .canvas-tab .react-flow__minimap,
+  .knowledge-graph-tab,
+  .knowledge-graph-tab__labels-layer,
+  .knowledge-graph-tab__stats,
+  .knowledge-graph-tab__settings-button,
+  .image-viewer-tab,
+  .settings-tab,
+  .settings-compact-row,
+  .project-reader-code-tab,
+  .project-reader-code-line,
+  .architecture-devtools,
+  .architecture-devtools-tab
+) {
+  transition-property: none !important;
+  animation-play-state: paused !important;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .workbench-layout-v2__tab-focus-scope,
+  .layout-v2-tab-section__card--active,
+  .layout-v2-panel-section__pane--active,
+  .cm-tab,
+  .calendar-tab,
+  .task-board,
+  .ai-chat-panel,
+  .canvas-tab,
+  .knowledge-graph-tab,
+  .image-viewer-tab,
+  .settings-tab,
+  .vault-panel-root,
+  .file-tree,
+  .tree-root,
+  .search-panel,
+  .search-results,
+  .project-reader-panel,
+  .project-reader-code-tab,
+  .outline-panel,
+  .outline-list,
+  .backlinks-panel,
+  .backlinks-list,
+  .agent-skills-panel,
+  .architecture-devtools,
+  .architecture-devtools-tab
+) {
+  contain: layout style paint;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .calendar-tab__calendar-surface,
+  .calendar-tab__grid,
+  .calendar-tab__details,
+  .tree-root,
+  .tree-item,
+  .outline-list,
+  .outline-item,
+  .backlinks-list,
+  .backlinks-item,
+  .search-toolbar,
+  .search-results,
+  .search-result,
+  .ai-chat-panel,
+  .ai-chat-messages,
+  .ai-chat-message,
+  .ai-chat-message-content,
+  .ai-chat-message-markdown,
+  .ai-chat-debug-list,
+  .ai-chat-debug-entry,
+  .task-board__grid,
+  .task-board__column,
+  .task-board__task-list,
+  .task-board__task-card,
+  .canvas-tab,
+  .canvas-tab__surface,
+  .canvas-tab .react-flow,
+  .canvas-tab .react-flow__renderer,
+  .canvas-tab .react-flow__nodes,
+  .canvas-tab .react-flow__node,
+  .canvas-tab__node,
+  .knowledge-graph-tab__canvas-wrap,
+  .knowledge-graph-tab__canvas-host,
+  .knowledge-graph-tab__labels-layer,
+  .project-reader-code-tab,
+  .project-reader-code-scroller,
+  .project-reader-code-chunk,
+  .settings-tab-content,
+  .settings-item-group,
+  .settings-compact-row,
+  .settings-compact-row-column,
+  .settings-shortcut-table-wrapper
+) {
+  contain: layout style paint;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .ai-chat-header,
+  .ai-chat-composer,
+  .canvas-tab,
+  .canvas-tab__surface,
+  .canvas-tab__action-button,
+  .canvas-tab__edge-editor,
+  .task-board__modal-backdrop,
+  .task-board__popover,
+  .calendar-tab__panel-popover,
+  .fmv-field-suggest-popup,
+  .mtv-context-menu,
+  .cm-wikilink-suggest-popup,
+  .cm-wikilink-preview-tooltip,
+  .knowledge-graph-tab__settings-panel,
+  .knowledge-graph-tab__color-query-suggestions,
+  .project-reader-symbol-popup,
+  .log-notification-card
+) {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .layout-v2-tab-section__tab,
+  .layout-v2-tab-section__card,
+  .layout-v2-panel-section__pane,
+  .layout-v2-panel-section__pane-symbol,
+  .cm-tab-guard-banner,
+  .calendar-tab__calendar-surface,
+  .calendar-tab__day,
+  .calendar-tab__day-badge,
+  .calendar-tab__task-bar,
+  .calendar-tab__panel-popover,
+  .cm-tab-header,
+  .cm-tab-title-input,
+  .cm-tab-mode-toggle,
+  .cm-tab-editor .cm-rendered-tag,
+  .cm-tab-editor .cm-rendered-inline-code,
+  .cm-tab-editor .cm-rendered-highlight,
+  .cm-tab-editor .cm-rendered-wikilink,
+  .cm-tab-editor .cm-rendered-link,
+  .cm-tab-editor .cm-rendered-task-checkbox,
+  .cm-tab-editor .cm-image-embed-widget,
+  .cm-tab-editor .cm-image-embed-loading,
+  .cm-tab-editor .cm-image-embed-error,
+  .cm-frontmatter-widget,
+  .fmv-editor,
+  .fmv-grid,
+  .fmv-row,
+  .fmv-vim-nav-target,
+  .fmv-field-icon,
+  .fmv-field-suggest-popup,
+  .fmv-mini-action,
+  .fmv-mini-action-remove,
+  .fmv-add-plus-button,
+  .cm-markdown-table-widget,
+  .mtv-shell,
+  .mtv-table-grid-shell,
+  .mtv-table-head-cell,
+  .mtv-table-body-cell,
+  .mtv-canvas-body-shell,
+  .mtv-canvas-row-nav-anchor,
+  .mtv-cell-input,
+  .mtv-cell-preview,
+  .mtv-cell-preview-pre,
+  .mtv-cell-preview-media-embed,
+  .mtv-edge-handle,
+  .mtv-resize-handle,
+  .mtv-context-menu,
+  .cm-latex-block-widget,
+  .cm-wikilink-suggest-popup,
+  .cm-wikilink-preview-tooltip,
+  .task-board__grid,
+  .task-board__column,
+  .task-board__column-count,
+  .task-board__task-tag,
+  .task-board__task-button,
+  .task-board__column-settings,
+  .task-board__task-card,
+  .task-board__popover,
+  .tree-empty-hint,
+  .tree-rename-input,
+  .vault-separator,
+  .outline-item,
+  .ai-chat-conversation-manager-button,
+  .ai-chat-conversation-create,
+  .ai-chat-conversation-manage,
+  .ai-chat-history-item,
+  .ai-chat-message,
+  .ai-chat-message-bubble,
+  .ai-chat-message-pre,
+  .ai-chat-message-reasoning-panel,
+  .ai-chat-message-inline-code,
+  .ai-chat-confirmation-args,
+  .ai-chat-confirmation-diff,
+  .ai-chat-welcome-card,
+  .ai-chat-confirmation-card,
+  .ai-chat-debug-entry,
+  .backlinks-count,
+  .backlinks-item,
+  .backlinks-item-weight,
+  .canvas-tab__node,
+  .canvas-tab__action-button,
+  .canvas-tab__edge-editor,
+  .canvas-tab .react-flow__controls,
+  .canvas-tab .react-flow__minimap,
+  .canvas-tab .react-flow__resize-control.handle,
+  .knowledge-graph-tab__stats,
+  .knowledge-graph-tab__settings-button,
+  .knowledge-graph-tab__settings-panel,
+  .knowledge-graph-tab__color-query-suggestions,
+  .knowledge-graph-tab__label,
+  .outline-empty-state,
+  .backlinks-empty-state,
+  .project-reader-symbol-popup,
+  .project-reader-code-line,
+  .project-reader-search-result,
+  .search-query-field,
+  .search-tag-field,
+  .search-scope-switch,
+  .search-scope-button,
+  .search-meta-chip,
+  .search-badge,
+  .search-result,
+  .settings-tab,
+  .settings-tab-content-summary,
+  .settings-tab-empty-state,
+  .settings-item-group,
+  .settings-compact-row,
+  .settings-compact-row-column,
+  .settings-shortcut-table-wrapper,
+  .settings-shortcut-kbd,
+  .log-notification-card,
+  .architecture-overview-card,
+  .architecture-summary-card,
+  .architecture-dag-card,
+  .architecture-runtime-card,
+  .architecture-inventory-item,
+  .architecture-inspector-modal
+) {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+/* 多编辑器 split resize 热路径：保持真实重排，只降低 editor widget 的绘制复杂度。 */
+:root[data-layout-lightweight] .app-shell .cm-tab-editor :is(
+  .cm-frontmatter-widget,
+  .cm-markdown-table-widget,
+  .cm-latex-block-widget
+) {
+  contain: layout style paint;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .cm-tab-header,
+  .cm-tab-title-input,
+  .cm-tab-mode-toggle,
+  .cm-tab-editor .cm-line,
+  .cm-tab-editor .cm-rendered-tag,
+  .cm-tab-editor .cm-rendered-inline-code,
+  .cm-tab-editor .cm-rendered-highlight,
+  .cm-tab-editor .cm-rendered-wikilink,
+  .cm-tab-editor .cm-rendered-link,
+  .cm-tab-editor .cm-image-embed-widget,
+  .cm-tab-editor .cm-image-embed-resize-handle,
+  .cm-frontmatter-widget,
+  .fmv-editor,
+  .fmv-editor *,
+  .cm-markdown-table-widget,
+  .mtv-shell,
+  .mtv-shell *,
+  .cm-latex-block-widget,
+  .cm-latex-block-widget *,
+  .cm-wikilink-suggest-popup,
+  .cm-wikilink-suggest-popup *,
+  .cm-wikilink-preview-tooltip,
+  .cm-wikilink-preview-tooltip *
+) {
+  transition-property: none !important;
+  animation-play-state: paused !important;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .cm-tab-editor .cm-rendered-list-marker,
+  .cm-tab-editor .cm-rendered-header-source-line,
+  .cm-tab-editor .cm-rendered-tag,
+  .cm-tab-editor .cm-rendered-inline-code,
+  .cm-tab-editor .cm-rendered-highlight,
+  .cm-tab-editor .cm-rendered-wikilink,
+  .cm-tab-editor .cm-rendered-link,
+  .cm-tab-editor .cm-image-embed-widget,
+  .cm-tab-editor .cm-image-embed-loading,
+  .cm-tab-editor .cm-image-embed-error,
+  .fmv-row,
+  .fmv-vim-nav-target,
+  .fmv-field-icon,
+  .fmv-field-icon-button:focus-visible .fmv-field-icon,
+  .fmv-field-suggest-popup,
+  .mtv-table-head-cell,
+  .mtv-table-body-cell,
+  .mtv-canvas-row-nav-anchor,
+  .mtv-cell-input,
+  .mtv-cell-preview,
+  .mtv-cell-preview-pre,
+  .mtv-cell-preview-media-embed,
+  .mtv-context-menu,
+  .cm-latex-block-widget,
+  .cm-wikilink-suggest-popup,
+  .cm-wikilink-preview-tooltip
+) {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .mtv-table-head-cell,
+  .mtv-table-body-cell
+) {
+  outline: 1px solid color-mix(in srgb, var(--editor-panel-border-color) 72%, transparent) !important;
+  outline-offset: -1px !important;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .cm-tab-editor .cm-image-embed-resize-handle,
+  .mtv-edge-handle,
+  .mtv-resize-handle,
+  .fmv-mini-action,
+  .fmv-mini-action-remove,
+  .fmv-add-plus-button
+) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .cm-tab-editor .cm-rendered-tag:hover,
+  .cm-tab-editor .cm-rendered-wikilink:hover,
+  .cm-tab-editor .cm-rendered-link:hover,
+  .cm-tab-editor .cm-image-embed-widget:hover,
+  .fmv-row:hover,
+  .fmv-field-icon-button:hover .fmv-field-icon,
+  .mtv-edge-handle:hover,
+  .mtv-edge-handle:focus-visible,
+  .mtv-edge-handle[data-selected="true"],
+  .mtv-edge-handle[data-drop-target="true"],
+  .mtv-table-head-cell:hover .mtv-resize-handle,
+  .mtv-table-body-cell:hover .mtv-resize-handle,
+  .mtv-resize-handle:hover,
+  .mtv-resize-handle:active
+) {
+  background-image: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell .cm-tab-editor :is(
+  .cm-activeLine,
+  .cm-activeLineGutter
+) {
+  background-color: transparent !important;
+}
+
+:root[data-layout-lightweight] .app-shell .cm-tab-editor :is(
+  .cm-editor,
+  .cm-scroller
+) {
+  background-color: transparent !important;
+}
+
+:root[data-layout-lightweight] .app-shell .cm-tab-editor :is(
+  .cm-gutters,
+  .cm-gutter,
+  .cm-gutterElement
+) {
+  background-image: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell .cm-tab-editor .cm-editor:not(.cm-focused) :is(
+  .cm-cursorLayer,
+  .cm-dropCursor
+) {
+  display: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell .cm-tab-editor .cm-editor:not(.cm-focused) :is(
+  .cm-gutters,
+  .cm-lineNumbers,
+  .cm-foldGutter,
+  .cm-activeLineGutter
+) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+:root[data-layout-lightweight] .app-shell .cm-tab-editor .cm-editor:not(.cm-focused) .cm-activeLine {
+  background: transparent !important;
+}
+
+:root[data-layout-lightweight] .app-shell .layout-v2-tab-section:not([data-layout-active-tab-group="true"]) .cm-tab-editor .cm-editor:not(.cm-focused) :is(
+  .cm-gutters,
+  .cm-lineNumbers,
+  .cm-foldGutter,
+  .cm-activeLineGutter
+) {
+  visibility: hidden !important;
+}
+
+:root[data-layout-lightweight] .app-shell .layout-v2-tab-section:not([data-layout-active-tab-group="true"]) .cm-tab-editor .cm-editor:not(.cm-focused) :is(
+  .cm-cursorLayer,
+  .cm-dropCursor
+) {
+  display: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell .layout-v2-tab-section:not([data-layout-active-tab-group="true"]) .cm-tab-editor .cm-editor:not(.cm-focused) :is(
+  .cm-rendered-header-source-marker,
+  .cm-list-syntax-marker-source,
+  .fmv-header-leading,
+  .fmv-field-icon,
+  .fmv-kv-divider,
+  .fmv-field-suggest-popup,
+  .mtv-column-edge-row,
+  .mtv-row-edge-column,
+  .cm-image-embed-caption
+) {
+  visibility: hidden !important;
+}
+
+:root[data-layout-lightweight] .app-shell .cm-tab-editor .cm-editor:not(.cm-focused) :is(
+  .cm-rendered-header-source-marker,
+  .cm-list-syntax-marker-source,
+  .fmv-field-icon,
+  .fmv-kv-divider,
+  .mtv-column-edge-row,
+  .mtv-row-edge-column,
+  .cm-image-embed-caption
+) {
+  visibility: hidden !important;
+}
+
+:root[data-layout-lightweight] .app-shell .cm-tab-editor .cm-editor:not(.cm-focused) :is(
+  .cm-code-block-copy-btn,
+  .cm-image-embed-resize-handle,
+  .mtv-edge-handle,
+  .mtv-resize-handle,
+  .fmv-mini-action,
+  .fmv-mini-action-remove,
+  .fmv-add-plus-button,
+  .fmv-add-button
+) {
+  display: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell .cm-tab-editor .cm-code-block-copy-btn {
+  display: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell .cm-tab-editor .cm-image-embed-widget::after {
+  display: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .canvas-tab__edge-label,
+  .canvas-tab .react-flow__edge-textwrapper,
+  .architecture-node-kind,
+  .architecture-node-title-box,
+  .architecture-node-summary-box,
+  .architecture-dag-edge-canvas,
+  .knowledge-graph-tab__label,
+  .ai-chat-confirm-button:hover
+) {
+  filter: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .canvas-tab .react-flow__background,
+  .canvas-tab .react-flow__edges,
+  .canvas-tab .react-flow__controls,
+  .canvas-tab .react-flow__minimap,
+  .canvas-tab .react-flow__attribution,
+  .canvas-tab .react-flow__edge-textwrapper,
+  .canvas-tab .react-flow__resize-control,
+  .canvas-tab__actions,
+  .knowledge-graph-tab__labels-layer
+) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell .canvas-tab {
+  background: var(--bg-primary) !important;
+}
+
+:root[data-layout-lightweight] .app-shell .canvas-tab__surface {
+  background: transparent !important;
+}
+
+:root[data-layout-lightweight] .app-shell .canvas-tab__node {
+  border-color: color-mix(in srgb, var(--canvas-node-border) 72%, transparent) !important;
+  border-radius: 8px !important;
+  background: color-mix(in srgb, var(--canvas-node-bg) 88%, var(--bg-primary) 12%) !important;
+}
+
+:root[data-layout-lightweight] .app-shell .canvas-tab__node:not(.canvas-tab__node--editing) :is(
+  .canvas-tab__node-header,
+  .canvas-tab__node-body
+) {
+  visibility: hidden !important;
+}
+
+:root[data-layout-lightweight] .app-shell .canvas-tab__node :is(pre, code:not(pre code)) {
+  border-color: transparent !important;
+  background: transparent !important;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .ai-chat-message-markdown,
+  .ai-chat-message-streaming-text,
+  .ai-chat-message-reasoning,
+  .ai-chat-message-pre,
+  .ai-chat-confirmation-diff,
+  .ai-chat-debug-entry-body,
+  .project-reader-code-text
+) {
+  text-shadow: none !important;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .calendar-tab__day-badges,
+  .calendar-tab__task-bar-title,
+  .task-board__task-meta,
+  .task-board__task-footer,
+  .backlinks-item-detail,
+  .backlinks-item-preview,
+  .search-badges,
+  .search-result-snippet,
+  .search-result-footer,
+  .search-tag-list,
+  .ai-chat-message-actions,
+  .ai-chat-message-meta,
+  .ai-chat-message-duration,
+  .ai-chat-history-preview,
+  .project-reader-code-text
+) {
+  visibility: hidden !important;
+}
+
+:root[data-layout-lightweight] .app-shell :is(
+  .task-board__column,
+  .task-board__task-card,
+  .calendar-tab__day,
+  .calendar-tab__task-bar,
+  .tree-item,
+  .outline-item,
+  .backlinks-item,
+  .search-result,
+  .search-scope-button,
+  .ai-chat-message,
+  .ai-chat-message-action-button,
+  .ai-chat-history-item,
+  .canvas-tab__node,
+  .project-reader-code-line,
+  .settings-compact-row,
+  .settings-compact-row-column,
+  .settings-shortcut-row
+):hover {
+  background-image: none !important;
 }
 
 /* macOS 标题栏：窗口控制按钮在左侧。 */
