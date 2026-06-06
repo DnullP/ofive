@@ -2992,6 +2992,14 @@ test.describe("workbench section performance", () => {
             sample.activeCardContainValues.length === 6 &&
             sample.activeCardContainValues.every((value) => hasLayoutContain(value))
         ))).toBe(true);
+        expect(activeResizeSamples.every((sample) => (
+            sample.editorContainValues.length === 6 &&
+            sample.editorContainValues.every((value) => hasLayoutContain(value))
+        ))).toBe(true);
+        expect(activeResizeSamples.every((sample) => (
+            sample.scrollerContainValues.length === 6 &&
+            sample.scrollerContainValues.every((value) => hasLayoutContain(value))
+        ))).toBe(true);
         expect(activeResizeSamples.every((sample) => sample.tableCellBoxShadow === "none")).toBe(true);
         expect(activeResizeSamples.every((sample) => sample.tableCellOutlineStyle === "solid")).toBe(true);
         expect(activeResizeSamples.every((sample) => sample.tableCellOutlineWidth === "1px")).toBe(true);

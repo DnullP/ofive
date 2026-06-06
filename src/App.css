@@ -1719,6 +1719,15 @@ textarea,
   .cm-scroller
 ) {
   background-color: transparent !important;
+  contain: layout style paint;
+}
+
+:root[data-layout-lightweight] .app-shell .cm-tab-editor :is(
+  .cm-content,
+  .cm-gutters,
+  .cm-layer
+) {
+  contain: layout style paint;
 }
 
 :root[data-layout-lightweight] .app-shell .cm-tab-editor :is(
